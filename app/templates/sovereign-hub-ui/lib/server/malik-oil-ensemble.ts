@@ -25,6 +25,7 @@ export type OilEnsembleInput = {
   allowCatalog?: boolean
   onToken?: (chunk: string) => void
   signal?: AbortSignal
+  participantTimeoutMs?: number
 }
 export type OilParticipantId = "ling-3.1-flash" | "nvidia-nemotron-ultra-550b" | "malik-max"
 export const OIL_PARTICIPANTS: readonly OilParticipantId[] = ["ling-3.1-flash", "nvidia-nemotron-ultra-550b", "malik-max"] as const
@@ -38,7 +39,7 @@ function statusLine(s: Status) {
     "nvidia-nemotron-ultra-550b": "NVIDIA Nemotron 3 Ultra 550B",
     "malik-max": "MalikLLM MAX",
   }
-  return `- ${names[s.id]}: ${s.ok ? "участвовала" : "не участвовала"}${!s.ok ? " (API недоступен или ответ не получен)" : ""}`
+  return `- ${names[s.id]}: ${s.ok ? "участвовала" : "не участвовала"}${!s.ok ? ` (${s.reason || "PROVIDER_UNAVAILABLE"})` : ""}`
 }
 export function oilEnsembleStatus(statuses: Status[]) {
   return `### Проверка участия моделей (${statuses.filter(s=>s.ok).length}/3)\n${statuses.map(statusLine).join("\n")}\n\nКонсилиум Malik Oil 1TB — программная маршрутизация, не подтверждение лабораторных испытаний или независимой полевой экспертизы.`
@@ -49,7 +50,33 @@ export function validOilParticipantText(value: unknown): string {
   if (!text || /^(?:error|ошибка|failed|failure|api[_ ]?error|provider error|request failed)\s*[:!#-]/iu.test(text)) return ""
   if (/^(?:HTTP\s*)?[45]\d{2}(?:\b|:)/i.test(text) || /^\s*\{\s*["']?error["']?\s*:/i.test(text)) return ""
   if (/^(?:unauthorized|forbidden|insufficient credits|rate limit exceeded|quota exceeded|provider unavailable|model unavailable|invalid api key|authentication failed)(?:\b|:)/i.test(text)) return ""
+  if (/^(?:your\s+(?:daily\s+)?quota|you have exceeded|too many requests|payment required|insufficient balance|лимит исчерпан|квота исчерпана)/iu.test(text)) return ""
+  if (/^[{[]/.test(text)) {
+    try {
+      const value = JSON.parse(text)
+      if (!value || typeof value === "object" && Object.keys(value).length === 0 || Array.isArray(value) && !value.length || typeof value === "object" && ("error" in value || "errors" in value || value.success === false || value.ok === false || /^(?:error|failed)$/i.test(String(value.status || "")) || /quota|credit|rate.limit|unauthoriz|forbidden|payment required/i.test(String(value.message || "")))) return ""
+    } catch { return "" }
+  }
   return text
+}
+function failureReason(error: unknown) {
+  const code = error instanceof OilEnsembleError ? error.code : typeof error === "object" && error ? String(Reflect.get(error, "code") || "") : ""
+  if (code === "PARTICIPANT_TIMEOUT" || code === "INVALID_RESPONSE") return code
+  const status = typeof error === "object" && error ? Number(Reflect.get(error, "status")) : 0
+  return status >= 400 && status <= 599 ? `HTTP_${status}` : "PROVIDER_UNAVAILABLE"
+}
+async function boundedRun(input: OilEnsembleInput, run: Runner, fallback: boolean) {
+  const controller = new AbortController()
+  const abort = () => controller.abort(input.signal?.reason)
+  input.signal?.addEventListener("abort", abort, { once: true })
+  if (input.signal?.aborted) abort()
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    return await Promise.race([
+      run({ ...input, signal: controller.signal }, fallback),
+      new Promise<never>((_, reject) => { timer = setTimeout(() => { controller.abort(); reject(new OilEnsembleError("PARTICIPANT_TIMEOUT", "Provider deadline exceeded")) }, Math.max(5, Math.min(120_000, input.participantTimeoutMs ?? 75_000))) }),
+    ])
+  } finally { clearTimeout(timer); input.signal?.removeEventListener("abort", abort) }
 }
 export async function runMalikOilEnsemble(input: OilEnsembleInput, run: Runner): Promise<StrictMalikResult> {
   if (input.signal?.aborted) throw new OilEnsembleError("REQUEST_CANCELLED", "Запрос отменён.")
@@ -64,7 +91,7 @@ export async function runMalikOilEnsemble(input: OilEnsembleInput, run: Runner):
   const jobs = await Promise.allSettled(OIL_PARTICIPANTS.map(async modelId => {
     if (input.signal?.aborted) throw new Error("aborted")
     const noFallback = modelId !== "malik-max"
-    const result = await run({
+    const result = await boundedRun({
       ...input,
       modelId,
       // Independent assessments, not visible competing drafts; no accidental fallback
@@ -74,9 +101,9 @@ export async function runMalikOilEnsemble(input: OilEnsembleInput, run: Runner):
       temperature: 0.12,
       systemPrompt: [input.systemPrompt,
         "PETROLEUM ENSEMBLE / INDEPENDENT ENGINEERING REVIEW. Analyze all requested parts; check Darcy, phase mass conservation, fracture/matrix exchange, units, realistic GPU performance, HSE and NPV where relevant. Distinguish proven vs hypothetical, do not invent test or tool results. Do not issue well/SCADA commands."].join("\n"),
-    }, !noFallback)
+    }, run, !noFallback)
     const text = validOilParticipantText(result.content)
-    if (!text) throw new Error("empty result")
+    if (!text || result.selectedModelId !== modelId) throw new OilEnsembleError("INVALID_RESPONSE", "Empty, invalid or wrong-model response")
     // An internal MAX execution may return its real subprovider and is still MAX's orchestrated vote.
     return { modelId, content: short(text, 10_000), provider: result.provider, model: result.model } as Answer
   }))
@@ -89,7 +116,7 @@ export async function runMalikOilEnsemble(input: OilEnsembleInput, run: Runner):
       successes.push(job.value)
       statuses.push({id,ok:true})
     } else {
-      statuses.push({id,ok:false})
+      statuses.push({id,ok:false,reason:failureReason(job.reason)})
       console.warn("[MALIK_OIL_1TB] participant failed", id, job.reason instanceof Error ? job.reason.name : "provider-failure")
     }
   })
@@ -117,7 +144,7 @@ export async function runMalikOilEnsemble(input: OilEnsembleInput, run: Runner):
   let finalResult: StrictMalikResult | undefined
   let synthesisComplete = false
   try {
-    finalResult = await run(synthesisRequest, true)
+    finalResult = await boundedRun(synthesisRequest, run, true)
     final = validOilParticipantText(finalResult.content)
     synthesisComplete = Boolean(final)
   } catch (error) {

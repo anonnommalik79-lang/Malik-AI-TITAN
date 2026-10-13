@@ -19,11 +19,11 @@ import {
 
 export type TableIssue = { row: number; code: string; column?: string }
 export type TableParse =
-  | { kind: "ok"; request: PetroleumAnalysisRequest; tableText: string; language: OilLanguage }
+  | { kind: "ok"; request: PetroleumAnalysisRequest; tableText: string; language: OilLanguage; alerts?: string[] }
   | { kind: "needs-input"; code: string; columns: string[]; language: OilLanguage; tableText: string }
 
-type Role = "period" | "well" | "oil" | "water" | "gas" | "liquid"
-type Unit = { family: "bbl" | "m3" | "t" | "scf" | "sm3"; factor: number; perDay: boolean; otherTime: boolean }
+type Role = "period" | "well" | "oil" | "water" | "gas" | "liquid" | "pressure"
+type Unit = { family: "bbl" | "m3" | "t" | "scf" | "sm3"; factor: number; perDay: boolean; otherTime: boolean; standard: boolean; basis: "surface" | "reservoir" | "unknown" }
 
 const MAX_ROWS = 5000
 const MAX_WELLS = 120
@@ -32,10 +32,11 @@ const SKIP = /(?:cut|обводн|сулан|\bwc\b|%|процент|\bgor\b|г�
 const ROLE_PATTERNS: Array<[Role, RegExp]> = [
   ["period", /^(?:month|date|period|time|mon|t|месяц|мес\.?|дата|период|время|ай|күн|кезең|уақыт|الشهر|التاريخ|الفترة|شهر)(?:$|[\s,(])/iu],
   ["well", /(?:well|скважин|скв\.?(?:$|\s)|ұңғыма|بئر|البئر)/iu],
+  ["pressure", /(?:\bpwf\b|pressure|давлен|\bp[_ ]?wf\b)/iu],
   ["liquid", /(?:liquid|жидк|сұйық|سائل|gross|\bql\b|\bblpd\b)/iu],
-  ["oil", /(?:oil|нефт|мұнай|نفط|\bqo\b|\bbopd\b)/iu],
-  ["water", /(?:water|вод[аыу]|\bсу\b|ماء|مياه|\bqw\b|\bbwpd\b)/iu],
-  ["gas", /(?:gas|газ|غاز|\bqg\b)/iu],
+  ["oil", /(?:oil|нефт|мұнай|نفط|\bq[_ ]?o\b|\bbopd\b)/iu],
+  ["water", /(?:water|вод[аыу]|\bсу\b|ماء|مياه|\bq[_ ]?w\b|\bbwpd\b)/iu],
+  ["gas", /(?:gas|газ|غاز|\bq[_ ]?g\b)/iu],
 ]
 
 const MONTHS: Array<[RegExp, number]> = [
@@ -62,8 +63,11 @@ const OTHER_TIME = /(?:\/|\s|_|-|\bper\b|\bв\b|^)\s*(?:month|mon|мес\p{L}*|�
 
 /** A unit from free text: «Oil_Rate_bbl_day», «Нефть, м³/сут», «Gas (Mscf/d)», «газ, тыс. м3/сут». */
 export function readUnit(text: string): Unit | null {
-  const value = ` ${text.toLowerCase().replace(/[_]/g, " ").replace(/³/g, "3").replace(/\s+/g, " ")} `
-  const timing = { perDay: DAY.test(value), otherTime: OTHER_TIME.test(value) }
+  const value = ` ${text.toLowerCase().replace(/[_*`]/g, " ").replace(/<sup>3<\/sup>|[³]/g, "3").replace(/м\s*\^?\s*3/g, "м3").replace(/m\s*\^?\s*3/g, "m3").replace(/\s+/g, " ")} `
+  const reservoir = /reservoir|in.situ|пластов|\brb\b|\brm3\b/iu.test(value)
+  const surface = /standard|stock.tank|surface|стандарт|поверхност|\bstb\b|\b(?:mm|m)?scf\b|\b[sn]m3\b|ст\.\s*м3/iu.test(value)
+  const standard = /standard|стандарт|std|\b(?:mm|m)?(?:scf|mcf)|\b(?:[sn]m3|ksm3|msm3|mmsm3)\b|ст\.?\s*м3|нм3/iu.test(value)
+  const timing = { standard, perDay: DAY.test(value), otherTime: OTHER_TIME.test(value), basis: reservoir ? "reservoir" as const : surface ? "surface" as const : "unknown" as const }
   if (/(?:^|[^\p{L}])(?:mmscf|mmcf)/iu.test(value)) return { family: "scf", factor: 1e6, ...timing }
   if (/(?:^|[^\p{L}])(?:mscf|mcf)/iu.test(value)) return { family: "scf", factor: 1e3, ...timing }
   if (/(?:^|[^\p{L}])(?:scf|ft3|cf\/d|scfd)/iu.test(value)) return { family: "scf", factor: 1, ...timing }
@@ -91,30 +95,73 @@ function splitRow(line: string, delimiter: string) {
 }
 
 /** Candidate tables: a Markdown pipe table, or a block of delimited lines with a text header. */
-export function findTables(text: string): Array<{ rows: string[][]; delimiter: string; text: string }> {
+type FoundTable = { rows: string[][]; delimiter: string; text: string; unitContext?: string }
+
+/** JSON tables are data, never instructions. Only scalar records and explicit unit metadata. */
+function jsonTables(text: string): FoundTable[] {
+  const result: FoundTable[] = []
+  const candidates = [...text.matchAll(/^\s*[{[]/gm)].slice(0, 32)
+  let consumed = -1
+  for (const match of candidates) {
+    const start = match.index! + match[0].search(/[{[]/)
+    if (start <= consumed) continue
+    let depth = 0, quoted = false, escaped = false
+    for (let end = start; end < text.length; end++) {
+      const c = text[end]
+      if (quoted) { if (escaped) escaped = false; else if (c === "\\") escaped = true; else if (c === '"') quoted = false; continue }
+      if (c === '"') { quoted = true; continue }
+      if (c === "{" || c === "[") depth++
+      if (c === "}" || c === "]") depth--
+      if (depth !== 0) continue
+      consumed = end
+      try {
+        const raw = text.slice(start, end + 1), object = JSON.parse(raw)
+        const records = Array.isArray(object) ? object : object.rows || object.data || object.records
+        if (!Array.isArray(records) || !records.length || records.length > MAX_ROWS || records.some(r => !r || typeof r !== "object" || Array.isArray(r))) break
+        const keys = [...new Set(records.flatMap(r => Object.keys(r)))]
+        if (keys.length > 40 || records.some(r => Object.values(r).some(v => v !== null && !["string", "number"].includes(typeof v)))) break
+        const units = !Array.isArray(object) && object.units && typeof object.units === "object" ? object.units : {}
+        const unitContext = Object.entries(units).map(([key, value]) => {
+          const unit = typeof value === "string" ? value : value && typeof value === "object" ? [Reflect.get(value, "unit"), Reflect.get(value, "conditions"), Reflect.get(value, "basis")].filter(v => typeof v === "string").join(" ") : ""
+          return `${key} = ${unit}`
+        }).join("\n")
+        result.push({ rows: [keys, ...records.map(r => keys.map(k => r[k] === undefined || r[k] === null ? "" : String(r[k])))], text: raw, delimiter: "json", unitContext })
+      } catch { /* malformed JSON is never repaired */ }
+      break
+    }
+  }
+  return result
+}
+
+export function findTables(text: string): FoundTable[] {
   const lines = text.replace(/\r\n?/g, "\n").split("\n").map((line) => line.replace(/^\s*```\w*\s*$/, ""))
-  const tables: Array<{ rows: string[][]; delimiter: string; text: string }> = []
+  const tables: FoundTable[] = []
   let index = 0
+  const isHeader = (line: string, delimiter: string) => {
+    const roles = splitRow(line, delimiter).map(name => SKIP.test(name) ? undefined : ROLE_PATTERNS.find(([, pattern]) => pattern.test(name.replace(/[*`]/g, "")))?.[0])
+    return roles.includes("period") && roles.includes("oil")
+  }
   while (index < lines.length) {
     const line = lines[index]
     if ((line.match(/\|/g) || []).length >= 2) {
+      if (!isHeader(line, "|")) { index++; continue }
       const block: string[] = []
-      while (index < lines.length && (lines[index].match(/\|/g) || []).length >= 2) block.push(lines[index++])
+      while (index < lines.length && (lines[index].match(/\|/g) || []).length >= 2 && (!block.length || !isHeader(lines[index], "|"))) block.push(lines[index++])
       const rows = block.filter((row) => !/^\s*\|?\s*:?-{2,}:?\s*(?:\|\s*:?-{2,}:?\s*)*\|?\s*$/.test(row)).map((row) => splitRow(row, "|"))
       if (rows.length >= 2) tables.push({ rows, delimiter: "|", text: block.join("\n") })
       continue
     }
     const delimiter = ["\t", ";", ","].find((candidate) => line.includes(candidate) && /\p{L}/u.test(line))
-    if (delimiter) {
+    if (delimiter && isHeader(line, delimiter)) {
       const width = splitRow(line, delimiter).length
       const block: string[] = [line]
       let cursor = index + 1
-      while (cursor < lines.length && lines[cursor].trim() && splitRow(lines[cursor], delimiter).length === width) block.push(lines[cursor++])
+      while (cursor < lines.length && lines[cursor].trim() && splitRow(lines[cursor], delimiter).length === width && !isHeader(lines[cursor], delimiter)) block.push(lines[cursor++])
       if (width >= 2 && block.length >= 2) { tables.push({ rows: block.map((row) => splitRow(row, delimiter)), delimiter, text: block.join("\n") }); index = cursor; continue }
     }
     index += 1
   }
-  return tables
+  return [...tables, ...jsonTables(text)]
 }
 
 type NumberStyle = "decimal-comma" | "thousands-comma" | null
@@ -176,12 +223,46 @@ function readPeriod(raw: string): Period | null {
   return null
 }
 
-function messageUnit(prompt: string, kind: "liquid" | "gas"): Unit | null {
-  const pattern = kind === "liquid"
-    ? /(?:дебит\p{L}*|rates?|units?|единиц\p{L}*|в\s+единицах|өлшем\p{L}*|وحدات|معدلات)[^.\n]{0,40}?(?:в|in|:|=|—|-)?\s*((?:bbl|stb|м3|m3|m³|м³|т|t|тонн\p{L}*|барр\p{L}*)\s*\/\s*(?:day|d|сут\p{L}*|день|күн\p{L}*|يوم))/iu
-    : /(?:газ\p{L}*|gas|غاز)[^.\n]{0,40}?(?:в|in|:|=|—|-)\s*((?:mmscf|mscf|mcf|scf|sm3|нм3|ст\.?\s*м3|тыс\.?\s*м3|м3|m3)\s*\/\s*(?:day|d|сут\p{L}*|день|күн\p{L}*|يوم))/iu
-  const found = prompt.match(pattern)
-  return found ? readUnit(found[1]) : null
+/** Bind declarations to their column, rather than assigning the first liquid unit to every phase. */
+function messageUnits(prompt: string, role: Role): Array<{ unit: Unit; source: string }> {
+  const found: Array<{ unit: Unit; source: string }> = []
+  // Exclude all table headers/data: another table's units are not global declarations.
+  let context = prompt
+  for (const table of findTables(prompt)) {
+    const headerRoles = table.rows[0].map(name => ROLE_PATTERNS.find(([, pattern]) => pattern.test(name))?.[0])
+    if (table.delimiter === "json" || headerRoles.includes("period") && headerRoles.includes("oil")) context = context.replace(table.text, "")
+  }
+  for (const line of context.replace(/[*`"']/g, "").split(/\n|;/)) {
+    const separator = line.match(/^(.*?)\s*(?:=|:|\bis\b|\bin\b|—|–)\s*(.+)$/iu)
+    const label = (separator?.[1] || "").trim().replace(/_/g, " ")
+    const declaredRole = ROLE_PATTERNS.find(([, pattern]) => pattern.test(label))?.[0]
+    if (declaredRole === role || role !== "gas" && role !== "pressure" && /^(?:units?|единиц\p{L}*|дебит\p{L}*|rates?)/iu.test(label)) {
+      const unit = readUnit(separator?.[2] || "")
+      if (unit) found.push({ unit, source: line.trim() })
+    }
+    // Prose such as “Oil production (STB per day)” / “дебиты в м³/сут”.
+    if (!separator && (ROLE_PATTERNS.find(([, pattern]) => pattern.test(line))?.[0] === role ||
+      role !== "gas" && role !== "pressure" && /(?:дебит\p{L}*|rates?|units?|единиц\p{L}*)\s+(?:в|in)/iu.test(line))) {
+      const unit = readUnit(line)
+      if (unit && (unit.perDay || unit.otherTime)) found.push({ unit, source: line.trim() })
+    }
+  }
+  return found
+}
+
+export function readPressureUnit(text: string): { factor: number; unit: string } | null {
+  const token = text.match(/(?<![\p{L}])(?:MPa|kPa|psi[ag]?|bar|МПа|кПа|бар|пси)(?![\p{L}])/iu)?.[0]
+  if (!token) return null
+  const key = token.toLowerCase()
+  const factor = /mpa|мпа/.test(key) ? 145.037737730209 : /kpa|кпа/.test(key) ? 0.145037737730209 : /bar|бар/.test(key) ? 14.5037737730209 : 1
+  return { factor, unit: token }
+}
+
+function pressureUnit(prompt: string, header: string) {
+  const sources = [header, ...prompt.replace(/[*`"']/g, "").split(/\n|;/).filter(line => /^(?:pwf|p[_ ]?wf|pressure|давлен\p{L}*)\s*(?:=|:|,|\(|\bis\b|\bin\b)/iu.test(line.trim()))]
+  const known = sources.map(source => ({ source, unit: readPressureUnit(source) })).filter(item => item.unit !== null)
+  const conflict = known.some(item => item.unit!.factor !== known[0].unit!.factor)
+  return { unit: conflict ? null : known[0]?.unit || null, conflict: conflict ? known.map(item => item.source).join(" ↔ ") : null }
 }
 
 export function readPrice(prompt: string): PetroleumAnalysisRequest["parameters"]["price"] {
@@ -239,10 +320,11 @@ function liquidFactor(from: LiquidUnit, to: LiquidUnit, density: number | null):
  * Reads the first production table in the message. Returns null when the
  * message has no table with a period and an oil column.
  */
-export function parseProductionTable(prompt: string, options: { scope?: "account" | "guest" | "api" | "fixture"; source?: "chat-table" } = {}): TableParse | null {
-  const message = stripPetroleumToken(String(prompt || "")).slice(0, 600_000)
+function parseSingleProductionTable(prompt: string, table: FoundTable, options: { scope?: "account" | "guest" | "api" | "fixture"; source?: "chat-table" }): TableParse | null {
+  const message = stripPetroleumToken(String(prompt || "")).slice(0, 600_000) + "\n" + (table.unitContext || "")
   const language = oilLanguage(message.replace(/```[\s\S]*?```/g, " ").replace(/\|[^\n]*\|/g, " ") || message)
-  for (const table of findTables(message)) {
+  for (const candidate of [table]) {
+    const table = candidate
     const header = table.rows[0].map((cell) => cell.replace(/[*`]/g, "").trim())
     const roles = new Map<Role, number>()
     let duplicate = false
@@ -258,24 +340,37 @@ export function parseProductionTable(prompt: string, options: { scope?: "account
     if (duplicate) return { kind: "needs-input", code: "DUPLICATE_COLUMN_ROLE", columns, language, tableText: table.text }
     if (table.rows.length - 1 > MAX_ROWS) return { kind: "needs-input", code: "TOO_MANY_ROWS", columns, language, tableText: table.text }
 
-    const liquidFromMessage = messageUnit(message, "liquid")
-    const gasFromMessage = messageUnit(message, "gas")
-    const unitFor = (role: Role) => {
-      const index = roles.get(role)
-      if (index === undefined) return null
-      const own = readUnit(header[index])
-      return own ?? (role === "gas" ? gasFromMessage : liquidFromMessage)
-    }
     const notes = new Set<string>()
-    const oilUnit = unitFor("oil"), waterUnit = unitFor("water"), gasUnit = unitFor("gas"), liquidUnitColumn = unitFor("liquid")
+    const resolved = new Map<Role, Unit>()
+    const alerts: string[] = []
     for (const role of ["oil", "water", "gas", "liquid"] as const) {
       const index = roles.get(role)
-      if (index !== undefined && !readUnit(header[index]) && unitFor(role)) notes.add("UNITS_FROM_MESSAGE")
+      if (index === undefined) continue
+      const own = readUnit(header[index])
+      const declarations = messageUnits(message, role)
+      const candidates = [...(own ? [{ unit: own, source: header[index] }] : []), ...declarations]
+      const first = candidates[0]?.unit
+      if (first && candidates.some(({ unit }) => unit.family !== first.family || unit.factor !== first.factor || unit.perDay !== first.perDay || unit.otherTime !== first.otherTime || unit.basis !== "unknown" && first.basis !== "unknown" && unit.basis !== first.basis)) {
+        return { kind: "needs-input", code: "UNIT_CONFLICT", columns: candidates.map(item => item.source), language, tableText: table.text }
+      }
+      const unit = candidates.find(item => item.unit.basis !== "unknown")?.unit || first
+      const invalid = !unit ? "UNITS_MISSING" : unit.otherTime || !unit.perDay ? "RATE_BASIS_MISSING" : unit.basis === "reservoir" ? "RESERVOIR_CONVERSION_REQUIRED" : role === "gas" && !unit.standard ? "GAS_CONDITIONS_REQUIRED" : null
+      if (invalid) {
+        if (role === "oil") return { kind: "needs-input", code: invalid, columns: invalid === "UNITS_MISSING" ? (["oil", "water", "gas", "liquid"] as const).filter(r => roles.has(r) && !readUnit(header[roles.get(r)!]) && !messageUnits(message, r).length).map(r => header[roles.get(r)!]) : [header[index]], language, tableText: table.text }
+        alerts.push(`${header[index]}: ${invalid}`)
+        notes.add(`${role.toUpperCase()}_${invalid}`)
+        roles.delete(role)
+        continue
+      }
+      resolved.set(role, unit!)
+      if (!own) notes.add("UNITS_FROM_MESSAGE")
     }
-    const missing = (["oil", "water", "gas", "liquid"] as const).filter((role) => roles.has(role) && !unitFor(role))
-    if (missing.length) return { kind: "needs-input", code: "UNITS_MISSING", columns: missing.map((role) => header[roles.get(role) as number]), language, tableText: table.text }
-    const notDaily = (["oil", "water", "gas", "liquid"] as const).filter((role) => { const unit = unitFor(role); return unit && (unit.otherTime || !unit.perDay) })
-    if (notDaily.length) return { kind: "needs-input", code: "RATE_BASIS_MISSING", columns: notDaily.map((role) => header[roles.get(role) as number]), language, tableText: table.text }
+    const unitFor = (role: Role) => resolved.get(role) || null
+    const oilUnit = unitFor("oil"), waterUnit = unitFor("water"), gasUnit = unitFor("gas"), liquidUnitColumn = unitFor("liquid")
+    const pressureIndex = roles.get("pressure")
+    const pressure = pressureIndex === undefined ? { unit: null, conflict: null } : pressureUnit(message, header[pressureIndex])
+    if (pressure.conflict) return { kind: "needs-input", code: "UNIT_CONFLICT", columns: [pressure.conflict], language, tableText: table.text }
+    if (pressureIndex !== undefined && !pressure.unit) { notes.add("PRESSURE_UNITS_MISSING"); alerts.push(`${header[pressureIndex]}: UNITS_MISSING`) }
 
     const density = readDensity(message)
     let liquid = unitToLiquid(oilUnit as Unit)
@@ -300,7 +395,7 @@ export function parseProductionTable(prompt: string, options: { scope?: "account
     if (columnLiquid && columnLiquid !== liquid) notes.add("LIQUID_CONVERTED_TO_OIL_UNIT")
     const gas = gasUnit ? unitToGas(gasUnit) : null
     if (gasUnit && !gas) return { kind: "needs-input", code: "GAS_UNIT_UNSUPPORTED", columns: [header[roles.get("gas") as number]], language, tableText: table.text }
-    if (gasUnit && gasUnit.family === "m3") notes.add("GAS_M3_AS_STANDARD")
+    if (gasUnit && gasUnit.family === "m3") notes.add("GAS_STANDARD_EXPLICIT")
     if (gasUnit && gasUnit.factor !== 1) notes.add("GAS_PREFIX_EXPANDED")
     if (!roles.has("water") && roles.has("liquid")) notes.add("WATER_DERIVED_FROM_LIQUID")
 
@@ -312,7 +407,7 @@ export function parseProductionTable(prompt: string, options: { scope?: "account
     }
     const fallback: NumberStyle = language === "ru" || language === "kk" ? "decimal-comma" : "thousands-comma"
     const issues: TableIssue[] = []
-    type Row = { well: string; period: Period; oil: number; water: number | null; gas: number | null; source: number }
+    type Row = { well: string; period: Period; oil: number; water: number | null; gas: number | null; pressure: number | null; source: number }
     const accepted: Row[] = []
     const defaultWell = wellFromPrompt(message)
     let periodKind: Period["kind"] | null = null
@@ -350,9 +445,29 @@ export function parseProductionTable(prompt: string, options: { scope?: "account
       const wellIndex = roles.get("well")
       const well = wellIndex === undefined ? defaultWell : cells[wellIndex].replace(/[^\p{L}\p{N}_. #№-]/gu, "").trim().slice(0, 80)
       if (!well) { issues.push({ row: source, code: "WELL_MISSING" }); return }
-      accepted.push({ well, period, oil: oilValue, water, gas: typeof gasValue === "number" ? gasValue : null, source })
+      let pressureValue: number | null = null
+      if (pressureIndex !== undefined && pressure.unit) {
+        const raw = readNumber(cells[pressureIndex], null, fallback)
+        if (raw !== null && Number.isFinite(raw) && raw >= 0 && raw * pressure.unit.factor <= 1e7) pressureValue = raw * pressure.unit.factor
+        else if (raw !== null) issues.push({ row: source, code: "PRESSURE_INVALID", column: header[pressureIndex] })
+      }
+      accepted.push({ well, period, oil: oilValue, water, gas: typeof gasValue === "number" ? gasValue : null, pressure: pressureValue, source })
     })
     if (usedFallback) notes.add(fallback === "decimal-comma" ? "COMMA_READ_AS_DECIMAL" : "COMMA_READ_AS_THOUSANDS")
+    if (!accepted.length) return { kind: "needs-input", code: "NO_VALID_ROWS", columns, language, tableText: table.text }
+
+    // Published totals are checks, never another producing well.
+    const totals = accepted.filter(row => /^(?:total|field|field total|итого|всего|сумма)$/iu.test(row.well))
+    for (const total of totals) {
+      const contributors = accepted.filter(row => !totals.includes(row) && row.period.label === total.period.label)
+      for (const role of ["oil", "water", "gas"] as const) {
+        if (total[role] === null || !contributors.length || contributors.some(row => row[role] === null)) continue
+        const sum = contributors.reduce((sum, row) => sum + row[role]!, 0)
+        if (Math.abs(sum - total[role]!) > 1e-9 * Math.max(1, Math.abs(sum))) issues.push({ row: total.source, code: "AGGREGATE_TOTAL_MISMATCH", column: role })
+        else notes.add("REPORTED_TOTAL_VERIFIED")
+      }
+    }
+    for (let index = accepted.length - 1; index >= 0; index--) if (totals.includes(accepted[index])) accepted.splice(index, 1)
     if (!accepted.length) return { kind: "needs-input", code: "NO_VALID_ROWS", columns, language, tableText: table.text }
 
     // Month names without a year run forward: «Декабрь, Январь» crosses into the next year.
@@ -401,6 +516,7 @@ export function parseProductionTable(prompt: string, options: { scope?: "account
         oil: unique.map((row) => row.oil),
         water: hasWater ? unique.map((row) => row.water) : null,
         gas: hasGas && gas ? unique.map((row) => row.gas) : null,
+        pressure: unique.some(row => row.pressure !== null) ? unique.map(row => row.pressure) : null,
       })
     }
     if (!wells.length) return { kind: "needs-input", code: "NO_VALID_ROWS", columns, language, tableText: table.text }
@@ -426,7 +542,42 @@ export function parseProductionTable(prompt: string, options: { scope?: "account
       language,
     })
     if (!request.success) return { kind: "needs-input", code: "TABLE_CONTRACT_REJECTED", columns, language, tableText: table.text }
-    return { kind: "ok", request: request.data, tableText: table.text, language }
+    return { kind: "ok", request: request.data, tableText: table.text, language, alerts }
   }
   return null
+}
+
+/** Every production table is parsed independently, then normalized before field aggregation. */
+export function parseProductionTable(prompt: string, options: { scope?: "account" | "guest" | "api" | "fixture"; source?: "chat-table" } = {}): TableParse | null {
+  const message = stripPetroleumToken(String(prompt || "")).slice(0, 600_000)
+  const parsed = findTables(message).map(table => parseSingleProductionTable(message, table, options)).filter((p): p is TableParse => p !== null)
+  if (!parsed.length) return null
+  const refused = parsed.find(p => p.kind === "needs-input")
+  if (refused) return refused
+  const valid = parsed.filter((p): p is Extract<TableParse, { kind: "ok" }> => p.kind === "ok")
+  if (valid.length === 1) return valid[0]
+  const first = valid[0], request = structuredClone(first.request)
+  const byId = new Map(request.dataset.wells.map(w => [w.id, w]))
+  for (const next of valid.slice(1)) {
+    const other = next.request
+    const factor = liquidFactor(other.units.liquid, request.units.liquid, request.units.oilDensityKgM3)
+    if (factor === null || other.units.gas !== request.units.gas || other.units.gasReference !== request.units.gasReference || other.dataset.granularity !== request.dataset.granularity || other.dataset.calendar !== request.dataset.calendar)
+      return { kind: "needs-input", code: "TABLE_UNITS_OR_PERIODS_CONFLICT", columns: [JSON.stringify(request.units), JSON.stringify(other.units)], language: first.language, tableText: message }
+    for (const source of other.dataset.wells) {
+      const well = { ...source, oil: source.oil.map(v => v * factor), water: source.water?.map(v => v === null ? null : v * factor) || null }
+      const existing = byId.get(well.id)
+      if (!existing) { byId.set(well.id, well); continue }
+      if (well.t.some(t => existing.t.includes(t))) return { kind: "needs-input", code: "DUPLICATE_WELL_PERIOD_ACROSS_TABLES", columns: [well.id], language: first.language, tableText: message }
+      const points = [...existing.t.map((t, i) => ({ t, i, w: existing })), ...well.t.map((t, i) => ({ t, i, w: well }))].sort((a, b) => a.t - b.t)
+      byId.set(well.id, { id: well.id, t: points.map(p => p.t), period: points.map(p => p.w.period[p.i]), oil: points.map(p => p.w.oil[p.i]), water: points.map(p => p.w.water?.[p.i] ?? null), gas: points.map(p => p.w.gas?.[p.i] ?? null), pressure: points.map(p => p.w.pressure?.[p.i] ?? null) })
+    }
+    request.metadata.acceptedRows += other.metadata.acceptedRows
+    request.metadata.rejectedRows += other.metadata.rejectedRows
+    request.metadata.issues = [...request.metadata.issues, ...other.metadata.issues].slice(0, 60)
+    request.metadata.notes = [...new Set([...request.metadata.notes, ...other.metadata.notes, "MULTIPLE_TABLES_MERGED"])].slice(0, 24)
+  }
+  request.dataset.wells = [...byId.values()]
+  const checked = petroleumAnalysisRequestSchema.safeParse(request)
+  if (!checked.success) return { kind: "needs-input", code: "TABLE_CONTRACT_REJECTED", columns: [], language: first.language, tableText: message }
+  return { ...first, request: checked.data, tableText: valid.map(p => p.tableText).join("\n\n"), alerts: valid.flatMap(p => p.alerts || []) }
 }

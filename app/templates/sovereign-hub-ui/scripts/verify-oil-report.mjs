@@ -9,7 +9,6 @@
 import test from "node:test"
 import assert from "node:assert/strict"
 import { performance } from "node:perf_hooks"
-import { readFileSync } from "node:fs"
 import { createRequire } from "node:module"
 import { workTestLoader } from "./work-test-loader.mjs"
 
@@ -36,7 +35,7 @@ const load = workTestLoader({
   "@/lib/server/plugin-model-answer": { runPluginModelAnswer: forbidden },
   "@/lib/ai/project-builder": { generateProjectWithBrain: forbidden },
   "@/lib/limits/rate-limit": { checkUsageLimit: async () => ({ ok: true }), recordChatUsage: async () => {} },
-  "@/lib/server/malik-model-router": { resolveStrictMalikSelection: async (_request, body) => ({ modelId: body?.modelId || "malik-20b", entitlement: owner }), MalikModelRouteError: RouteError, malikModelErrorPayload: (error) => ({ error: error.message }) },
+  "@/lib/server/malik-model-router": { resolveStrictMalikSelection: async (_request, body) => ({ modelId: body?.model || "malik-20b", entitlement: owner }), MalikModelRouteError: RouteError, malikModelErrorPayload: (error) => ({ error: error.message }) },
   "@/lib/server/malik-coder-orchestrator": { runMalikCoderOrchestrator: forbidden },
   "@/lib/server/malik-agent-runtime": { prepareMalikAgentRuntime: forbidden },
   "@/lib/server/request-entitlement": { resolveRequestEntitlement: async () => owner },
@@ -51,10 +50,10 @@ const load = workTestLoader({
 })
 
 const contract = load("lib/work/petroleum/analysis-contract.ts")
-const { analyzePetroleumDataset, compareOilMetrics, oilMetricPairs, fitDeclineModels, daysInMonthT, FIELD_ID } = load("lib/work/petroleum/analysis.ts")
+const { analyzePetroleumDataset, compareOilMetrics, fitDeclineModels, daysInMonthT, FIELD_ID } = load("lib/work/petroleum/analysis.ts")
 const { parseProductionTable, readUnit, readPrice } = load("lib/work/petroleum/table-input.ts")
 const { crossCheckOil } = load("lib/work/petroleum/cross-check.ts")
-const { oilReportFence, readOilReportBlock, oilReportText, oilReportBlocksToText, oilKpis } = load("lib/work/petroleum/visual-report.ts")
+const { oilReportFence, readOilReportBlock, oilReportBlocksToText, oilKpis } = load("lib/work/petroleum/visual-report.ts")
 const { oilConclusion, oilNumber, oilPercent } = load("lib/work/petroleum/analysis-i18n.ts")
 const { executePetroleumTable, withOilVisual } = load("lib/work/petroleum/table-message.ts")
 const { executePetroleumMessage } = load("lib/work/petroleum/message.ts")
@@ -191,7 +190,7 @@ scenario("05 density converts tonnes to m3 exactly", () => {
   close(request.dataset.wells[0].oil[0], 85 * 1000 / 850); assert.equal(request.dataset.granularity, "month"); assert.ok(request.metadata.notes.includes("OIL_MASS_TO_VOLUME_BY_DENSITY"))
 })
 scenario("06 both phases in tonnes → water cut by mass, GOR sm3/t", () => {
-  const result = analyze("| Месяц | Нефть, т/сут | Вода, т/сут | Газ, м3/сут |\n|---|---|---|---|\n| 2025-01 | 80 | 20 | 6400 |\n| 2025-02 | 76 | 24 | 6200 |")
+  const result = analyze("| Месяц | Нефть, т/сут | Вода, т/сут | Газ, sm3/сут |\n|---|---|---|---|\n| 2025-01 | 80 | 20 | 6400 |\n| 2025-02 | 76 | 24 | 6200 |")
   close(result.wells[0].first.wc, 0.2); assert.equal(result.validatedInputs.units.basis, "mass"); assert.equal(result.validatedInputs.units.gor, "sm3/t"); close(result.wells[0].first.gor, 80)
   assert.ok(result.qualityFlags.some((flag) => flag.code === "MASS_BASIS"))
 })
@@ -353,6 +352,7 @@ test("copy/share text replaces the block with a readable report", () => {
 // ── Stream route and rendered report ───────────────────────────────────────
 const POST = load("app/api/stream/route-impl.ts").POST
 async function stream(body) {
+  if (body.modelId) body = { ...body, model: body.modelId }
   const response = await POST(new Request("http://fixture/api/stream", { method: "POST", headers: { "content-type": "application/json", accept: "text/event-stream" }, body: JSON.stringify({ stream: true, workspaceMode: "chat", ...body }) }))
   assert.equal(response.status, 200)
   const events = (await response.text()).split("\n\n").filter((frame) => frame.includes("data: ")).map((frame) => JSON.parse(frame.split("\ndata: ")[1]))
@@ -383,6 +383,7 @@ test("grand challenge: Ling and MAX both receive a real model call and the verif
     assert.equal(done[0].provider, "mock-selected-model")
     assert.equal(done[0].selectedModelId, modelId)
     assert.equal(answer.match(/MULTIDISCIPLINARY MODEL ANALYSIS/g)?.length, 1)
+    assert.ok(answer.startsWith("```malik-oil-report"), "Computed report precedes unverified model interpretation")
     assert.equal(answer.match(/```malik-oil-report/g)?.length, 1)
     const recent = comprehensiveCalls.at(-1)
     assert.equal(recent.modelId, modelId)
@@ -420,4 +421,59 @@ test("render: the report shows the engine's numbers, sections, charts and Arabic
   const ar = renderToStaticMarkup(React.createElement(MalikOilReport, { raw: executePetroleumTable({ prompt: "حلل إنتاج النفط\n" + GOLDEN }).content.split("\n")[1] }))
   assert.ok(ar.includes('dir="rtl"') && ar.includes('lang="ar"') && ar.includes("الاستنتاج الهندسي"))
   assert.match(renderToStaticMarkup(React.createElement(MalikOilReport, { raw: "{broken" })), /повреждён/)
+})
+
+// The original production incident, through the real HTTP/SSE handler.
+import {prompt as SIX_WELLS_PROMPT} from './fixtures/oil-six-wells.mjs'
+test('production incident: six wells through Chat and Work, one final report and actual stages',async()=>{
+ for(const workspaceMode of ['chat','work']){
+  const {answer,done,events}=await stream({originalQuestion:SIX_WELLS_PROMPT,modelId:'malik-oil-1tb',selectedSkillId:'petroleum.analyze',workspaceMode})
+  assert.equal(done.length,1);assert.equal(done[0].selectedModelId,'malik-oil-1tb')
+  assert.equal(answer.match(/```malik-oil-report/g)?.length,1)
+  const raw=answer.match(/```malik-oil-report[\r\n]+([^\r\n]+)/)?.[1]; assert.ok(raw,JSON.stringify(answer.slice(0,160))); const view=readOilReportBlock(raw)
+  close(view.result.wells[0].first.oil,4000);close(view.result.wells[0].last.oil,3240);close(view.result.wells[0].decline.total,0.19)
+  close(view.result.wells[0].last.wc,2070/5310)
+  assert.ok(view.result.chartSeries.some(c=>c.id==='pressure'))
+  assert.deepEqual(events.filter(e=>e.phase==='petroleum'&&/^[A-Z_]+$/.test(e.stage)).map(e=>e.stage),['INPUT_PARSED','UNITS_RESOLVED','DATA_VALIDATED','COMPUTATIONS_STARTED','COMPUTATIONS_VERIFIED','VISUALS_PREPARED','RESPONSE_SYNTHESIZED','COMPLETED'])
+  assert.doesNotMatch(answer,/нет единиц|generatedMedia|участвовала|3\/3/)
+  assert.match(answer,/расчёты сохранены/)
+ }
+})
+test('production incident: long prompt, scheduling words and draw chart cannot invoke another tool',async()=>{
+ const {answer,done}=await stream({originalQuestion:SIX_WELLS_PROMPT+'\nНарисуй график. Каждый день анализируй только эти имеющиеся данные.\n'+('Проверяй численные расчёты.\n'.repeat(500)),selectedSkillId:'petroleum.analyze'})
+ assert.equal(done.length,1);assert.equal(done[0].provider,'malik-petroleum-local');assert.equal(answer.match(/```malik-oil-report/g)?.length,1)
+ assert.doesNotMatch(answer,/планировщик|Задача создан|generatedMedia|нет единиц/)
+})
+test('production incident: actual rendered field report includes pressure and water-cut heatmap values',()=>{
+ const content=executePetroleumTable({prompt:SIX_WELLS_PROMPT}).content
+ const html=renderToStaticMarkup(React.createElement(MalikOilReport,{raw:content.split('\n')[1]}))
+ assert.match(html,/data-metric="water-cut"/);assert.match(html,/61.403508/);assert.match(html,/data-oil-section="pressure"/);assert.match(html,/Pwf/)
+})
+test('production incident: dataset JSON reaches the table pipeline rather than unknown-op refusal',async()=>{
+ const {table}=await import('./fixtures/oil-six-wells.mjs')
+ const rows=table.split('\n').slice(1).map(l=>{const r=l.split('\t');return {Well:r[0],Month:r[1],Oil:+r[2],Water:+r[3],Gas:+r[4],Pwf:+r[5]}})
+ const json=JSON.stringify({units:{Oil:'STB/day',Water:'bbl/day at surface conditions',Gas:'standard scf/day',Pwf:'psi'},rows})
+ const {answer,done}=await stream({originalQuestion:'@Malik Oil AI Analyze synthetic petroleum data\n```json\n'+json+'\n```',selectedSkillId:'petroleum.analyze'})
+ assert.equal(done.length,1);assert.equal(done[0].provider,'malik-petroleum-local')
+ const raw=answer.match(/```malik-oil-report[\r\n]+([^\r\n]+)/)[1],view=readOilReportBlock(raw)
+ close(view.result.wells[0].last.oil,3240);assert.doesNotMatch(answer,/INVALID_TASK/)
+})
+test('production incident: uploaded CSV and XLSX use declarations in message context',async()=>{
+ const {table,declarations}=await import('./fixtures/oil-six-wells.mjs')
+ const rows=table.split('\n').map(l=>l.split('\t'))
+ const {buildXlsx}=load('lib/work/documents/xlsx.ts')
+ const xlsx=Buffer.from(buildXlsx([{name:'Production',header:rows[0],rows:rows.slice(1)}]))
+ for(const file of [{name:'production.csv',mime:'text/csv',text:table.replace(/\t/g,',')},{name:'production.xlsx',mime:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',base64:xlsx.toString('base64')}]){
+  const {answer,done}=await stream({originalQuestion:'@Malik Oil AI Analyze synthetic oil production\n'+declarations,selectedSkillId:'petroleum.analyze',attachments:[{...file,kind:'file'}]})
+  assert.equal(done.length,1);const raw=answer.match(/```malik-oil-report[\r\n]+([^\r\n]+)/)?.[1];assert.ok(raw,answer.slice(0,150))
+  const view=readOilReportBlock(raw);close(view.result.wells[0].last.oil,3240);assert.ok(view.request.metadata.source==='csv'||view.request.metadata.source==='xlsx')
+ }
+})
+test('production incident: XLSX visible metadata cells supply units before the production header',async()=>{
+ const {table}=await import('./fixtures/oil-six-wells.mjs'),{buildXlsx}=load('lib/work/documents/xlsx.ts')
+ const rows=table.split('\n').map(l=>l.split('\t'))
+ const pad=r=>[...r,...Array.from({length:6-r.length},()=> '')]
+ const bytes=Buffer.from(buildXlsx([{name:'Production',header:pad(['Oil','STB/day']),rows:[pad(['Water','bbl/day at surface conditions']),pad(['Gas','standard scf/day']),pad(['Pwf','psi']),...rows]}]))
+ const {answer}=await stream({originalQuestion:'@Malik Oil AI Analyze synthetic oil production',selectedSkillId:'petroleum.analyze',attachments:[{kind:'file',name:'metadata.xlsx',base64:bytes.toString('base64')}]})
+ const raw=answer.match(/```malik-oil-report[\r\n]+([^\r\n]+)/)?.[1];assert.ok(raw,answer.slice(0,150));close(readOilReportBlock(raw).result.wells[0].last.oil,3240)
 })

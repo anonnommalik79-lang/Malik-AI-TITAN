@@ -18,7 +18,7 @@ export function routePetroleum(prompt: string, selectedSkillId?: unknown): Petro
   const explicit = selectedSkillId === PETROLEUM_SKILL_ID || petroleumSelected(prompt)
   const text = routingScope(stripPetroleumToken(prompt)).slice(0, 6000)
   const actionable = text.replace(/(?:не\s+(?:генерируй|создавай|рисуй|нарисуй|сгенерируй)|do\s+not\s+(?:generate|create|draw)|don't\s+(?:generate|create|draw)|لا\s+(?:ترسم|تنشئ))[^.;\n]*/giu, "")
-  const domain = explicit || isOilGasRequest(text) || PRODUCTION_TABLE.test(stripPetroleumToken(prompt).slice(0, 20000)) || /النفط|نفطي|الغاز الطبيعي|إنتاج النفط|البئر|الآبار|مكمن|حقل نفط|الغاز المسال|\bLNG\b|water\s*cut|gas.oil\s+ratio|\bGOR\b|sour\s+gas|\brefinery\b|\brefining\b/iu.test(text)
+  const domain = explicit || isOilGasRequest(text) || PRODUCTION_TABLE.test(stripPetroleumToken(prompt).slice(0, 600_000)) || /النفط|نفطي|الغاز الطبيعي|إنتاج النفط|البئر|الآبار|مكمن|حقل نفط|الغاز المسال|\bLNG\b|water\s*cut|gas.oil\s+ratio|\bGOR\b|sour\s+gas|\brefinery\b|\brefining\b/iu.test(text)
   const base = { domain, explicit, ...(domain ? { skillId: PETROLEUM_SKILL_ID } : {}) }
   const create = /нарисуй|сгенерируй|создай|сделай|напиши|write|generate|draw|create|make|render|ارسم|أنشئ|انشئ|صمم|жаса|сал/iu.test(actionable)
   if (/(?:напиши|создай|разработай|исправь|write|create|build|fix|debug|اكتب)\s+(?:мне\s+|an?\s+)?(?:(?:python|javascript|typescript|SQL)\s+)?(?:код|скрипт|сайт|code|script|website|function|برنامج)/iu.test(actionable)) return { ...base, engine: "code" }

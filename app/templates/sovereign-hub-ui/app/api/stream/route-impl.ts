@@ -35,7 +35,7 @@ import { buildChatArtifactSkillPrompt } from "@/lib/ai/chat-artifact-skills"
 import { petroleumSafetyMessage } from "@/lib/work/petroleum/safety"
 import { executePetroleumDocument } from "@/lib/work/petroleum/documents"
 import { executePetroleumMessageAsync } from "@/lib/work/petroleum/message"
-import { executePetroleumTable, withOilVisual } from "@/lib/work/petroleum/table-message"
+import { executePetroleumAttachmentTable, executePetroleumTable, withOilVisual } from "@/lib/work/petroleum/table-message"
 import { oilReportBlocksToText } from "@/lib/work/petroleum/visual-report"
 import { requiresPetroleumExpertSynthesis } from "@/lib/work/petroleum/expert-routing"
 import { routePetroleum } from "@/lib/work/petroleum/router"
@@ -346,6 +346,7 @@ async function malikAdminCommandAnswer(request: Request, body: any, ownerMode: b
 
 async function scheduledCommandAnswer(body: any, entitlement: RequestEntitlement) {
   const prompt = coderPrompt(body)
+  if (body?.modelId === "malik-oil-1tb" || body?.model === "malik-oil-1tb" || routePetroleum(prompt, body?.selectedSkillId).engine === "petroleum") return null
   const timeZone = String(body?.metadata?.timeZone || "UTC").trim() || "UTC"
   const intent = resolveWorkspaceMode(body?.workspaceMode) === "work"
     ? detectWorkScheduleIntent(prompt, timeZone)
@@ -400,12 +401,13 @@ function shouldRunMalikCoder(selection: Awaited<ReturnType<typeof resolveStrictM
 async function runSelectedAnswer(
   ...args: Parameters<typeof runSelectedAnswerUnchecked>
 ) {
-  let [body, selection, onProgress, maxOutputTokens, onToken, activity, signal] = args
+  const [initialBody, selection, onProgress, maxOutputTokens, onToken, activity, signal] = args
+  let body = initialBody
   const originalPrompt = coderPrompt(body), freshness = classifyFreshness(originalPrompt)
   const safety = routePetroleum(originalPrompt, body?.selectedSkillId).domain ? petroleumSafetyMessage(originalPrompt) : null
   if (safety) { onToken?.(safety); return { content: safety, provider: "malik-petroleum-safety", model: "advisory-guard", selectedModelId: selection?.modelId || DEFAULT_MALIK_MODEL_ID, usedWeb: false, sources: [], attempts: [] } }
   let fieldStep: string | undefined
-  const petroleum = await executePetroleumDocument({ prompt: originalPrompt, selectedSkillId: body?.selectedSkillId, attachments: body?.attachments }) || await executePetroleumMessageAsync({ prompt: originalPrompt, selectedSkillId: body?.selectedSkillId, attachments: body?.attachments, signal, onProgress: event => {
+  let petroleum = await executePetroleumDocument({ prompt: originalPrompt, selectedSkillId: body?.selectedSkillId, attachments: body?.attachments }) || await executePetroleumMessageAsync({ prompt: originalPrompt, selectedSkillId: body?.selectedSkillId, attachments: body?.attachments, signal, onProgress: event => {
     fieldStep ||= activity?.start("Анализирую нефтяные данные", "code", "petroleum.field")
     if (event.stage === "analyze" && event.processed % 25 !== 0 && event.processed !== event.requested) return
     const text = `Проверено скважин: ${event.processed}/${event.requested}; ошибок: ${event.failed}`
@@ -413,6 +415,9 @@ async function runSelectedAnswer(
     onProgress?.({phase:"petroleum",kind:"petroleum",stage:event.stage,text,processed:event.processed,requested:event.requested,failed:event.failed})
   } })
   const oilScope = selection?.entitlement?.authenticated ? "account" as const : "guest" as const
+  const oilProgress = (event: { stage: string; status: string; reason?: string; checked?: number }) => onProgress?.({ phase: "petroleum", kind: "petroleum", ...event })
+  const attachmentTable = petroleum && !petroleum.receipt.ok ? executePetroleumAttachmentTable({ prompt: originalPrompt, selectedSkillId: body?.selectedSkillId, scope: oilScope, attachments: body?.attachments, onEvent: oilProgress, deferCompletion: true }) : null
+  if (attachmentTable) petroleum = null
   if (petroleum) {
     const step = fieldStep || activity?.start("Нефтегазовый расчёт и аудит", "code", petroleum.receipt.version)
     activity?.finish(step, { ok: petroleum.receipt.ok, inputHash: petroleum.receipt.inputHash }, petroleum.receipt.ok ? "completed" : "failed", petroleum.receipt.error)
@@ -427,16 +432,24 @@ async function runSelectedAnswer(
           petroleumComputedEvidence: oilReportBlocksToText(content).slice(0, 16_000),
         },
       }
-      const answer = await runSelectedAnswerUnchecked(engineeringBody, selection, onProgress, maxOutputTokens, onToken, activity, signal)
-      const appendix = "\n\n### Подтверждённые расчётным движком данные\n\n" + content
-      onToken?.(appendix)
-      return { ...answer, content: answer.content + appendix }
+      try {
+        const answer = await runSelectedAnswerUnchecked(engineeringBody, selection, onProgress, maxOutputTokens, undefined, activity, signal)
+        const combined = content + "\n\n### Инженерная интерпретация моделей — требует проверки\n\n" + answer.content
+        onToken?.(combined)
+        return { ...answer, content: combined }
+      } catch (error) {
+        signal?.throwIfAborted()
+        const diagnostic = error instanceof MalikModelRouteError && error.code === "OIL_ENSEMBLE_UNAVAILABLE" ? "Участие моделей: 0/3 — ответы провайдеров не получены." : "Ансамбль не вернул итоговый ответ; участие моделей не подтверждено."
+        const combined = content + "\n\n" + diagnostic + " Детерминированные расчёты сохранены."
+        onToken?.(combined)
+        return { content: combined, provider: "malik-petroleum-local", model: petroleum.receipt.version, selectedModelId: selection.modelId, usedWeb: false, sources: [], attempts: [] }
+      }
     }
     onToken?.(content)
     return { content, provider: "malik-petroleum-local", model: petroleum.receipt.version, selectedModelId: selection?.modelId || DEFAULT_MALIK_MODEL_ID, usedWeb: false, sources: [], attempts: [] }
   }
   // A production table pasted into the message: computed locally, answered with the visual report.
-  const oilTable = hasMalikAttachments(body?.attachments) ? null : executePetroleumTable({ prompt: originalPrompt, selectedSkillId: body?.selectedSkillId, scope: oilScope })
+  const oilTable = attachmentTable || (hasMalikAttachments(body?.attachments) ? null : executePetroleumTable({ prompt: originalPrompt, selectedSkillId: body?.selectedSkillId, scope: oilScope, onEvent: oilProgress, deferCompletion: true }))
   if (oilTable) {
     const step = activity?.start("Нефтегазовый расчёт и аудит", "code", oilTable.version)
     activity?.finish(step, { ok: oilTable.ok, inputHash: oilTable.inputHash }, oilTable.ok ? "completed" : "failed", oilTable.ok ? undefined : "Units or rate basis missing")
@@ -453,13 +466,28 @@ async function runSelectedAnswer(
         },
       }
       const modelStep = activity?.start("Мультидисциплинарный нефтегазовый анализ", "model", selection?.modelId || DEFAULT_MALIK_MODEL_ID)
-      const answer = await runSelectedAnswerUnchecked(modelBody, selection, onProgress, maxOutputTokens, onToken, activity, signal)
-      activity?.finish(modelStep, { provider: answer.provider, model: answer.model, characters: answer.content.length })
-      const appendix = "\n\n### Проверенные данные добычи и интерактивные графики\n\n" + oilTable.content
-      onToken?.(appendix)
-      return { ...answer, content: answer.content + appendix }
+      try {
+        const answer = await runSelectedAnswerUnchecked(modelBody, selection, onProgress, maxOutputTokens, undefined, activity, signal)
+        activity?.finish(modelStep, { provider: answer.provider, model: answer.model, characters: answer.content.length })
+        const content = oilTable.content + "\n\n### Инженерная интерпретация моделей — требует проверки\n\n" + answer.content
+        oilProgress({ stage: "RESPONSE_SYNTHESIZED", status: "completed" })
+        onToken?.(content)
+        oilProgress({ stage: "COMPLETED", status: "completed" })
+        return { ...answer, content }
+      } catch (error) {
+        signal?.throwIfAborted()
+        activity?.finish(modelStep, { ok: false }, "failed", "MODEL_UNAVAILABLE")
+        const diagnostic = error instanceof MalikModelRouteError && error.code === "OIL_ENSEMBLE_UNAVAILABLE" ? "Участие моделей: 0/3 — ответы провайдеров не получены." : "Модель не вернула итоговый ответ; участие провайдеров не подтверждено."
+        const content = oilTable.content + "\n\n" + diagnostic + " Детерминированные расчёты сохранены."
+        oilProgress({ stage: "RESPONSE_SYNTHESIZED", status: "completed", reason: "DETERMINISTIC_REPORT_MODEL_UNAVAILABLE" })
+        onToken?.(content)
+        oilProgress({ stage: "COMPLETED", status: "completed" })
+        return { content, provider: "malik-petroleum-local", model: oilTable.version, selectedModelId: selection?.modelId || DEFAULT_MALIK_MODEL_ID, usedWeb: false, sources: [], attempts: [] }
+      }
     }
+    if (oilTable.ok) oilProgress({ stage: "RESPONSE_SYNTHESIZED", status: "completed" })
     onToken?.(oilTable.content)
+    if (oilTable.ok) oilProgress({ stage: "COMPLETED", status: "completed" })
     return { content: oilTable.content, provider: "malik-petroleum-local", model: oilTable.version, selectedModelId: selection?.modelId || DEFAULT_MALIK_MODEL_ID, usedWeb: false, sources: [], attempts: [] }
   }
   if (routePetroleum(originalPrompt, body?.selectedSkillId).domain) body = { ...body, metadata: { ...body?.metadata, petroleumDomain: true } }

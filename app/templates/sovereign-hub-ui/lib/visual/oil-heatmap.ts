@@ -34,3 +34,11 @@ export function buildOilRateHeatmap(wells: readonly OilHeatWell[], periodsToShow
   })
   return { periods, wells: rows, maximum }
 }
+
+/** Percent water cut, recomputed from compatible measured rates; zero total liquid stays missing. */
+export function buildOilWaterCutHeatmap(wells: readonly (OilHeatWell & { water: Array<number | null> })[], periodsToShow = 12): OilHeatmap | null {
+  return buildOilRateHeatmap(wells.map(w => ({ ...w, oil: w.oil.map((oil, i) => {
+    const water = w.water[i]
+    return typeof oil === "number" && typeof water === "number" && Number.isFinite(oil) && Number.isFinite(water) && oil >= 0 && water >= 0 && oil + water > 0 ? 100 * water / (oil + water) : null
+  }) })), periodsToShow)
+}
