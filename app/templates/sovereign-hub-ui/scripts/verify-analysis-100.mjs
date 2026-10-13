@@ -33,6 +33,7 @@ const { ANALYSIS_PRESETS, classifyAnalysisDomain, suggestAnalysisPresets } = loa
 const { selectVisualKinds, visualEngineContract } = load("lib/visual/intent.ts")
 const { computeCalculator, calculatorInputs, CALCULATOR_MODELS } = load("lib/visual/calculators.ts")
 const { parseVisualBlock } = load("lib/visual/schema.ts")
+const { scienceCurve } = load("lib/visual/science-charts.ts")
 
 assert.equal(ANALYSIS_PRESETS.length, 100)
 assert.deepEqual(ANALYSIS_PRESETS.map((s) => s.id), Array.from({ length: 100 }, (_, i) => i + 1))
@@ -85,4 +86,32 @@ close(value(ideal, "volumeL"), liters, "ideal gas molar volume")
 close(value(ideal, "volumeM3"), liters / 1000, "ideal gas m3")
 assert.equal(value(computeCalculator("ideal-gas", { moles: 1, temperatureK: 0, pressurePa: 101325 }), "volumeL"), null)
 assert.equal(value(computeCalculator("ideal-gas", { moles: 1, temperatureK: 300, pressurePa: 0 }), "volumeL"), null)
-console.log("PASS: 100 registered (specifications only), domain/no-photo/no-code routing, Zod-calculator schemas, deterministic physics numerical references and invalid inputs.")
+for (const model of ["projectile-motion", "ohms-law", "ideal-gas"]) {
+  const inputs = model === "projectile-motion"
+    ? { speed: 20, angleDegrees: 45, gravity: 9.81 }
+    : model === "ohms-law" ? { voltage: 12, resistance: 6 }
+      : { moles: 1, temperatureK: 273.15, pressurePa: 101325 }
+  const curve = scienceCurve(model, inputs)
+  assert.ok(curve && curve.data.labels.length === 21 && curve.data.series[0].values.length === 21, model)
+  const schema = parseVisualBlock(JSON.stringify({
+    version: 2, type: "chart", chart: "line", title: curve.title, unit: curve.unit,
+    dataKind: "user", labels: curve.data.labels, series: curve.data.series,
+  }))
+  assert.equal(schema.ok, true, `Calculated chart rejected by visual schema: ${model} (${schema.reason})`)
+  assert.ok(curve.data.series[0].values.every((v) => Number.isFinite(v)), model)
+}
+const ballCurve = scienceCurve("projectile-motion", { speed: 20, angleDegrees: 45, gravity: 9.81 })
+close(ballCurve.data.series[0].values[10], 100/(2*9.81), "computed trajectory apex")
+const gasCurve = scienceCurve("ideal-gas", { moles: 1, temperatureK: 273.15, pressurePa: 101325 })
+close(gasCurve.data.series[0].values[10], liters, "isotherm at supplied p")
+const ohmCurve = scienceCurve("ohms-law", { voltage: 12, resistance: 6 })
+close(ohmCurve.data.series[0].values[20], 2, "I-U curve at supplied U")
+assert.equal(scienceCurve("ohms-law", { voltage: 10, resistance: 0 }), null)
+assert.equal(scienceCurve("ideal-gas", { moles: 1, temperatureK: 273, pressurePa: 0 }), null)
+assert.equal(scienceCurve("projectile-motion", { speed: 20, angleDegrees: 45, gravity: -9 }), null)
+
+const calculatorUi = fs.readFileSync("components/sovereign/visual-engine/VisualCalculator.tsx", "utf8")
+assert.match(calculatorUi, /scienceCurve\(block\.model, current\)/)
+assert.match(calculatorUi, /<ChartView kind="line" data=\{curve\.data\}/)
+
+console.log("PASS: 100 registered (specifications only), domain/no-photo/no-code routing, Zod-calculator schemas, deterministic physics numerical references curves, schema validation and invalid inputs.")
