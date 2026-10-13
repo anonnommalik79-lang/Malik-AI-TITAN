@@ -1,4 +1,5 @@
 import type { VisualEngineType } from "./schema"
+import { classifyAnalysisDomain, suggestAnalysisPresets } from "./analysis-presets"
 
 /**
  * Dynamic UI: which interactive blocks suit this request.
@@ -25,6 +26,14 @@ export function selectVisualKinds(prompt: string): VisualEngineType[] {
   const value = String(prompt || "").slice(0, 4000)
   if (!value.trim() || NO_VISUALS.test(value) || WANTS_CODE.test(value)) return []
   const kinds = PATTERNS.filter(([, pattern]) => pattern.test(value)).map(([kind]) => kind)
+  // Domain-specific visual suggestions use the existing rendering engine, not photos.
+  // No entry is interpreted as an already-implemented computation.
+  const relevant = suggestAnalysisPresets(value)
+  for (const preset of relevant) if (!kinds.includes(preset.kind)) kinds.push(preset.kind)
+  const domain = classifyAnalysisDomain(value)
+  if (!kinds.length && domain && /(?:объясни|разбери|реши|задач|анализ|покажи|вычисл|explai|analy|solve|calculate|model|simulat|plot|модель|моделир)/iu.test(value)) {
+    kinds.push(domain === "logic" ? "graph" : domain === "general" ? "table" : "chart")
+  }
   // A dashboard already contains a chart; a calculator about a loan does not need one.
   if (kinds.includes("dashboard")) return kinds.filter((kind) => kind !== "chart").slice(0, 3)
   return kinds.slice(0, 3)
@@ -47,7 +56,16 @@ const SCHEMAS: Record<VisualEngineType, string> = {
 export function visualEngineContract(prompt: string): string {
   const kinds = selectVisualKinds(prompt)
   if (!kinds.length) return ""
-  return [...COMMON, `Suitable for this request: ${kinds.join(", ")}.`, ...kinds.map((kind) => SCHEMAS[kind])].join("\n")
+  const presets = suggestAnalysisPresets(prompt)
+  const domain = classifyAnalysisDomain(prompt)
+  const guidance = domain
+    ? [
+      "ENGINEERING/SCIENCE VISUALS: choose a real chart, table, graph or calculator according to the question; never substitute an unrelated web photo or decorative image for a numerical plot. Never repeat the same dataset as multiple meaningless charts. Show axes and dimensional units; if quantities have incompatible units, split the charts. A graph is a conceptual scheme; do not label it as experimental evidence.",
+      "STRICT EVIDENCE: display actual supplied numeric series or numbers computed transparently from explicitly stated input and valid equations. If the parameters, laboratory measurements, boundary conditions or model choice are missing, do not invent plots, reservoir grids, measurements, source records, solver outputs, 3D fields or uncertainty intervals. Instead give the symbolic relationship, input checklist or a clearly marked illustrative diagram when useful.",
+      ...(presets.length ? [`Relevant ANALYSIS PRESETS (visual-design specifications, NOT claims of completed engines): ${presets.map((p) => `#${p.id} ${p.name} [${p.kind}; needs: ${p.required}]`).join("; ")}.`] : []),
+    ]
+    : []
+  return [...COMMON, `Suitable for this request: ${kinds.join(", ")}.`, ...guidance, ...kinds.map((kind) => SCHEMAS[kind])].join("\n")
 }
 
 /** Full catalogue, for documentation and tests. */
