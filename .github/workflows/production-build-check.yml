@@ -43,6 +43,9 @@ jobs:
       - name: Install
         run: npm ci --legacy-peer-deps
 
+      - name: Core release regression suite
+        run: npm run test:release-core
+
       - name: Verify attachment UX
         run: npm run test:attachment-menu
 
@@ -94,8 +97,6 @@ jobs:
       - name: Verify image credits and Agnes routing
         run: npm run test:image-credits
 
-      - name: Core release regression suite
-        run: npm run test:release-core
 
       - name: Verify live domain health
         if: github.event_name == 'workflow_dispatch' && inputs.live_smoke == true
