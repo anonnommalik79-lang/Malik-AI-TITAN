@@ -1,5 +1,6 @@
 import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
+import { auditTwoContinuumMass, rawStateMemoryBytes, petroleumProxyPhysicsInstruction } from "../lib/work/petroleum/pinn-physics.ts"
 import {
   PETROLEUM_BARREL_M3, isOilGasRequest, buildOilGasSkillInstruction,
   convertOilVolume, apiGravity, specificGravity,
@@ -40,6 +41,41 @@ for (const [prompt, expected] of [
   ["Рассчитай NPV нефтяного проекта", "ECONOMICS"],
 ]) assert.ok(buildOilGasSkillInstruction(prompt).includes(expected), prompt)
 
+// Scientific phase conservation must close for oil and water separately, and
+// must detect opposite local residuals even when they cancel globally.
+const makeMass = (changes = {}) => ({
+  matrix: { deltaStorageKg: -50, injectionKg: 100, productionKg: 100, boundaryInKg: 0, boundaryOutKg: 0, ...changes.matrix },
+  fracture: { deltaStorageKg: 50, injectionKg: 0, productionKg: 0, boundaryInKg: 0, boundaryOutKg: 0, ...changes.fracture },
+  matrixToFractureKg: 50,
+})
+const balanced = { oil: makeMass(), water: makeMass() }
+const audit = auditTwoContinuumMass(balanced)
+assert.equal(audit.ok, true)
+assert.deepEqual(audit.phases.map(p => p.globalResidualKg), [0, 0])
+const localMismatch = auditTwoContinuumMass({
+  oil: makeMass({ matrix: { deltaStorageKg: -45 }, fracture: { deltaStorageKg: 45 } }),
+  water: makeMass(),
+})
+assert.equal(localMismatch.ok, false)
+assert.equal(localMismatch.phases[0].globalConservation, true)
+assert.equal(localMismatch.phases[0].localConservation, false)
+const globalMismatch = auditTwoContinuumMass({ oil: makeMass({ fracture: { deltaStorageKg: 55 } }), water: makeMass() })
+assert.equal(globalMismatch.phases[0].globalConservation, false)
+assert.throws(() => auditTwoContinuumMass({ oil: makeMass({ matrix: { productionKg: -1 } }), water: makeMass() }), RangeError)
+assert.throws(() => auditTwoContinuumMass({ oil: makeMass(), water: makeMass(), relativeTolerance: -1 }), RangeError)
+assert.equal(rawStateMemoryBytes(10_000_000, 4, 4), 160_000_000)
+assert.throws(() => rawStateMemoryBytes(0, 4, 4), RangeError)
+assert.throws(() => rawStateMemoryBytes(10_000_000, 0, 4), RangeError)
+const pinntask = "Спроектируй PINN и FNO модель карбонатного нефтяного пласта с 10^7 ячеек, 8x H100, 92% обводненности и polymer flood"
+const physics = petroleumProxyPhysicsInstruction(pinntask)
+assert.match(physics, /T_\{α,m\} = -T_\{α,f\}/)
+assert.match(physics, /automatic differentiation does NOT guarantee/)
+assert.match(physics, /160,000,000 bytes/)
+assert.match(physics, /Temporal rollout cannot simply parallelize/)
+assert.match(physics, /salinity compatibility/)
+assert.match(physics, /DEMONSTRATED\/NOT DEMONSTRATED/)
+assert.match(buildOilGasSkillInstruction(pinntask), /PETROLEUM AI PROXY/)
+assert.equal(petroleumProxyPhysicsInstruction("объясни дебит скважины"), "")
 const response = readFileSync("lib/ai/response-intelligence.ts", "utf8")
 const models = readFileSync("lib/ai/malik-models.ts", "utf8")
 const godRouter = readFileSync("lib/malik-god-router.ts", "utf8")
