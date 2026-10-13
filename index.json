@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
-  "lastAttemptAt": "2026-10-13T09:43:22.602Z",
-  "lastSuccessAt": "2026-10-13T09:43:22.602Z",
-  "runId": "38378323276",
+  "lastAttemptAt": "2026-10-13T20:20:29.982Z",
+  "lastSuccessAt": "2026-10-13T20:20:29.982Z",
+  "runId": "38462015536",
   "items": [
     {
       "id": "00427e47df5ef3064509e152",
@@ -12,7 +12,7 @@
       "domain": "openai.com",
       "snippet": "OpenAI publishes new results on open problems in mathematics from an internal frontier model and shares Lean proof formalizations and research details on GitHub.",
       "publishedAt": "2026-10-06T12:00:00.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "dateKind": "publication",
       "authority": "primary",
       "provider": "openai"
@@ -25,7 +25,7 @@
       "domain": "huggingface.co",
       "snippet": "Model repository. Pipeline: image-text-to-text. Repository modification is NOT announcement or availability.",
       "updatedAt": "2026-08-14T14:44:41.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "dateKind": "repository-update",
       "authority": "primary",
       "provider": "hf-Qwen"
@@ -38,7 +38,7 @@
       "domain": "deepmind.google",
       "snippet": "Feed headline only; article text not fetched: We’re launching Lyria 3.5 in Google Flow Music, with advances across musicality, lyrics, vocals, and creative control",
       "publishedAt": "2026-07-29T16:02:10.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "dateKind": "publication",
       "authority": "primary",
       "provider": "deepmind"
@@ -51,7 +51,7 @@
       "domain": "openai.com",
       "snippet": "OpenAI is partnering with America’s SBDC to expand hands-on AI training and local support for small businesses, alongside a new report on how small teams are using AI.",
       "publishedAt": "2026-09-30T10:00:00.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "dateKind": "publication",
       "authority": "primary",
       "provider": "openai"
@@ -63,8 +63,8 @@
       "url": "https://huggingface.co/mistralai/LIDstral-Arabic",
       "domain": "huggingface.co",
       "snippet": "Model repository. Pipeline: text-classification. Repository modification is NOT announcement or availability.",
-      "updatedAt": "2026-10-09T17:11:36.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "updatedAt": "2026-10-13T13:52:02.000Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "dateKind": "repository-update",
       "authority": "primary",
       "provider": "hf-mistralai"
@@ -77,7 +77,7 @@
       "domain": "deepmind.google",
       "snippet": "Introducing sign-language-to-text (SL2T), our breakthrough model powering new sign language features for Deaf and hard of hearing users.",
       "publishedAt": "2026-08-12T14:01:59.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "dateKind": "publication",
       "authority": "primary",
       "provider": "deepmind"
@@ -90,7 +90,7 @@
       "domain": "huggingface.co",
       "snippet": "Model repository. Pipeline: text-to-image. Repository modification is NOT announcement or availability.",
       "updatedAt": "2026-10-12T09:45:49.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "dateKind": "repository-update",
       "authority": "primary",
       "provider": "hf-Qwen"
@@ -103,7 +103,7 @@
       "domain": "huggingface.co",
       "snippet": "Model repository. Pipeline: token-classification. Repository modification is NOT announcement or availability.",
       "updatedAt": "2026-04-22T16:50:17.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "dateKind": "repository-update",
       "authority": "primary",
       "provider": "hf-openai"
@@ -116,7 +116,7 @@
       "domain": "deepmind.google",
       "snippet": "Feed headline only; article text not fetched: WeatherNext: AI model achieves breakthrough in forecasting cyclones",
       "publishedAt": "2026-08-06T15:06:15.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "dateKind": "publication",
       "authority": "primary",
       "provider": "deepmind"
@@ -129,7 +129,7 @@
       "domain": "huggingface.co",
       "snippet": "Model repository. Pipeline: not supplied. Repository modification is NOT announcement or availability.",
       "updatedAt": "2026-09-02T15:03:09.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "dateKind": "repository-update",
       "authority": "primary",
       "provider": "hf-google"
@@ -142,7 +142,7 @@
       "domain": "huggingface.co",
       "snippet": "Model repository. Pipeline: not supplied. Repository modification is NOT announcement or availability.",
       "updatedAt": "2026-06-28T12:33:22.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "dateKind": "repository-update",
       "authority": "primary",
       "provider": "hf-deepseek-ai"
@@ -155,7 +155,7 @@
       "domain": "huggingface.co",
       "snippet": "Model repository. Pipeline: text-generation. Repository modification is NOT announcement or availability.",
       "updatedAt": "2026-07-04T03:15:12.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "dateKind": "repository-update",
       "authority": "primary",
       "provider": "hf-deepseek-ai"
@@ -168,7 +168,7 @@
       "domain": "deepmind.google",
       "snippet": "Feed headline only; article text not fetched: Introducing agentic video understanding with Gemini",
       "publishedAt": "2026-09-01T17:08:51.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "dateKind": "publication",
       "authority": "primary",
       "provider": "deepmind"
@@ -181,7 +181,7 @@
       "domain": "huggingface.co",
       "snippet": "Model repository. Pipeline: image-text-to-text. Repository modification is NOT announcement or availability.",
       "updatedAt": "2026-09-01T09:22:10.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "dateKind": "repository-update",
       "authority": "primary",
       "provider": "hf-deepseek-ai"
@@ -194,7 +194,7 @@
       "domain": "openai.com",
       "snippet": "As it opens a new location, the social club prepares grant applications in 2 hours instead of 3 days and liquor-license materials in 3 hours instead of 4 days.",
       "publishedAt": "2026-10-01T00:00:00.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "dateKind": "publication",
       "authority": "primary",
       "provider": "openai"
@@ -207,7 +207,7 @@
       "domain": "huggingface.co",
       "snippet": "Model repository. Pipeline: not supplied. Repository modification is NOT announcement or availability.",
       "updatedAt": "2026-06-28T12:38:12.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "dateKind": "repository-update",
       "authority": "primary",
       "provider": "hf-deepseek-ai"
@@ -220,7 +220,7 @@
       "domain": "openai.com",
       "snippet": "Atlassian and OpenAI are expanding their partnership to connect frontier models with enterprise knowledge and help teams plan, build, and deliver work.",
       "publishedAt": "2026-10-06T16:00:00.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "dateKind": "publication",
       "authority": "primary",
       "provider": "openai"
@@ -233,7 +233,7 @@
       "domain": "huggingface.co",
       "snippet": "Model repository. Pipeline: feature-extraction. Repository modification is NOT announcement or availability.",
       "updatedAt": "2026-09-27T02:00:16.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "dateKind": "repository-update",
       "authority": "primary",
       "provider": "hf-Qwen"
@@ -246,7 +246,7 @@
       "domain": "deepmind.google",
       "snippet": "Feed headline only; article text not fetched: Introducing WeatherNext 3, our most advanced and accurate global weather AI model",
       "publishedAt": "2026-09-03T15:02:08.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "dateKind": "publication",
       "authority": "primary",
       "provider": "deepmind"
@@ -258,7 +258,7 @@
       "url": "https://www.anthropic.com/news/cyber-verification-program",
       "domain": "www.anthropic.com",
       "snippet": "Official news listing; publication date not established",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "dateKind": "unknown",
       "authority": "primary",
       "provider": "anthropic"
@@ -271,7 +271,7 @@
       "domain": "huggingface.co",
       "snippet": "Model repository. Pipeline: text-generation. Repository modification is NOT announcement or availability.",
       "updatedAt": "2025-12-12T07:36:26.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "dateKind": "repository-update",
       "authority": "primary",
       "provider": "hf-openai"
@@ -284,7 +284,7 @@
       "domain": "openai.com",
       "snippet": "OpenAI introduces a new visual ad format in ChatGPT and expands measurement tools, attribution partnerships, and brand suitability for advertisers.",
       "publishedAt": "2026-10-05T10:00:00.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "dateKind": "publication",
       "authority": "primary",
       "provider": "openai"
@@ -297,7 +297,7 @@
       "domain": "huggingface.co",
       "snippet": "Model repository. Pipeline: automatic-speech-recognition. Repository modification is NOT announcement or availability.",
       "updatedAt": "2024-02-29T10:57:50.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "dateKind": "repository-update",
       "authority": "primary",
       "provider": "hf-openai"
@@ -310,7 +310,7 @@
       "domain": "deepmind.google",
       "snippet": "Feed headline only; article text not fetched: Introducing Gemini 3.8 Live with Live Avatar",
       "publishedAt": "2026-09-24T16:20:39.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "dateKind": "publication",
       "authority": "primary",
       "provider": "deepmind"
@@ -323,7 +323,7 @@
       "domain": "huggingface.co",
       "snippet": "Model repository. Pipeline: automatic-speech-recognition. Repository modification is NOT announcement or availability.",
       "updatedAt": "2024-08-12T10:20:10.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "dateKind": "repository-update",
       "authority": "primary",
       "provider": "hf-openai"
@@ -336,7 +336,7 @@
       "domain": "huggingface.co",
       "snippet": "Model repository. Pipeline: text-to-image. Repository modification is NOT announcement or availability.",
       "updatedAt": "2026-09-30T02:14:09.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "dateKind": "repository-update",
       "authority": "primary",
       "provider": "hf-Qwen"
@@ -349,7 +349,7 @@
       "domain": "huggingface.co",
       "snippet": "Model repository. Pipeline: time-series-forecasting. Repository modification is NOT announcement or availability.",
       "updatedAt": "2026-09-02T15:44:59.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "dateKind": "repository-update",
       "authority": "primary",
       "provider": "hf-google"
@@ -362,7 +362,7 @@
       "domain": "huggingface.co",
       "snippet": "Model repository. Pipeline: not supplied. Repository modification is NOT announcement or availability.",
       "updatedAt": "2026-09-20T11:59:48.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "dateKind": "repository-update",
       "authority": "primary",
       "provider": "hf-Qwen"
@@ -375,7 +375,7 @@
       "domain": "deepmind.google",
       "snippet": "Feed headline only; article text not fetched: Gemini Robotics 2 brings whole body intelligence to robots",
       "publishedAt": "2026-07-28T13:21:37.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "dateKind": "publication",
       "authority": "primary",
       "provider": "deepmind"
@@ -388,7 +388,7 @@
       "domain": "deepmind.google",
       "snippet": "Feed headline only; article text not fetched: Introducing Gemini 3.7 Flash",
       "publishedAt": "2026-08-13T17:04:18.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "dateKind": "publication",
       "authority": "primary",
       "provider": "deepmind"
@@ -401,7 +401,7 @@
       "domain": "openai.com",
       "snippet": "LegalOn cut estimated daily Codex costs by 65% while maintaining development speed. It matched Astra, Sol, and Luna to tasks and managed budgets strategically.",
       "publishedAt": "2026-10-08T12:00:00.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "dateKind": "publication",
       "authority": "primary",
       "provider": "openai"
@@ -414,7 +414,7 @@
       "domain": "huggingface.co",
       "snippet": "Model repository. Pipeline: text-generation. Repository modification is NOT announcement or availability.",
       "updatedAt": "2025-06-18T23:49:26.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "dateKind": "repository-update",
       "authority": "primary",
       "provider": "hf-meta-llama"
@@ -427,7 +427,7 @@
       "domain": "huggingface.co",
       "snippet": "Model repository. Pipeline: zero-shot-image-classification. Repository modification is NOT announcement or availability.",
       "updatedAt": "2026-08-19T23:46:52.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "dateKind": "repository-update",
       "authority": "primary",
       "provider": "hf-google"
@@ -440,7 +440,7 @@
       "domain": "huggingface.co",
       "snippet": "Model repository. Pipeline: image-text-to-text. Repository modification is NOT announcement or availability.",
       "updatedAt": "2025-04-29T18:14:44.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "dateKind": "repository-update",
       "authority": "primary",
       "provider": "hf-meta-llama"
@@ -453,7 +453,7 @@
       "domain": "openai.com",
       "snippet": "Radisson partnered with Accenture to build a ChatGPT plugin using OpenAI technology, helping travelers find, compare, and book hotels while planning their trips.",
       "publishedAt": "2026-10-07T07:00:00.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "dateKind": "publication",
       "authority": "primary",
       "provider": "openai"
@@ -466,7 +466,7 @@
       "domain": "huggingface.co",
       "snippet": "Model repository. Pipeline: feature-extraction. Repository modification is NOT announcement or availability.",
       "updatedAt": "2026-10-06T15:29:23.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "dateKind": "repository-update",
       "authority": "primary",
       "provider": "hf-google"
@@ -478,7 +478,7 @@
       "url": "https://www.anthropic.com/news/2026-usage-policy-update",
       "domain": "www.anthropic.com",
       "snippet": "Official news listing; publication date not established",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "dateKind": "unknown",
       "authority": "primary",
       "provider": "anthropic"
@@ -491,7 +491,7 @@
       "domain": "huggingface.co",
       "snippet": "Model repository. Pipeline: text-generation. Repository modification is NOT announcement or availability.",
       "updatedAt": "2025-08-26T17:25:47.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "dateKind": "repository-update",
       "authority": "primary",
       "provider": "hf-openai"
@@ -504,7 +504,7 @@
       "domain": "huggingface.co",
       "snippet": "Model repository. Pipeline: not supplied. Repository modification is NOT announcement or availability.",
       "updatedAt": "2026-08-05T10:06:52.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "dateKind": "repository-update",
       "authority": "primary",
       "provider": "hf-mistralai"
@@ -517,7 +517,7 @@
       "domain": "huggingface.co",
       "snippet": "Model repository. Pipeline: text-generation. Repository modification is NOT announcement or availability.",
       "updatedAt": "2025-06-18T23:49:51.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "dateKind": "repository-update",
       "authority": "primary",
       "provider": "hf-meta-llama"
@@ -530,7 +530,7 @@
       "domain": "huggingface.co",
       "snippet": "Model repository. Pipeline: not supplied. Repository modification is NOT announcement or availability.",
       "updatedAt": "2026-07-15T12:22:30.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "dateKind": "repository-update",
       "authority": "primary",
       "provider": "hf-mistralai"
@@ -543,7 +543,7 @@
       "domain": "openai.com",
       "snippet": "Discover how Sophos uses OpenAI’s Daybreak to cut cyber-threat investigation time by 96% and automate 52% of MDR cases while preserving human oversight.",
       "publishedAt": "2026-10-09T07:00:00.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "dateKind": "publication",
       "authority": "primary",
       "provider": "openai"
@@ -556,7 +556,7 @@
       "domain": "huggingface.co",
       "snippet": "Model repository. Pipeline: feature-extraction. Repository modification is NOT announcement or availability.",
       "updatedAt": "2026-09-27T02:00:07.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "dateKind": "repository-update",
       "authority": "primary",
       "provider": "hf-Qwen"
@@ -569,7 +569,7 @@
       "domain": "huggingface.co",
       "snippet": "Model repository. Pipeline: automatic-speech-recognition. Repository modification is NOT announcement or availability.",
       "updatedAt": "2024-02-29T10:57:42.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "dateKind": "repository-update",
       "authority": "primary",
       "provider": "hf-openai"
@@ -582,7 +582,7 @@
       "domain": "huggingface.co",
       "snippet": "Model repository. Pipeline: image-text-to-text. Repository modification is NOT announcement or availability.",
       "updatedAt": "2026-10-12T09:45:54.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "dateKind": "repository-update",
       "authority": "primary",
       "provider": "hf-deepseek-ai"
@@ -595,7 +595,7 @@
       "domain": "huggingface.co",
       "snippet": "Model repository. Pipeline: image-text-to-text. Repository modification is NOT announcement or availability.",
       "updatedAt": "2025-05-22T23:46:03.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "dateKind": "repository-update",
       "authority": "primary",
       "provider": "hf-meta-llama"
@@ -608,7 +608,7 @@
       "domain": "huggingface.co",
       "snippet": "Model repository. Pipeline: depth-estimation. Repository modification is NOT announcement or availability.",
       "updatedAt": "2026-08-17T16:43:17.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "dateKind": "repository-update",
       "authority": "primary",
       "provider": "hf-google"
@@ -620,7 +620,7 @@
       "url": "https://www.anthropic.com/news/accenture-embedded-evaluation",
       "domain": "www.anthropic.com",
       "snippet": "Official news listing; publication date not established",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "dateKind": "unknown",
       "authority": "primary",
       "provider": "anthropic"
@@ -633,7 +633,7 @@
       "domain": "huggingface.co",
       "snippet": "Model repository. Pipeline: text-to-image. Repository modification is NOT announcement or availability.",
       "updatedAt": "2026-09-20T11:59:46.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "dateKind": "repository-update",
       "authority": "primary",
       "provider": "hf-Qwen"
@@ -646,7 +646,7 @@
       "domain": "openai.com",
       "snippet": "Explore more than 20 announcements from OpenAI DevDay 2026, including GPT-6 Astra, ChatGPT, Codex, APIs, security, and new tools for builders.",
       "publishedAt": "2026-09-29T10:00:00.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "dateKind": "publication",
       "authority": "primary",
       "provider": "openai"
@@ -659,7 +659,7 @@
       "domain": "huggingface.co",
       "snippet": "Model repository. Pipeline: image-text-to-text. Repository modification is NOT announcement or availability.",
       "updatedAt": "2026-08-31T08:19:15.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "dateKind": "repository-update",
       "authority": "primary",
       "provider": "hf-Qwen"
@@ -672,7 +672,7 @@
       "domain": "huggingface.co",
       "snippet": "Model repository. Pipeline: zero-shot-image-classification. Repository modification is NOT announcement or availability.",
       "updatedAt": "2026-08-17T16:43:16.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "dateKind": "repository-update",
       "authority": "primary",
       "provider": "hf-google"
@@ -685,7 +685,7 @@
       "domain": "openai.com",
       "snippet": "Albertsons Cos. is using ChatGPT Enterprise and the OpenAI API to help teams work faster and make grocery shopping easier for millions of customers.",
       "publishedAt": "2026-10-01T16:00:00.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "dateKind": "publication",
       "authority": "primary",
       "provider": "openai"
@@ -698,7 +698,7 @@
       "domain": "deepmind.google",
       "snippet": "Feed headline only; article text not fetched: Introducing Gemini 3.8 Flash and 3.8 Flash Cyber",
       "publishedAt": "2026-09-02T16:18:31.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "dateKind": "publication",
       "authority": "primary",
       "provider": "deepmind"
@@ -711,7 +711,7 @@
       "domain": "huggingface.co",
       "snippet": "Model repository. Pipeline: image-text-to-text. Repository modification is NOT announcement or availability.",
       "updatedAt": "2025-05-22T23:46:12.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "dateKind": "repository-update",
       "authority": "primary",
       "provider": "hf-meta-llama"
@@ -724,7 +724,7 @@
       "domain": "openai.com",
       "snippet": "College Planner is coming to ChatGPT for Teens to help students manage college applications, alongside new flashcards, quizzes, and a teen AI council.",
       "publishedAt": "2026-10-07T12:00:00.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "dateKind": "publication",
       "authority": "primary",
       "provider": "openai"
@@ -737,7 +737,7 @@
       "domain": "deepmind.google",
       "snippet": "Introducing private, server-side memory to Private AI Compute for personal AI.",
       "publishedAt": "2026-09-23T16:00:57.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "dateKind": "publication",
       "authority": "primary",
       "provider": "deepmind"
@@ -749,7 +749,7 @@
       "url": "https://www.anthropic.com/news/genesis-mission-commitment",
       "domain": "www.anthropic.com",
       "snippet": "Official news listing; publication date not established",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "dateKind": "unknown",
       "authority": "primary",
       "provider": "anthropic"
@@ -762,7 +762,7 @@
       "domain": "deepmind.google",
       "snippet": "Piloting the world's first double-blind AI evaluations",
       "publishedAt": "2026-08-27T12:59:16.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "dateKind": "publication",
       "authority": "primary",
       "provider": "deepmind"
@@ -775,7 +775,7 @@
       "domain": "deepmind.google",
       "snippet": "Feed headline only; article text not fetched: Gemini Omni 1.1 Flash lets you build with more control",
       "publishedAt": "2026-08-27T16:11:32.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "dateKind": "publication",
       "authority": "primary",
       "provider": "deepmind"
@@ -788,7 +788,7 @@
       "domain": "huggingface.co",
       "snippet": "Model repository. Pipeline: not supplied. Repository modification is NOT announcement or availability.",
       "updatedAt": "2026-07-15T12:23:17.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "dateKind": "repository-update",
       "authority": "primary",
       "provider": "hf-mistralai"
@@ -801,7 +801,7 @@
       "domain": "huggingface.co",
       "snippet": "Model repository. Pipeline: not supplied. Repository modification is NOT announcement or availability.",
       "updatedAt": "2026-06-28T12:36:18.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "dateKind": "repository-update",
       "authority": "primary",
       "provider": "hf-deepseek-ai"
@@ -814,7 +814,7 @@
       "domain": "deepmind.google",
       "snippet": "Feed headline only; article text not fetched: Gemini 3.8 text-to-speech says hello",
       "publishedAt": "2026-09-23T15:25:14.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "dateKind": "publication",
       "authority": "primary",
       "provider": "deepmind"
@@ -827,7 +827,20 @@
       "domain": "deepmind.google",
       "snippet": "Google DeepMind partners with game studios to prototype breakthrough AI gameplay.",
       "publishedAt": "2026-08-21T11:59:48.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
+      "dateKind": "publication",
+      "authority": "primary",
+      "provider": "deepmind"
+    },
+    {
+      "id": "851107eacfc8ba0f286d51c3",
+      "topic": "ai",
+      "title": "Gemini 4 Argon: Built to solve your hardest problems",
+      "url": "https://deepmind.google/blog/introducing-gemini-4-argon/",
+      "domain": "deepmind.google",
+      "snippet": "Feed headline only; article text not fetched: Gemini 4 Argon: Built to solve your hardest problems",
+      "publishedAt": "2026-10-13T16:01:52.000Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "dateKind": "publication",
       "authority": "primary",
       "provider": "deepmind"
@@ -840,7 +853,7 @@
       "domain": "openai.com",
       "snippet": "With GPT-5.6, GPT-6 Astra, and GPT‑Image‑2.5, Pollo AI helps creators turn bold ideas into detailed images and cinematic video ads.",
       "publishedAt": "2026-10-08T12:00:00.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "dateKind": "publication",
       "authority": "primary",
       "provider": "openai"
@@ -853,10 +866,23 @@
       "domain": "openai.com",
       "snippet": "Chatham Financial uses Codex and GPT-5.6 to build technology and redesign workflows, cutting trade validation from 30 minutes to under 4.",
       "publishedAt": "2026-10-02T00:00:00.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "dateKind": "publication",
       "authority": "primary",
       "provider": "openai"
+    },
+    {
+      "id": "8b1ab1df41ac00d8450a9c25",
+      "topic": "ai",
+      "title": "Developing Gemini 4 Argon responsibly and safely",
+      "url": "https://deepmind.google/blog/developing-gemini-4-argon-responsibly-and-safely/",
+      "domain": "deepmind.google",
+      "snippet": "Feed headline only; article text not fetched: Developing Gemini 4 Argon responsibly and safely",
+      "publishedAt": "2026-10-13T19:43:07.000Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
+      "dateKind": "publication",
+      "authority": "primary",
+      "provider": "deepmind"
     },
     {
       "id": "8b7663e373c4c258e6acc611",
@@ -866,7 +892,7 @@
       "domain": "huggingface.co",
       "snippet": "Model repository. Pipeline: text-generation. Repository modification is NOT announcement or availability.",
       "updatedAt": "2026-01-14T18:38:05.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "dateKind": "repository-update",
       "authority": "primary",
       "provider": "hf-openai"
@@ -879,7 +905,7 @@
       "domain": "huggingface.co",
       "snippet": "Model repository. Pipeline: image-text-to-text. Repository modification is NOT announcement or availability.",
       "updatedAt": "2025-05-22T23:44:50.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "dateKind": "repository-update",
       "authority": "primary",
       "provider": "hf-meta-llama"
@@ -892,10 +918,23 @@
       "domain": "huggingface.co",
       "snippet": "Model repository. Pipeline: not supplied. Repository modification is NOT announcement or availability.",
       "updatedAt": "2026-06-28T12:37:15.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "dateKind": "repository-update",
       "authority": "primary",
       "provider": "hf-deepseek-ai"
+    },
+    {
+      "id": "8d45898e533e591d4241f4c1",
+      "topic": "ai",
+      "title": "Higgsfield takes AI video from 1 minute to over 10",
+      "url": "https://openai.com/index/higgsfield-longer-videos-voice",
+      "domain": "openai.com",
+      "snippet": "Higgsfield brings creators longer videos with GPT-6 Astra, precise visuals with GPT-Image-2.5, and a path to voice filmmaking with GPT-Live.",
+      "publishedAt": "2026-10-13T12:00:00.000Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
+      "dateKind": "publication",
+      "authority": "primary",
+      "provider": "openai"
     },
     {
       "id": "8d80cb94a02d997e5a857457",
@@ -905,7 +944,7 @@
       "domain": "huggingface.co",
       "snippet": "Model repository. Pipeline: not supplied. Repository modification is NOT announcement or availability.",
       "updatedAt": "2026-07-15T12:24:10.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "dateKind": "repository-update",
       "authority": "primary",
       "provider": "hf-mistralai"
@@ -918,7 +957,7 @@
       "domain": "huggingface.co",
       "snippet": "Model repository. Pipeline: automatic-speech-recognition. Repository modification is NOT announcement or availability.",
       "updatedAt": "2024-02-29T10:57:46.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "dateKind": "repository-update",
       "authority": "primary",
       "provider": "hf-openai"
@@ -931,7 +970,7 @@
       "domain": "huggingface.co",
       "snippet": "Model repository. Pipeline: image-text-to-text. Repository modification is NOT announcement or availability.",
       "updatedAt": "2026-09-02T06:31:52.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "dateKind": "repository-update",
       "authority": "primary",
       "provider": "hf-Qwen"
@@ -944,7 +983,7 @@
       "domain": "openai.com",
       "snippet": "Learn how OpenAI disrupted a campaign to extract protected model reasoning and is strengthening defenses against adversarial distillation.",
       "publishedAt": "2026-09-30T10:30:00.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "dateKind": "publication",
       "authority": "primary",
       "provider": "openai"
@@ -957,7 +996,7 @@
       "domain": "huggingface.co",
       "snippet": "Model repository. Pipeline: zero-shot-image-classification. Repository modification is NOT announcement or availability.",
       "updatedAt": "2026-08-19T23:46:52.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "dateKind": "repository-update",
       "authority": "primary",
       "provider": "hf-google"
@@ -970,7 +1009,7 @@
       "domain": "deepmind.google",
       "snippet": "Feed headline only; article text not fetched: Introducing Gemini 3.8 Live and 3.8 Live Extended Thinking",
       "publishedAt": "2026-09-15T17:05:57.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "dateKind": "publication",
       "authority": "primary",
       "provider": "deepmind"
@@ -983,10 +1022,23 @@
       "domain": "huggingface.co",
       "snippet": "Model repository. Pipeline: not supplied. Repository modification is NOT announcement or availability.",
       "updatedAt": "2026-09-07T07:28:06.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "dateKind": "repository-update",
       "authority": "primary",
       "provider": "hf-mistralai"
+    },
+    {
+      "id": "94cc08977f17740f09c1909b",
+      "topic": "ai",
+      "title": "Gemini 4 Argon for Robotics",
+      "url": "https://deepmind.google/blog/gemini-4-argon-for-robotics/",
+      "domain": "deepmind.google",
+      "snippet": "Feed headline only; article text not fetched: Gemini 4 Argon for Robotics",
+      "publishedAt": "2026-10-13T16:01:58.000Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
+      "dateKind": "publication",
+      "authority": "primary",
+      "provider": "deepmind"
     },
     {
       "id": "9536f8ac7de9fd4ba0626968",
@@ -996,7 +1048,7 @@
       "domain": "huggingface.co",
       "snippet": "Model repository. Pipeline: zero-shot-image-classification. Repository modification is NOT announcement or availability.",
       "updatedAt": "2026-08-19T23:46:54.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "dateKind": "repository-update",
       "authority": "primary",
       "provider": "hf-google"
@@ -1009,7 +1061,7 @@
       "domain": "huggingface.co",
       "snippet": "Model repository. Pipeline: zero-shot-image-classification. Repository modification is NOT announcement or availability.",
       "updatedAt": "2026-08-19T23:46:53.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "dateKind": "repository-update",
       "authority": "primary",
       "provider": "hf-google"
@@ -1022,7 +1074,7 @@
       "domain": "openai.com",
       "snippet": "Using GPT-6 Astra in Codex, Asana made its browser agent 76x cheaper and 5x faster in tests to offer customers more capable models.",
       "publishedAt": "2026-10-09T07:00:00.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "dateKind": "publication",
       "authority": "primary",
       "provider": "openai"
@@ -1035,7 +1087,7 @@
       "domain": "huggingface.co",
       "snippet": "Model repository. Pipeline: text-classification. Repository modification is NOT announcement or availability.",
       "updatedAt": "2025-11-12T21:27:00.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "dateKind": "repository-update",
       "authority": "primary",
       "provider": "hf-meta-llama"
@@ -1048,7 +1100,7 @@
       "domain": "huggingface.co",
       "snippet": "Model repository. Pipeline: feature-extraction. Repository modification is NOT announcement or availability.",
       "updatedAt": "2026-09-27T02:00:18.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "dateKind": "repository-update",
       "authority": "primary",
       "provider": "hf-Qwen"
@@ -1061,7 +1113,7 @@
       "domain": "openai.com",
       "snippet": "GPT‑6 is rolling out globally in ChatGPT with Intelligent UI, delivering faster responses with visuals and interactive experiences you can explore and use directly.",
       "publishedAt": "2026-10-07T00:00:00.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "dateKind": "publication",
       "authority": "primary",
       "provider": "openai"
@@ -1074,7 +1126,7 @@
       "domain": "huggingface.co",
       "snippet": "Model repository. Pipeline: text-generation. Repository modification is NOT announcement or availability.",
       "updatedAt": "2026-08-01T03:07:41.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "dateKind": "repository-update",
       "authority": "primary",
       "provider": "hf-deepseek-ai"
@@ -1086,7 +1138,7 @@
       "url": "https://www.anthropic.com/news/life-sciences-verification-program",
       "domain": "www.anthropic.com",
       "snippet": "Official news listing; publication date not established",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "dateKind": "unknown",
       "authority": "primary",
       "provider": "anthropic"
@@ -1099,7 +1151,7 @@
       "domain": "huggingface.co",
       "snippet": "Model repository. Pipeline: not supplied. Repository modification is NOT announcement or availability.",
       "updatedAt": "2026-09-11T08:37:56.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "dateKind": "repository-update",
       "authority": "primary",
       "provider": "hf-mistralai"
@@ -1112,23 +1164,10 @@
       "domain": "huggingface.co",
       "snippet": "Model repository. Pipeline: not supplied. Repository modification is NOT announcement or availability.",
       "updatedAt": "2026-06-28T12:35:27.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "dateKind": "repository-update",
       "authority": "primary",
       "provider": "hf-deepseek-ai"
-    },
-    {
-      "id": "a821810ee2b72f1657951f98",
-      "topic": "ai",
-      "title": "Accelerating the frontiers of scientific discovery: Google’s $40M commitment to the Genesis Mission",
-      "url": "https://deepmind.google/blog/accelerating-the-frontiers-of-scientific-discovery-googles-40m-commitment-to-the-genesis-mission/",
-      "domain": "deepmind.google",
-      "snippet": "Google commits $40M in AI tokens and credits for the Genesis Mission",
-      "publishedAt": "2026-07-22T13:38:54.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
-      "dateKind": "publication",
-      "authority": "primary",
-      "provider": "deepmind"
     },
     {
       "id": "a91e404b2bda93f1a36eca69",
@@ -1138,7 +1177,7 @@
       "domain": "huggingface.co",
       "snippet": "Model repository. Pipeline: automatic-speech-recognition. Repository modification is NOT announcement or availability.",
       "updatedAt": "2026-10-12T10:28:56.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "dateKind": "repository-update",
       "authority": "primary",
       "provider": "hf-mistralai"
@@ -1151,7 +1190,7 @@
       "domain": "huggingface.co",
       "snippet": "Model repository. Pipeline: automatic-speech-recognition. Repository modification is NOT announcement or availability.",
       "updatedAt": "2024-02-29T10:57:38.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "dateKind": "repository-update",
       "authority": "primary",
       "provider": "hf-openai"
@@ -1164,7 +1203,7 @@
       "domain": "deepmind.google",
       "snippet": "Now you can get more intelligent speech-to-text transcription with Gemini 3.5 Transcribe.",
       "publishedAt": "2026-08-26T17:01:00.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "dateKind": "publication",
       "authority": "primary",
       "provider": "deepmind"
@@ -1177,7 +1216,7 @@
       "domain": "huggingface.co",
       "snippet": "Model repository. Pipeline: not supplied. Repository modification is NOT announcement or availability.",
       "updatedAt": "2025-05-10T15:08:32.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "dateKind": "repository-update",
       "authority": "primary",
       "provider": "hf-meta-llama"
@@ -1190,7 +1229,7 @@
       "domain": "huggingface.co",
       "snippet": "Model repository. Pipeline: image-text-to-text. Repository modification is NOT announcement or availability.",
       "updatedAt": "2025-04-09T10:41:47.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "dateKind": "repository-update",
       "authority": "primary",
       "provider": "hf-meta-llama"
@@ -1202,7 +1241,7 @@
       "url": "https://www.anthropic.com/news/enterprise-frontier-safeguards",
       "domain": "www.anthropic.com",
       "snippet": "Official news listing; publication date not established",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "dateKind": "unknown",
       "authority": "primary",
       "provider": "anthropic"
@@ -1215,6 +1254,495 @@
       "domain": "deepmind.google",
       "snippet": "Gemini Robotics ER 2 helps robots reason, collaborate, and solve real-world tasks. It represents a step change in video understanding, tool orchestration, and multi-robot collaboration for robotic applications.",
       "publishedAt": "2026-07-30T15:00:59.000Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
+      "dateKind": "publication",
+      "authority": "primary",
+      "provider": "deepmind"
+    },
+    {
+      "id": "b8087b88cb63ae7fc829eff8",
+      "topic": "ai",
+      "title": "The eternal complement",
+      "url": "https://openai.com/index/the-eternal-complement",
+      "domain": "openai.com",
+      "snippet": "Advanced AI may matter most for the routine work behind breakthrough ideas. Explore why execution could shape the next economy and the pace of progress.",
+      "publishedAt": "2026-10-01T17:00:00.000Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
+      "dateKind": "publication",
+      "authority": "primary",
+      "provider": "openai"
+    },
+    {
+      "id": "b96a45c2e08370dfb4cd3316",
+      "topic": "ai",
+      "title": "deepseek-ai/DeepSeek-V4-Pro-0813",
+      "url": "https://huggingface.co/deepseek-ai/DeepSeek-V4-Pro-0813",
+      "domain": "huggingface.co",
+      "snippet": "Model repository. Pipeline: text-generation. Repository modification is NOT announcement or availability.",
+      "updatedAt": "2026-08-13T16:28:28.000Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
+      "dateKind": "repository-update",
+      "authority": "primary",
+      "provider": "hf-deepseek-ai"
+    },
+    {
+      "id": "bb917e2858abf79a4e3fe915",
+      "topic": "ai",
+      "title": "mistralai/Mistral-Large-3-675B-Instruct-2512-Eagle",
+      "url": "https://huggingface.co/mistralai/Mistral-Large-3-675B-Instruct-2512-Eagle",
+      "domain": "huggingface.co",
+      "snippet": "Model repository. Pipeline: not supplied. Repository modification is NOT announcement or availability.",
+      "updatedAt": "2026-07-15T12:22:54.000Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
+      "dateKind": "repository-update",
+      "authority": "primary",
+      "provider": "hf-mistralai"
+    },
+    {
+      "id": "bfc4355d370530a85bd88314",
+      "topic": "ai",
+      "title": "Oct 2, 2026  Announcements   Anthropic invests $100 million to train 10,000 engineers and tackle the enterprise AI talent gap",
+      "url": "https://www.anthropic.com/news/claude-frontier-academy",
+      "domain": "www.anthropic.com",
+      "snippet": "Official news listing; publication date not established",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
+      "dateKind": "unknown",
+      "authority": "primary",
+      "provider": "anthropic"
+    },
+    {
+      "id": "c08402b8f22a4b159df3858c",
+      "topic": "ai",
+      "title": "Oct 1, 2026  Announcements   Barclays scales Claude to upgrade operations and improve client experience",
+      "url": "https://www.anthropic.com/news/barclays-scales-claude",
+      "domain": "www.anthropic.com",
+      "snippet": "Official news listing; publication date not established",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
+      "dateKind": "unknown",
+      "authority": "primary",
+      "provider": "anthropic"
+    },
+    {
+      "id": "c11a83f73b42d75639443284",
+      "topic": "ai",
+      "title": "EmbeddingGemma 2: an open, lightweight multimodal embedding model",
+      "url": "https://deepmind.google/blog/embeddinggemma-2-an-open-lightweight-multimodal-embedding-model/",
+      "domain": "deepmind.google",
+      "snippet": "Feed headline only; article text not fetched: EmbeddingGemma 2: an open, lightweight multimodal embedding model",
+      "publishedAt": "2026-10-06T19:57:04.000Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
+      "dateKind": "publication",
+      "authority": "primary",
+      "provider": "deepmind"
+    },
+    {
+      "id": "c38af6e5cae43e23a64c1d50",
+      "topic": "ai",
+      "title": "A model guide for the GPT-6 family",
+      "url": "https://openai.com/index/practical-guide-building-gpt-6",
+      "domain": "openai.com",
+      "snippet": "Learn how startups can choose GPT-6 models, tune reasoning effort, improve prompts and skills, coordinate tools, and prepare workflows for production.",
+      "publishedAt": "2026-10-02T16:15:00.000Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
+      "dateKind": "publication",
+      "authority": "primary",
+      "provider": "openai"
+    },
+    {
+      "id": "c4a1f46e5a98744a7c57fd6e",
+      "topic": "ai",
+      "title": "Oct 8, 2026  Announcements   Introducing the Anthropic Cyber Mission",
+      "url": "https://www.anthropic.com/news/anthropic-cyber-mission",
+      "domain": "www.anthropic.com",
+      "snippet": "Official news listing; publication date not established",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
+      "dateKind": "unknown",
+      "authority": "primary",
+      "provider": "anthropic"
+    },
+    {
+      "id": "c4dc3bf19b4773e541b9958f",
+      "topic": "ai",
+      "title": "google/gemma-4-12B-it-assistant",
+      "url": "https://huggingface.co/google/gemma-4-12B-it-assistant",
+      "domain": "huggingface.co",
+      "snippet": "Model repository. Pipeline: any-to-any. Repository modification is NOT announcement or availability.",
+      "updatedAt": "2026-08-20T21:49:20.000Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
+      "dateKind": "repository-update",
+      "authority": "primary",
+      "provider": "hf-google"
+    },
+    {
+      "id": "c696e8b1f34224735a5b522f",
+      "topic": "ai",
+      "title": "Introducing SynthID Bio",
+      "url": "https://deepmind.google/blog/introducing-synthid-bio/",
+      "domain": "deepmind.google",
+      "snippet": "Proof of concept for watermarking AI-generated proteins while preserving biological function.",
+      "publishedAt": "2026-09-30T15:03:07.000Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
+      "dateKind": "publication",
+      "authority": "primary",
+      "provider": "deepmind"
+    },
+    {
+      "id": "c802ea18564f8c9395b34887",
+      "topic": "ai",
+      "title": "mistralai/Mistral-Small-4-119B-2603-eagle",
+      "url": "https://huggingface.co/mistralai/Mistral-Small-4-119B-2603-eagle",
+      "domain": "huggingface.co",
+      "snippet": "Model repository. Pipeline: not supplied. Repository modification is NOT announcement or availability.",
+      "updatedAt": "2026-07-15T12:23:57.000Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
+      "dateKind": "repository-update",
+      "authority": "primary",
+      "provider": "hf-mistralai"
+    },
+    {
+      "id": "c859d1a572377655b7e92e58",
+      "topic": "ai",
+      "title": "meta-llama/Llama-4-Scout-17B-16E",
+      "url": "https://huggingface.co/meta-llama/Llama-4-Scout-17B-16E",
+      "domain": "huggingface.co",
+      "snippet": "Model repository. Pipeline: image-text-to-text. Repository modification is NOT announcement or availability.",
+      "updatedAt": "2025-04-09T10:41:20.000Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
+      "dateKind": "repository-update",
+      "authority": "primary",
+      "provider": "hf-meta-llama"
+    },
+    {
+      "id": "ca26bca182f697df2bca2ed1",
+      "topic": "ai",
+      "title": "Qwen/Qwen3.8-27B",
+      "url": "https://huggingface.co/Qwen/Qwen3.8-27B",
+      "domain": "huggingface.co",
+      "snippet": "Model repository. Pipeline: image-text-to-text. Repository modification is NOT announcement or availability.",
+      "updatedAt": "2026-08-14T15:00:01.000Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
+      "dateKind": "repository-update",
+      "authority": "primary",
+      "provider": "hf-Qwen"
+    },
+    {
+      "id": "cb56155b61078c3166224bcf",
+      "topic": "ai",
+      "title": "deepseek-ai/DeepSeek-V4-Pro-DSpark",
+      "url": "https://huggingface.co/deepseek-ai/DeepSeek-V4-Pro-DSpark",
+      "domain": "huggingface.co",
+      "snippet": "Model repository. Pipeline: text-generation. Repository modification is NOT announcement or availability.",
+      "updatedAt": "2026-07-04T03:14:46.000Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
+      "dateKind": "repository-update",
+      "authority": "primary",
+      "provider": "hf-deepseek-ai"
+    },
+    {
+      "id": "ce56aa83d0064ef1be25967d",
+      "topic": "ai",
+      "title": "Gemini 4 Argon: our next era of frontier intelligence",
+      "url": "https://deepmind.google/blog/gemini-4-argon-our-next-era-of-frontier-intelligence/",
+      "domain": "deepmind.google",
+      "snippet": "Feed headline only; article text not fetched: Gemini 4 Argon: our next era of frontier intelligence",
+      "publishedAt": "2026-09-30T20:01:45.000Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
+      "dateKind": "publication",
+      "authority": "primary",
+      "provider": "deepmind"
+    },
+    {
+      "id": "d0ba81cc7a8fdb2b044686bd",
+      "topic": "ai",
+      "title": "Responsible Scaling Policy",
+      "url": "https://www.anthropic.com/news/announcing-our-updated-responsible-scaling-policy",
+      "domain": "www.anthropic.com",
+      "snippet": "Official news listing; publication date not established",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
+      "dateKind": "unknown",
+      "authority": "primary",
+      "provider": "anthropic"
+    },
+    {
+      "id": "d2b5b29b4c815525619915dc",
+      "topic": "ai",
+      "title": "Our approach to EU text provenance rules",
+      "url": "https://openai.com/index/eu-text-provenance",
+      "domain": "openai.com",
+      "snippet": "How OpenAI is approaching text watermarking under EU rules. Learn where watermarks apply, how detection works, and why access starts with researchers.",
+      "publishedAt": "2026-10-05T15:00:00.000Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
+      "dateKind": "publication",
+      "authority": "primary",
+      "provider": "openai"
+    },
+    {
+      "id": "d6b9f5e651b1891e950e0096",
+      "topic": "ai",
+      "title": "Introducing GPT-6.1 Sol",
+      "url": "https://openai.com/index/introducing-gpt-6-1-sol",
+      "domain": "openai.com",
+      "snippet": "Meet GPT-6.1 Sol: near-Astra intelligence for coding, computer use, and professional work at one-fifth of Astra’s standard API input and output token prices.",
+      "publishedAt": "2026-09-29T10:00:00.000Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
+      "dateKind": "publication",
+      "authority": "primary",
+      "provider": "openai"
+    },
+    {
+      "id": "d721843382f3485e8d6d91c4",
+      "topic": "ai",
+      "title": "Proactive cyber defense for governments and enterprises",
+      "url": "https://deepmind.google/blog/proactive-cyber-defense-for-governments-and-enterprises/",
+      "domain": "deepmind.google",
+      "snippet": "Feed headline only; article text not fetched: Proactive cyber defense for governments and enterprises",
+      "publishedAt": "2026-09-02T16:24:24.000Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
+      "dateKind": "publication",
+      "authority": "primary",
+      "provider": "deepmind"
+    },
+    {
+      "id": "d9e485b409fe8517ac6e3a5b",
+      "topic": "ai",
+      "title": "Disrupting AI-enabled “false front” operations",
+      "url": "https://openai.com/index/disrupting-ai-enabled-false-front-operations",
+      "domain": "openai.com",
+      "snippet": "OpenAI disrupted two AI-enabled influence operations that used false-front journalists and a think tank to spread geopolitical messaging.",
+      "publishedAt": "2026-10-08T00:00:00.000Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
+      "dateKind": "publication",
+      "authority": "primary",
+      "provider": "openai"
+    },
+    {
+      "id": "db7b9e6fe248e3146f87743a",
+      "topic": "ai",
+      "title": "How Oracle turns days of work into minutes with ChatGPT and Codex",
+      "url": "https://openai.com/index/oracle",
+      "domain": "openai.com",
+      "snippet": "Across recruiting, engineering, and operations, Oracle turns specialist knowledge into fast, repeatable workflows with ChatGPT Work and Codex.",
+      "publishedAt": "2026-10-08T16:00:00.000Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
+      "dateKind": "publication",
+      "authority": "primary",
+      "provider": "openai"
+    },
+    {
+      "id": "dcba779ffa9087b00490f89f",
+      "topic": "ai",
+      "title": "mistralai/Mistral-Small-4-119B-2603",
+      "url": "https://huggingface.co/mistralai/Mistral-Small-4-119B-2603",
+      "domain": "huggingface.co",
+      "snippet": "Model repository. Pipeline: not supplied. Repository modification is NOT announcement or availability.",
+      "updatedAt": "2026-07-15T12:23:29.000Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
+      "dateKind": "repository-update",
+      "authority": "primary",
+      "provider": "hf-mistralai"
+    },
+    {
+      "id": "ddede063a233dba1173def52",
+      "topic": "ai",
+      "title": "meta-llama/Llama-Prompt-Guard-2-22M",
+      "url": "https://huggingface.co/meta-llama/Llama-Prompt-Guard-2-22M",
+      "domain": "huggingface.co",
+      "snippet": "Model repository. Pipeline: text-classification. Repository modification is NOT announcement or availability.",
+      "updatedAt": "2025-04-29T15:47:24.000Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
+      "dateKind": "repository-update",
+      "authority": "primary",
+      "provider": "hf-meta-llama"
+    },
+    {
+      "id": "e11d88f393daa355d00a657c",
+      "topic": "ai",
+      "title": "google/tipsv1-g14",
+      "url": "https://huggingface.co/google/tipsv1-g14",
+      "domain": "huggingface.co",
+      "snippet": "Model repository. Pipeline: zero-shot-image-classification. Repository modification is NOT announcement or availability.",
+      "updatedAt": "2026-08-19T23:46:54.000Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
+      "dateKind": "repository-update",
+      "authority": "primary",
+      "provider": "hf-google"
+    },
+    {
+      "id": "e99c1ded8705dab80b0e6b20",
+      "topic": "ai",
+      "title": "openai/gpt-oss-safeguard-120b",
+      "url": "https://huggingface.co/openai/gpt-oss-safeguard-120b",
+      "domain": "huggingface.co",
+      "snippet": "Model repository. Pipeline: text-generation. Repository modification is NOT announcement or availability.",
+      "updatedAt": "2025-10-29T11:13:59.000Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
+      "dateKind": "repository-update",
+      "authority": "primary",
+      "provider": "hf-openai"
+    },
+    {
+      "id": "eb79656c925ccbff0eee1147",
+      "topic": "ai",
+      "title": "Qwen/Qwen3.8-Flash-Next",
+      "url": "https://huggingface.co/Qwen/Qwen3.8-Flash-Next",
+      "domain": "huggingface.co",
+      "snippet": "Model repository. Pipeline: image-text-to-text. Repository modification is NOT announcement or availability.",
+      "updatedAt": "2026-08-27T05:03:36.000Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
+      "dateKind": "repository-update",
+      "authority": "primary",
+      "provider": "hf-Qwen"
+    },
+    {
+      "id": "ebb413cc5359756bf9234b81",
+      "topic": "ai",
+      "title": "How Jump Trading is scaling quant research with ChatGPT",
+      "url": "https://openai.com/index/jump-trading",
+      "domain": "openai.com",
+      "snippet": "Jump Trading uses OpenAI to expand quantitative research. See how longer-running AI workflows combine multiple data sources with human review.",
+      "publishedAt": "2026-10-06T12:00:00.000Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
+      "dateKind": "publication",
+      "authority": "primary",
+      "provider": "openai"
+    },
+    {
+      "id": "ef1b3a4772eab8370f467eb4",
+      "topic": "ai",
+      "title": "Sep 23, 2026  Science    Claude discovers a novel enzyme system with CRISPR-like repeats",
+      "url": "https://www.anthropic.com/news/claude-discovers-novel-enzyme-system",
+      "domain": "www.anthropic.com",
+      "snippet": "Official news listing; publication date not established",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
+      "dateKind": "unknown",
+      "authority": "primary",
+      "provider": "anthropic"
+    },
+    {
+      "id": "f0e27f432f48fb866973d706",
+      "topic": "ai",
+      "title": "AlphaGenome Atlas: A predictive map of every possible DNA letter change in the human genome",
+      "url": "https://deepmind.google/blog/alphagenome-atlas-a-predictive-map-of-every-possible-dna-letter-change-in-the-human-genome/",
+      "domain": "deepmind.google",
+      "snippet": "AlphaGenome Atlas maps the molecular effects of 9 billion single-letter DNA variants across the human genome.",
+      "publishedAt": "2026-09-08T14:00:15.000Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
+      "dateKind": "publication",
+      "authority": "primary",
+      "provider": "deepmind"
+    },
+    {
+      "id": "f141654f555ba9973a978942",
+      "topic": "ai",
+      "title": "openai/whisper-large-v3-turbo",
+      "url": "https://huggingface.co/openai/whisper-large-v3-turbo",
+      "domain": "huggingface.co",
+      "snippet": "Model repository. Pipeline: automatic-speech-recognition. Repository modification is NOT announcement or availability.",
+      "updatedAt": "2024-10-04T14:51:11.000Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
+      "dateKind": "repository-update",
+      "authority": "primary",
+      "provider": "hf-openai"
+    },
+    {
+      "id": "f249e65005c196bd88aa2291",
+      "topic": "ai",
+      "title": "mistralai/Mistral-Large-3-675B-Instruct-2512",
+      "url": "https://huggingface.co/mistralai/Mistral-Large-3-675B-Instruct-2512",
+      "domain": "huggingface.co",
+      "snippet": "Model repository. Pipeline: not supplied. Repository modification is NOT announcement or availability.",
+      "updatedAt": "2026-07-15T12:22:43.000Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
+      "dateKind": "repository-update",
+      "authority": "primary",
+      "provider": "hf-mistralai"
+    },
+    {
+      "id": "f3f88bc9e0ec5c5203b28ab9",
+      "topic": "ai",
+      "title": "meta-llama/Llama-Prompt-Guard-2-86M",
+      "url": "https://huggingface.co/meta-llama/Llama-Prompt-Guard-2-86M",
+      "domain": "huggingface.co",
+      "snippet": "Model repository. Pipeline: text-classification. Repository modification is NOT announcement or availability.",
+      "updatedAt": "2025-04-29T15:59:55.000Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
+      "dateKind": "repository-update",
+      "authority": "primary",
+      "provider": "hf-meta-llama"
+    },
+    {
+      "id": "f57eff9c23a4454b476bbb26",
+      "topic": "ai",
+      "title": "Advancing computer use with Ironclad",
+      "url": "https://openai.com/index/advancing-computer-use-with-ironclad",
+      "domain": "openai.com",
+      "snippet": "Learn how OpenAI and Ironclad are training and evaluating AI agents on complex contracting workflows to advance computer use for professional work.",
+      "publishedAt": "2026-10-06T10:00:00.000Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
+      "dateKind": "publication",
+      "authority": "primary",
+      "provider": "openai"
+    },
+    {
+      "id": "f85326ed9ab1c9be95a7804f",
+      "topic": "ai",
+      "title": "openai/gpt-oss-120b",
+      "url": "https://huggingface.co/openai/gpt-oss-120b",
+      "domain": "huggingface.co",
+      "snippet": "Model repository. Pipeline: text-generation. Repository modification is NOT announcement or availability.",
+      "updatedAt": "2025-08-26T17:25:03.000Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
+      "dateKind": "repository-update",
+      "authority": "primary",
+      "provider": "hf-openai"
+    },
+    {
+      "id": "f8ea5e7e4d84d96f83f7c31f",
+      "topic": "ai",
+      "title": "deepseek-ai/dflash_gemma4_12b_block7",
+      "url": "https://huggingface.co/deepseek-ai/dflash_gemma4_12b_block7",
+      "domain": "huggingface.co",
+      "snippet": "Model repository. Pipeline: not supplied. Repository modification is NOT announcement or availability.",
+      "updatedAt": "2026-06-28T12:34:57.000Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
+      "dateKind": "repository-update",
+      "authority": "primary",
+      "provider": "hf-deepseek-ai"
+    },
+    {
+      "id": "f9592b3a319e469ac67b370d",
+      "topic": "ai",
+      "title": "google/tipsv1-l14",
+      "url": "https://huggingface.co/google/tipsv1-l14",
+      "domain": "huggingface.co",
+      "snippet": "Model repository. Pipeline: zero-shot-image-classification. Repository modification is NOT announcement or availability.",
+      "updatedAt": "2026-08-19T23:46:53.000Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
+      "dateKind": "repository-update",
+      "authority": "primary",
+      "provider": "hf-google"
+    },
+    {
+      "id": "fb176bf94b4aaa8b7938f86f",
+      "topic": "software",
+      "title": "v16.4.0",
+      "url": "https://github.com/vercel/next.js/releases/tag/v16.4.0",
+      "domain": "github.com",
+      "snippet": "Check out the [16.4 announcement post](https://nextjs.org/blog/next-16-4) to get an overview of the changes.\r\n\r\n### Core Changes\r\n\r\n- Show compiler plugin warning in more situations: #75682\r\n- fix(scripts): correct typo in rm.mjs error message: #87015\r\n- docs: improve clarity and punctuation in README: #86096\r\n- Fix debug build paths Pages Router support entries: #93529\r\n- bundle-analyzer: record historical snapshots on each analyze run: #93520\r\n- fix: detect proxy.ts correctly with compound pageExtensions: #93246\r\n- feat(turbopack): support `false` values for `resolveAlias` config: #93331\r\n\r\n### Misc Changes\r\n\r\n- docs: correction to dynamicParams migration: #96624\r\n- docs: proxy event argument: #96435\r\n- docs: remove experimental note from runtime prefetching: #96615\r\n- Preserve per-segment prefetching after dynamic navigation: #96583\r\n- Rename static generation stream option to waitForAllReady: #96564\r\n- Remove obsolete static generation plumbing: #96563\r\n- [turbopack] Drop dead writes to `exports`: #96381\r\n- [turbopack] Ignore writes to `exports` after a `module.exports = {}` writes: #96380\r\n- [turbopack] Add test for sideEffects with optimizePackageImports: #96549\r\n- [turbopack] Strip leading BOM before parsing CSS: #96678\r\n- Upgrade React from `cbb046ab-20260731` to `7dfc7ccd-20260803`: #96550\r\n- docs: use relative doc links in instant-navigation error pages: #96672\r\n- Turbopack: terminate failed plugin worker threads: #96592\r\n- Fix HTML-limited bot matching in prerender bypass rules: #96584\r\n- [ci] Fix create_release_branch for new repo permissions: #96641\r\n- test: skip action module instance deploy test: #96629\r\n- docs: quote the dynamicParams build error in a blockquote: #96633\r\n- [react-sync] Open pull requests as the bot that authors the commits: #96682\r\n- [Be",
+      "publishedAt": "2026-10-07T10:03:29.000Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
+      "dateKind": "publication",
+      "authority": "primary",
+      "provider": "nextjs"
+    },
+    {
+      "id": "a821810ee2b72f1657951f98",
+      "topic": "ai",
+      "title": "Accelerating the frontiers of scientific discovery: Google’s $40M commitment to the Genesis Mission",
+      "url": "https://deepmind.google/blog/accelerating-the-frontiers-of-scientific-discovery-googles-40m-commitment-to-the-genesis-mission/",
+      "domain": "deepmind.google",
+      "snippet": "Google commits $40M in AI tokens and credits for the Genesis Mission",
+      "publishedAt": "2026-07-22T13:38:54.000Z",
       "checkedAt": "2026-10-13T09:43:22.602Z",
       "dateKind": "publication",
       "authority": "primary",
@@ -1234,301 +1762,6 @@
       "provider": "deepmind"
     },
     {
-      "id": "b8087b88cb63ae7fc829eff8",
-      "topic": "ai",
-      "title": "The eternal complement",
-      "url": "https://openai.com/index/the-eternal-complement",
-      "domain": "openai.com",
-      "snippet": "Advanced AI may matter most for the routine work behind breakthrough ideas. Explore why execution could shape the next economy and the pace of progress.",
-      "publishedAt": "2026-10-01T17:00:00.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
-      "dateKind": "publication",
-      "authority": "primary",
-      "provider": "openai"
-    },
-    {
-      "id": "b96a45c2e08370dfb4cd3316",
-      "topic": "ai",
-      "title": "deepseek-ai/DeepSeek-V4-Pro-0813",
-      "url": "https://huggingface.co/deepseek-ai/DeepSeek-V4-Pro-0813",
-      "domain": "huggingface.co",
-      "snippet": "Model repository. Pipeline: text-generation. Repository modification is NOT announcement or availability.",
-      "updatedAt": "2026-08-13T16:28:28.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
-      "dateKind": "repository-update",
-      "authority": "primary",
-      "provider": "hf-deepseek-ai"
-    },
-    {
-      "id": "bb917e2858abf79a4e3fe915",
-      "topic": "ai",
-      "title": "mistralai/Mistral-Large-3-675B-Instruct-2512-Eagle",
-      "url": "https://huggingface.co/mistralai/Mistral-Large-3-675B-Instruct-2512-Eagle",
-      "domain": "huggingface.co",
-      "snippet": "Model repository. Pipeline: not supplied. Repository modification is NOT announcement or availability.",
-      "updatedAt": "2026-07-15T12:22:54.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
-      "dateKind": "repository-update",
-      "authority": "primary",
-      "provider": "hf-mistralai"
-    },
-    {
-      "id": "bfc4355d370530a85bd88314",
-      "topic": "ai",
-      "title": "Oct 2, 2026  Announcements   Anthropic invests $100 million to train 10,000 engineers and tackle the enterprise AI talent gap",
-      "url": "https://www.anthropic.com/news/claude-frontier-academy",
-      "domain": "www.anthropic.com",
-      "snippet": "Official news listing; publication date not established",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
-      "dateKind": "unknown",
-      "authority": "primary",
-      "provider": "anthropic"
-    },
-    {
-      "id": "c08402b8f22a4b159df3858c",
-      "topic": "ai",
-      "title": "Oct 1, 2026  Announcements   Barclays scales Claude to upgrade operations and improve client experience",
-      "url": "https://www.anthropic.com/news/barclays-scales-claude",
-      "domain": "www.anthropic.com",
-      "snippet": "Official news listing; publication date not established",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
-      "dateKind": "unknown",
-      "authority": "primary",
-      "provider": "anthropic"
-    },
-    {
-      "id": "c11a83f73b42d75639443284",
-      "topic": "ai",
-      "title": "EmbeddingGemma 2: an open, lightweight multimodal embedding model",
-      "url": "https://deepmind.google/blog/embeddinggemma-2-an-open-lightweight-multimodal-embedding-model/",
-      "domain": "deepmind.google",
-      "snippet": "Feed headline only; article text not fetched: EmbeddingGemma 2: an open, lightweight multimodal embedding model",
-      "publishedAt": "2026-10-06T19:57:04.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
-      "dateKind": "publication",
-      "authority": "primary",
-      "provider": "deepmind"
-    },
-    {
-      "id": "c38af6e5cae43e23a64c1d50",
-      "topic": "ai",
-      "title": "A model guide for the GPT-6 family",
-      "url": "https://openai.com/index/practical-guide-building-gpt-6",
-      "domain": "openai.com",
-      "snippet": "Learn how startups can choose GPT-6 models, tune reasoning effort, improve prompts and skills, coordinate tools, and prepare workflows for production.",
-      "publishedAt": "2026-10-02T16:15:00.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
-      "dateKind": "publication",
-      "authority": "primary",
-      "provider": "openai"
-    },
-    {
-      "id": "c4a1f46e5a98744a7c57fd6e",
-      "topic": "ai",
-      "title": "Oct 8, 2026  Announcements   Introducing the Anthropic Cyber Mission",
-      "url": "https://www.anthropic.com/news/anthropic-cyber-mission",
-      "domain": "www.anthropic.com",
-      "snippet": "Official news listing; publication date not established",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
-      "dateKind": "unknown",
-      "authority": "primary",
-      "provider": "anthropic"
-    },
-    {
-      "id": "c4dc3bf19b4773e541b9958f",
-      "topic": "ai",
-      "title": "google/gemma-4-12B-it-assistant",
-      "url": "https://huggingface.co/google/gemma-4-12B-it-assistant",
-      "domain": "huggingface.co",
-      "snippet": "Model repository. Pipeline: any-to-any. Repository modification is NOT announcement or availability.",
-      "updatedAt": "2026-08-20T21:49:20.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
-      "dateKind": "repository-update",
-      "authority": "primary",
-      "provider": "hf-google"
-    },
-    {
-      "id": "c696e8b1f34224735a5b522f",
-      "topic": "ai",
-      "title": "Introducing SynthID Bio",
-      "url": "https://deepmind.google/blog/introducing-synthid-bio/",
-      "domain": "deepmind.google",
-      "snippet": "Proof of concept for watermarking AI-generated proteins while preserving biological function.",
-      "publishedAt": "2026-09-30T15:03:07.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
-      "dateKind": "publication",
-      "authority": "primary",
-      "provider": "deepmind"
-    },
-    {
-      "id": "c802ea18564f8c9395b34887",
-      "topic": "ai",
-      "title": "mistralai/Mistral-Small-4-119B-2603-eagle",
-      "url": "https://huggingface.co/mistralai/Mistral-Small-4-119B-2603-eagle",
-      "domain": "huggingface.co",
-      "snippet": "Model repository. Pipeline: not supplied. Repository modification is NOT announcement or availability.",
-      "updatedAt": "2026-07-15T12:23:57.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
-      "dateKind": "repository-update",
-      "authority": "primary",
-      "provider": "hf-mistralai"
-    },
-    {
-      "id": "c859d1a572377655b7e92e58",
-      "topic": "ai",
-      "title": "meta-llama/Llama-4-Scout-17B-16E",
-      "url": "https://huggingface.co/meta-llama/Llama-4-Scout-17B-16E",
-      "domain": "huggingface.co",
-      "snippet": "Model repository. Pipeline: image-text-to-text. Repository modification is NOT announcement or availability.",
-      "updatedAt": "2025-04-09T10:41:20.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
-      "dateKind": "repository-update",
-      "authority": "primary",
-      "provider": "hf-meta-llama"
-    },
-    {
-      "id": "ca26bca182f697df2bca2ed1",
-      "topic": "ai",
-      "title": "Qwen/Qwen3.8-27B",
-      "url": "https://huggingface.co/Qwen/Qwen3.8-27B",
-      "domain": "huggingface.co",
-      "snippet": "Model repository. Pipeline: image-text-to-text. Repository modification is NOT announcement or availability.",
-      "updatedAt": "2026-08-14T15:00:01.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
-      "dateKind": "repository-update",
-      "authority": "primary",
-      "provider": "hf-Qwen"
-    },
-    {
-      "id": "cb56155b61078c3166224bcf",
-      "topic": "ai",
-      "title": "deepseek-ai/DeepSeek-V4-Pro-DSpark",
-      "url": "https://huggingface.co/deepseek-ai/DeepSeek-V4-Pro-DSpark",
-      "domain": "huggingface.co",
-      "snippet": "Model repository. Pipeline: text-generation. Repository modification is NOT announcement or availability.",
-      "updatedAt": "2026-07-04T03:14:46.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
-      "dateKind": "repository-update",
-      "authority": "primary",
-      "provider": "hf-deepseek-ai"
-    },
-    {
-      "id": "ce56aa83d0064ef1be25967d",
-      "topic": "ai",
-      "title": "Gemini 4 Argon: our next era of frontier intelligence",
-      "url": "https://deepmind.google/blog/gemini-4-argon-our-next-era-of-frontier-intelligence/",
-      "domain": "deepmind.google",
-      "snippet": "Feed headline only; article text not fetched: Gemini 4 Argon: our next era of frontier intelligence",
-      "publishedAt": "2026-09-30T20:01:45.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
-      "dateKind": "publication",
-      "authority": "primary",
-      "provider": "deepmind"
-    },
-    {
-      "id": "d0ba81cc7a8fdb2b044686bd",
-      "topic": "ai",
-      "title": "Responsible Scaling Policy",
-      "url": "https://www.anthropic.com/news/announcing-our-updated-responsible-scaling-policy",
-      "domain": "www.anthropic.com",
-      "snippet": "Official news listing; publication date not established",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
-      "dateKind": "unknown",
-      "authority": "primary",
-      "provider": "anthropic"
-    },
-    {
-      "id": "d2b5b29b4c815525619915dc",
-      "topic": "ai",
-      "title": "Our approach to EU text provenance rules",
-      "url": "https://openai.com/index/eu-text-provenance",
-      "domain": "openai.com",
-      "snippet": "How OpenAI is approaching text watermarking under EU rules. Learn where watermarks apply, how detection works, and why access starts with researchers.",
-      "publishedAt": "2026-10-05T15:00:00.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
-      "dateKind": "publication",
-      "authority": "primary",
-      "provider": "openai"
-    },
-    {
-      "id": "d6b9f5e651b1891e950e0096",
-      "topic": "ai",
-      "title": "Introducing GPT-6.1 Sol",
-      "url": "https://openai.com/index/introducing-gpt-6-1-sol",
-      "domain": "openai.com",
-      "snippet": "Meet GPT-6.1 Sol: near-Astra intelligence for coding, computer use, and professional work at one-fifth of Astra’s standard API input and output token prices.",
-      "publishedAt": "2026-09-29T10:00:00.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
-      "dateKind": "publication",
-      "authority": "primary",
-      "provider": "openai"
-    },
-    {
-      "id": "d721843382f3485e8d6d91c4",
-      "topic": "ai",
-      "title": "Proactive cyber defense for governments and enterprises",
-      "url": "https://deepmind.google/blog/proactive-cyber-defense-for-governments-and-enterprises/",
-      "domain": "deepmind.google",
-      "snippet": "Feed headline only; article text not fetched: Proactive cyber defense for governments and enterprises",
-      "publishedAt": "2026-09-02T16:24:24.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
-      "dateKind": "publication",
-      "authority": "primary",
-      "provider": "deepmind"
-    },
-    {
-      "id": "d9e485b409fe8517ac6e3a5b",
-      "topic": "ai",
-      "title": "Disrupting AI-enabled “false front” operations",
-      "url": "https://openai.com/index/disrupting-ai-enabled-false-front-operations",
-      "domain": "openai.com",
-      "snippet": "OpenAI disrupted two AI-enabled influence operations that used false-front journalists and a think tank to spread geopolitical messaging.",
-      "publishedAt": "2026-10-08T00:00:00.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
-      "dateKind": "publication",
-      "authority": "primary",
-      "provider": "openai"
-    },
-    {
-      "id": "db7b9e6fe248e3146f87743a",
-      "topic": "ai",
-      "title": "How Oracle turns days of work into minutes with ChatGPT and Codex",
-      "url": "https://openai.com/index/oracle",
-      "domain": "openai.com",
-      "snippet": "Across recruiting, engineering, and operations, Oracle turns specialist knowledge into fast, repeatable workflows with ChatGPT Work and Codex.",
-      "publishedAt": "2026-10-08T16:00:00.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
-      "dateKind": "publication",
-      "authority": "primary",
-      "provider": "openai"
-    },
-    {
-      "id": "dcba779ffa9087b00490f89f",
-      "topic": "ai",
-      "title": "mistralai/Mistral-Small-4-119B-2603",
-      "url": "https://huggingface.co/mistralai/Mistral-Small-4-119B-2603",
-      "domain": "huggingface.co",
-      "snippet": "Model repository. Pipeline: not supplied. Repository modification is NOT announcement or availability.",
-      "updatedAt": "2026-07-15T12:23:29.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
-      "dateKind": "repository-update",
-      "authority": "primary",
-      "provider": "hf-mistralai"
-    },
-    {
-      "id": "ddede063a233dba1173def52",
-      "topic": "ai",
-      "title": "meta-llama/Llama-Prompt-Guard-2-22M",
-      "url": "https://huggingface.co/meta-llama/Llama-Prompt-Guard-2-22M",
-      "domain": "huggingface.co",
-      "snippet": "Model repository. Pipeline: text-classification. Repository modification is NOT announcement or availability.",
-      "updatedAt": "2025-04-29T15:47:24.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
-      "dateKind": "repository-update",
-      "authority": "primary",
-      "provider": "hf-meta-llama"
-    },
-    {
       "id": "dec620cb7225d2434a9b02e6",
       "topic": "ai",
       "title": "Introducing dots",
@@ -1542,19 +1775,6 @@
       "provider": "openai"
     },
     {
-      "id": "e11d88f393daa355d00a657c",
-      "topic": "ai",
-      "title": "google/tipsv1-g14",
-      "url": "https://huggingface.co/google/tipsv1-g14",
-      "domain": "huggingface.co",
-      "snippet": "Model repository. Pipeline: zero-shot-image-classification. Repository modification is NOT announcement or availability.",
-      "updatedAt": "2026-08-19T23:46:54.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
-      "dateKind": "repository-update",
-      "authority": "primary",
-      "provider": "hf-google"
-    },
-    {
       "id": "e38a2bc2474832f28ea96744",
       "topic": "ai",
       "title": "Introducing Gemini 3.6 Flash, 3.5 Flash-Lite, and 3.5 Flash Cyber",
@@ -1566,174 +1786,6 @@
       "dateKind": "publication",
       "authority": "primary",
       "provider": "deepmind"
-    },
-    {
-      "id": "e99c1ded8705dab80b0e6b20",
-      "topic": "ai",
-      "title": "openai/gpt-oss-safeguard-120b",
-      "url": "https://huggingface.co/openai/gpt-oss-safeguard-120b",
-      "domain": "huggingface.co",
-      "snippet": "Model repository. Pipeline: text-generation. Repository modification is NOT announcement or availability.",
-      "updatedAt": "2025-10-29T11:13:59.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
-      "dateKind": "repository-update",
-      "authority": "primary",
-      "provider": "hf-openai"
-    },
-    {
-      "id": "eb79656c925ccbff0eee1147",
-      "topic": "ai",
-      "title": "Qwen/Qwen3.8-Flash-Next",
-      "url": "https://huggingface.co/Qwen/Qwen3.8-Flash-Next",
-      "domain": "huggingface.co",
-      "snippet": "Model repository. Pipeline: image-text-to-text. Repository modification is NOT announcement or availability.",
-      "updatedAt": "2026-08-27T05:03:36.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
-      "dateKind": "repository-update",
-      "authority": "primary",
-      "provider": "hf-Qwen"
-    },
-    {
-      "id": "ebb413cc5359756bf9234b81",
-      "topic": "ai",
-      "title": "How Jump Trading is scaling quant research with ChatGPT",
-      "url": "https://openai.com/index/jump-trading",
-      "domain": "openai.com",
-      "snippet": "Jump Trading uses OpenAI to expand quantitative research. See how longer-running AI workflows combine multiple data sources with human review.",
-      "publishedAt": "2026-10-06T12:00:00.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
-      "dateKind": "publication",
-      "authority": "primary",
-      "provider": "openai"
-    },
-    {
-      "id": "ef1b3a4772eab8370f467eb4",
-      "topic": "ai",
-      "title": "Sep 23, 2026  Science    Claude discovers a novel enzyme system with CRISPR-like repeats",
-      "url": "https://www.anthropic.com/news/claude-discovers-novel-enzyme-system",
-      "domain": "www.anthropic.com",
-      "snippet": "Official news listing; publication date not established",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
-      "dateKind": "unknown",
-      "authority": "primary",
-      "provider": "anthropic"
-    },
-    {
-      "id": "f0e27f432f48fb866973d706",
-      "topic": "ai",
-      "title": "AlphaGenome Atlas: A predictive map of every possible DNA letter change in the human genome",
-      "url": "https://deepmind.google/blog/alphagenome-atlas-a-predictive-map-of-every-possible-dna-letter-change-in-the-human-genome/",
-      "domain": "deepmind.google",
-      "snippet": "AlphaGenome Atlas maps the molecular effects of 9 billion single-letter DNA variants across the human genome.",
-      "publishedAt": "2026-09-08T14:00:15.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
-      "dateKind": "publication",
-      "authority": "primary",
-      "provider": "deepmind"
-    },
-    {
-      "id": "f141654f555ba9973a978942",
-      "topic": "ai",
-      "title": "openai/whisper-large-v3-turbo",
-      "url": "https://huggingface.co/openai/whisper-large-v3-turbo",
-      "domain": "huggingface.co",
-      "snippet": "Model repository. Pipeline: automatic-speech-recognition. Repository modification is NOT announcement or availability.",
-      "updatedAt": "2024-10-04T14:51:11.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
-      "dateKind": "repository-update",
-      "authority": "primary",
-      "provider": "hf-openai"
-    },
-    {
-      "id": "f249e65005c196bd88aa2291",
-      "topic": "ai",
-      "title": "mistralai/Mistral-Large-3-675B-Instruct-2512",
-      "url": "https://huggingface.co/mistralai/Mistral-Large-3-675B-Instruct-2512",
-      "domain": "huggingface.co",
-      "snippet": "Model repository. Pipeline: not supplied. Repository modification is NOT announcement or availability.",
-      "updatedAt": "2026-07-15T12:22:43.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
-      "dateKind": "repository-update",
-      "authority": "primary",
-      "provider": "hf-mistralai"
-    },
-    {
-      "id": "f3f88bc9e0ec5c5203b28ab9",
-      "topic": "ai",
-      "title": "meta-llama/Llama-Prompt-Guard-2-86M",
-      "url": "https://huggingface.co/meta-llama/Llama-Prompt-Guard-2-86M",
-      "domain": "huggingface.co",
-      "snippet": "Model repository. Pipeline: text-classification. Repository modification is NOT announcement or availability.",
-      "updatedAt": "2025-04-29T15:59:55.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
-      "dateKind": "repository-update",
-      "authority": "primary",
-      "provider": "hf-meta-llama"
-    },
-    {
-      "id": "f57eff9c23a4454b476bbb26",
-      "topic": "ai",
-      "title": "Advancing computer use with Ironclad",
-      "url": "https://openai.com/index/advancing-computer-use-with-ironclad",
-      "domain": "openai.com",
-      "snippet": "Learn how OpenAI and Ironclad are training and evaluating AI agents on complex contracting workflows to advance computer use for professional work.",
-      "publishedAt": "2026-10-06T10:00:00.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
-      "dateKind": "publication",
-      "authority": "primary",
-      "provider": "openai"
-    },
-    {
-      "id": "f85326ed9ab1c9be95a7804f",
-      "topic": "ai",
-      "title": "openai/gpt-oss-120b",
-      "url": "https://huggingface.co/openai/gpt-oss-120b",
-      "domain": "huggingface.co",
-      "snippet": "Model repository. Pipeline: text-generation. Repository modification is NOT announcement or availability.",
-      "updatedAt": "2025-08-26T17:25:03.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
-      "dateKind": "repository-update",
-      "authority": "primary",
-      "provider": "hf-openai"
-    },
-    {
-      "id": "f8ea5e7e4d84d96f83f7c31f",
-      "topic": "ai",
-      "title": "deepseek-ai/dflash_gemma4_12b_block7",
-      "url": "https://huggingface.co/deepseek-ai/dflash_gemma4_12b_block7",
-      "domain": "huggingface.co",
-      "snippet": "Model repository. Pipeline: not supplied. Repository modification is NOT announcement or availability.",
-      "updatedAt": "2026-06-28T12:34:57.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
-      "dateKind": "repository-update",
-      "authority": "primary",
-      "provider": "hf-deepseek-ai"
-    },
-    {
-      "id": "f9592b3a319e469ac67b370d",
-      "topic": "ai",
-      "title": "google/tipsv1-l14",
-      "url": "https://huggingface.co/google/tipsv1-l14",
-      "domain": "huggingface.co",
-      "snippet": "Model repository. Pipeline: zero-shot-image-classification. Repository modification is NOT announcement or availability.",
-      "updatedAt": "2026-08-19T23:46:53.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
-      "dateKind": "repository-update",
-      "authority": "primary",
-      "provider": "hf-google"
-    },
-    {
-      "id": "fb176bf94b4aaa8b7938f86f",
-      "topic": "software",
-      "title": "v16.4.0",
-      "url": "https://github.com/vercel/next.js/releases/tag/v16.4.0",
-      "domain": "github.com",
-      "snippet": "Check out the [16.4 announcement post](https://nextjs.org/blog/next-16-4) to get an overview of the changes.\r\n\r\n### Core Changes\r\n\r\n- Show compiler plugin warning in more situations: #75682\r\n- fix(scripts): correct typo in rm.mjs error message: #87015\r\n- docs: improve clarity and punctuation in README: #86096\r\n- Fix debug build paths Pages Router support entries: #93529\r\n- bundle-analyzer: record historical snapshots on each analyze run: #93520\r\n- fix: detect proxy.ts correctly with compound pageExtensions: #93246\r\n- feat(turbopack): support `false` values for `resolveAlias` config: #93331\r\n\r\n### Misc Changes\r\n\r\n- docs: correction to dynamicParams migration: #96624\r\n- docs: proxy event argument: #96435\r\n- docs: remove experimental note from runtime prefetching: #96615\r\n- Preserve per-segment prefetching after dynamic navigation: #96583\r\n- Rename static generation stream option to waitForAllReady: #96564\r\n- Remove obsolete static generation plumbing: #96563\r\n- [turbopack] Drop dead writes to `exports`: #96381\r\n- [turbopack] Ignore writes to `exports` after a `module.exports = {}` writes: #96380\r\n- [turbopack] Add test for sideEffects with optimizePackageImports: #96549\r\n- [turbopack] Strip leading BOM before parsing CSS: #96678\r\n- Upgrade React from `cbb046ab-20260731` to `7dfc7ccd-20260803`: #96550\r\n- docs: use relative doc links in instant-navigation error pages: #96672\r\n- Turbopack: terminate failed plugin worker threads: #96592\r\n- Fix HTML-limited bot matching in prerender bypass rules: #96584\r\n- [ci] Fix create_release_branch for new repo permissions: #96641\r\n- test: skip action module instance deploy test: #96629\r\n- docs: quote the dynamicParams build error in a blockquote: #96633\r\n- [react-sync] Open pull requests as the bot that authors the commits: #96682\r\n- [Be",
-      "publishedAt": "2026-10-07T10:03:29.000Z",
-      "checkedAt": "2026-10-13T09:43:22.602Z",
-      "dateKind": "publication",
-      "authority": "primary",
-      "provider": "nextjs"
     }
   ],
   "models": [
@@ -1751,7 +1803,7 @@
       "sourceUrls": [
         "https://huggingface.co/Qwen/Qwen3.8-27B-FP8"
       ],
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "status": "primary-mention"
     },
     {
@@ -1775,7 +1827,7 @@
         "https://huggingface.co/mistralai/Mistral-Large-3-675B-Instruct-2512-NVFP4",
         "https://huggingface.co/mistralai/Voxtral-Mini-4B-Realtime-Arabic"
       ],
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "status": "primary-mention"
     },
     {
@@ -1792,7 +1844,7 @@
       "sourceUrls": [
         "https://huggingface.co/Qwen/Qwen-Image-2.1-Turbo"
       ],
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "status": "primary-mention"
     },
     {
@@ -1809,7 +1861,7 @@
       "sourceUrls": [
         "https://huggingface.co/openai/privacy-filter"
       ],
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "status": "primary-mention"
     },
     {
@@ -1826,7 +1878,7 @@
       "sourceUrls": [
         "https://huggingface.co/google/gnm-v3"
       ],
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "status": "primary-mention"
     },
     {
@@ -1843,7 +1895,7 @@
       "sourceUrls": [
         "https://huggingface.co/deepseek-ai/dflash_qwen3_14b_block7"
       ],
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "status": "primary-mention"
     },
     {
@@ -1860,7 +1912,7 @@
       "sourceUrls": [
         "https://huggingface.co/deepseek-ai/DeepSeek-V4-Flash-DSpark"
       ],
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "status": "primary-mention"
     },
     {
@@ -1877,7 +1929,7 @@
       "sourceUrls": [
         "https://huggingface.co/deepseek-ai/DeepSeek-V4-Flash-Vision-Exp"
       ],
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "status": "primary-mention"
     },
     {
@@ -1894,7 +1946,7 @@
       "sourceUrls": [
         "https://huggingface.co/deepseek-ai/eagle3_gemma4_12b_ttt7"
       ],
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "status": "primary-mention"
     },
     {
@@ -1911,7 +1963,7 @@
       "sourceUrls": [
         "https://huggingface.co/Qwen/Qwen3Guard-Stream-0.6B"
       ],
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "status": "primary-mention"
     },
     {
@@ -1928,7 +1980,7 @@
       "sourceUrls": [
         "https://huggingface.co/openai/circuit-sparsity"
       ],
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "status": "primary-mention"
     },
     {
@@ -1945,7 +1997,7 @@
       "sourceUrls": [
         "https://huggingface.co/openai/whisper-large-v2"
       ],
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "status": "primary-mention"
     },
     {
@@ -1964,7 +2016,7 @@
         "https://deepmind.google/blog/say-hello-to-gemini-38-text-to-speech/",
         "https://deepmind.google/blog/introducing-gemini-3-8-live-and-3-8-live-extended-thinking/"
       ],
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "status": "release-announcement"
     },
     {
@@ -1981,7 +2033,7 @@
       "sourceUrls": [
         "https://huggingface.co/openai/whisper-large-v3"
       ],
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "status": "primary-mention"
     },
     {
@@ -1998,7 +2050,7 @@
       "sourceUrls": [
         "https://huggingface.co/Qwen/Qwen-Image-2.1"
       ],
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "status": "primary-mention"
     },
     {
@@ -2015,7 +2067,7 @@
       "sourceUrls": [
         "https://huggingface.co/google/timesfm-3.0-pytorch"
       ],
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "status": "primary-mention"
     },
     {
@@ -2032,7 +2084,7 @@
       "sourceUrls": [
         "https://huggingface.co/Qwen/Qwen-Image-2.1-PE-I2I"
       ],
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "status": "primary-mention"
     },
     {
@@ -2049,7 +2101,7 @@
       "sourceUrls": [
         "https://deepmind.google/blog/introducing-gemini-3-7-flash/"
       ],
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "status": "release-announcement"
     },
     {
@@ -2066,7 +2118,7 @@
       "sourceUrls": [
         "https://huggingface.co/meta-llama/Meta-Llama-3-70B-Instruct"
       ],
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "status": "primary-mention"
     },
     {
@@ -2083,7 +2135,7 @@
       "sourceUrls": [
         "https://huggingface.co/google/tipsv1-s14"
       ],
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "status": "primary-mention"
     },
     {
@@ -2100,7 +2152,7 @@
       "sourceUrls": [
         "https://huggingface.co/meta-llama/Llama-Guard-4-12B"
       ],
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "status": "primary-mention"
     },
     {
@@ -2118,7 +2170,7 @@
         "https://huggingface.co/google/embeddinggemma-2",
         "https://deepmind.google/blog/embeddinggemma-2-an-open-lightweight-multimodal-embedding-model/"
       ],
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "status": "primary-mention"
     },
     {
@@ -2135,7 +2187,7 @@
       "sourceUrls": [
         "https://huggingface.co/openai/gpt-oss-20b"
       ],
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "status": "primary-mention"
     },
     {
@@ -2152,7 +2204,7 @@
       "sourceUrls": [
         "https://huggingface.co/meta-llama/Meta-Llama-3-8B-Instruct"
       ],
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "status": "primary-mention"
     },
     {
@@ -2169,7 +2221,7 @@
       "sourceUrls": [
         "https://huggingface.co/Qwen/Qwen3Guard-Stream-8B"
       ],
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "status": "primary-mention"
     },
     {
@@ -2186,7 +2238,7 @@
       "sourceUrls": [
         "https://huggingface.co/openai/whisper-medium"
       ],
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "status": "primary-mention"
     },
     {
@@ -2203,7 +2255,7 @@
       "sourceUrls": [
         "https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash"
       ],
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "status": "primary-mention"
     },
     {
@@ -2220,7 +2272,7 @@
       "sourceUrls": [
         "https://huggingface.co/meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8"
       ],
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "status": "primary-mention"
     },
     {
@@ -2237,7 +2289,7 @@
       "sourceUrls": [
         "https://huggingface.co/google/tipsv2-so400m14-dpt"
       ],
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "status": "primary-mention"
     },
     {
@@ -2254,7 +2306,7 @@
       "sourceUrls": [
         "https://huggingface.co/Qwen/Qwen-Image-2.1-PE-T2I"
       ],
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "status": "primary-mention"
     },
     {
@@ -2271,7 +2323,7 @@
       "sourceUrls": [
         "https://huggingface.co/Qwen/Qwen3.8-Flash-Next-FP8"
       ],
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "status": "primary-mention"
     },
     {
@@ -2289,7 +2341,7 @@
         "https://huggingface.co/google/tipsv2-so400m14",
         "https://huggingface.co/google/tipsv1-so400m14"
       ],
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "status": "primary-mention"
     },
     {
@@ -2306,7 +2358,7 @@
       "sourceUrls": [
         "https://deepmind.google/blog/introducing-gemini-3-8-flash-and-38-flash-cyber/"
       ],
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "status": "release-announcement"
     },
     {
@@ -2323,7 +2375,7 @@
       "sourceUrls": [
         "https://huggingface.co/meta-llama/Llama-4-Maverick-17B-128E-Instruct"
       ],
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "status": "primary-mention"
     },
     {
@@ -2340,7 +2392,7 @@
       "sourceUrls": [
         "https://huggingface.co/mistralai/Mistral-Medium-3.5-128B"
       ],
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "status": "primary-mention"
     },
     {
@@ -2357,7 +2409,27 @@
       "sourceUrls": [
         "https://huggingface.co/deepseek-ai/eagle3_qwen3_8b_ttt7"
       ],
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
+      "status": "primary-mention"
+    },
+    {
+      "name": "Gemini 4",
+      "developer": "Google DeepMind",
+      "family": "Gemini",
+      "version": "4",
+      "announcedAt": null,
+      "availableAt": null,
+      "modalities": [],
+      "capabilities": [],
+      "limitations": [],
+      "access": [],
+      "sourceUrls": [
+        "https://deepmind.google/blog/introducing-gemini-4-argon/",
+        "https://deepmind.google/blog/developing-gemini-4-argon-responsibly-and-safely/",
+        "https://deepmind.google/blog/gemini-4-argon-for-robotics/",
+        "https://deepmind.google/blog/gemini-4-argon-our-next-era-of-frontier-intelligence/"
+      ],
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "status": "primary-mention"
     },
     {
@@ -2374,7 +2446,7 @@
       "sourceUrls": [
         "https://huggingface.co/openai/gpt-oss-safeguard-20b"
       ],
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "status": "primary-mention"
     },
     {
@@ -2391,7 +2463,7 @@
       "sourceUrls": [
         "https://huggingface.co/meta-llama/Llama-4-Scout-17B-16E-Instruct"
       ],
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "status": "primary-mention"
     },
     {
@@ -2408,7 +2480,7 @@
       "sourceUrls": [
         "https://huggingface.co/deepseek-ai/eagle3_qwen3_14b_ttt7"
       ],
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "status": "primary-mention"
     },
     {
@@ -2425,7 +2497,7 @@
       "sourceUrls": [
         "https://huggingface.co/openai/whisper-large"
       ],
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "status": "primary-mention"
     },
     {
@@ -2442,7 +2514,7 @@
       "sourceUrls": [
         "https://huggingface.co/Qwen/Qwen-Drive-1.0-4B"
       ],
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "status": "primary-mention"
     },
     {
@@ -2459,7 +2531,7 @@
       "sourceUrls": [
         "https://huggingface.co/google/tipsv1-b14"
       ],
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "status": "primary-mention"
     },
     {
@@ -2476,7 +2548,7 @@
       "sourceUrls": [
         "https://huggingface.co/mistralai/Mistral-Small-4-119B-2603-NVFP4"
       ],
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "status": "primary-mention"
     },
     {
@@ -2493,7 +2565,7 @@
       "sourceUrls": [
         "https://huggingface.co/google/tipsv1-g14-lowres"
       ],
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "status": "primary-mention"
     },
     {
@@ -2511,7 +2583,7 @@
         "https://openai.com/index/asana-browser-agent",
         "https://openai.com/index/introducing-gpt-6-1-sol"
       ],
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "status": "release-announcement"
     },
     {
@@ -2528,7 +2600,7 @@
       "sourceUrls": [
         "https://huggingface.co/meta-llama/Prompt-Guard-86M"
       ],
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "status": "primary-mention"
     },
     {
@@ -2545,7 +2617,7 @@
       "sourceUrls": [
         "https://huggingface.co/Qwen/Qwen3Guard-Stream-4B"
       ],
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "status": "primary-mention"
     },
     {
@@ -2563,7 +2635,7 @@
         "https://openai.com/index/gpt-6-for-everyone",
         "https://openai.com/index/practical-guide-building-gpt-6"
       ],
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "status": "primary-mention"
     },
     {
@@ -2580,7 +2652,7 @@
       "sourceUrls": [
         "https://huggingface.co/deepseek-ai/DeepSeek-V4-Flash-0731"
       ],
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "status": "primary-mention"
     },
     {
@@ -2597,7 +2669,7 @@
       "sourceUrls": [
         "https://huggingface.co/mistralai/Mistral-Large-3-675B-Instruct-2512-NVFP4"
       ],
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "status": "primary-mention"
     },
     {
@@ -2614,7 +2686,7 @@
       "sourceUrls": [
         "https://huggingface.co/deepseek-ai/eagle3_qwen3_4b_ttt7"
       ],
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "status": "primary-mention"
     },
     {
@@ -2631,7 +2703,7 @@
       "sourceUrls": [
         "https://huggingface.co/openai/whisper-small"
       ],
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "status": "primary-mention"
     },
     {
@@ -2648,7 +2720,7 @@
       "sourceUrls": [
         "https://deepmind.google/blog/intelligent-transcription-with-gemini-3-5-transcribe/"
       ],
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "status": "primary-mention"
     },
     {
@@ -2665,7 +2737,7 @@
       "sourceUrls": [
         "https://huggingface.co/meta-llama/Llama-4-Maverick-17B-128E-Instruct-Original"
       ],
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "status": "primary-mention"
     },
     {
@@ -2682,7 +2754,313 @@
       "sourceUrls": [
         "https://huggingface.co/meta-llama/Llama-4-Maverick-17B-128E"
       ],
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
+      "status": "primary-mention"
+    },
+    {
+      "name": "DeepSeek-V4-Pro-0813",
+      "developer": "DeepSeek",
+      "family": "DeepSeek",
+      "version": "4-Pro-0813",
+      "announcedAt": null,
+      "availableAt": null,
+      "modalities": [],
+      "capabilities": [],
+      "limitations": [],
+      "access": [],
+      "sourceUrls": [
+        "https://huggingface.co/deepseek-ai/DeepSeek-V4-Pro-0813"
+      ],
+      "checkedAt": "2026-10-13T20:20:29.982Z",
+      "status": "primary-mention"
+    },
+    {
+      "name": "Mistral-Large-3-675B-Instruct-2512-Eagle",
+      "developer": "Mistral",
+      "family": "Mistral",
+      "version": "3-675B-Instruct-2512-Eagle",
+      "announcedAt": null,
+      "availableAt": null,
+      "modalities": [],
+      "capabilities": [],
+      "limitations": [],
+      "access": [],
+      "sourceUrls": [
+        "https://huggingface.co/mistralai/Mistral-Large-3-675B-Instruct-2512-Eagle"
+      ],
+      "checkedAt": "2026-10-13T20:20:29.982Z",
+      "status": "primary-mention"
+    },
+    {
+      "name": "gemma-4-12B-it-assistant",
+      "developer": "Google DeepMind",
+      "family": "gemma",
+      "version": "4-12B-it-assistant",
+      "announcedAt": null,
+      "availableAt": null,
+      "modalities": [],
+      "capabilities": [],
+      "limitations": [],
+      "access": [],
+      "sourceUrls": [
+        "https://huggingface.co/google/gemma-4-12B-it-assistant"
+      ],
+      "checkedAt": "2026-10-13T20:20:29.982Z",
+      "status": "primary-mention"
+    },
+    {
+      "name": "Mistral-Small-4-119B-2603-eagle",
+      "developer": "Mistral",
+      "family": "Mistral",
+      "version": "4-119B-2603-eagle",
+      "announcedAt": null,
+      "availableAt": null,
+      "modalities": [],
+      "capabilities": [],
+      "limitations": [],
+      "access": [],
+      "sourceUrls": [
+        "https://huggingface.co/mistralai/Mistral-Small-4-119B-2603-eagle"
+      ],
+      "checkedAt": "2026-10-13T20:20:29.982Z",
+      "status": "primary-mention"
+    },
+    {
+      "name": "Llama-4-Scout-17B-16E",
+      "developer": "Meta",
+      "family": "Llama",
+      "version": "4-Scout-17B-16E",
+      "announcedAt": null,
+      "availableAt": null,
+      "modalities": [],
+      "capabilities": [],
+      "limitations": [],
+      "access": [],
+      "sourceUrls": [
+        "https://huggingface.co/meta-llama/Llama-4-Scout-17B-16E"
+      ],
+      "checkedAt": "2026-10-13T20:20:29.982Z",
+      "status": "primary-mention"
+    },
+    {
+      "name": "Qwen3.8-27B",
+      "developer": "Alibaba Qwen",
+      "family": "Qwen3",
+      "version": "3.8-27B",
+      "announcedAt": null,
+      "availableAt": null,
+      "modalities": [],
+      "capabilities": [],
+      "limitations": [],
+      "access": [],
+      "sourceUrls": [
+        "https://huggingface.co/Qwen/Qwen3.8-27B"
+      ],
+      "checkedAt": "2026-10-13T20:20:29.982Z",
+      "status": "primary-mention"
+    },
+    {
+      "name": "DeepSeek-V4-Pro-DSpark",
+      "developer": "DeepSeek",
+      "family": "DeepSeek",
+      "version": "4-Pro-DSpark",
+      "announcedAt": null,
+      "availableAt": null,
+      "modalities": [],
+      "capabilities": [],
+      "limitations": [],
+      "access": [],
+      "sourceUrls": [
+        "https://huggingface.co/deepseek-ai/DeepSeek-V4-Pro-DSpark"
+      ],
+      "checkedAt": "2026-10-13T20:20:29.982Z",
+      "status": "primary-mention"
+    },
+    {
+      "name": "Mistral-Small-4-119B-2603",
+      "developer": "Mistral",
+      "family": "Mistral",
+      "version": "4-119B-2603",
+      "announcedAt": null,
+      "availableAt": null,
+      "modalities": [],
+      "capabilities": [],
+      "limitations": [],
+      "access": [],
+      "sourceUrls": [
+        "https://huggingface.co/mistralai/Mistral-Small-4-119B-2603"
+      ],
+      "checkedAt": "2026-10-13T20:20:29.982Z",
+      "status": "primary-mention"
+    },
+    {
+      "name": "Llama-Prompt-Guard-2-22M",
+      "developer": "Meta",
+      "family": "Llama",
+      "version": "2-22M",
+      "announcedAt": null,
+      "availableAt": null,
+      "modalities": [],
+      "capabilities": [],
+      "limitations": [],
+      "access": [],
+      "sourceUrls": [
+        "https://huggingface.co/meta-llama/Llama-Prompt-Guard-2-22M"
+      ],
+      "checkedAt": "2026-10-13T20:20:29.982Z",
+      "status": "primary-mention"
+    },
+    {
+      "name": "tipsv1-g14",
+      "developer": "Google DeepMind",
+      "family": "tipsv1",
+      "version": "1-g14",
+      "announcedAt": null,
+      "availableAt": null,
+      "modalities": [],
+      "capabilities": [],
+      "limitations": [],
+      "access": [],
+      "sourceUrls": [
+        "https://huggingface.co/google/tipsv1-g14"
+      ],
+      "checkedAt": "2026-10-13T20:20:29.982Z",
+      "status": "primary-mention"
+    },
+    {
+      "name": "gpt-oss-safeguard-120b",
+      "developer": "OpenAI",
+      "family": "gpt",
+      "version": "120b",
+      "announcedAt": null,
+      "availableAt": null,
+      "modalities": [],
+      "capabilities": [],
+      "limitations": [],
+      "access": [],
+      "sourceUrls": [
+        "https://huggingface.co/openai/gpt-oss-safeguard-120b"
+      ],
+      "checkedAt": "2026-10-13T20:20:29.982Z",
+      "status": "primary-mention"
+    },
+    {
+      "name": "Qwen3.8-Flash-Next",
+      "developer": "Alibaba Qwen",
+      "family": "Qwen3",
+      "version": "3.8-Flash-Next",
+      "announcedAt": null,
+      "availableAt": null,
+      "modalities": [],
+      "capabilities": [],
+      "limitations": [],
+      "access": [],
+      "sourceUrls": [
+        "https://huggingface.co/Qwen/Qwen3.8-Flash-Next"
+      ],
+      "checkedAt": "2026-10-13T20:20:29.982Z",
+      "status": "primary-mention"
+    },
+    {
+      "name": "whisper-large-v3-turbo",
+      "developer": "OpenAI",
+      "family": "whisper",
+      "version": "3-turbo",
+      "announcedAt": null,
+      "availableAt": null,
+      "modalities": [],
+      "capabilities": [],
+      "limitations": [],
+      "access": [],
+      "sourceUrls": [
+        "https://huggingface.co/openai/whisper-large-v3-turbo"
+      ],
+      "checkedAt": "2026-10-13T20:20:29.982Z",
+      "status": "primary-mention"
+    },
+    {
+      "name": "Mistral-Large-3-675B-Instruct-2512",
+      "developer": "Mistral",
+      "family": "Mistral",
+      "version": "3-675B-Instruct-2512",
+      "announcedAt": null,
+      "availableAt": null,
+      "modalities": [],
+      "capabilities": [],
+      "limitations": [],
+      "access": [],
+      "sourceUrls": [
+        "https://huggingface.co/mistralai/Mistral-Large-3-675B-Instruct-2512"
+      ],
+      "checkedAt": "2026-10-13T20:20:29.982Z",
+      "status": "primary-mention"
+    },
+    {
+      "name": "Llama-Prompt-Guard-2-86M",
+      "developer": "Meta",
+      "family": "Llama",
+      "version": "2-86M",
+      "announcedAt": null,
+      "availableAt": null,
+      "modalities": [],
+      "capabilities": [],
+      "limitations": [],
+      "access": [],
+      "sourceUrls": [
+        "https://huggingface.co/meta-llama/Llama-Prompt-Guard-2-86M"
+      ],
+      "checkedAt": "2026-10-13T20:20:29.982Z",
+      "status": "primary-mention"
+    },
+    {
+      "name": "gpt-oss-120b",
+      "developer": "OpenAI",
+      "family": "gpt",
+      "version": "120b",
+      "announcedAt": null,
+      "availableAt": null,
+      "modalities": [],
+      "capabilities": [],
+      "limitations": [],
+      "access": [],
+      "sourceUrls": [
+        "https://huggingface.co/openai/gpt-oss-120b"
+      ],
+      "checkedAt": "2026-10-13T20:20:29.982Z",
+      "status": "primary-mention"
+    },
+    {
+      "name": "dflash_gemma4_12b_block7",
+      "developer": "DeepSeek",
+      "family": "dflash_gemma4_12b_block7",
+      "version": "4_12b_block7",
+      "announcedAt": null,
+      "availableAt": null,
+      "modalities": [],
+      "capabilities": [],
+      "limitations": [],
+      "access": [],
+      "sourceUrls": [
+        "https://huggingface.co/deepseek-ai/dflash_gemma4_12b_block7"
+      ],
+      "checkedAt": "2026-10-13T20:20:29.982Z",
+      "status": "primary-mention"
+    },
+    {
+      "name": "tipsv1-l14",
+      "developer": "Google DeepMind",
+      "family": "tipsv1",
+      "version": "1-l14",
+      "announcedAt": null,
+      "availableAt": null,
+      "modalities": [],
+      "capabilities": [],
+      "limitations": [],
+      "access": [],
+      "sourceUrls": [
+        "https://huggingface.co/google/tipsv1-l14"
+      ],
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "status": "primary-mention"
     },
     {
@@ -2703,193 +3081,6 @@
       "status": "release-announcement"
     },
     {
-      "name": "DeepSeek-V4-Pro-0813",
-      "developer": "DeepSeek",
-      "family": "DeepSeek",
-      "version": "4-Pro-0813",
-      "announcedAt": null,
-      "availableAt": null,
-      "modalities": [],
-      "capabilities": [],
-      "limitations": [],
-      "access": [],
-      "sourceUrls": [
-        "https://huggingface.co/deepseek-ai/DeepSeek-V4-Pro-0813"
-      ],
-      "checkedAt": "2026-10-13T09:43:22.602Z",
-      "status": "primary-mention"
-    },
-    {
-      "name": "Mistral-Large-3-675B-Instruct-2512-Eagle",
-      "developer": "Mistral",
-      "family": "Mistral",
-      "version": "3-675B-Instruct-2512-Eagle",
-      "announcedAt": null,
-      "availableAt": null,
-      "modalities": [],
-      "capabilities": [],
-      "limitations": [],
-      "access": [],
-      "sourceUrls": [
-        "https://huggingface.co/mistralai/Mistral-Large-3-675B-Instruct-2512-Eagle"
-      ],
-      "checkedAt": "2026-10-13T09:43:22.602Z",
-      "status": "primary-mention"
-    },
-    {
-      "name": "gemma-4-12B-it-assistant",
-      "developer": "Google DeepMind",
-      "family": "gemma",
-      "version": "4-12B-it-assistant",
-      "announcedAt": null,
-      "availableAt": null,
-      "modalities": [],
-      "capabilities": [],
-      "limitations": [],
-      "access": [],
-      "sourceUrls": [
-        "https://huggingface.co/google/gemma-4-12B-it-assistant"
-      ],
-      "checkedAt": "2026-10-13T09:43:22.602Z",
-      "status": "primary-mention"
-    },
-    {
-      "name": "Mistral-Small-4-119B-2603-eagle",
-      "developer": "Mistral",
-      "family": "Mistral",
-      "version": "4-119B-2603-eagle",
-      "announcedAt": null,
-      "availableAt": null,
-      "modalities": [],
-      "capabilities": [],
-      "limitations": [],
-      "access": [],
-      "sourceUrls": [
-        "https://huggingface.co/mistralai/Mistral-Small-4-119B-2603-eagle"
-      ],
-      "checkedAt": "2026-10-13T09:43:22.602Z",
-      "status": "primary-mention"
-    },
-    {
-      "name": "Llama-4-Scout-17B-16E",
-      "developer": "Meta",
-      "family": "Llama",
-      "version": "4-Scout-17B-16E",
-      "announcedAt": null,
-      "availableAt": null,
-      "modalities": [],
-      "capabilities": [],
-      "limitations": [],
-      "access": [],
-      "sourceUrls": [
-        "https://huggingface.co/meta-llama/Llama-4-Scout-17B-16E"
-      ],
-      "checkedAt": "2026-10-13T09:43:22.602Z",
-      "status": "primary-mention"
-    },
-    {
-      "name": "Qwen3.8-27B",
-      "developer": "Alibaba Qwen",
-      "family": "Qwen3",
-      "version": "3.8-27B",
-      "announcedAt": null,
-      "availableAt": null,
-      "modalities": [],
-      "capabilities": [],
-      "limitations": [],
-      "access": [],
-      "sourceUrls": [
-        "https://huggingface.co/Qwen/Qwen3.8-27B"
-      ],
-      "checkedAt": "2026-10-13T09:43:22.602Z",
-      "status": "primary-mention"
-    },
-    {
-      "name": "DeepSeek-V4-Pro-DSpark",
-      "developer": "DeepSeek",
-      "family": "DeepSeek",
-      "version": "4-Pro-DSpark",
-      "announcedAt": null,
-      "availableAt": null,
-      "modalities": [],
-      "capabilities": [],
-      "limitations": [],
-      "access": [],
-      "sourceUrls": [
-        "https://huggingface.co/deepseek-ai/DeepSeek-V4-Pro-DSpark"
-      ],
-      "checkedAt": "2026-10-13T09:43:22.602Z",
-      "status": "primary-mention"
-    },
-    {
-      "name": "Gemini 4",
-      "developer": "Google DeepMind",
-      "family": "Gemini",
-      "version": "4",
-      "announcedAt": null,
-      "availableAt": null,
-      "modalities": [],
-      "capabilities": [],
-      "limitations": [],
-      "access": [],
-      "sourceUrls": [
-        "https://deepmind.google/blog/gemini-4-argon-our-next-era-of-frontier-intelligence/"
-      ],
-      "checkedAt": "2026-10-13T09:43:22.602Z",
-      "status": "primary-mention"
-    },
-    {
-      "name": "Mistral-Small-4-119B-2603",
-      "developer": "Mistral",
-      "family": "Mistral",
-      "version": "4-119B-2603",
-      "announcedAt": null,
-      "availableAt": null,
-      "modalities": [],
-      "capabilities": [],
-      "limitations": [],
-      "access": [],
-      "sourceUrls": [
-        "https://huggingface.co/mistralai/Mistral-Small-4-119B-2603"
-      ],
-      "checkedAt": "2026-10-13T09:43:22.602Z",
-      "status": "primary-mention"
-    },
-    {
-      "name": "Llama-Prompt-Guard-2-22M",
-      "developer": "Meta",
-      "family": "Llama",
-      "version": "2-22M",
-      "announcedAt": null,
-      "availableAt": null,
-      "modalities": [],
-      "capabilities": [],
-      "limitations": [],
-      "access": [],
-      "sourceUrls": [
-        "https://huggingface.co/meta-llama/Llama-Prompt-Guard-2-22M"
-      ],
-      "checkedAt": "2026-10-13T09:43:22.602Z",
-      "status": "primary-mention"
-    },
-    {
-      "name": "tipsv1-g14",
-      "developer": "Google DeepMind",
-      "family": "tipsv1",
-      "version": "1-g14",
-      "announcedAt": null,
-      "availableAt": null,
-      "modalities": [],
-      "capabilities": [],
-      "limitations": [],
-      "access": [],
-      "sourceUrls": [
-        "https://huggingface.co/google/tipsv1-g14"
-      ],
-      "checkedAt": "2026-10-13T09:43:22.602Z",
-      "status": "primary-mention"
-    },
-    {
       "name": "Gemini 3.6 Flash",
       "developer": "Google DeepMind",
       "family": "Gemini",
@@ -2905,271 +3096,135 @@
       ],
       "checkedAt": "2026-10-13T09:43:22.602Z",
       "status": "release-announcement"
-    },
-    {
-      "name": "gpt-oss-safeguard-120b",
-      "developer": "OpenAI",
-      "family": "gpt",
-      "version": "120b",
-      "announcedAt": null,
-      "availableAt": null,
-      "modalities": [],
-      "capabilities": [],
-      "limitations": [],
-      "access": [],
-      "sourceUrls": [
-        "https://huggingface.co/openai/gpt-oss-safeguard-120b"
-      ],
-      "checkedAt": "2026-10-13T09:43:22.602Z",
-      "status": "primary-mention"
-    },
-    {
-      "name": "Qwen3.8-Flash-Next",
-      "developer": "Alibaba Qwen",
-      "family": "Qwen3",
-      "version": "3.8-Flash-Next",
-      "announcedAt": null,
-      "availableAt": null,
-      "modalities": [],
-      "capabilities": [],
-      "limitations": [],
-      "access": [],
-      "sourceUrls": [
-        "https://huggingface.co/Qwen/Qwen3.8-Flash-Next"
-      ],
-      "checkedAt": "2026-10-13T09:43:22.602Z",
-      "status": "primary-mention"
-    },
-    {
-      "name": "whisper-large-v3-turbo",
-      "developer": "OpenAI",
-      "family": "whisper",
-      "version": "3-turbo",
-      "announcedAt": null,
-      "availableAt": null,
-      "modalities": [],
-      "capabilities": [],
-      "limitations": [],
-      "access": [],
-      "sourceUrls": [
-        "https://huggingface.co/openai/whisper-large-v3-turbo"
-      ],
-      "checkedAt": "2026-10-13T09:43:22.602Z",
-      "status": "primary-mention"
-    },
-    {
-      "name": "Mistral-Large-3-675B-Instruct-2512",
-      "developer": "Mistral",
-      "family": "Mistral",
-      "version": "3-675B-Instruct-2512",
-      "announcedAt": null,
-      "availableAt": null,
-      "modalities": [],
-      "capabilities": [],
-      "limitations": [],
-      "access": [],
-      "sourceUrls": [
-        "https://huggingface.co/mistralai/Mistral-Large-3-675B-Instruct-2512"
-      ],
-      "checkedAt": "2026-10-13T09:43:22.602Z",
-      "status": "primary-mention"
-    },
-    {
-      "name": "Llama-Prompt-Guard-2-86M",
-      "developer": "Meta",
-      "family": "Llama",
-      "version": "2-86M",
-      "announcedAt": null,
-      "availableAt": null,
-      "modalities": [],
-      "capabilities": [],
-      "limitations": [],
-      "access": [],
-      "sourceUrls": [
-        "https://huggingface.co/meta-llama/Llama-Prompt-Guard-2-86M"
-      ],
-      "checkedAt": "2026-10-13T09:43:22.602Z",
-      "status": "primary-mention"
-    },
-    {
-      "name": "gpt-oss-120b",
-      "developer": "OpenAI",
-      "family": "gpt",
-      "version": "120b",
-      "announcedAt": null,
-      "availableAt": null,
-      "modalities": [],
-      "capabilities": [],
-      "limitations": [],
-      "access": [],
-      "sourceUrls": [
-        "https://huggingface.co/openai/gpt-oss-120b"
-      ],
-      "checkedAt": "2026-10-13T09:43:22.602Z",
-      "status": "primary-mention"
-    },
-    {
-      "name": "dflash_gemma4_12b_block7",
-      "developer": "DeepSeek",
-      "family": "dflash_gemma4_12b_block7",
-      "version": "4_12b_block7",
-      "announcedAt": null,
-      "availableAt": null,
-      "modalities": [],
-      "capabilities": [],
-      "limitations": [],
-      "access": [],
-      "sourceUrls": [
-        "https://huggingface.co/deepseek-ai/dflash_gemma4_12b_block7"
-      ],
-      "checkedAt": "2026-10-13T09:43:22.602Z",
-      "status": "primary-mention"
-    },
-    {
-      "name": "tipsv1-l14",
-      "developer": "Google DeepMind",
-      "family": "tipsv1",
-      "version": "1-l14",
-      "announcedAt": null,
-      "availableAt": null,
-      "modalities": [],
-      "capabilities": [],
-      "limitations": [],
-      "access": [],
-      "sourceUrls": [
-        "https://huggingface.co/google/tipsv1-l14"
-      ],
-      "checkedAt": "2026-10-13T09:43:22.602Z",
-      "status": "primary-mention"
     }
   ],
   "feeds": {
     "openai": {
-      "checkedAt": "2026-10-13T09:43:22.602Z",
-      "lastSuccessAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
+      "lastSuccessAt": "2026-10-13T20:20:29.982Z",
       "count": 25
     },
     "anthropic": {
-      "checkedAt": "2026-10-13T09:43:22.602Z",
-      "lastSuccessAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
+      "lastSuccessAt": "2026-10-13T20:20:29.982Z",
       "count": 11
     },
     "deepmind": {
-      "checkedAt": "2026-10-13T09:43:22.602Z",
-      "lastSuccessAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
+      "lastSuccessAt": "2026-10-13T20:20:29.982Z",
       "count": 25,
-      "etag": "\"qkB8EA\""
+      "modified": "Tue, 13 Oct 2026 19:43:07 GMT"
     },
     "mistral": {
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "lastSuccessAt": null,
       "count": 0,
       "error": "FETCH_OR_PARSE_FAILED"
     },
     "xai": {
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "lastSuccessAt": null,
       "count": 0,
       "error": "HTTP_403"
     },
     "hf-google": {
-      "checkedAt": "2026-10-13T09:43:22.602Z",
-      "lastSuccessAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
+      "lastSuccessAt": "2026-10-13T20:20:29.982Z",
       "count": 12,
-      "etag": "W/\"2b47-NXBHuK5+TY61C1oKko70lkz4LY4\""
+      "etag": "W/\"2b47-UGVqHg69Hc0M6Isdsvu7HUFpHVo\""
     },
     "hf-openai": {
-      "checkedAt": "2026-10-13T09:43:22.602Z",
-      "lastSuccessAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
+      "lastSuccessAt": "2026-10-13T20:20:29.982Z",
       "count": 12,
-      "etag": "W/\"4ba3-QqIHTDbTXDbt1WL/IEjowP6BiG4\""
+      "etag": "W/\"4ba3-GvxvUdJn5c0PQW8HFwTPqxoK9Ds\""
     },
     "hf-deepseek-ai": {
-      "checkedAt": "2026-10-13T09:43:22.602Z",
-      "lastSuccessAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
+      "lastSuccessAt": "2026-10-13T20:20:29.982Z",
       "count": 12,
-      "etag": "W/\"740a-TgVkYmC7ee2R1XaCe/RK04dt7gg\""
+      "etag": "W/\"7419-SLzg7b4QV590P+tb+L48doEPrm4\""
     },
     "hf-meta-llama": {
-      "checkedAt": "2026-10-13T09:43:22.602Z",
-      "lastSuccessAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
+      "lastSuccessAt": "2026-10-13T20:20:29.982Z",
       "count": 12,
-      "etag": "W/\"77b7-tkxpquDqgg9/RIwX9vIHVQ5ShLM\""
+      "etag": "W/\"77b7-6tV5Q4/uk5YVuVxfII2HU8uhA50\""
     },
     "hf-Qwen": {
-      "checkedAt": "2026-10-13T09:43:22.602Z",
-      "lastSuccessAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
+      "lastSuccessAt": "2026-10-13T20:20:29.982Z",
       "count": 12,
-      "etag": "W/\"7a27-ntEpPT1oOfzDqf7ZLIZqxk48Wxc\""
+      "etag": "W/\"7a27-C9hV1bzWtVksomTEqvbwBgGb2co\""
     },
     "hf-mistralai": {
-      "checkedAt": "2026-10-13T09:43:22.602Z",
-      "lastSuccessAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
+      "lastSuccessAt": "2026-10-13T20:20:29.982Z",
       "count": 12,
-      "etag": "W/\"b028-3/KqDG+eya+iH58huHJhpntPiEA\""
+      "etag": "W/\"b028-89qRIu79Ow2fMvyEBHQjKhveHKs\""
     },
     "react": {
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "lastSuccessAt": null,
       "count": 0,
       "error": "FETCH_OR_PARSE_FAILED"
     },
     "kazakhstan": {
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "lastSuccessAt": null,
       "count": 0,
       "error": "FETCH_OR_PARSE_FAILED"
     },
     "nextjs": {
-      "checkedAt": "2026-10-13T09:43:22.602Z",
-      "lastSuccessAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
+      "lastSuccessAt": "2026-10-13T20:20:29.982Z",
       "count": 1,
       "etag": "W/\"c2c59f206f2fce10359371ae9e7aa0f3c68800fe1e0e0523ab3c6e872ab61ce3\""
     },
     "science": {
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "lastSuccessAt": null,
       "count": 0,
       "error": "FETCH_OR_PARSE_FAILED"
     },
     "world": {
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "lastSuccessAt": null,
       "count": 0,
       "error": "FETCH_OR_PARSE_FAILED"
     },
     "space": {
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "lastSuccessAt": null,
       "count": 0,
       "error": "FETCH_OR_PARSE_FAILED"
     },
     "business": {
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "lastSuccessAt": null,
       "count": 0,
       "error": "FETCH_OR_PARSE_FAILED"
     },
     "products": {
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "lastSuccessAt": null,
       "count": 0,
       "error": "FETCH_OR_PARSE_FAILED"
     },
     "international": {
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "lastSuccessAt": null,
       "count": 0,
       "error": "FETCH_OR_PARSE_FAILED"
     },
     "apis": {
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "lastSuccessAt": null,
       "count": 0,
       "error": "FETCH_OR_PARSE_FAILED"
     },
     "technology": {
-      "checkedAt": "2026-10-13T09:43:22.602Z",
+      "checkedAt": "2026-10-13T20:20:29.982Z",
       "lastSuccessAt": null,
       "count": 0,
       "error": "FETCH_OR_PARSE_FAILED"
@@ -3177,56 +3232,6 @@
   },
   "errors": [
     {
-      "feed": "mistral",
-      "at": "2026-10-11T23:57:13.047Z",
-      "reason": "FETCH_OR_PARSE_FAILED"
-    },
-    {
-      "feed": "xai",
-      "at": "2026-10-11T23:57:13.047Z",
-      "reason": "HTTP_403"
-    },
-    {
-      "feed": "react",
-      "at": "2026-10-11T23:57:13.047Z",
-      "reason": "FETCH_OR_PARSE_FAILED"
-    },
-    {
-      "feed": "kazakhstan",
-      "at": "2026-10-11T23:57:13.047Z",
-      "reason": "FETCH_OR_PARSE_FAILED"
-    },
-    {
-      "feed": "science",
-      "at": "2026-10-11T23:57:13.047Z",
-      "reason": "FETCH_OR_PARSE_FAILED"
-    },
-    {
-      "feed": "world",
-      "at": "2026-10-11T23:57:13.047Z",
-      "reason": "FETCH_OR_PARSE_FAILED"
-    },
-    {
-      "feed": "space",
-      "at": "2026-10-11T23:57:13.047Z",
-      "reason": "FETCH_OR_PARSE_FAILED"
-    },
-    {
-      "feed": "business",
-      "at": "2026-10-11T23:57:13.047Z",
-      "reason": "FETCH_OR_PARSE_FAILED"
-    },
-    {
-      "feed": "products",
-      "at": "2026-10-11T23:57:13.047Z",
-      "reason": "FETCH_OR_PARSE_FAILED"
-    },
-    {
-      "feed": "international",
-      "at": "2026-10-11T23:57:13.047Z",
-      "reason": "FETCH_OR_PARSE_FAILED"
-    },
-    {
       "feed": "apis",
       "at": "2026-10-11T23:57:13.047Z",
       "reason": "FETCH_OR_PARSE_FAILED"
@@ -3414,6 +3419,66 @@
     {
       "feed": "technology",
       "at": "2026-10-13T09:43:22.602Z",
+      "reason": "FETCH_OR_PARSE_FAILED"
+    },
+    {
+      "feed": "mistral",
+      "at": "2026-10-13T20:20:29.982Z",
+      "reason": "FETCH_OR_PARSE_FAILED"
+    },
+    {
+      "feed": "xai",
+      "at": "2026-10-13T20:20:29.982Z",
+      "reason": "HTTP_403"
+    },
+    {
+      "feed": "react",
+      "at": "2026-10-13T20:20:29.982Z",
+      "reason": "FETCH_OR_PARSE_FAILED"
+    },
+    {
+      "feed": "kazakhstan",
+      "at": "2026-10-13T20:20:29.982Z",
+      "reason": "FETCH_OR_PARSE_FAILED"
+    },
+    {
+      "feed": "world",
+      "at": "2026-10-13T20:20:29.982Z",
+      "reason": "FETCH_OR_PARSE_FAILED"
+    },
+    {
+      "feed": "science",
+      "at": "2026-10-13T20:20:29.982Z",
+      "reason": "FETCH_OR_PARSE_FAILED"
+    },
+    {
+      "feed": "space",
+      "at": "2026-10-13T20:20:29.982Z",
+      "reason": "FETCH_OR_PARSE_FAILED"
+    },
+    {
+      "feed": "business",
+      "at": "2026-10-13T20:20:29.982Z",
+      "reason": "FETCH_OR_PARSE_FAILED"
+    },
+    {
+      "feed": "international",
+      "at": "2026-10-13T20:20:29.982Z",
+      "reason": "FETCH_OR_PARSE_FAILED"
+    },
+    {
+      "feed": "products",
+      "at": "2026-10-13T20:20:29.982Z",
+      "reason": "FETCH_OR_PARSE_FAILED"
+    },
+    {
+      "feed": "apis",
+      "at": "2026-10-13T20:20:29.982Z",
+      "reason": "FETCH_OR_PARSE_FAILED"
+    },
+    {
+      "feed": "technology",
+      "at": "2026-10-13T20:20:29.982Z",
       "reason": "FETCH_OR_PARSE_FAILED"
     }
   ]
