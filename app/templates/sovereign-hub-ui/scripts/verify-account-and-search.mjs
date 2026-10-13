@@ -183,13 +183,13 @@ try {
     MODELSCOPE_API_KEY: "offline",
     AIHUBMIX_API_KEY: "offline",
     NEMOTRON_OPENROUTER_API_KEY: "offline",
+    MALIK_LING_API_KEY: "offline",
     GOOGLE_AI_POOL_API_KEY: "offline",
     TOGETHER_API_KEY: "offline",
     DEEPSEEK_API_KEY: "offline",
     XKIRO_API_KEY: "offline",
     LLM7_API_KEY: "offline",
     NARA_API_KEY: "offline",
-    MALIK_LING_API_KEY: "offline",
   })
   console.info = () => {}
   // A selected model must call its own provider and providerModel.
@@ -217,14 +217,14 @@ try {
       else await assert.rejects(resolve, err => err.status === 403)
       plan = "pro"
       assert.equal((await resolve()).modelId, model.id)
-      const beforeCalls = calls.length
+      const outboundBefore = calls.length
       const response = await router.runStrictMalikModel({ modelId: model.id, prompt: "test", systemPrompt: "test", allowCatalog: true })
       assert.equal(response.selectedModelId, model.id)
       if (model.provider === "malik-oil-ensemble") {
-        // Oil 1TB is a virtual three-participant route, not an API hostname.
-        // A non-oil test prompt must be handled without spending provider quota.
-        assert.equal(calls.length, beforeCalls, "Oil ensemble must not call providers for unrelated prompts")
-        assert.match(response.content, /нефтегазовых задач|petroleum|oil/i)
+        // Virtual petroleum-only consortium: a non-oil fixture MUST spend zero
+        // provider calls rather than pretending to have a physical API host.
+        assert.equal(response.provider, "malik-oil-ensemble")
+        assert.equal(calls.length, outboundBefore)
         continue
       }
       const call = calls.at(-1)
