@@ -3,6 +3,7 @@
  * No external API, field-controller, or simulation is implied.
  */
 import { petroleumKnowledgeInstruction } from "../work/petroleum/knowledge"
+import { petroleumProxyPhysicsInstruction } from "../work/petroleum/pinn-physics"
 
 export const PETROLEUM_BARREL_M3 = 0.158987294928
 export type OilVolumeUnit = "bbl" | "m3" | "bbl/day" | "m3/day"
@@ -93,6 +94,7 @@ export function buildOilGasSkillInstruction(prompt: string): string {
     "MALIK OIL & GAS EXPERT — PETROLEUM ENGINEERING SKILL:",
     petroleumKnowledgeInstruction(),
     "SPECIALIST FOCUS: " + petroleumDisciplineGuidance(prompt).join("\n"),
+    petroleumProxyPhysicsInstruction(prompt),
     "QUALITY CHECKPOINTS: first establish scope, data provenance, units/datum and applicable method; then compute only from supplied evidence, cross-check dimensional integrity and alternative explanations, rank next tests by information gain. Return ONE conclusion with uncertainty and field-review gates.",
     "NONNEGOTIABLE: no claim to have solved every case, done a live simulator, read a missing log, diagnosed a failure or verified a forecast without supporting data. For dangerous operating decisions use approved procedures and responsible engineers.",
     "Respond as a careful petroleum-industry analyst in the user's language (KK/RU/EN), without claiming professional licensure or field certification.",
