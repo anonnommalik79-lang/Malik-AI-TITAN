@@ -1,11 +1,5 @@
 import assert from "node:assert/strict"
-import { createRequire } from "node:module"
-import { workTestLoader } from "./work-test-loader.mjs"
-const require = createRequire(import.meta.url)
-const load = workTestLoader({
-  "@/lib/server/malik-model-router": { MalikModelRouteError: class MalikModelRouteError extends Error { constructor(code,message,status,modelId){super(message);Object.assign(this,{code,status,modelId})} } },
-})
-const { runMalikOilEnsemble } = load("lib/server/malik-oil-ensemble.ts")
+import { runMalikOilEnsemble } from "../lib/server/malik-oil-ensemble.ts"
 const base = {
   modelId: "malik-oil-1tb",
   prompt: "@Malik Oil AI Рассчитай нефтяной дебит, обводненность и анализ трещин",
