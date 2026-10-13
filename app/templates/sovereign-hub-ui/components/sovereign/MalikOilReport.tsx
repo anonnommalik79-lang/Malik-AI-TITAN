@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import { AlertTriangle, Check, Copy, Download } from "lucide-react"
 import { TexMath } from "./malik-tex"
 import { OilChart, type OilChartSeries } from "./oil-report/OilChart"
+import { OilWellHeatmap } from "./oil-report/OilWellHeatmap"
 import type { OilLanguage } from "@/lib/work/petroleum/analysis-contract"
 import { isRtl, oilCode, oilConclusion, oilCount, oilNumber, oilPercent, oilPeriod, oilRate, oilUnit, oilWord, type OilWordKey } from "@/lib/work/petroleum/analysis-i18n"
 import { CROSS_CHECK_ENGINE } from "@/lib/work/petroleum/cross-check"
@@ -207,6 +208,15 @@ function OilReport({ view }: { view: OilReportView }) {
       </div>
 
       <section className="malik-oil__section" data-oil-section="rates">{chart("rates", word("s.rates"), rate, { zero: true })}</section>
+
+      {result.wells.filter((item) => !item.isField).length > 1 ? (
+        <OilSection id="well-heatmap" title={{
+          ru: "Дебиты скважин по периодам", en: "Oil rates by well and period",
+          kk: "Ұңғымалар дебиті кезеңдер бойынша", ar: "معدلات النفط حسب البئر والفترة",
+        }[language]} open>
+          <OilWellHeatmap wells={result.wells} language={language} unit={L} />
+        </OilSection>
+      ) : null}
 
       {computed("water-cut") || computed("gor") ? (
         <div className="malik-oil__pair">
