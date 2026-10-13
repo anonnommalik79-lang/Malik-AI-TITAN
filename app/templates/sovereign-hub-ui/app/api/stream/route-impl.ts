@@ -37,6 +37,8 @@ import { executePetroleumDocument } from "@/lib/work/petroleum/documents"
 import { executePetroleumMessageAsync } from "@/lib/work/petroleum/message"
 import { executePetroleumAttachmentTable, executePetroleumTable, withOilVisual } from "@/lib/work/petroleum/table-message"
 import { oilReportBlocksToText } from "@/lib/work/petroleum/visual-report"
+import { guardOilInterpretation } from "@/lib/work/petroleum/interpretation-policy"
+import { oilLanguage } from "@/lib/work/petroleum/table-input"
 import { requiresPetroleumExpertSynthesis } from "@/lib/work/petroleum/expert-routing"
 import { routePetroleum } from "@/lib/work/petroleum/router"
 import { buildOilGasSkillInstruction } from "@/lib/ai/oil-gas-skill"
@@ -432,16 +434,21 @@ async function runSelectedAnswer(
           petroleumComputedEvidence: oilReportBlocksToText(content).slice(0, 16_000),
         },
       }
+      const prefix = content + "\n\n"
+      onToken?.(prefix)
       try {
         const answer = await runSelectedAnswerUnchecked(engineeringBody, selection, onProgress, maxOutputTokens, undefined, activity, signal)
-        const combined = content + "\n\n### Инженерная интерпретация моделей — требует проверки\n\n" + answer.content
-        onToken?.(combined)
+        const guarded = guardOilInterpretation(answer.content, oilLanguage(originalPrompt))
+        const appendix = "### Инженерная интерпретация моделей — требует проверки\n\n" + guarded.content
+        const combined = prefix + appendix
+        onToken?.(appendix)
         return { ...answer, content: combined }
       } catch (error) {
         signal?.throwIfAborted()
         const diagnostic = error instanceof MalikModelRouteError && error.code === "OIL_ENSEMBLE_UNAVAILABLE" ? "Участие моделей: 0/3 — ответы провайдеров не получены." : "Ансамбль не вернул итоговый ответ; участие моделей не подтверждено."
-        const combined = content + "\n\n" + diagnostic + " Детерминированные расчёты сохранены."
-        onToken?.(combined)
+        const appendix = diagnostic + " Детерминированные расчёты сохранены."
+        const combined = prefix + appendix
+        onToken?.(appendix)
         return { content: combined, provider: "malik-petroleum-local", model: petroleum.receipt.version, selectedModelId: selection.modelId, usedWeb: false, sources: [], attempts: [] }
       }
     }
@@ -465,22 +472,27 @@ async function runSelectedAnswer(
           petroleumComputedEvidence: oilReportBlocksToText(oilTable.content).slice(0, 16_000),
         },
       }
+      const prefix = oilTable.content + "\n\n"
+      onToken?.(prefix)
       const modelStep = activity?.start("Мультидисциплинарный нефтегазовый анализ", "model", selection?.modelId || DEFAULT_MALIK_MODEL_ID)
       try {
         const answer = await runSelectedAnswerUnchecked(modelBody, selection, onProgress, maxOutputTokens, undefined, activity, signal)
         activity?.finish(modelStep, { provider: answer.provider, model: answer.model, characters: answer.content.length })
-        const content = oilTable.content + "\n\n### Инженерная интерпретация моделей — требует проверки\n\n" + answer.content
+        const guarded = guardOilInterpretation(answer.content, oilLanguage(originalPrompt))
+        const appendix = "### Инженерная интерпретация моделей — требует проверки\n\n" + guarded.content
+        const content = prefix + appendix
         oilProgress({ stage: "RESPONSE_SYNTHESIZED", status: "completed" })
-        onToken?.(content)
+        onToken?.(appendix)
         oilProgress({ stage: "COMPLETED", status: "completed" })
         return { ...answer, content }
       } catch (error) {
         signal?.throwIfAborted()
         activity?.finish(modelStep, { ok: false }, "failed", "MODEL_UNAVAILABLE")
         const diagnostic = error instanceof MalikModelRouteError && error.code === "OIL_ENSEMBLE_UNAVAILABLE" ? "Участие моделей: 0/3 — ответы провайдеров не получены." : "Модель не вернула итоговый ответ; участие провайдеров не подтверждено."
-        const content = oilTable.content + "\n\n" + diagnostic + " Детерминированные расчёты сохранены."
+        const appendix = diagnostic + " Детерминированные расчёты сохранены."
+        const content = prefix + appendix
         oilProgress({ stage: "RESPONSE_SYNTHESIZED", status: "completed", reason: "DETERMINISTIC_REPORT_MODEL_UNAVAILABLE" })
-        onToken?.(content)
+        onToken?.(appendix)
         oilProgress({ stage: "COMPLETED", status: "completed" })
         return { content, provider: "malik-petroleum-local", model: oilTable.version, selectedModelId: selection?.modelId || DEFAULT_MALIK_MODEL_ID, usedWeb: false, sources: [], attempts: [] }
       }

@@ -102,3 +102,14 @@ test('ensemble: all failures are explicit, no fake consensus',async()=>assert.re
 test('gas conditions: surface m3 is not automatically standard m3',()=>{const p=parsed(declarations.replace('standard scf/day','m3/day at surface conditions')+'\n'+table);assert.equal(p.units.gas,null);assert.equal(analyzePetroleumDataset(p).wells[0].last.gor,null)})
 test('gas conditions: a metric prefix does not establish standard conditions',()=>{const p=parsed(declarations.replace('standard scf/day','тыс. м3/сут')+'\n'+table);assert.equal(p.units.gas,null);assert.ok(p.metadata.notes.includes('GAS_GAS_CONDITIONS_REQUIRED'))})
 test('gas conditions: explicitly standard metric prefix retains measured gas',()=>{const p=parsed(declarations.replace('standard scf/day','тыс. ст. м3/сут')+'\n'+table);assert.equal(p.units.gas,'sm3/day');close(p.dataset.wells[0].gas[0],270000000)})
+
+const {guardOilInterpretation}=load('lib/work/petroleum/interpretation-policy.ts')
+test('economics policy: source incident profitability claim is withheld, participation retained',()=>{
+ const r=guardOilInterpretation('* Экономика: При текущем темпе падения (24% в год) без ГТМ фонд станет нерентабельным в течение 18–24 месяцев (в зависимости от OPEX на утилизацию воды).\n\n### Проверка участия моделей (2/3)\n- NVIDIA: участвовала','ru');assert.equal(r.removed,1);assert.doesNotMatch(r.content,/18–24|нерентабельным/);assert.match(r.content,/2\/3/)
+})
+test('economics policy: valid data trends and missing-input explanations are preserved',()=>{
+ const text='Oil fell 19%; W-04 water cut is 61.40%.\n\n8 months; NPV needs review.';assert.equal(guardOilInterpretation(text,'en').content,text)
+})
+test('economics policy: numerical ROI/NPV claims cannot become financial evidence',()=>{
+ for(const text of ['NPV = $1000000','IRR 45%','Profitability in 18 months','Окупаемость: 2 года','Экономика: прибыль 5000 USD'])assert.equal(guardOilInterpretation(text,'en').removed,1)
+})
