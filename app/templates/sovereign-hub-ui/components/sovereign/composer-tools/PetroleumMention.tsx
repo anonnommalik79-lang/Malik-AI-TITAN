@@ -20,8 +20,8 @@ export function usePetroleumMention(prompt:string,setPrompt:(text:string)=>void,
 export function PetroleumMentionMenu({mention}:{mention:ReturnType<typeof usePetroleumMention>}) {
   return <>
     {mention.skillId?<button type="button" onClick={mention.remove} aria-label="Отключить Malik Oil AI" className="flex items-center gap-2 rounded-full border border-white/20 bg-black px-3 py-1 text-xs text-white"><OilDropIcon/> Malik Oil AI <span aria-hidden="true">×</span></button>:null}
-    {mention.open?<div role="listbox" aria-label="Скиллы" className="absolute bottom-full left-0 z-50 mb-2 w-[min(360px,calc(100vw-32px))] rounded-xl border border-white/20 bg-black p-1 shadow-xl">
-      <button type="button" role="option" aria-selected="true" onMouseDown={event=>event.preventDefault()} onClick={mention.choose} className="flex w-full items-start gap-3 rounded-lg p-3 text-left text-white focus:outline-white"><OilDropIcon/><span><strong className="block text-sm">Malik Oil AI</strong><span className="mt-1 block text-xs text-zinc-400">Профессиональный ИИ для нефти, газа, месторождений и энергетической аналитики.</span></span></button>
+    {mention.open?<div role="listbox" aria-label="Скиллы" className="absolute bottom-full left-0 z-50 mb-2 w-[min(360px,calc(100vw-32px))] bg-black p-1 text-white" style={{backgroundColor:"#000",border:"none",borderRadius:0,boxShadow:"none",backdropFilter:"none"}}>
+      <button type="button" role="option" aria-selected="true" onMouseDown={event=>event.preventDefault()} onClick={mention.choose} className="flex w-full items-start gap-3 bg-black p-3 text-left text-white focus-visible:outline focus-visible:outline-1 focus-visible:outline-white" style={{backgroundColor:"#000",border:"none",boxShadow:"none"}}><OilDropIcon/><span><strong className="block text-sm">Malik Oil AI</strong><span className="mt-1 block text-xs text-zinc-400">Профессиональный ИИ для нефти, газа, месторождений и энергетической аналитики.</span></span></button>
     </div>:null}
   </>
 }
