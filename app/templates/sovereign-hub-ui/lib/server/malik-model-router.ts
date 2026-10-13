@@ -891,10 +891,15 @@ export async function runStrictMalikModel(input: {
   if (model.id === "malik-oil-1tb") {
     // Ensemble participants never stream competing drafts into the chat.
     // Internal participants use their real IDs and no silent cross-provider fallback.
-    const { runMalikOilEnsemble } = await import("./malik-oil-ensemble")
-    return runMalikOilEnsemble(input, async (request, allowFallback) =>
-      runStrictMalikModel(request, { allowFallback }),
-    )
+    const { runMalikOilEnsemble, OilEnsembleError } = await import("./malik-oil-ensemble")
+    try {
+      return await runMalikOilEnsemble(input, async (request, allowFallback) =>
+        runStrictMalikModel(request, { allowFallback }),
+      )
+    } catch (error) {
+      if (error instanceof OilEnsembleError) throw new MalikModelRouteError(error.code, error.message, error.code === "REQUEST_CANCELLED" ? 499 : 503, input.modelId)
+      throw error
+    }
   }
 
   // MalikLLM MAX and models picked by name run on the streaming engine:
