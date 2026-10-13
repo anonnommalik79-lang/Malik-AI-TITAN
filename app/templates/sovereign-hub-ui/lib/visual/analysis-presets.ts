@@ -87,7 +87,7 @@ const ROWS = `
 73|physics|chart|Projectile Trajectory|брос,полёт тел,projectile|начальная скорость, угол и ускорение g
 74|physics|calculator|Free Fall Time Lab|свободн паден,free fall|высота и ускорение свободного падения
 75|physics|chart|Newton Force Balance|сила ньютон,force balance|массы, силы, направления
-76|physics|calculator|Ohm Circuit Lab|закон ома,ohm,сопротивлен,напряжен|напряжение и сопротивление
+76|physics|calculator|Ohm Circuit Lab|закон ома,закону ома,ohm,сопротивлен,напряжен|напряжение и сопротивление
 77|physics|chart|RC Transient Response|rc цеп,rc circuit,конденсатор|R, C, исходное напряжение, время
 78|physics|chart|Harmonic Oscillator|гармоническ колебан,oscillator,маятник|амплитуда, период или масса и жёсткость
 79|physics|chart|Heat Transfer Profile|теплопередач,heat transfer|теплопроводность и граничные условия
@@ -127,7 +127,7 @@ export const ANALYSIS_PRESETS: readonly AnalysisPreset[] = ROWS.trim().split("\n
 const DOMAINS: ReadonlyArray<[AnalysisDomain, RegExp]> = [
   ["petroleum", /(?:@malik oil ai|нефт|мұнай|скважин|дебит|бурен|пластов|карбонатн|газодобыч|пластов(?:ое|ого)|\b(?:petroleum|oilfield|oil well|oil production|reservoir|wellbore|pvt|gor|wor|h2s|adnoc)\b)/iu],
   ["logic", /(?:логик|булев|истинност|доказательств|алгоритм|дерево решен|кратчайш пут|\b(?:logic|boolean|truth table|algorithm|decision tree|shortest path|complexity)\b)/iu],
-  ["physics", /(?:физик|ускорени|свободн паден|кинематик|закон ома|сопротивлен|напряжен|маятник|колебани|теплопередач|идеальн газ|брос|\b(?:physics|projectile|kinematics|free fall|ohm|resistance|oscillator|ideal gas)\b)/iu],
+  ["physics", /(?:физик|ускорени|свободн паден|кинематик|закон[ау]? ома|сопротивлен|напряжен|маятник|колебани|теплопередач|идеальн|брос|\b(?:physics|projectile|kinematics|free fall|ohm|resistance|oscillator|ideal gas)\b)/iu],
   ["chemistry", /(?:хими|стехиометр|титрован|скорост реакци|\b(?:chemistry|titration|stoichiometry|reaction rate)\b)/iu],
   ["math", /(?:математ|график функц|производн|интеграл|корни уравнен|уравнен|регресс|корреляц|вероятност|\b(?:mathematics|function plot|derivative|integral|equation roots|regression|correlation|probability|y=)\b)/iu],
   ["statistics", /(?:статистик|доверительн интервал|сезонност|\b(?:statistics|confidence interval|seasonality)\b)/iu],
