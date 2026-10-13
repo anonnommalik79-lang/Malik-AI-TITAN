@@ -11,6 +11,14 @@ let queries = [], modelInputs = [], fileInputs = [], godInputs = [], fail = fals
 const deps = {
   ...freshness, ...evidence, ...accuracy, ...gates, ...brain,
   ...load("lib/ai/web-search-policy.ts"),
+  // The production stream now enters petroleum routing before its live-intelligence
+  // lanes. Exercise real domain/safety guards, while isolating the calculation
+  // and document backends: these fixtures are not production petroleum tests.
+  ...load("lib/work/petroleum/router.ts"),
+  ...load("lib/work/petroleum/safety.ts"),
+  executePetroleumDocument: async () => null,
+  executePetroleumMessageAsync: async () => null,
+  executePetroleumTable: () => null,
   coderPrompt: body => body.originalQuestion || body.prompt,
   coderHistory: body => body.history || [],
   hasMalikAttachments: items => Array.isArray(items) && items.length > 0,
