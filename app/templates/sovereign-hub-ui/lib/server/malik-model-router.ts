@@ -284,7 +284,7 @@ export function providerRuntime(
     const nimKey = env("NVIDIA_NIM_API_KEY")
     if (env("NVIDIA_NIM_ENABLED").toLowerCase() === "true" && nimKey) {
       return {
-        url: `${(env("NVIDIA_NIM_BASE_URL") || "https://integrate.api.nvidia.com/v1").replace(/\\/+$/, "")}/chat/completions`,
+        url: `${(env("NVIDIA_NIM_BASE_URL") || "https://integrate.api.nvidia.com/v1").replace(/\/+$/, "")}/chat/completions`,
         key: nimKey,
         model: env("NVIDIA_NIM_MODEL") || "nvidia/nemotron-3-ultra-550b-a55b",
         stream: false,
