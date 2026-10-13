@@ -4,7 +4,7 @@ import { isPublicReferenceUrl, referenceTitleScore, type MalikVisualImage } from
 
 // A matching article title does not make the site's default OG cover a photo
 // of that subject. Reject shared root assets and let the image search continue.
-function isGenericPageCover(path: string): boolean {
+export function isGenericPageCover(path: string): boolean {
   try { path = decodeURIComponent(path) } catch {}
   return /(?:^|[/_.-])(?:logo|icon|favicon|1x1|pixel|spacer|blank|placeholder|default|og[-_]?image|social[-_]?(?:share|image))(?:[/_.-]|$)/iu.test(path)
     || /^(?:\/(?:assets|static|images|img|media))*\/(?:main|home|homepage|share|og|banner)\.(?:jpe?g|png|webp|avif)$/iu.test(path)
