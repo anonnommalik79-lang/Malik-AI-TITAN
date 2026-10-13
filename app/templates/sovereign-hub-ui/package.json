@@ -41,7 +41,7 @@
     "test:request-motion": "node scripts/verify-request-motion-parity.mjs",
     "test:request-motion-keeper": "node scripts/verify-request-motion-keeper.mjs",
     "test:request-motion-live": "node scripts/verify-request-motion-live.mjs",
-    "test:visual-engine": "node scripts/verify-visual-engine.mjs",
+    "test:visual-engine": "node scripts/verify-visual-engine.mjs && node scripts/verify-analysis-100.mjs",
     "test:share-links": "node scripts/verify-share-links.mjs",
     "test:composer-tools": "node scripts/verify-composer-tools.mjs",
     "test:composer-tools-live": "node scripts/verify-composer-tools-live.mjs 1280 && node scripts/verify-composer-tools-live.mjs 390",
@@ -147,7 +147,8 @@
     "test:petroleum-full-ui": "node scripts/verify-petroleum-full-ui.mjs",
     "test:oil-report": "node scripts/verify-oil-report.mjs",
     "test:oil-ensemble": "node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs scripts/verify-oil-ensemble.mjs",
-    "test:oil-report-live": "node scripts/verify-oil-report-live.mjs"
+    "test:oil-report-live": "node scripts/verify-oil-report-live.mjs",
+    "test:analysis-100": "node scripts/verify-analysis-100.mjs"
   },
   "dependencies": {
     "@pdf-lib/fontkit": "1.1.1",
