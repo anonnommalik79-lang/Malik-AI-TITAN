@@ -818,6 +818,8 @@ export function providerSpecificBody(
     return { reasoning_effort: fastMode ? "low" : reasoningEffort }
   }
   if (model.provider === "nemotron-openrouter") {
+    // OpenRouter-specific reasoning schema must not be sent to NVIDIA NIM.
+    if (runtime.url.startsWith("https://integrate.api.nvidia.com/")) return {}
     return { reasoning: { effort: fastMode ? "low" : reasoningEffort, exclude: true } }
   }
   return {}
