@@ -11,6 +11,15 @@ let queries = [], modelInputs = [], fileInputs = [], godInputs = [], fail = fals
 const deps = {
   ...freshness, ...evidence, ...accuracy, ...gates, ...brain,
   ...load("lib/ai/web-search-policy.ts"),
+  // Petroleum execution is exercised by its dedicated suite. These seven
+  // non-petroleum lane checks must not create files or call paid providers.
+  // Inject explicit no-op boundaries for the newer petroleum pre-routing path.
+  routePetroleum: () => ({ domain: false }),
+  petroleumSafetyMessage: () => null,
+  executePetroleumDocument: async () => null,
+  executePetroleumMessageAsync: async () => null,
+  executePetroleumTable: () => null,
+  buildOilGasSkillInstruction: () => "",
   coderPrompt: body => body.originalQuestion || body.prompt,
   coderHistory: body => body.history || [],
   hasMalikAttachments: items => Array.isArray(items) && items.length > 0,

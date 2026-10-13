@@ -183,6 +183,7 @@ try {
     MODELSCOPE_API_KEY: "offline",
     AIHUBMIX_API_KEY: "offline",
     NEMOTRON_OPENROUTER_API_KEY: "offline",
+    MALIK_LING_API_KEY: "offline",
     GOOGLE_AI_POOL_API_KEY: "offline",
     TOGETHER_API_KEY: "offline",
     DEEPSEEK_API_KEY: "offline",
@@ -199,6 +200,7 @@ try {
     modelscope: "api-inference.modelscope.cn",
     aihubmix: "aihubmix.com",
     "nemotron-openrouter": "openrouter.ai",
+    "ling-openrouter": "openrouter.ai",
     "google-ai": "generativelanguage.googleapis.com",
     together: "api.together.xyz",
     deepseek: "api.deepseek.com",
@@ -215,8 +217,16 @@ try {
       else await assert.rejects(resolve, err => err.status === 403)
       plan = "pro"
       assert.equal((await resolve()).modelId, model.id)
+      const outboundBefore = calls.length
       const response = await router.runStrictMalikModel({ modelId: model.id, prompt: "test", systemPrompt: "test", allowCatalog: true })
       assert.equal(response.selectedModelId, model.id)
+      if (model.provider === "malik-oil-ensemble") {
+        // Virtual petroleum-only consortium: a non-oil fixture MUST spend zero
+        // provider calls rather than pretending to have a physical API host.
+        assert.equal(response.provider, "malik-oil-ensemble")
+        assert.equal(calls.length, outboundBefore)
+        continue
+      }
       const call = calls.at(-1)
       if (model.provider === "malik-orchestrator") {
         // A virtual model: it fans out to whichever backend answers, so the
