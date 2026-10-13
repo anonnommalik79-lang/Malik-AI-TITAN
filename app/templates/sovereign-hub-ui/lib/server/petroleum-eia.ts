@@ -16,7 +16,7 @@ export function requestedEiaSpotSeries(prompt:string): EiaSpotSeries[] {
   const price=/(?:цен[ауыеой]|стоимост|price|spot|котиров|market|рын[оы]к|сколько.*(?:стоит|баррел))/iu.test(text)
   if(!names||!price)return[]
   // Do not treat investment scenario assumptions as live spot quotes.
-  if(/(?:гипотетич|условн.*цен|scenario|сценари.*(?:\$|цен)|assum(?:e|ption)|допущени)/iu.test(text) &&
+  if(/(?:гипотетич|условн.*цен|scenario|сценар|assum(?:e|ption)|допущени)/iu.test(text) &&
      !/(?:актуальн|сегодня|текущ|latest|current|real.price|официальн.*цен)/iu.test(text))return[]
   const selected:EiaSpotSeries[]=[]
   if(/brent|брент/iu.test(text))selected.push("RBRTE")
