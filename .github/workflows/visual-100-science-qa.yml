@@ -1,0 +1,46 @@
+name: Visual 100 and science QA
+
+on:
+  pull_request:
+    paths:
+      - "app/templates/sovereign-hub-ui/lib/visual/**"
+      - "app/templates/sovereign-hub-ui/components/sovereign/visual-engine/**"
+      - "app/templates/sovereign-hub-ui/components/sovereign/oil-report/**"
+      - "app/templates/sovereign-hub-ui/components/sovereign/MalikOilReport.tsx"
+      - "app/templates/sovereign-hub-ui/scripts/verify-analysis-100.mjs"
+      - "app/templates/sovereign-hub-ui/package.json"
+      - ".github/workflows/visual-100-science-qa.yml"
+  push:
+    branches: [main]
+    paths:
+      - "app/templates/sovereign-hub-ui/lib/visual/**"
+      - "app/templates/sovereign-hub-ui/components/sovereign/visual-engine/**"
+      - "app/templates/sovereign-hub-ui/components/sovereign/oil-report/**"
+      - "app/templates/sovereign-hub-ui/components/sovereign/MalikOilReport.tsx"
+      - "app/templates/sovereign-hub-ui/scripts/verify-analysis-100.mjs"
+      - "app/templates/sovereign-hub-ui/package.json"
+      - ".github/workflows/visual-100-science-qa.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  verified-visuals:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app/templates/sovereign-hub-ui
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: app/templates/sovereign-hub-ui/package-lock.json
+      - run: npm ci --legacy-peer-deps
+      - name: 100 catalog routing + numerical science + observed oil heatmap
+        run: npm run test:analysis-100
+      - name: Existing visual engine regressions
+        run: npm run test:visual-engine
+      - name: TypeScript typecheck
+        run: npx tsc --noEmit --incremental false

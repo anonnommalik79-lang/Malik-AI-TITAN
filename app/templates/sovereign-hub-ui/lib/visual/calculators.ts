@@ -10,8 +10,8 @@
  * operating margin, and nothing here includes taxes - every model says so.
  */
 
-export type CalculatorInputKind = "money" | "count" | "percent" | "years" | "months"
-export type CalculatorFormat = "currency" | "percent" | "count" | "months" | "years" | "ratio"
+export type CalculatorInputKind = "money" | "count" | "percent" | "years" | "months" | "decimal"
+export type CalculatorFormat = "currency" | "percent" | "count" | "months" | "years" | "ratio" | "decimal"
 
 export type CalculatorInputDef = {
   key: string
@@ -153,6 +153,76 @@ export const CALCULATOR_MODELS = {
         ],
         details: [],
         assumptions: ["Аннуитетная схема, фиксированная ставка, без комиссий и страховок банка."],
+      }
+    },
+  },
+  "projectile-motion": {
+    label: "Движение тела под углом",
+    subtitle: "Баллистика без сопротивления воздуха, одинаковая высота старта и финиша",
+    inputs: [
+      { key: "speed", label: "Начальная скорость (м/с)", kind: "decimal", value: 20, min: 0, max: 300, step: 0.1 },
+      { key: "angleDegrees", label: "Угол броска (°)", kind: "decimal", value: 45, min: 0, max: 90, step: 0.5 },
+      { key: "gravity", label: "Ускорение g (м/с²)", kind: "decimal", value: 9.81, min: 0.1, max: 30, step: 0.01 },
+    ],
+    compute: (v) => {
+      const valid = v.speed >= 0 && v.angleDegrees >= 0 && v.angleDegrees <= 90 && v.gravity > 0
+      const theta = v.angleDegrees * Math.PI / 180
+      const flight = valid ? 2 * v.speed * Math.sin(theta) / v.gravity : null
+      const range = valid ? v.speed * v.speed * Math.sin(2 * theta) / v.gravity : null
+      const height = valid ? Math.pow(v.speed * Math.sin(theta), 2) / (2 * v.gravity) : null
+      return {
+        headline: { key: "range", label: "Горизонтальная дальность (м)", value: range, format: "decimal", empty: "недопустимые параметры" },
+        outputs: [
+          { key: "flight", label: "Время полёта (с)", value: flight, format: "decimal" },
+          { key: "height", label: "Максимальная высота (м)", value: height, format: "decimal" },
+          { key: "horizontalSpeed", label: "Горизонтальная скорость (м/с)", value: valid ? v.speed * Math.cos(theta) : null, format: "decimal" },
+        ],
+        details: [],
+        assumptions: ["Постоянное g, плоская поверхность, без сопротивления воздуха, начальная и конечная высоты одинаковы. Результаты — расчёт модели, не измерения."],
+      }
+    },
+  },
+  "ohms-law": {
+    label: "Закон Ома",
+    subtitle: "Постоянный ток и идеальный резистор",
+    inputs: [
+      { key: "voltage", label: "Напряжение (В)", kind: "decimal", value: 12, min: 0, max: 10000, step: 0.1 },
+      { key: "resistance", label: "Сопротивление (Ом)", kind: "decimal", value: 6, min: 0.001, max: 100000, step: 0.1 },
+    ],
+    compute: (v) => {
+      const valid = v.resistance > 0 && v.voltage >= 0
+      const current = valid ? v.voltage / v.resistance : null
+      return {
+        headline: { key: "current", label: "Сила тока (А)", value: current, format: "decimal", empty: "R должно быть больше нуля" },
+        outputs: [
+          { key: "power", label: "Мощность (Вт)", value: current === null ? null : v.voltage * current, format: "decimal" },
+          { key: "conductance", label: "Проводимость (См)", value: valid ? 1 / v.resistance : null, format: "decimal" },
+        ],
+        details: [],
+        assumptions: ["Постоянное напряжение, идеальный линейный резистор. Нет поправок на нагрев, допуски и перегрузку."],
+      }
+    },
+  },
+  "ideal-gas": {
+    label: "Уравнение идеального газа",
+    subtitle: "pV = nRT, только абсолютные давление и температура",
+    inputs: [
+      { key: "moles", label: "Количество вещества (моль)", kind: "decimal", value: 1, min: 0, max: 10000, step: 0.1 },
+      { key: "temperatureK", label: "Температура (K)", kind: "decimal", value: 300, min: 0.1, max: 2000, step: 1 },
+      { key: "pressurePa", label: "Давление абсолютное (Па)", kind: "decimal", value: 101325, min: 1, max: 10000000, step: 25 },
+    ],
+    compute: (v) => {
+      const valid = v.moles >= 0 && v.temperatureK > 0 && v.pressurePa > 0
+      const pv = valid ? v.moles * 8.31446261815324 * v.temperatureK : null
+      const volume = pv === null ? null : pv / v.pressurePa
+      return {
+        headline: { key: "volumeL", label: "Объём газа (л)", value: volume === null ? null : volume * 1000, format: "decimal" },
+        outputs: [
+          { key: "volumeM3", label: "Объём газа (м³)", value: volume, format: "decimal" },
+          { key: "pv", label: "Произведение pV (Дж)", value: pv, format: "decimal" },
+        ],
+        details: [],
+        assumptions: ["Газ считается идеальным: Z = 1; R = 8.31446261815324 Дж/(моль·K). Не использовать для реального пластового газа без PVT/Z-коррекции."],
       }
     },
   },
