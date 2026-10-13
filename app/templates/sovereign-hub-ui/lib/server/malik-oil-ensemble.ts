@@ -6,7 +6,10 @@
  */
 import type { MalikModelId } from "../ai/malik-models"
 import { isOilGasRequest } from "../ai/oil-gas-skill"
-import { MalikModelRouteError, type StrictMalikResult } from "./malik-model-router"
+import type { StrictMalikResult } from "./malik-model-router"
+export class OilEnsembleError extends Error {
+  constructor(public readonly code: string, message: string) { super(message); this.name = "OilEnsembleError" }
+}
 
 export type OilEnsembleInput = {
   modelId: MalikModelId
@@ -44,7 +47,7 @@ function validText(value: unknown) {
   return text && !/^\s*(?:error|ошибка|failed|undefined)\s*[:!]$/i.test(text) ? text : ""
 }
 export async function runMalikOilEnsemble(input: OilEnsembleInput, run: Runner): Promise<StrictMalikResult> {
-  if (input.signal?.aborted) throw new MalikModelRouteError("REQUEST_CANCELLED", "Запрос отменён.", 499, input.modelId)
+  if (input.signal?.aborted) throw new OilEnsembleError("REQUEST_CANCELLED", "Запрос отменён.")
   // Prevent accidentally consuming three free provider quotas on non-petroleum chat.
   if (!isOilGasRequest(input.taskPrompt || input.prompt)) {
     const content = "Malik Oil 1TB предназначена для нефтегазовых задач. Добавьте нефтяной вопрос или выберите универсальную модель."
@@ -72,7 +75,7 @@ export async function runMalikOilEnsemble(input: OilEnsembleInput, run: Runner):
     // An internal MAX execution may return its real subprovider and is still MAX's orchestrated vote.
     return { modelId, content: short(text, 10_000), provider: result.provider, model: result.model } as Answer
   }))
-  if (input.signal?.aborted) throw new MalikModelRouteError("REQUEST_CANCELLED","Запрос отменён.",499,input.modelId)
+  if (input.signal?.aborted) throw new OilEnsembleError("REQUEST_CANCELLED","Запрос отменён.")
   const successes: Answer[] = []
   const statuses: Status[] = []
   jobs.forEach((job, i) => {
@@ -85,10 +88,9 @@ export async function runMalikOilEnsemble(input: OilEnsembleInput, run: Runner):
       console.warn("[MALIK_OIL_1TB] participant failed", id, job.reason instanceof Error ? job.reason.name : "provider-failure")
     }
   })
-  if (!successes.length) throw new MalikModelRouteError(
+  if (!successes.length) throw new OilEnsembleError(
     "OIL_ENSEMBLE_UNAVAILABLE",
-    "Malik Oil 1TB: ни один из трёх аналитических маршрутов не ответил. Проверьте Ling, NVIDIA и MAX API.",
-    503, input.modelId
+    "Malik Oil 1TB: ни один из трёх аналитических маршрутов не ответил. Проверьте Ling, NVIDIA и MAX API."
   )
   const reviewText = successes.map(a => `[ACTUAL RESPONSE — ${a.modelId}]\n${a.content}`).join("\n\n----\n\n")
   const status = oilEnsembleStatus(statuses)
@@ -114,7 +116,7 @@ export async function runMalikOilEnsemble(input: OilEnsembleInput, run: Runner):
   } catch (error) {
     console.warn("[MALIK_OIL_1TB] synthesis unavailable", error instanceof Error ? error.name : "provider-failure")
   }
-  if (input.signal?.aborted) throw new MalikModelRouteError("REQUEST_CANCELLED","Запрос отменён.",499,input.modelId)
+  if (input.signal?.aborted) throw new OilEnsembleError("REQUEST_CANCELLED","Запрос отменён.")
   if (!final) {
     const fallback = successes.find(x => x.modelId === "malik-max") || successes[0]
     final = fallback.content + "\n\n*Сведение ответов не завершено; показана одна из реально ответивших моделей. Независимая сверка не подтверждена.*"
