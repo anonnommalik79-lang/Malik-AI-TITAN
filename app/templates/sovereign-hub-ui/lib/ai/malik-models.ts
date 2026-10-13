@@ -221,8 +221,8 @@ export const MALIK_OIL_1TB_MODEL: MalikModelDefinition = {
 
 export const MALIK_MODELS: readonly MalikModelDefinition[] = [
   MALIK_MAX_MODEL,
-  MALIK_OIL_1TB_MODEL,
   ...GOOGLE_AI_POOL_MODELS,
+  MALIK_OIL_1TB_MODEL,
   LING_3_1_FLASH_MODEL,
   ...ROUTER_TEXT_MODELS,
   LLM7_DEFAULT_MODEL,
