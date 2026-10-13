@@ -14,6 +14,7 @@ export function formatOutput(item: CalculatorOutput, currency: VisualCurrency) {
   if (item.value === null) return item.empty || "—"
   const locale = currency === "USD" || currency === "EUR" ? "en-US" : "ru-RU"
   if (item.format === "currency") return formatCurrency(item.value, currency)
+  if (item.format === "decimal") return formatNumber(item.value, "ru-RU", 3)
   if (item.format === "percent") return formatPercent(item.value, locale)
   if (item.format === "months") return `${formatNumber(item.value, "ru-RU", 1)} ${plural(item.value, "месяц", "месяца", "месяцев")}`
   if (item.format === "years") return `${formatNumber(item.value, "ru-RU", 1)} ${plural(item.value, "год", "года", "лет")}`
@@ -23,6 +24,7 @@ export function formatOutput(item: CalculatorOutput, currency: VisualCurrency) {
 
 function inputText(input: CalculatorInputState, value: number, currency: VisualCurrency) {
   if (input.kind === "money") return formatCurrency(value, currency)
+  if (input.kind === "decimal") return formatNumber(value, "ru-RU", 3)
   if (input.kind === "percent") return `${formatNumber(value, "ru-RU", 1)}%`
   if (input.kind === "years") return `${formatNumber(value)} ${plural(value, "год", "года", "лет")}`
   if (input.kind === "months") return `${formatNumber(value)} мес.`
