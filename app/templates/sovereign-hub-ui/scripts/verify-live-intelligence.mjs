@@ -28,7 +28,7 @@ const staticPrompts = [
   "Какая модель была представлена в 2020 году?", "Which AI model was released in 2020?", "История развития ИИ", "Қазақстанның тарихы", "Какая ИИ-модель была представлена в конкретный исторический период?",
 ]
 const dynamicPrompts = [
-  "Какая самая мощная ИИ-модель?", "Какая последняя модель OpenAI?", "Какие модели недавно выпустила Anthropic?", "Сравни GPT 6.1 и Gemini 4", "Какая актуальная стабильная версия Next.js?",
+  "Топ-20 текстовых языковых моделей (LLM)", "Рейтинг языковых моделей", "Top 20 language models", "Лучшие 10 AI моделей", "Какая самая мощная ИИ-модель?", "Какая последняя модель OpenAI?", "Какие модели недавно выпустила Anthropic?", "Сравни GPT 6.1 и Gemini 4", "Какая актуальная стабильная версия Next.js?",
   "Что сегодня произошло в Казахстане?", "Какие последние технологические новости Казахстана за 24 часа?", "Какие новые технологии появились?", "Какие научные открытия опубликованы на этой неделе?", "Какие компании запустили новые продукты?",
   "Which is the strongest AI model?", "What is the latest OpenAI model?", "Latest Anthropic models", "Compare Claude and Gemini", "What is the current stable Next.js version?",
   "World news today", "Kazakhstan news in the last 24 hours", "Current president of the USA", "What is the weather?", "USD exchange rate today",
@@ -45,6 +45,8 @@ for (const value of dynamicPrompts) await check("changing fact: " + value, () =>
   assert.equal(shouldUseWeb(value), true)
 })
 for (const value of ["Без интернета последние новости", "Do not browse latest AI models", "Don't search today's news", "Интернетсіз соңғы жаңалық", "іздеме бүгін жаңалық"]) await check("opt-out: " + value, () => assert.equal(shouldUseWeb(value), false))
+for (const value of ["Топ-20 текстовых языковых моделей (LLM)", "Рейтинг языковых моделей", "Top 20 language models"]) await check("model ranking needs mandatory web evidence: " + value, () => { assert.equal(classifyFreshness(value, NOW).needsSearch, true); assert.equal(shouldUseWeb(value), true) })
+await check("model ranking opt-out remains respected", () => { assert.equal(shouldUseWeb("Без интернета топ-20 языковых моделей LLM"), false) })
 await check("mixed separates current evidence from stable task", () => assert.equal(classifyFreshness("Build with latest Next.js", NOW).category, "MIXED"))
 await check("unknown intent is explicit", () => assert.equal(classifyFreshness("А он?", NOW).category, "UNCERTAIN"))
 await check("explicit source request is honored", () => assert.equal(shouldUseWeb("Поищи информацию о фотосинтезе"), true))
