@@ -56,8 +56,8 @@ export function routeStepsForMode(mode: MalikAIMode): ModeRouteStep[] {
       if (provider === "openrouter" && hasEnv("OPENROUTER_API_KEY")) {
         const model =
           mode === "code"
-            ? env("OPENROUTER_CODE_MODEL", env("OPENROUTER_MODEL", "deepseek/deepseek-v4-pro"))
-            : env("OPENROUTER_MODEL", "deepseek/deepseek-v4-flash")
+            ? env("OPENROUTER_CODE_MODEL", env("OPENROUTER_MODEL", "deepseek/deepseek-v4-flash-0731:free"))
+            : env("OPENROUTER_MODEL", "deepseek/deepseek-v4-flash-0731:free")
 
         steps.push({ provider: "openrouter", model, task })
       }
