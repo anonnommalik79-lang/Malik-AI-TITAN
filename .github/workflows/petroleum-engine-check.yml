@@ -1,5 +1,12 @@
 name: Petroleum engineering checks
 on:
+  push:
+    branches: [main]
+    paths:
+      - "app/templates/sovereign-hub-ui/lib/work/petroleum/**"
+      - "app/templates/sovereign-hub-ui/scripts/verify-oil-science*"
+      - "app/templates/sovereign-hub-ui/scripts/fixtures/oil-science.mjs"
+      - ".github/workflows/petroleum-engine-check.yml"
   pull_request:
     paths:
       - "app/templates/sovereign-hub-ui/lib/work/petroleum/**"
@@ -12,6 +19,8 @@ on:
       - "app/templates/sovereign-hub-ui/scripts/verify-oil-report*"
       - "app/templates/sovereign-hub-ui/scripts/verify-oil-ensemble.mjs"
       - "app/templates/sovereign-hub-ui/scripts/verify-mpce*"
+      - "app/templates/sovereign-hub-ui/scripts/verify-oil-science*"
+      - "app/templates/sovereign-hub-ui/scripts/fixtures/oil-science.mjs"
       - "app/templates/sovereign-hub-ui/scripts/fixtures/oil-titan-field.mjs"
       - "app/templates/sovereign-hub-ui/lib/ai/accuracy/**"
       - ".github/workflows/petroleum-engine-check.yml"
@@ -42,5 +51,6 @@ jobs:
       - run: npm run test:petroleum-context
       - run: npm run test:oil-report
       - run: npm run test:mpce
+      - run: npm run test:oil-science
       - run: npm run test:oil-ensemble
       - run: npm run test:work-mode && npm run test:work-math && npm run test:work-docs && npm run test:chat-stream-integrity && npm run test:music-intent

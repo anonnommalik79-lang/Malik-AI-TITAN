@@ -3,6 +3,8 @@ import { PETROLEUM_REFERENCES } from "./knowledge"
 import type { analyzeProduction } from "./production"
 import { fieldReport } from "./field-report"
 import type { FieldResult } from "./field"
+import {scienceReport} from "./science-report"
+import type {ScienceInput,ScienceResult} from "./science-schema"
 export type PetroleumLanguage="ar"|"en"|"ru"|"kk"
 export function petroleumLanguage(text:string):PetroleumLanguage {return /[\u0600-\u06ff]/.test(text)?"ar":/[әғқңөұүһі]/i.test(text)?"kk":/[а-яё]/i.test(text)?"ru":"en"}
 const labels={
@@ -26,7 +28,8 @@ export function petroleumReport(receipt:PetroleumReceipt,language:PetroleumLangu
   lines.push("", `## ${language === "ar" ? "المدخلات" : language === "ru" ? "Исходные данные" : "Inputs"}`, "", "| Parameter | Value |", "|---|---|", ...flatten(input).map(([k,v])=>`| ${safe(k)} | ${safe(v)} |`))
   if(!receipt.ok) lines.push("",safe(receipt.error))
   const task=receipt.task as {op?:string}, result=receipt.result as ReturnType<typeof analyzeProduction>|undefined
-  if(task.op==="field-surveillance" && receipt.result) lines.push("",fieldReport(receipt.result as FieldResult,charts))
+  if(receipt.ok&&task.op==="scientific"&&receipt.result)lines.push("",scienceReport((receipt.task as {input:ScienceInput}).input,receipt.result as ScienceResult,language,charts))
+  else if(task.op==="field-surveillance" && receipt.result) lines.push("",fieldReport(receipt.result as FieldResult,charts))
   else if(receipt.ok && task.op==="production" && result?.wells) {
     lines.push("",`## ${l[1]}`,"",`${l[14]}: ${result.audit.acceptedRows} / ${result.audit.rejectedRows}`,"",`| ${l[10]} | ${l[11]} (bbl/day) | ${l[12]} (%) | ${l[13]} (scf/bbl) |`,"|---|---|---|---|",
       ...result.wells.slice(0,100).map(w=>`| ${safe(w.well)} | ${fmt(w.lastRate)} | ${fmt(w.waterCutLast===null?null:w.waterCutLast*100)} | ${fmt(w.gorLast)} |`))

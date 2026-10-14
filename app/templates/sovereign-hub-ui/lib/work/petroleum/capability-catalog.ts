@@ -3,7 +3,10 @@ import {analyzePetroleumDataset} from "./analysis"
 import {verifyOilAnalysis} from "./verify-analysis"
 import {runPetroleum} from "./engine"
 import {volumetricOil} from "./volumetric"
-export const OIL_CAPABILITY_VERSION="mpce-catalog-1.0.0"
+import {SCIENCE_METHODS} from "./science-methods"
+import {executeScience} from "./science"
+import type {ScienceMethod} from "./science-schema"
+export const OIL_CAPABILITY_VERSION="mpce-catalog-1.1.0"
 export const CAPABILITY_STATUSES=["IMPLEMENTED & VERIFIED","IMPLEMENTED VALIDATION PENDING","PROTOTYPE","NOT IMPLEMENTED","NOT APPLICABLE"] as const
 export type CapabilityStatus=typeof CAPABILITY_STATUSES[number]
 const groups={
@@ -12,7 +15,7 @@ const groups={
   C:["OOIP","GIIP","Recovery factor","Material balance","Pressure analysis","Drive mechanisms","Darcy flow","Relative permeability","Capillary pressure","Sensitivity"],
   D:["Linear DCA","Exponential DCA","Harmonic DCA","Hyperbolic DCA","Model comparison","Residual analysis","Production forecast","Forecast uncertainty","Parameter estimation","Time-series backtesting"],
   E:["Drawdown test","Buildup test","Horner plot","Well-test permeability","Skin","Pressure derivative","Reservoir boundaries","Flow regimes","Interference","Well-test quality"],
-  F:["Oil formation volume factor","Gas formation volume factor","Oil/gas viscosity","Z factor","Bubble point","Solution GOR","Density","PVT visualization","Correlation comparison","PVT quality"],
+  F:["Oil formation volume factor","Gas formation volume factor","Oil viscosity","Gas viscosity","Z factor","Bubble point","Solution GOR","Density","PVT visualization","Correlation comparison"],
   G:["Archie saturation","Porosity","Shale volume","Gamma ray","Density-neutron","Resistivity","Net pay","Formation classification","Log visualization","Petrophysical uncertainty"],
   H:["Hydrostatic pressure","ECD","Drilling hydraulics","Pressure window","Mud weight","Wellbore stability","Completion","Tubing","Formation damage","Well integrity"],
   I:["Waterflood screening","Injection optimization","Polymer flooding","CO2 flooding","Miscibility","Thermal recovery","EOR sensitivity","Injection allocation","Breakthrough analysis","EOR uncertainty"],
@@ -21,9 +24,12 @@ const groups={
 const production=new Set(["A01","A02","A03","A04","A05","A06","A07","A08","A09","A10","C25","D31","D32","D33","D34","D35","D36","D37","D39","J100"])
 const economic=new Set(["J93","J95","J96","J97","J98"])
 const refs={dca:"https://stat.ethz.ch/CRAN/web/packages/aRpsDCA/refman/aRpsDCA.html",units:"https://www.nist.gov/pml/special-publication-811/nist-guide-si-appendix-b-conversion-factors",volumetric:"https://pubs.usgs.gov/of/1986/0097/report.pdf"}
+const scientific=new Map(Object.entries(SCIENCE_METHODS).flatMap(([method,definition])=>definition.ids.map(id=>[id,method as ScienceMethod] as const)))
 /** Inventory of THIS executable MPCE release, not a claim that a paper/plugin is integrated. */
 export const OIL_CAPABILITIES=Object.entries(groups).flatMap(([group,names],gi)=>names.map((name,i)=>{
   const id=group+String(gi*10+i+1).padStart(2,"0"),implemented=production.has(id)||economic.has(id)||id==="C21"
+  const scienceMethod=scientific.get(id)
+  if(scienceMethod){const d=SCIENCE_METHODS[scienceMethod];return{id,name,group,status:"IMPLEMENTED & VERIFIED" as CapabilityStatus,callable:"invokeOilCapability",version:OIL_CAPABILITY_VERSION,inputSchema:`scienceInputSchema: ${scienceMethod}`,outputSchema:"scienceResultSchema + independent numerical identities",equation:d.equation,units:"Explicit SI keys and physical datum/reference; see strict method schema",assumptions:["User/synthetic input provenance unverified",d.scope],errors:["INVALID_SCHEMA","PHYSICAL_DOMAIN_ERROR","SCIENCE_VALIDATION_FAILED"],references:[d.reference],tests:["verify-oil-science.mjs"],ui:"Existing petroleum chat, scientific receipt, numerical table/chart and file exports",limitation:d.scope,scienceMethod}}
   return {id,name,group,status:(implemented?"IMPLEMENTED & VERIFIED":"NOT IMPLEMENTED") as CapabilityStatus,
     callable:implemented?"invokeOilCapability":null,version:OIL_CAPABILITY_VERSION,
     inputSchema:implemented?id==="C21"?"volumetricSchema":economic.has(id)?"petroleumTaskSchema: npv/economics":"petroleumAnalysisRequestSchema":"Not available",
@@ -42,6 +48,8 @@ export const OIL_CAPABILITIES=Object.entries(groups).flatMap(([group,names],gi)=
 export function invokeOilCapability(id:string,input:unknown) {
   const cap=OIL_CAPABILITIES.find(c=>c.id===id)
   if(!cap?.callable) throw new RangeError("CAPABILITY_NOT_IMPLEMENTED: "+id)
+  const scienceMethod=scientific.get(id)
+  if(scienceMethod){if(!input||typeof input!=="object"||(input as {method?:unknown}).method!==scienceMethod)throw new RangeError("CAPABILITY_METHOD_MISMATCH");return executeScience(input)}
   if(id==="C21")return volumetricOil(input)
   if(economic.has(id)) {
     if(!input||typeof input!=="object"||!["npv","economics"].includes(String((input as {op?:unknown}).op))) throw new RangeError("INVALID_ECONOMICS_TASK")

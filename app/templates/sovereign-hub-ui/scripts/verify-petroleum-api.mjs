@@ -1,5 +1,6 @@
 import assert from "node:assert/strict"
 import { workTestLoader } from "./work-test-loader.mjs"
+import {scienceCases,scienceInput} from './fixtures/oil-science.mjs'
 const activities=[], limits=new Map()
 const load=workTestLoader({
   "@/lib/os/http":{osOwner:async request=>({userId:request.headers.get('x-fixture-owner')||'guest',authenticated:true,plan:'pro'})},
@@ -12,6 +13,9 @@ const req=(body,owner='client-a')=>new Request('http://fixture/api/work/skills/r
 const first=await POST(req({skill:'petroleum.analyze',task,language:'ar'}));assert.equal(first.status,200)
 const payload=await first.json();assert.equal(payload.result.ok,true);assert.ok(payload.report.includes('التقرير الهندسي'))
 for(const format of ['docx','pdf','xlsx','md','json','html']){const r=await POST(req({skill:'petroleum.analyze',task,format},'export-'+format));assert.equal(r.status,200);assert.ok(r.headers.get('content-disposition').includes('attachment'));assert.ok((await r.arrayBuffer()).byteLength>50)}
+for(const example of scienceCases){const task={op:'scientific',input:scienceInput(example)},r=await POST(req({skill:'petroleum.analyze',task,language:'ru'},'science-'+example.method));assert.equal(r.status,200,example.method);const payload=await r.json();assert.equal(payload.result.ok,true,payload.result.error);assert.equal(payload.result.result.method,example.method);assert.match(payload.report,/Численные проверки: PASS/)}
+for(const format of ['docx','pdf','xlsx','md','json','html']){const task={op:'scientific',input:scienceInput(scienceCases[0])},r=await POST(req({skill:'petroleum.analyze',task,format},'science-export-'+format));assert.equal(r.status,200,format);assert.ok((await r.arrayBuffer()).byteLength>50);assert.match(r.headers.get('content-disposition'),/attachment/)}
+assert.equal((await POST(req({skill:'petroleum.analyze',task:{op:'scientific',input:{...scienceInput(scienceCases[0]),flowingPa:99e6}}},'science-domain-rejection'))).status,422)
 const rtl=await POST(req({skill:'petroleum.analyze',task,format:'html',language:'ar'},'rtl'));assert.ok((await rtl.text()).includes('dir="rtl"'))
 assert.equal((await POST(req({skill:'petroleum.analyze',task,format:'pdf',language:'ar'},'arabic-pdf'))).status,422)
 assert.equal((await POST(req({skill:'petroleum.analyze',task:{...task,rate:-1}}))).status,400)

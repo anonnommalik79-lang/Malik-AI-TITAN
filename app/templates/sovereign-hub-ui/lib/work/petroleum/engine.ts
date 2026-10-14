@@ -6,10 +6,13 @@ import { decline } from "./reservoir"
 import { analyzeProduction } from "./production"
 import { analyzeField, analyzeFieldAsync, type FieldResult, type FieldRunOptions, type FieldProgress } from "./field"
 import {volumetricOil} from "./volumetric"
-export const PETROLEUM_ALGORITHM_VERSION="malik-petroleum-1.2.0"
+import {executeScience} from "./science"
+import {SCIENCE_METHODS} from "./science-methods"
+export const PETROLEUM_ALGORITHM_VERSION="malik-petroleum-1.3.0"
 export type EvidenceClass = "Verified Measurement" | "Verified External Source" | "Deterministic Calculation" | "Statistical Estimate" | "Engineering Assumption" | "AI Hypothesis" | "Missing Evidence"
 export type PetroleumReceipt = {ok:boolean;version:string;inputHash:string;task:unknown;result?:unknown;error?:string;method:string;variables:string;units:string;assumptions:string[];evidence:EvidenceClass[];humanReview:boolean;uncertainty:string;limitations:string[]}
 const methods:Record<PetroleumTask["op"],[string,string,string]>={
+  scientific:["Closed SI scientific method; see result.method and versioned method definition", "Strict scienceInputSchema with method-specific required physical parameters", "SI keys specify absolute pressure Pa, temperature K, TVD m, density kg/m3; no inferred field-unit conversion"],
   "volumetric-oil":["N=A*h*phi*(1-Sw)/Bo", "A: net area m2; h: net pay m; phi/Sw: fractions; Bo: reservoir m3/stock-tank m3", "Homogeneous synthetic/user scenario; stock-tank m3, not reserves or recovery"],
   "field-surveillance":["Same-basis KPI screening; explicit baseline; interval-aware gap and non-overlapping downtime attribution; conditional recovery economics", "Asset relationships, unit-bearing history, declared averaging basis, threshold configuration and supplied scenarios", "bbl/day or scf/day; volumes only for declared averaging intervals; supplied currency; no measured loss or guaranteed recovery inferred"],
   "document-audit":["Literal text extraction and deterministic document quality screening", "sourceHash: original bytes fingerprint supplied by the extraction path; extracted text is untrusted data", "No physical measurement or geological interpretation inferred from prose"],
@@ -32,6 +35,13 @@ function executePetroleum(raw: unknown, fieldExecution?: { result?: FieldResult;
   try {
     let result:unknown
     switch(task.op) {
+      case "scientific": {
+        result=executeScience(task.input)
+        const definition=SCIENCE_METHODS[task.input.method]
+        base.assumptions.push(definition.scope)
+        base.limitations.push("Numerical identities checked; input provenance, correlation applicability and field calibration are not verified")
+        break
+      }
       case "volumetric-oil":result=volumetricOil(task.input);base.evidence.push("Statistical Estimate");base.assumptions.push("Homogeneous volumetric scenario, supplied Bo and initial saturation; no calibrated reservoir model");break
       case "field-surveillance": {
         if (fieldExecution?.error) throw new Error(fieldExecution.error)
@@ -55,7 +65,7 @@ function executePetroleum(raw: unknown, fieldExecution?: { result?: FieldResult;
       }
       case "methane": {const kg=finite(task.activity*task.factorKgPerUnit); result={kg,methodology:task.methodology,factorSource:task.factorSource,bounds:task.relativeUncertainty===undefined?null:[kg*(1-task.relativeUncertainty),kg*(1+task.relativeUncertainty)],boundsKind:"User supplied relative scenario bound, not statistical confidence"};break}
     }
-    return {...base,ok:true,method,variables,units,result}
+    return {...base,ok:true,method:task.op==="scientific"?SCIENCE_METHODS[task.input.method].equation:method,variables,units,result}
   }catch(error){return {...base,ok:false,method,variables,units,error:error instanceof Error?error.message:"ENGINE_FAILED"}}
 }
 export function runPetroleum(raw: unknown): PetroleumReceipt { return executePetroleum(raw) }

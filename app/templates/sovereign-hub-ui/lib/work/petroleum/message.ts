@@ -4,6 +4,7 @@ import type { FieldProgress } from "./field"
 import { routePetroleum, stripPetroleumToken } from "./router"
 import { petroleumReport, petroleumLanguage } from "./report"
 import { normalizeDigits } from "./production"
+import {scienceTaskFromPrompt} from "./science-prompt"
 type Attachment={name?:string;mime?:string;text?:string;base64?:string;size?:number}
 const MAX_BYTES=4*1024*1024
 export function attachmentCsv(file:Attachment) {
@@ -57,6 +58,8 @@ export function taskFromPetroleumPrompt(prompt:string):unknown|null {
     } catch { return {op:"invalid-json"} }
   }
   // Explicit structured numeric notation only. No guesses from unlabeled numbers.
+  const science=scienceTaskFromPrompt(text)
+  if(science)return science
   const flows=text.match(/(?:cashflows|денежные потоки|التدفقات النقدية)\s*[:=]\s*\[([^\]]+)\]/iu)
   if(flows && /NPV|IRR/iu.test(text)) {
     const cashflows=flows[1].split(/[,;]/).map(v=>Number(v.trim()))

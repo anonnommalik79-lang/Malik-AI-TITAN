@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { workTestLoader } from './work-test-loader.mjs'
+import {scienceCases,scienceInput} from './fixtures/oil-science.mjs'
 const owner={userId:'fixture-account',authenticated:true,plan:'pro'},after=[],forbidden=()=>{throw new Error('Forbidden provider/tool invoked during petroleum calculation')}
 class RouteError extends Error {}
 const load=workTestLoader({
@@ -23,6 +24,15 @@ const load=workTestLoader({
   '@/lib/malik-compute/runtime':{withCompute:handler=>handler,observeComputeResult:()=>{}},
 })
 const POST=load('app/api/stream/route-impl.ts').POST
+for(const example of scienceCases) {
+  const task={op:'scientific',input:scienceInput(example)},prompt='@Malik Oil AI Calculate\n```petroleum\n'+JSON.stringify(task)+'\n```'
+  const response=await POST(new Request('http://fixture/api/stream',{method:'POST',headers:{'content-type':'application/json','accept':'text/event-stream'},body:JSON.stringify({originalQuestion:prompt,selectedSkillId:'petroleum.analyze',workspaceMode:'work',stream:true})}))
+  assert.equal(response.status,200,example.method)
+  const events=(await response.text()).split('\n\n').filter(x=>x.includes('data: ')).map(frame=>JSON.parse(frame.split('\ndata: ')[1]))
+  const done=events.filter(e=>e.type==='done'),answer=events.filter(e=>e.type==='content').map(e=>e.content).join('')
+  assert.equal(done.length,1);assert.equal(done[0].provider,'malik-petroleum-local');assert.match(answer,/Numerical checks: PASS/);assert.ok(answer.includes(example.method));assert.match(answer,/model calls: 0/);assert.equal((answer.match(/# Malik Oil AI/g)||[]).length,1)
+  for(const deferred of after.splice(0))await deferred()
+}
 const csv='well_id,date,oil_bbl_day,water_bbl_day\nA,2025-01-01,80,20\nA,2025-02-01,60,40'
 for(const language of ['ru','ar','en','kk']) {
   const text={ru:'Проанализируй нефтяную скважину',ar:'حلل إنتاج النفط',en:'Analyze oil well production',kk:'Мұнай ұңғымаларын талда'}[language]
