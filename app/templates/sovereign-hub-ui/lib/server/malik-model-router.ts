@@ -340,6 +340,29 @@ export function providerRuntime(
       timeoutMs: commonTimeout,
     }
   }
+  // Allowlisted zero-price variants only: never strip ':free' and never
+  // silently substitute the paid DeepSeek V4.1 or default OpenRouter route.
+  if (model.provider === "openrouter-free") {
+    const freeModels = ["deepseek/deepseek-v4-flash-0731:free", "deepseek/deepseek-v4-flash:free"]
+    if (!freeModels.includes(model.providerModel)) {
+      throw new MalikModelRouteError("FREE_MODEL_NOT_ALLOWED", "Недопустимый платный маршрут DeepSeek.", 400, model.id)
+    }
+    const key = env("OPENROUTER_API_KEY")
+    if (!key) return missing("Для бесплатной DeepSeek нужен OPENROUTER_API_KEY в Render (серверный ключ OpenRouter).") as never
+    return {
+      url: "https://openrouter.ai/api/v1/chat/completions",
+      key,
+      model: model.providerModel,
+      stream: true,
+      maxTokens: Math.min(commonTokens, 8_000),
+      temperature: commonTemperature,
+      timeoutMs: Math.max(commonTimeout, 75_000),
+      headers: {
+        "HTTP-Referer": env("NEXT_PUBLIC_APP_URL") || "https://malikaiworld.world",
+        "X-Title": "MALIK AI",
+      },
+    }
+  }
   if (model.provider === "deepseek") {
     const key = env("DEEPSEEK_API_KEY")
     if (!key) return missing(`${model.label} временно недоступна: DEEPSEEK_API_KEY не настроен.`) as never
@@ -795,7 +818,7 @@ export function googleNativeBody(messages: ProviderMessage[], runtime: ProviderR
 }
 
 function providerAttempts(model: MalikModelDefinition) {
-  if (model.provider === "google-ai" || model.provider === "nemotron-openrouter" || model.provider === "xkiro" || model.provider === "llm7" || model.provider === "nara") return 1
+  if (model.provider === "openrouter-free" || model.provider === "google-ai" || model.provider === "nemotron-openrouter" || model.provider === "xkiro" || model.provider === "llm7" || model.provider === "nara") return 1
   return 2
 }
 
@@ -931,6 +954,13 @@ export async function runStrictMalikModel(input: {
         return { ...result, selectedModelId: model.id }
       } catch (error) {
         if (wrote || input.signal?.aborted) throw error
+        // A user explicitly selecting free DeepSeek must not be billed by an
+        // automatic MAX rescue that may race paid upstream providers.
+        if (model.provider === "openrouter-free") {
+          throw error instanceof MalikModelRouteError
+            ? error
+            : new MalikModelRouteError("FREE_DEEPSEEK_UNAVAILABLE", "Бесплатная DeepSeek сейчас недоступна или исчерпала лимит. Выберите резервную бесплатную версию.", 503, model.id)
+        }
         console.warn("[MALIK_MODEL_ROUTE] selected model unavailable, MAX answers", model.id, error instanceof Error ? error.message : String(error))
       }
       try {
