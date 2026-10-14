@@ -583,7 +583,7 @@ function buildQueries(prompt: string) {
   // Ranked LLM lists require independent benchmarks, not a memorized list.
   if (isModelLeaderboardRequest(prompt)) return [
     q,
-    "LMArena text chatbot leaderboard latest model rankings " + year,
+    "arena.ai Text Arena latest model leaderboard overall rankings " + year,
     "Artificial Analysis Intelligence Index LiveBench LLM benchmark ranking " + year,
   ].slice(0, Math.max(1, Math.min(3, Number(process.env.MALIK_GOD_MAX_SEARCH_QUERIES || 3))))
   const modelQueries = currentModelQueries(prompt)
@@ -629,7 +629,7 @@ function searchTokens(value: string) {
 function knownNameAliases(value: string) {
   const aliases: string[] = []
   if (/(?:ИИ|AI|LLM|ЖИ|искусственн.{0,15}интеллект|жасанды.{0,15}интеллект)/iu.test(value) && /модел|model|сильн|мощн|strong|powerful|күшті/iu.test(value)) aliases.push("model", "models", "llm", "openai", "anthropic", "gemini", "gpt", "claude", "qwen", "llama", "grok")
-  if (isModelLeaderboardRequest(value)) aliases.push("llm", "model", "models", "leaderboard", "benchmark", "ranking", "lmarena", "artificialanalysis", "livebench")
+  if (isModelLeaderboardRequest(value)) aliases.push("llm", "model", "models", "leaderboard", "benchmark", "ranking", "arena", "lmarena", "artificialanalysis", "livebench")
   if (/казахст|қазақст/iu.test(value)) aliases.push("kazakhstan")
   if (/наук|ғылым|космос/iu.test(value)) aliases.push("science", "research", "nasa", "space")
   // Search indexes often store internationally known names only in Latin.
