@@ -3,6 +3,7 @@
 import React, { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { Check, ChevronRight, Eye, EyeOff, Lock, Mail, User } from "lucide-react";
 import SovereignMobileRegister from "@/components/sovereign/SovereignMobileRegister";
+import { AUTH_DRAGON_BACKGROUND, AUTH_DRAGON_JPG } from "@/lib/brand-assets";
 
 type Provider = "email" | "google" | "github" | "apple" | "microsoft" | "guest";
 
@@ -82,30 +83,8 @@ export function SovereignVideoAuth() {
 
   const [isOpening, setIsOpening] = useState(false);
   const [message, setMessage] = useState("");
-  // The movie is opt-in only on desktop, and stays off for reduced-motion and data-saving users.
-  const [cinemaEnabled, setCinemaEnabled] = useState(false);
-  const sceneRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const desktop = window.matchMedia("(min-width: 981px)");
-    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const connection = (navigator as Navigator & { connection?: { saveData?: boolean } }).connection;
-    const update = () => setCinemaEnabled(desktop.matches && !reducedMotion.matches && !connection?.saveData);
-    update();
-    desktop.addEventListener("change", update);
-    reducedMotion.addEventListener("change", update);
-    return () => {
-      desktop.removeEventListener("change", update);
-      reducedMotion.removeEventListener("change", update);
-    };
-  }, []);
-  const moveCinematic = useCallback((event: React.PointerEvent<HTMLElement>) => {
-    if (event.pointerType !== "mouse" || !sceneRef.current) return;
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    const x = (event.clientX / window.innerWidth - 0.5) * 18;
-    const y = (event.clientY / window.innerHeight - 0.5) * 12;
-    sceneRef.current.style.setProperty("--sva-motion-x", x.toFixed(1) + "px");
-    sceneRef.current.style.setProperty("--sva-motion-y", y.toFixed(1) + "px");
-  }, []);
+  const [bgFailed, setBgFailed] = useState(false);
+  const [bgSrc, setBgSrc] = useState(AUTH_DRAGON_JPG);
   const [authMode, setAuthMode] = useState<"signin" | "signup">("signup");
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
@@ -142,43 +121,41 @@ export function SovereignVideoAuth() {
     window.location.assign("/guest");
   }, [isOpening]);
 
+  const sceneRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    // The artwork and real form share one coordinate system, so they cannot drift.
+    const fitScene = () => sceneRef.current?.style.setProperty(
+      "--sva-scene-scale", String(Math.min(window.innerWidth / 1717, window.innerHeight / 916)),
+    );
+    fitScene();
+    window.addEventListener("resize", fitScene);
+    return () => window.removeEventListener("resize", fitScene);
+  }, []);
+
   return (
     <>
       <SovereignMobileRegister />
-      {/* Dedicated desktop composition; the original mobile auth remains untouched. */}
-      <main className="sva-root sva-desktop-only" data-preserve-brand-color="true" onPointerMove={moveCinematic}>
+      {/* Keep the original desktop TITAN artwork out of the neutral dashboard color guard. */}
+      <main className="sva-root sva-desktop-only" data-preserve-brand-color="true">
       <div className="sva-scene" ref={sceneRef}>
-        <div className="sva-cinema" aria-hidden="true">
-          {cinemaEnabled && (
-            <video
-              className="sva-cinema-video"
-              autoPlay
-              muted
-              loop
-              playsInline
-              preload="metadata"
-              poster="/images/auth-cosmos-poster.svg"
-              onError={() => setCinemaEnabled(false)}
-            >
-              <source src="/videos/titan-auth-bg.mp4" type="video/mp4" />
-            </video>
-          )}
-          <div className="sva-cinema-stars" />
-          <div className="sva-cinema-lens"><div className="sva-cinema-event-horizon" /></div>
-          <div className="sva-cinema-orbit" />
-          <div className="sva-cinema-vignette" />
-        </div>
-        <div className="sva-cinema-brand" aria-hidden="true">
-          <span className="sva-cinema-emblem"><span>M</span></span>
-          <span>MALIK <b>AI</b></span>
-          <small>SOVEREIGN INTELLIGENCE</small>
-        </div>
-        <div className="sva-cinema-copy" aria-hidden="true">
-          <span className="sva-cinema-eyebrow"><i /> NEXT GENERATION AI</span>
-          <h2>Интеллект.<br/><em>Без границ.</em></h2>
-          <p>Создавай. Исследуй. Открывай новое.<br/>Твоё пространство возможностей начинается здесь.</p>
-          <div className="sva-cinema-signal"><span /> SYSTEM ONLINE <span className="sva-cinema-signal-rule" /> 2026</div>
-        </div>
+      <div className="sva-bg-layer" aria-hidden="true" />
+      <img
+        className="sva-bg"
+        src={bgSrc}
+        alt=""
+        draggable={false}
+        onError={() => {
+          if (bgSrc !== AUTH_DRAGON_BACKGROUND) setBgSrc(AUTH_DRAGON_BACKGROUND)
+          else setBgFailed(true)
+        }}
+      />
+      {bgFailed && <div className="sva-bg-fallback" />}
+
+      <div className="sva-left-shadow" />
+      <div className="sva-top-clear" />
+      <div className="sva-dragon-aura" />
+      <div className="sva-wind sva-wind-a" />
+      <div className="sva-wind sva-wind-b" />
 
       <div className="sva-shell">
         <section className="sva-card">

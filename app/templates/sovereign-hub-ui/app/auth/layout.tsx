@@ -1,5 +1,4 @@
 import "./auth-isolation.css";
-import "./cinematic-desktop-auth.css";
 import "../../components/sovereign/sovereign-mobile-auth-black.css";
 import { AuthBodyLock } from "./auth-body-lock";
 
