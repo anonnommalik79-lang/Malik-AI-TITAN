@@ -1,4 +1,5 @@
 import { missingBriefItems, briefMissingMarker, briefNeedsDeep } from "@/lib/ai/brief-quality"
+import { isModelLeaderboardRequest } from "@/lib/ai/freshness-intent"
 import { assessAnswerCompletion, type AnswerIncompleteReason } from "@/lib/ai/answer-completion"
 import { createContinuationFilter } from "@/lib/ai/continuation-overlap"
 import {
@@ -1218,7 +1219,10 @@ export async function runMalikMax(input: MaxInput, deps: { fetcher?: typeof fetc
   // The caller has already fitted the budget to the task and the account's
   // daily allowance.
   const budget = Math.max(256, Math.min(Number(input.maxTokens) || (codeMode ? 16_000 : 8_000), codeMode ? 48_000 : 32_000))
-  const perCall = (spent: number) => Math.max(256, Math.min(fastMode ? 1_500 : 16_000, budget - spent + 200))
+  // Leaderboard answers must fit a bounded model call instead of spending the
+  // entire HTTP deadline on an uncontrolled essay. Other tasks are unaffected.
+  const rankingRequest = !codeMode && isModelLeaderboardRequest(taskPrompt)
+  const perCall = (spent: number) => Math.max(256, Math.min(fastMode ? 1_500 : rankingRequest ? 2_800 : 16_000, budget - spent + 200))
   const timing = fastMode
     ? { hedgeMs: 3_500, firstTokenMs: 30_000, firstDeadlineMs: 60_000, idleMs: 45_000 }
     : codeMode
