@@ -23,6 +23,14 @@ const LIVE_WORDS = /(?:последние?\s+24\s+час|за\s+24\s+час|се
 const TIME_WORDS = /(?:последн|новейш|свеж|актуальн|на\s+этой\s+неделе|текущ|\blatest\b|\bcurrent\b|\brecent\b|this\s+(?:week|month|year)|соңғы|қазіргі|жаңа)/iu
 const VOLATILE = /(?:новост|погод|курс\s+(?:валют|доллар|евро)|цен[ауы]|стоимост|сколько\s+стоит|президент|министр|расписани|спикер|релиз|выпуст|выш[её]л|(?<!\p{L})(?:версии?|версия)|доступност|\b(?:news|weather|price|pricing|exchange rate|president|ceo|schedule|release|version|available|availability)\b|жаңалық|бағасы|бағам|нұсқа|шығарыл|президент|министр)/iu
 const AI = /(?:\b(?:AI|LLM|GPT|OpenAI|Anthropic|Claude|Gemini|DeepMind|Meta|Llama|DeepSeek|Alibaba|Qwen|Mistral|xAI|Grok)\b|ИИ[ -]?модел|модел.{0,20}ИИ|искусственн.{0,20}интеллект|жасанды\s+интеллект|ЖИ[ -]?модел)/iu
+/** A ranked model list is a changing factual claim, even without words like "today". */
+const LEADERBOARD = /(?:\b(?:top[\s-]?\d+|rankings?|leaderboards?|benchmarks?|best|strongest)\b|(?:^|[^\p{L}])топ(?:[\s-]?\d+|(?=[^\p{L}]|$))|рейтинг\p{L}*|лидерборд\p{L}*|бенчмарк\p{L}*|лучш\p{L}*\s+\d+|үздік\p{L}*)/iu
+const LANGUAGE_MODEL = /(?:языков\p{L}*\s+модел\p{L}*|текстов\p{L}*(?:\s+\p{L}+){0,2}\s+модел\p{L}*|модел\p{L}*.{0,20}(?:языков|ИИ)|(?:large\s+)?language\s+models?|foundation\s+models?|чат-?бот\p{L}*|тілдік\s+модел\p{L}*|үлкен\s+тілдік)/iu
+
+export function isModelLeaderboardRequest(prompt: string): boolean {
+  return LEADERBOARD.test(prompt) && (AI.test(prompt) || LANGUAGE_MODEL.test(prompt))
+}
+
 const COMPARISON = /(?:сам.{0,8}(?:мощн|сильн|лучш)|сильнейш|сравни|выбери|рекоменду|\b(?:best|strongest|most powerful|compare|recommend)\b|ең\s+(?:күшті|үздік)|салыстыр)/iu
 const HISTORICAL = /(?:в\s+(?:19\d{2}|20\d{2})\s*году|историческ|история|раньше|в\s+конкретный\s+исторический|\bin\s+(?:19\d{2}|20\d{2})\b|historical|history of|тарих|(?:19\d{2}|20\d{2})\s*жылы)/iu
 const BASIC = /(?:фотосинтез|photosynthesis|теорем.{0,15}пифагор|pythagor|площадь\s+круга|закон\s+ньютона|newton's laws|арифметик|arithmetic|гравитация|what is a prime number)/iu
@@ -80,7 +88,7 @@ export function classifyFreshness(prompt: string, now = new Date(), timeZone = "
   if (CREATIVE.test(text) && !/(?:новост|источник|research|sources|news|жаңалық)/iu.test(text)) return result("STATIC", false, "creative")
   if (SELF_CONTAINED.test(text) && !VOLATILE.test(text) && !/(?:актуальн|current|latest|соңғы|қазіргі)/iu.test(text)) return result("STATIC", false, "self-contained")
   if (historical) return result("STATIC", false, "historical")
-  const changing = VOLATILE.test(text) || AI.test(text) && (COMPARISON.test(text) || TIME_WORDS.test(text) || /(?:модел|models?|GPT[ -]?\d|Claude[ -]?\d|Gemini[ -]?\d|Grok[ -]?\d)/iu.test(text))
+  const changing = isModelLeaderboardRequest(text) || VOLATILE.test(text) || AI.test(text) && (COMPARISON.test(text) || TIME_WORDS.test(text) || /(?:модел|models?|GPT[ -]?\d|Claude[ -]?\d|Gemini[ -]?\d|Grok[ -]?\d)/iu.test(text))
     || TECH.test(text) && /(?:нов[а-я]*|latest|current|recent|new|жаңа|соңғы)/iu.test(text)
     || EVENT.test(text) && /(?:форум|конференц|мероприяти|выставк|conference|summit|forum|event|expo)/iu.test(text)
   const factualTime = (TIME_WORDS.test(text) || LIVE_WORDS.test(text)) && /(?:кто|како|каки|что.{0,20}(?:произошло|нового)|когда|what|which|who|when|қандай|не\s+болды)/iu.test(text)
