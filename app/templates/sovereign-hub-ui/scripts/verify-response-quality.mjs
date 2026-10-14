@@ -297,6 +297,20 @@ check("text typed on the wrong keyboard layout is read as the Russian it was mea
   for (const [typed, meant] of Object.entries(cases)) assert.equal(fixWrongKeyboardLayout(typed)?.text, meant, typed)
 })
 
+check("a layout switched in the middle of a Russian sentence is read too", () => {
+  const cases = {
+    "rfhjxt lfk vjtve vfkbrbb создай сайт на кофейню": "кароче дал моему маликии создай сайт на кофейню",
+    "сделай сайт ghbdtn": "сделай сайт привет",
+    "crjr tot jcnfkcz": "скок еще остался",
+    "f jy cjplfk djn [nvk": "а он создал вот хтмл",
+  }
+  for (const [typed, meant] of Object.entries(cases)) assert.equal(fixWrongKeyboardLayout(typed)?.text, meant, typed)
+  // Real English and identifiers inside Russian stay as they are.
+  for (const text of ["что такое tot", "напиши функцию sortBy", "сравни claude и gpt", "переведи на английский: hello world", "как работает useEffect в react", "сделай deploy на render", "почему build падает", "the best фильм 2024", "сәлем ghbdtn"]) {
+    assert.equal(fixWrongKeyboardLayout(text), null, text)
+  }
+})
+
 check("the chat request carries the Russian reading in every field the model reads", () => {
   const typed = "chfdyb ;tcnrjv ehjdyt xfnugn b rkjl"
   const meant = "сравни жестком уровне чатгпт и клод"

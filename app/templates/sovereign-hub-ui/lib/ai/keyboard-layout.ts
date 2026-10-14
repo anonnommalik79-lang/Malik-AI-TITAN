@@ -38,6 +38,16 @@ const EN_PAIRS = new Set((
   "rm rn rs rt ru ry sa sc so sp ss su sy tw ty ua ub ud ue ug ul um un up us ut va vi wa we wh wi wo ws ya yo ys ze"
 ).split(/\s+/).filter(Boolean))
 
+/**
+ * Short everyday Russian words. Letter pairs cannot tell «tot» (еще) or
+ * «kdk» (лвл) from English; a word list can.
+ */
+const RU_COMMON = new Set((
+  "еще ещё что это так как уже вот тут там где кто они она оно нет да все всё мне меня тебе тебя его её ее их мы вы ты " +
+  "но или не ни на по за из от до для при про без над под чем чтобы если когда потом сейчас щас надо нужно можно хочу " +
+  "скок сколько че чё норм ии лвл хтмл гпт сайт бот код малик кароче короче тоже типа просто очень сам сама"
+).split(/\s+/).filter(Boolean))
+
 const RU_VOWELS = /[аеёиоуыэюя]/u
 const EN_VOWELS = /[aeiouy]/i
 
@@ -78,22 +88,33 @@ function tokenize(text: string): Token[] {
 
 export type LayoutFix = { text: string; converted: number; words: number }
 
+/** Everyday English words that also read as plausible Russian on the other layout. */
+const COMMON_ENGLISH = /^(?:the|and|for|you|are|not|can|new|one|all|get|set|app|web|bot|dev|top|best|free|test|demo|beta|live|data|code|home|news|chat|mode|plan|team)$/iu
+
 /**
  * Returns the Russian reading when the text was clearly typed on an English
- * layout, otherwise null. Never touches text that already contains Cyrillic.
+ * layout, otherwise null.
+ *
+ * People also switch layouts mid-sentence: «rfhjxt lfk vjtve vfkbrbb создай
+ * сайт на кофейню». Russian words already in the message are context, not a
+ * reason to give up: the Latin runs are judged with a lean towards Russian and
+ * converted when most of them agree. Kazakh letters mean a Kazakh layout,
+ * whose keys differ, so such text is left alone.
  */
 export function fixWrongKeyboardLayout(input: string): LayoutFix | null {
   const text = String(input || "")
-  if (!text.trim() || /[а-яёәіңғүұқөһ]/iu.test(text) || text.length > 2_000) return null
+  if (!text.trim() || /[әіңғүұқөһ]/iu.test(text) || text.length > 2_000) return null
   if (/https?:\/\/|www\.|@|```/iu.test(text)) return null
+  const mixed = /[а-яё]/iu.test(text)
   const tokens = tokenize(text)
   const words = tokens.filter((token) => token.word)
   const letters = words.reduce((sum, token) => sum + token.text.replace(/[^A-Za-z]/g, "").length, 0)
-  if (!words.length || letters < 5) return null
+  if (!words.length || letters < (mixed ? 3 : 5)) return null
 
   let russian = 0
   let english = 0
   const decisions = new Map<Token, boolean>()
+  const plausible = new Set<Token>()
   for (const token of words) {
     const raw = token.text
     // Trailing sentence punctuation stays punctuation.
@@ -102,16 +123,22 @@ export function fixWrongKeyboardLayout(input: string): LayoutFix | null {
     if (KEEP_LATIN.test(core)) { english += 1; decisions.set(token, false); continue }
     const cyr = convertWord(core)
     const layoutKeys = /[;'\[\]{}:"<>`~]|[A-Za-z][,.][A-Za-z]/.test(core)
-    const ru = pairScore(cyr, RU_PAIRS) + (RU_VOWELS.test(cyr) ? 0.1 : -0.4) - (impossibleRussian(cyr) ? 0.6 : 0)
+    const common = RU_COMMON.has(cyr.toLowerCase()) ? 0.6 : 0
+    const ru = pairScore(cyr, RU_PAIRS) + (RU_VOWELS.test(cyr) || common ? 0.1 : -0.4) - (impossibleRussian(cyr) ? 0.6 : 0) + (mixed ? 0.15 : 0) + common
     const en = pairScore(core, EN_PAIRS) + (EN_VOWELS.test(core) ? 0.05 : -0.4) - (layoutKeys ? 0.5 : 0)
     const toRussian = ru - en >= 0.15 && ru >= 0.35
     decisions.set(token, toRussian)
     if (toRussian) russian += 1
     else english += 1
+    // A word that reads as real Russian even though it also looks like
+    // English («tot» → «еще»); it follows the sentence once the sentence is
+    // clearly Russian. Identifiers (camelCase, digits, _) never do.
+    if (!toRussian && ru >= 0.5 && RU_VOWELS.test(cyr) && !impossibleRussian(cyr) && !COMMON_ENGLISH.test(core) && !/[0-9_]|[a-z][A-Z]/.test(core)) plausible.add(token)
   }
 
   const judged = russian + english
   if (!russian || !judged || russian / judged < 0.6) return null
+  if (russian >= 2) for (const token of plausible) decisions.set(token, true)
 
   let converted = 0
   const out = tokens.map((token) => {
