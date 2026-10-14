@@ -5,9 +5,9 @@ import { buildMalikResponseSystemPrompt } from "../response-intelligence"
 function modelForInput(input: AIRequest) {
   if (input.model) return input.model
   if (input.task === "code" || input.task === "debug" || input.task === "project") {
-    return (process.env.TITAN_V65_OPENROUTER_CODE_MODEL || (process.env.TITAN_V65_OPENROUTER_CODE_MODEL || process.env.OPENROUTER_CODE_MODEL)) || (process.env.TITAN_V65_OPENROUTER_CHAT_MODEL || (process.env.TITAN_V65_OPENROUTER_CHAT_MODEL || process.env.OPENROUTER_MODEL)) || "deepseek/deepseek-v4-flash"
+    return (process.env.TITAN_V65_OPENROUTER_CODE_MODEL || (process.env.TITAN_V65_OPENROUTER_CODE_MODEL || process.env.OPENROUTER_CODE_MODEL)) || (process.env.TITAN_V65_OPENROUTER_CHAT_MODEL || (process.env.TITAN_V65_OPENROUTER_CHAT_MODEL || process.env.OPENROUTER_MODEL)) || "deepseek/deepseek-v4-flash-0731:free"
   }
-  return (process.env.TITAN_V65_OPENROUTER_CHAT_MODEL || (process.env.TITAN_V65_OPENROUTER_CHAT_MODEL || process.env.OPENROUTER_MODEL)) || "deepseek/deepseek-v4-flash"
+  return (process.env.TITAN_V65_OPENROUTER_CHAT_MODEL || (process.env.TITAN_V65_OPENROUTER_CHAT_MODEL || process.env.OPENROUTER_MODEL)) || "deepseek/deepseek-v4-flash-0731:free"
 }
 
 function maxTokensFor(input: AIRequest) {
@@ -68,7 +68,7 @@ export const openRouterProvider: AIProvider = {
 
   healthCheck() {
     return health("openrouter", hasEnv("OPENROUTER_API_KEY"), this.supports, [
-      (process.env.TITAN_V65_OPENROUTER_CHAT_MODEL || (process.env.TITAN_V65_OPENROUTER_CHAT_MODEL || process.env.OPENROUTER_MODEL)) || "deepseek/deepseek-v4-flash",
+      (process.env.TITAN_V65_OPENROUTER_CHAT_MODEL || (process.env.TITAN_V65_OPENROUTER_CHAT_MODEL || process.env.OPENROUTER_MODEL)) || "deepseek/deepseek-v4-flash-0731:free",
     ])
   },
 
