@@ -6,10 +6,10 @@ import type { analyzeProduction } from "./production"
 import { parseProductionTable, readPrice, type TableParse } from "./table-input"
 import { analyzePetroleumDataset } from "./analysis"
 import { attachmentCsv } from "./message"
-import { verifyOilAnalysis } from "./verify-analysis"
+import {executeMpce} from "./mpce"
 import { oilReportFence } from "./visual-report"
 import { oilNeedsInput, oilWord } from "./analysis-i18n"
-import { OIL_ANALYSES, OIL_ANALYSIS_ENGINE_VERSION, OIL_ANALYSIS_SCHEMA_VERSION, petroleumAnalysisRequestSchema, type OilLanguage, type PetroleumAnalysisRequest } from "./analysis-contract"
+import { OIL_ANALYSES, OIL_ANALYSIS_ENGINE_VERSION, OIL_ANALYSIS_SCHEMA_VERSION, petroleumAnalysisRequestSchema, type MpceReceipt, type OilLanguage, type PetroleumAnalysisRequest } from "./analysis-contract"
 
 /**
  * Chat entry points of the visual oil report (server side).
@@ -35,10 +35,10 @@ function needsInputAnswer(parsed: Extract<TableParse, { kind: "needs-input" }>) 
 }
 
 /** Keeps the report inside the chat answer limit: the wells with the largest oil loss stay. */
-function boundedFence(request: PetroleumAnalysisRequest, result = analyzePetroleumDataset(request)) {
+function boundedFence(request: PetroleumAnalysisRequest, result = analyzePetroleumDataset(request), receipt?:MpceReceipt) {
   let current = request
   for (let attempt = 0; attempt < 8; attempt++) {
-    const fence = oilReportFence(current, attempt === 0 ? result : analyzePetroleumDataset(current))
+    const fence = oilReportFence(current, attempt === 0 ? result : analyzePetroleumDataset(current), attempt===0?receipt:undefined)
     if (fence.length <= MAX_FENCE_CHARS || current.dataset.wells.length <= 1) return fence
     const keep = Math.max(1, Math.floor(current.dataset.wells.length * 0.6))
     const ranked = [...current.dataset.wells].sort((a, b) => (b.oil[0] - b.oil[b.oil.length - 1]) - (a.oil[0] - a.oil[a.oil.length - 1]) || a.id.localeCompare(b.id))
@@ -69,13 +69,13 @@ export function executePetroleumTable(input: { prompt: string; selectedSkillId?:
   const sourceHash = sha256(JSON.stringify(parsed.request) + "\n" + parsed.tableText)
   const request: PetroleumAnalysisRequest = { ...parsed.request, metadata: { ...parsed.request.metadata, source: input.source || parsed.request.metadata.source, sourceHash } }
   emit({ stage: "COMPUTATIONS_STARTED", status: "completed" })
-  const result = analyzePetroleumDataset(request), verification = verifyOilAnalysis(request, result)
+  const computation=executeMpce(request),result=computation.result,verification=computation.validation
   if (!verification.ok) {
     emit({ stage: "COMPUTATIONS_VERIFIED", status: "blocked", reason: verification.mismatches.join(", "), checked: verification.checked })
     return { ok: false, content: "Расчёт не прошёл независимую проверку; результаты не опубликованы.", version: OIL_ANALYSIS_ENGINE_VERSION, inputHash: sourceHash, events }
   }
   emit({ stage: "COMPUTATIONS_VERIFIED", status: "completed", checked: verification.checked })
-  const content = boundedFence(request, result) + (parsed.alerts?.length ? "\n\n" + parsed.alerts.map(alert => `- ${alert}. Уточните единицы или условия для этого столбца; остальные расчёты выполнены.`).join("\n") : "")
+  const content = boundedFence(request, result,computation.receipt) + (parsed.alerts?.length ? "\n\n" + parsed.alerts.map(alert => `- ${alert}. Уточните единицы или условия для этого столбца; остальные расчёты выполнены.`).join("\n") : "")
   emit({ stage: "VISUALS_PREPARED", status: "completed" })
   if (!input.deferCompletion) {
     emit({ stage: "RESPONSE_SYNTHESIZED", status: "completed" })

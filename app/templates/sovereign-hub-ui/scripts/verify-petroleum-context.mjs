@@ -64,7 +64,10 @@ for(const [unit,factor] of [['psi',1],['bar',14.5037737730209],['kPa',0.14503773
  const r=result(declarations.replace('Pwf = psi','Pwf = '+unit)+'\n'+table)
  const chart=r.chartSeries.find(c=>c.id==='pressure'&&c.well==='W-04');close(chart.series[0].values[3],232*factor)
  close(r.calculatedMetrics.find(m=>m.id==='pressure_change_abs'&&m.well==='W-04').value,-38*factor)
- assert.equal(r.chartSeries.find(c=>c.id==='pressure'&&c.well==='__field__').series.length,6)
+ const field=r.chartSeries.find(c=>c.id==='pressure'&&c.well==='__field__')
+ assert.equal(field.series.length,7) // six measured traces plus explicitly calculated mean
+ const expected=r.wells.filter(w=>!w.isField).reduce((s,w)=>s+r.chartSeries.find(c=>c.id==='pressure'&&c.well===w.id).series[0].values[3],0)/6
+ close(field.series.find(s=>s.id==='pressure').values[3],expected)
 })
 test('engineering: missing measurements remain null and do not become zero',()=>{const p=parsed(declarations+'\n'+table.replace('900\t100','900\t'));assert.equal(p.dataset.wells[0].water[0],null);assert.equal(analyzePetroleumDataset(p).wells[0].first.wc,null)})
 test('engineering: negative, NaN, Infinity and impossible values are rejected',()=>{for(const bad of ['-900','NaN','Infinity','100000000000000']){const p=parsed(declarations+'\n'+table.replace('900\t100',bad+'\t100'));assert.equal(p.metadata.acceptedRows,23);assert.ok(p.metadata.issues.length>0)}})

@@ -47,7 +47,7 @@ for(const [file,expected] of [
   assert.equal(response.status,200)
   const events=(await response.text()).split('\n\n').filter(x=>x.includes('data: ')).map(frame=>JSON.parse(frame.split('\ndata: ')[1]))
   const done=events.filter(e=>e.type==='done'),answer=events.filter(e=>e.type==='content').map(e=>e.content).join('')
-  assert.equal(done.length,1);assert.equal(done[0].provider,'malik-petroleum-local');assert.ok(answer.includes(expected));assert.equal(answer.match(/# Malik Oil AI/g).length,1)
+  assert.equal(done.length,1);assert.equal(done[0].provider,'malik-petroleum-local');assert.ok(answer.includes(expected),file.name+': '+answer.slice(0,1200));assert.equal(answer.match(/# Malik Oil AI/g).length,1)
   for(const deferred of after.splice(0))await deferred()
 }
 console.log('PASS actual stream HTTP/SSE path in RU/AR/EN/KK: CSV, DOCX production table, PDF audit and corrupt PDF refusal; Work quota admission, project/media isolation, one completion and one answer. Model/media/provider boundaries throw if invoked; auth/quota fixtures explicit.')

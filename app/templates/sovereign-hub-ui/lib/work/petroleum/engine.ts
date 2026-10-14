@@ -5,10 +5,12 @@ import { npv, irr, economics } from "./economics"
 import { decline } from "./reservoir"
 import { analyzeProduction } from "./production"
 import { analyzeField, analyzeFieldAsync, type FieldResult, type FieldRunOptions, type FieldProgress } from "./field"
+import {volumetricOil} from "./volumetric"
 export const PETROLEUM_ALGORITHM_VERSION="malik-petroleum-1.2.0"
 export type EvidenceClass = "Verified Measurement" | "Verified External Source" | "Deterministic Calculation" | "Statistical Estimate" | "Engineering Assumption" | "AI Hypothesis" | "Missing Evidence"
 export type PetroleumReceipt = {ok:boolean;version:string;inputHash:string;task:unknown;result?:unknown;error?:string;method:string;variables:string;units:string;assumptions:string[];evidence:EvidenceClass[];humanReview:boolean;uncertainty:string;limitations:string[]}
 const methods:Record<PetroleumTask["op"],[string,string,string]>={
+  "volumetric-oil":["N=A*h*phi*(1-Sw)/Bo", "A: net area m2; h: net pay m; phi/Sw: fractions; Bo: reservoir m3/stock-tank m3", "Homogeneous synthetic/user scenario; stock-tank m3, not reserves or recovery"],
   "field-surveillance":["Same-basis KPI screening; explicit baseline; interval-aware gap and non-overlapping downtime attribution; conditional recovery economics", "Asset relationships, unit-bearing history, declared averaging basis, threshold configuration and supplied scenarios", "bbl/day or scf/day; volumes only for declared averaging intervals; supplied currency; no measured loss or guaranteed recovery inferred"],
   "document-audit":["Literal text extraction and deterministic document quality screening", "sourceHash: original bytes fingerprint supplied by the extraction path; extracted text is untrusted data", "No physical measurement or geological interpretation inferred from prose"],
   convert:["value_to = value_from × factor_from / factor_to","value: supplied quantity; factors: SI conversion constants","Dimension-preserving; gas T/P reference unchanged; pressure must use same absolute/gauge basis"],
@@ -30,6 +32,7 @@ function executePetroleum(raw: unknown, fieldExecution?: { result?: FieldResult;
   try {
     let result:unknown
     switch(task.op) {
+      case "volumetric-oil":result=volumetricOil(task.input);base.evidence.push("Statistical Estimate");base.assumptions.push("Homogeneous volumetric scenario, supplied Bo and initial saturation; no calibrated reservoir model");break
       case "field-surveillance": {
         if (fieldExecution?.error) throw new Error(fieldExecution.error)
         result=fieldExecution?.result ?? analyzeField(task)

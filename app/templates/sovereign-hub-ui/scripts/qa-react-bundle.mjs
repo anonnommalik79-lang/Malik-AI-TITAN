@@ -13,7 +13,7 @@ export function reactQaBundle() {
     const js = ts.transpileModule(fs.readFileSync(file, "utf8"), { compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } }).outputText
     modules[file] = js.replace(/require\("([^"]+)"\)/g, (whole, name) => {
       if (name.endsWith(".css") || modules[name]) return whole
-      const base = name.startsWith("@/") ? name.slice(2) : path.join(path.dirname(file), name)
+      const base = name === "zod" ? require.resolve(name) : name.startsWith("@/") ? name.slice(2) : path.join(path.dirname(file), name)
       const target = [base, base + ".ts", base + ".tsx"].find(f => fs.existsSync(f))
       if (!target) throw Error(`QA import missing: ${name}`)
       return `require(${JSON.stringify(bundle(target))})`

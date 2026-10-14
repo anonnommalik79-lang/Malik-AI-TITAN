@@ -1,4 +1,5 @@
 import { BARREL_M3 } from "./units"
+import { arpsRate, fitHyperbolic, effectiveDecline } from "./dca"
 import {
   OIL_ANALYSES, OIL_ANALYSIS_ENGINE_VERSION, OIL_ANALYSIS_SCHEMA_VERSION,
   type OilAnalysisId, type OilEvidence, type OilModelFit, type OilModelId, type OilWellAnalysis,
@@ -28,6 +29,8 @@ type Context = {
   granularity: Granularity
   calendar: boolean
   forecastPeriods: number
+  forecastTargets?: number[]
+  rateBasis?:"snapshot"|"calendar-average"
   gorFactor: number
   hasWater: boolean
   hasGas: boolean
@@ -81,13 +84,15 @@ export function predictModel(fit: OilModelFit, tau: number): Num {
   if (!fit.valid) return null
   if (fit.model === "linear") return isNum(fit.a) && isNum(fit.b) ? fit.a + fit.b * tau : null
   if (!isNum(fit.qi) || !isNum(fit.D)) return null
-  return fit.model === "exponential" ? fit.qi * Math.exp(-fit.D * tau) : fit.qi / (1 + fit.D * tau)
+  return arpsRate(fit.qi, fit.D, tau, fit.model === "exponential" ? 0 : fit.model === "harmonic" ? 1 : fit.arpsB ?? 0)
 }
 
 /** Linear, exponential (Arps b=0) and harmonic (Arps b=1) fitted by least squares on their linear forms. */
 export function fitDeclineModels(tau: number[], rate: number[]): OilModelFit[] {
   const empty = (model: OilModelId, reason: string): OilModelFit => ({ model, valid: false, reason, a: null, b: null, qi: null, D: null, r2: null, rmse: null, n: tau.length })
-  if (tau.length < 3) return (["linear", "exponential", "harmonic"] as const).map((model) => empty(model, "TOO_FEW_POINTS"))
+  const ids = ["linear", "exponential", "harmonic", "hyperbolic"] as const
+  if (tau.length !== rate.length || !tau.every((t,i)=>Number.isFinite(t)&&t>=0&&(i===0||t>tau[i-1])) || !rate.every(q=>Number.isFinite(q)&&q>=0)) return ids.map(model=>empty(model,"INVALID_SERIES"))
+  if (tau.length < 3) return ids.map((model) => empty(model, "TOO_FEW_POINTS"))
   const fits: OilModelFit[] = []
   const linear = ols(tau, rate)
   if (!linear) fits.push(empty("linear", "NO_TIME_SPREAD"))
@@ -104,6 +109,8 @@ export function fitDeclineModels(tau: number[], rate: number[]): OilModelFit[] {
     const qi = Math.exp(exponential.intercept), D = -exponential.slope
     const fit: OilModelFit = { model: "exponential", valid: D > 0, reason: D > 0 ? undefined : "NOT_DECLINING", a: null, b: null, qi, D, r2: null, rmse: null, n: tau.length }
     Object.assign(fit, goodness(rate, tau.map((value) => qi * Math.exp(-D * value))))
+    fit.r2Log = goodness(rate.map(Math.log), tau.map(value=>Math.log(qi)-D*value)).r2
+    fit.arpsB = 0
     fits.push(fit)
   }
   const harmonic = positive ? ols(tau, rate.map((value) => 1 / value)) : null
@@ -114,7 +121,15 @@ export function fitDeclineModels(tau: number[], rate: number[]): OilModelFit[] {
     const qi = 1 / harmonic.intercept, D = harmonic.slope / harmonic.intercept
     const fit: OilModelFit = { model: "harmonic", valid: true, a: null, b: null, qi, D, r2: null, rmse: null, n: tau.length }
     Object.assign(fit, goodness(rate, tau.map((value) => qi / (1 + D * value))))
+    fit.r2Log = goodness(rate.map(Math.log), tau.map(value=>Math.log(qi)-Math.log1p(D*value))).r2
+    fit.arpsB = 1
     fits.push(fit)
+  }
+  const hyperbolic = positive ? fitHyperbolic(tau, rate) : null
+  if(!hyperbolic) fits.push(empty("hyperbolic", !positive ? "ZERO_RATES" : tau.length<4 ? "TOO_FEW_POINTS" : tau.length>512 ? "FIT_BUDGET_LIMIT" : "NO_IDENTIFIABLE_ARPS_FIT"))
+  else {
+    const predicted=tau.map(t=>arpsRate(hyperbolic.qi,hyperbolic.D,t,hyperbolic.b))
+    fits.push({model:"hyperbolic",valid:true,a:null,b:null,qi:hyperbolic.qi,D:hyperbolic.D,arpsB:hyperbolic.b,r2Log:goodness(rate.map(Math.log),predicted.map(Math.log)).r2,...goodness(rate,predicted),n:tau.length})
   }
   return fits
 }
@@ -134,7 +149,8 @@ function stepOf(t: number[], granularity: Granularity) {
 
 /** Days a rate stands for, when the calendar says so: a calendar month, or one day of consecutive daily data. */
 function periodDays(t: number[], context: Context): number[] | null {
-  if (!context.calendar) return null
+  if (!context.calendar || context.rateBasis==="snapshot") return null
+  if(context.granularity==="month"&&context.rateBasis!=="calendar-average"&&t.some((v,i)=>i>0&&v-t[i-1]>1)) return null
   if (context.granularity === "month") return t.map(daysInMonthT)
   if (context.granularity === "day" && t.every((value, index) => index === 0 || value - t[index - 1] === 1)) return t.map(() => 1)
   return null
@@ -194,7 +210,7 @@ function analyzeSeries(id: string, input: { t: number[]; period: string[]; oil: 
   const tau = t.map((value) => value - t[0])
   const models = fitDeclineModels(tau, oil)
   const valid = models.filter((fit) => fit.valid && isNum(fit.rmse))
-  const preference: OilModelId[] = ["exponential", "harmonic", "linear"]
+  const preference: OilModelId[] = ["exponential", "harmonic", "linear", "hyperbolic"]
   valid.sort((left, right) => {
     const scale = Math.max(1e-12, Math.abs(left.rmse as number), Math.abs(right.rmse as number))
     const difference = (left.rmse as number) - (right.rmse as number)
@@ -204,12 +220,12 @@ function analyzeSeries(id: string, input: { t: number[]; period: string[]; oil: 
 
   let forecast: OilWellAnalysis["forecast"] = null
   let forecastBlocked: string | null = null
-  if (context.forecastPeriods === 0) forecastBlocked = "NO_HORIZON"
+  if (context.forecastPeriods === 0 && !context.forecastTargets?.length) forecastBlocked = "NO_HORIZON"
   else if (n < 4) forecastBlocked = "TOO_FEW_POINTS"
   else if (!valid.length) forecastBlocked = models.some((fit) => fit.reason === "ZERO_RATES") && !models.some((fit) => fit.valid) ? "ZERO_RATES" : "NO_DECLINING_TREND"
   else {
     const step = stepOf(t, context.granularity)
-    const future = Array.from({ length: context.forecastPeriods }, (_, index) => t[n - 1] + (index + 1) * step)
+    const future = context.forecastTargets?.filter(value=>value>t[n-1]) ?? Array.from({ length: context.forecastPeriods }, (_, index) => t[n - 1] + (index + 1) * step)
     const byModel = (model: OilModelId) => {
       const fit = models.find((item) => item.model === model)
       return future.map((value) => fit && fit.valid ? predictModel(fit, value - t[0]) : null)
@@ -221,6 +237,7 @@ function analyzeSeries(id: string, input: { t: number[]; period: string[]; oil: 
       linear: rawLinear.map((value) => isNum(value) ? Math.max(0, value) : null),
       exponential: byModel("exponential"),
       harmonic: byModel("harmonic"),
+      hyperbolic: byModel("hyperbolic"),
       linearClamped: rawLinear.some((value) => isNum(value) && value <= 0),
       linearZeroT: linearFit?.valid && isNum(linearFit.a) && isNum(linearFit.b) && linearFit.b < 0 ? t[0] + -linearFit.a / linearFit.b : null,
     }
@@ -364,7 +381,7 @@ function gorSetup(request: Request) {
 
 type Metric = PetroleumAnalysisResult["calculatedMetrics"][number]
 
-function wellMetrics(well: OilWellAnalysis, units: { liquid: string; gas: string | null; gor: string | null }, price: Request["parameters"]["price"]): Metric[] {
+function wellMetrics(well: OilWellAnalysis, units: { liquid: string; gas: string | null; gor: string | null }, price: Request["parameters"]["price"], granularity: Granularity): Metric[] {
   const out: Metric[] = []
   const add = (id: string, value: Num | undefined, unit: string, evidence: OilEvidence = "Deterministic Calculation") => out.push({ id, well: well.id, value: isNum(value) ? value : null, unit, evidence })
   add("oil_first", well.first.oil, units.liquid); add("oil_last", well.last.oil, units.liquid); add("oil_change", well.change.oil, "fraction"); add("oil_change_abs", well.change.oilAbs, units.liquid)
@@ -383,9 +400,18 @@ function wellMetrics(well: OilWellAnalysis, units: { liquid: string; gas: string
     if (fit.model === "linear") { add(`${prefix}_a`, fit.a, units.liquid, "Statistical Estimate"); add(`${prefix}_b`, fit.b, `${units.liquid}/period`, "Statistical Estimate") }
     else { add(`${prefix}_qi`, fit.qi, units.liquid, "Statistical Estimate"); add(`${prefix}_D`, fit.D, "1/period", "Statistical Estimate") }
     add(`${prefix}_r2`, fit.r2, "", "Statistical Estimate"); add(`${prefix}_rmse`, fit.rmse, units.liquid, "Statistical Estimate")
+    add(`${prefix}_r2_log`, fit.r2Log, "log-space", "Statistical Estimate")
+    if (isNum(fit.D)) {
+      const time = granularity === "index" ? "period" : granularity
+      add(`${prefix}_nominal`, fit.D, `1/${time}`, "Statistical Estimate")
+      add(`${prefix}_effective`, effectiveDecline(fit.D,1,fit.arpsB??0), `fraction/${time}`, "Statistical Estimate")
+      const perYear = periodsPerYear(granularity)
+      if(perYear) add(`${prefix}_effective_annual`,effectiveDecline(fit.D,perYear,fit.arpsB??0),"fraction/year","Statistical Estimate")
+    }
+    if(fit.model === "hyperbolic") add(`${prefix}_arps_b`,fit.arpsB,"dimensionless","Statistical Estimate")
   }
   well.forecast?.t.forEach((_, index) => {
-    for (const model of ["linear", "exponential", "harmonic"] as const) add(`forecast_${model}_${index + 1}`, well.forecast?.[model][index], units.liquid, "Statistical Estimate")
+    for (const model of ["linear", "exponential", "harmonic", "hyperbolic"] as const) add(`forecast_${model}_${index + 1}`, well.forecast?.[model]?.[index], units.liquid, "Statistical Estimate")
   })
   if (well.cumulative) {
     add("cum_oil", well.cumulative.oil, units.liquid.replace("/day", ""), "Engineering Assumption")
@@ -408,6 +434,8 @@ export function analyzePetroleumDataset(request: Request): PetroleumAnalysisResu
   const hasGas = units.gas !== null && dataset.wells.some((well) => well.gas !== null)
   const context: Context = {
     granularity: dataset.granularity, calendar: dataset.calendar, forecastPeriods: parameters.forecastPeriods,
+    forecastTargets: parameters.forecastTargets,
+    rateBasis:parameters.rateBasis,
     gorFactor: gor.factor, hasWater, hasGas, price: parameters.price, priceFactor: priceFactor(request),
   }
   const fill = (values: Num[] | null, length: number): Num[] => values ? values : Array.from({ length }, () => null)
@@ -469,7 +497,7 @@ export function analyzePetroleumDataset(request: Request): PetroleumAnalysisResu
   const analysisSections = OIL_ANALYSES.map(status)
 
   const unitSummary = { liquid: units.liquid, gas: hasGas ? units.gas : null, gor: hasGas ? gor.unit : null }
-  const calculatedMetrics = wells.flatMap((well) => wellMetrics(well, unitSummary, parameters.price))
+  const calculatedMetrics = wells.flatMap((well) => wellMetrics(well, unitSummary, parameters.price, dataset.granularity))
   const percent = (values: Num[]) => values.map((value) => isNum(value) ? value * 100 : null)
   const chartSeries: PetroleumAnalysisResult["chartSeries"] = wells.flatMap((well) => {
     const charts: PetroleumAnalysisResult["chartSeries"] = [{
@@ -490,14 +518,17 @@ export function analyzePetroleumDataset(request: Request): PetroleumAnalysisResu
     }
     if (well.forecast) {
       const history = well.t.length
-      const pad = (values: Num[]) => [...Array.from({ length: history - 1 }, () => null), well.oil[history - 1], ...values]
+      // A fitted curve may not pass through the last measured rate. Never fake
+      // a measured anchor for a model; retain its own predicted endpoint.
+      const pad = (model: OilModelId, values: Num[]) => [...Array.from({ length: history - 1 }, () => null), predictModel(well.models.find(f=>f.model===model)!, well.t[history-1]-well.t[0]), ...values]
       charts.push({
         id: "forecast", well: well.id, unit: units.liquid, x: [...well.t, ...well.forecast.t], forecastFrom: well.t[history - 1],
         series: [
           { id: "oil", values: [...well.oil, ...well.forecast.t.map(() => null)], role: "fact", style: "solid" },
-          { id: "linear", values: pad(well.forecast.linear), role: "model", style: "dash" },
-          { id: "exponential", values: pad(well.forecast.exponential), role: "model", style: "dashdot" },
-          { id: "harmonic", values: pad(well.forecast.harmonic), role: "model", style: "dot" },
+          { id: "linear", values: pad("linear", well.forecast.linear), role: "model", style: "dash" },
+          { id: "exponential", values: pad("exponential", well.forecast.exponential), role: "model", style: "dashdot" },
+          { id: "harmonic", values: pad("harmonic", well.forecast.harmonic), role: "model", style: "dot" },
+          { id: "hyperbolic", values: pad("hyperbolic", well.forecast.hyperbolic || []), role: "model", style: "dashdot" },
         ],
       })
     }
@@ -505,14 +536,22 @@ export function analyzePetroleumDataset(request: Request): PetroleumAnalysisResu
   })
 
   const pressureWells = dataset.wells.filter(w => w.pressure?.some(isNum))
+  const pressureLabel = units.pressure?.datum === "absolute" ? "psia" : units.pressure?.datum === "gauge" ? "psig" : "psi"
   for (const well of pressureWells) {
     const values = well.pressure!.map(v => v === null ? null : v)
-    chartSeries.push({ id: "pressure", well: well.id, unit: "psi", x: well.t, forecastFrom: null, series: [{ id: "pressure", values, role: "fact", style: "solid" }] })
-    const add = (id: string, value: Num) => calculatedMetrics.push({ id, well: well.id, value, unit: "psi", evidence: "Deterministic Calculation" })
+    chartSeries.push({ id: "pressure", well: well.id, unit: pressureLabel, x: well.t, forecastFrom: null, series: [{ id: "pressure", values, role: "fact", style: "solid" }] })
+    const add = (id: string, value: Num) => calculatedMetrics.push({ id, well: well.id, value, unit: pressureLabel, evidence: "Deterministic Calculation" })
     add("pressure_first", values[0]); add("pressure_last", values[values.length - 1])
     add("pressure_change_abs", isNum(values[0]) && isNum(values[values.length - 1]) ? values[values.length - 1]! - values[0]! : null)
   }
-  if (field && pressureWells.length) chartSeries.push({ id: "pressure", well: FIELD_ID, unit: "psi", x: field.t, forecastFrom: null, series: pressureWells.map(w => ({ id: `pwf:${w.id}`, values: field!.t.map(t => w.pressure?.[w.t.indexOf(t)] ?? null), role: "fact", style: "solid" })) })
+  if (field && pressureWells.length) {
+    const mean = field.t.map(t=> {
+      const values=dataset.wells.map(w=>w.pressure?.[w.t.indexOf(t)]??null)
+      return values.every(isNum) ? values.reduce((s,v)=>s+v,0)/values.length : null
+    })
+    chartSeries.push({ id: "pressure", well: FIELD_ID, unit: pressureLabel, x: field.t, forecastFrom: null, series: [{id:"pressure",values:mean,role:"fact",style:"dash"},...pressureWells.map(w => ({ id: `pwf:${w.id}`, values: field!.t.map(t => w.pressure?.[w.t.indexOf(t)] ?? null), role: "fact" as const, style: "solid" as const }))] })
+    for(const [id,value] of [["pressure_first",mean[0]],["pressure_last",mean[mean.length-1]],["pressure_change_abs",isNum(mean[0])&&isNum(mean[mean.length-1])?mean[mean.length-1]!-mean[0]!:null]] as const) calculatedMetrics.push({id,well:FIELD_ID,value,unit:pressureLabel,evidence:"Deterministic Calculation"})
+  }
 
   const tableDatasets: PetroleumAnalysisResult["tableDatasets"] = wells.flatMap((well) => {
     const tables: PetroleumAnalysisResult["tableDatasets"] = [{
@@ -527,7 +566,14 @@ export function analyzePetroleumDataset(request: Request): PetroleumAnalysisResu
     })
     return tables
   })
-  for (const well of pressureWells) tableDatasets.push({ id: "pressure", well: well.id, columns: [{ id: "period", unit: "" }, { id: "Pwf", unit: "psi" }], rows: well.t.map((_, i) => [well.period[i], well.pressure![i]]) })
+  for (const well of wells) {
+    const source=chartSeries.find(c=>c.well===well.id&&c.id==="pressure")?.series.find(s=>s.id==="pressure")
+    if(source) tableDatasets.push({id:"pressure",well:well.id,columns:[{id:"period",unit:""},{id:"Pwf",unit:pressureLabel}],rows:well.t.map((_,i)=>[well.period[i],source.values[i]])})
+  }
+  if(field?.forecast) tableDatasets.push({id:"summed-well-forecast",well:FIELD_ID,columns:[{id:"t",unit:""},{id:"sum_exponential",unit:units.liquid}],rows:field.forecast.t.map(t=>{
+    const values=analyses.map(w=>{const i=w.forecast?.t.indexOf(t)??-1;return i>=0?w.forecast!.exponential[i]:null})
+    return [t,values.every(isNum)?values.reduce((s,v)=>s+v,0):null]
+  })})
   if (dataset.wells.length > 1) tableDatasets.push({
     id: "multiwell", well: null,
     columns: [{ id: "well", unit: "" }, { id: "oil_first", unit: units.liquid }, { id: "oil_last", unit: units.liquid }, { id: "oil_change", unit: "%" }, { id: "oil_loss", unit: units.liquid }, { id: "wc_change_pp", unit: "pp" }, { id: "gor_change", unit: "%" }],
@@ -550,7 +596,7 @@ export function analyzePetroleumDataset(request: Request): PetroleumAnalysisResu
   const warnings = ["ENGINEER_REVIEW_REQUIRED"]
   if (wells.some((well) => well.forecast)) warnings.push("TREND_EXTRAPOLATION_NOT_RESERVOIR_FORECAST", "SCENARIOS_NOT_CONFIDENCE_INTERVALS")
   if (wells.some((well) => well.hypotheses.measurements.length)) warnings.push("MECHANISM_NOT_DETERMINED")
-  const limitations = ["USER_DATA_UNVERIFIED", ...(pressureWells.length ? ["NO_PVT_DATA", "PRESSURE_DATUM_NOT_STATED"] : ["NO_PRESSURE_PVT_DATA"]), "NO_RESERVES_CLASSIFICATION", "NO_EQUIPMENT_CONTROL"]
+  const limitations = ["USER_DATA_UNVERIFIED", ...(pressureWells.length ? ["NO_PVT_DATA", ...(units.pressure?.datum&&units.pressure.datum!=="unknown"?[]:["PRESSURE_DATUM_NOT_STATED"])] : ["NO_PRESSURE_PVT_DATA"]), "NO_RESERVES_CLASSIFICATION", "NO_EQUIPMENT_CONTROL"]
   if (wells.some((well) => well.cumulative)) limitations.push("CUMULATIVE_ASSUMES_AVERAGE_RATES")
   if (parameters.price) limitations.push("ECONOMICS_GROSS_PRETAX")
 
@@ -571,7 +617,7 @@ export function analyzePetroleumDataset(request: Request): PetroleumAnalysisResu
       firstT: Math.min(...dataset.wells.map((well) => well.t[0])), lastT: Math.max(...dataset.wells.map((well) => well.t[well.t.length - 1])),
       omittedWells: metadata.omittedWells,
     },
-    validatedInputs: { acceptedRows: metadata.acceptedRows, rejectedRows: metadata.rejectedRows, units: { ...unitSummary, gasReference: units.gasReference, basis: units.liquid === "t/day" ? "mass" : "volume" }, notes: [...metadata.notes] },
+    validatedInputs: { acceptedRows: metadata.acceptedRows, rejectedRows: metadata.rejectedRows, units: { ...unitSummary, gasReference: units.gasReference, basis: units.liquid === "t/day" ? "mass" : "volume", pressure: pressureWells.length ? pressureLabel : null }, notes: [...metadata.notes] },
     calculatedMetrics,
     analysisSections,
     chartSeries,

@@ -1,4 +1,4 @@
-import { BARREL_M3 } from "./units"
+import { BARREL_M3, PRESSURE_PA, type PressureDatum } from "./units"
 import { normalizeDigits } from "./production"
 import { stripPetroleumToken } from "./router"
 import {
@@ -32,7 +32,7 @@ const SKIP = /(?:cut|обводн|сулан|\bwc\b|%|процент|\bgor\b|г�
 const ROLE_PATTERNS: Array<[Role, RegExp]> = [
   ["period", /^(?:month|date|period|time|mon|t|месяц|мес\.?|дата|период|время|ай|күн|кезең|уақыт|الشهر|التاريخ|الفترة|شهر)(?:$|[\s,(])/iu],
   ["well", /(?:well|скважин|скв\.?(?:$|\s)|ұңғыма|بئر|البئر)/iu],
-  ["pressure", /(?:\bpwf\b|pressure|давлен|\bp[_ ]?wf\b)/iu],
+  ["pressure", /(?:\bpwf\b|pressure|давлен|қысым|الضغط|\bp[_ ]?wf\b)/iu],
   ["liquid", /(?:liquid|жидк|сұйық|سائل|gross|\bql\b|\bblpd\b)/iu],
   ["oil", /(?:oil|нефт|мұнай|نفط|\bq[_ ]?o\b|\bbopd\b)/iu],
   ["water", /(?:water|вод[аыу]|\bсу\b|ماء|مياه|\bq[_ ]?w\b|\bbwpd\b)/iu],
@@ -250,19 +250,23 @@ function messageUnits(prompt: string, role: Role): Array<{ unit: Unit; source: s
   return found
 }
 
-export function readPressureUnit(text: string): { factor: number; unit: string } | null {
+export function readPressureUnit(text: string): { factor: number; unit: string; datum: PressureDatum } | null {
   const token = text.match(/(?<![\p{L}])(?:MPa|kPa|psi[ag]?|bar|МПа|кПа|бар|пси)(?![\p{L}])/iu)?.[0]
   if (!token) return null
   const key = token.toLowerCase()
-  const factor = /mpa|мпа/.test(key) ? 145.037737730209 : /kpa|кпа/.test(key) ? 0.145037737730209 : /bar|бар/.test(key) ? 14.5037737730209 : 1
-  return { factor, unit: token }
+  const factor = (/mpa|мпа/.test(key) ? PRESSURE_PA.MPa : /kpa|кпа/.test(key) ? PRESSURE_PA.kPa : /bar|бар/.test(key) ? PRESSURE_PA.bar : PRESSURE_PA.psi) / PRESSURE_PA.psi
+  const datum = key === "psia" || /absolute|абсолют|مطلق/iu.test(text) ? "absolute" : key === "psig" || /gauge|манометр|избыточ|مقاس/iu.test(text) ? "gauge" : "unknown"
+  return { factor, unit: token, datum }
 }
 
 function pressureUnit(prompt: string, header: string) {
-  const sources = [header, ...prompt.replace(/[*`"']/g, "").split(/\n|;/).filter(line => /^(?:pwf|p[_ ]?wf|pressure|давлен\p{L}*)\s*(?:=|:|,|\(|\bis\b|\bin\b)/iu.test(line.trim()))]
+  let context = prompt
+  for (const table of findTables(prompt)) context = context.replace(table.text, "")
+  const sources = [header, ...context.replace(/[*`"']/g, "").split(/\n|;/).filter(line => /^(?:pwf|p[_ ]?wf|pressure|давлен\p{L}*|қысым|الضغط)\s*(?:=|:|,|\(|—|–|\bis\b|\bin\b)/iu.test(line.trim()))]
   const known = sources.map(source => ({ source, unit: readPressureUnit(source) })).filter(item => item.unit !== null)
-  const conflict = known.some(item => item.unit!.factor !== known[0].unit!.factor)
-  return { unit: conflict ? null : known[0]?.unit || null, conflict: conflict ? known.map(item => item.source).join(" ↔ ") : null }
+  const datums = new Set(known.map(item => item.unit!.datum).filter(d => d !== "unknown"))
+  const conflict = known.some(item => item.unit!.factor !== known[0].unit!.factor) || datums.size > 1
+  return { unit: conflict ? null : known.find(item => item.unit!.datum !== "unknown")?.unit || known[0]?.unit || null, conflict: conflict ? known.map(item => item.source).join(" ↔ ") : null }
 }
 
 export function readPrice(prompt: string): PetroleumAnalysisRequest["parameters"]["price"] {
@@ -478,11 +482,16 @@ function parseSingleProductionTable(prompt: string, table: FoundTable, options: 
       let year = 0, previous = -1
       for (const row of rows) { if (row.period.t <= previous) year += 1; previous = row.period.t; row.period = { ...row.period, t: row.period.t + 12 * year } }
     }
+    // A history year is authoritative only when explicitly attached to history,
+    // not a date mentioned in a forecast, and never the machine's current year.
+    const years = [...normalizeDigits(message).matchAll(/(?:history\s+year|data\s+year|год\s+(?:истории|данных)|деректер\s+жылы|سنة\s+البيانات)\s*[:=—]\s*(\d{4})/giu)].map(m => Number(m[1]))
+    if (new Set(years).size > 1) return { kind: "needs-input", code: "HISTORY_YEAR_CONFLICT", columns, language, tableText: table.text }
+    if (kind === "name" && years.length) for (const row of accepted) row.period = { ...row.period, t: row.period.t + years[0] * 12 }
     const allDates = kind === "date"
     const monthlyDates = allDates && accepted.every((row) => new Date(row.period.t * 86_400_000).getUTCDate() === 1)
     if (monthlyDates) for (const row of accepted) { const date = new Date(row.period.t * 86_400_000); row.period = { ...row.period, t: date.getUTCFullYear() * 12 + date.getUTCMonth() } }
     const granularity: PetroleumAnalysisRequest["dataset"]["granularity"] = kind === "month" || kind === "name" || monthlyDates ? "month" : kind === "date" ? "day" : /^(?:month|месяц|мес|ай|شهر|الشهر)/iu.test(header[roles.get("period") as number]) ? "month" : "index"
-    const calendar = kind === "month" || kind === "date"
+    const calendar = kind === "month" || kind === "date" || kind === "name" && years.length > 0
 
     let omittedWells = 0
     let entries = [...byWell.entries()]
@@ -521,6 +530,22 @@ function parseSingleProductionTable(prompt: string, table: FoundTable, options: 
     }
     if (!wells.length) return { kind: "needs-input", code: "NO_VALID_ROWS", columns, language, tableText: table.text }
     const acceptedRows = wells.reduce((sum, well) => sum + well.t.length, 0)
+    // Named targets belong to the requested forecast sentence only. Gregorian
+    // dates require a declared history year; yearless history remains relative.
+    const targetTimes: number[] = []
+    for (const sentence of normalizeDigits(message).split(/[.!?\n]/)) {
+      if (!/(?:прогноз|forecast|болжам|توقع|تنبؤ)/iu.test(sentence) || !calendar || granularity !== "month") continue
+      const year = sentence.match(/\b(\d{4})\b/)?.[1]
+      if (!year) continue
+      if(new Set([...sentence.matchAll(/\b(\d{4})\b/g)].map(m=>m[1])).size>1) return {kind:"needs-input",code:"FORECAST_YEAR_AMBIGUOUS",columns,language,tableText:table.text}
+      for (const [pattern, month] of MONTHS) {
+        if (sentence.split(/[\s,;]+/).some(word => pattern.test(word))) targetTimes.push(Number(year) * 12 + month)
+      }
+    }
+    const lastT = Math.max(...wells.map(w => w.t[w.t.length - 1]))
+    if (targetTimes.some(t => t <= lastT || t - lastT > 24)) return { kind: "needs-input", code: "FORECAST_TARGET_OUT_OF_RANGE", columns, language, tableText: table.text }
+    if (targetTimes.length) notes.add("EXPLICIT_FORECAST_TARGETS")
+    if (!calendar && /(?:прогноз|forecast)[^\n]{0,100}\b20\d{2}\b/iu.test(message)) { notes.add("FORECAST_YEAR_UNRESOLVED"); alerts.push("History year is not declared; forecasts are relative periods, not dated calendar predictions") }
     const request = petroleumAnalysisRequestSchema.safeParse({
       schemaVersion: OIL_ANALYSIS_SCHEMA_VERSION,
       taskType: "production-history",
@@ -536,8 +561,8 @@ function parseSingleProductionTable(prompt: string, table: FoundTable, options: 
         notes: [...notes].slice(0, 24),
         omittedWells,
       },
-      units: { liquid, gas: wells.some((well) => well.gas) ? gas : null, gasReference: readGasReference(message), oilDensityKgM3: density },
-      parameters: { forecastPeriods: readForecast(message), price: readPrice(message) },
+      units: { liquid, gas: wells.some((well) => well.gas) ? gas : null, gasReference: readGasReference(message), oilDensityKgM3: density, pressure: pressure.unit ? { unit: "psi", datum: pressure.unit.datum, sourceUnit: pressure.unit.unit } : null },
+      parameters: { forecastPeriods: readForecast(message), ...(targetTimes.length ? { forecastTargets: [...new Set(targetTimes)].sort((a,b) => a-b) } : {}), ...(/(?:rate\s*basis|базис\s*дебит\p{L}*)\s*[:=—]\s*(?:snapshot|моменталь|снимок)/iu.test(message)?{rateBasis:"snapshot"}:/(?:rate\s*basis|базис\s*дебит\p{L}*)\s*[:=—]\s*(?:calendar.average|monthly.average|средн)/iu.test(message)?{rateBasis:"calendar-average"}:{}), price: readPrice(message) },
       requestedAnalyses: [...OIL_ANALYSES],
       language,
     })
@@ -561,7 +586,7 @@ export function parseProductionTable(prompt: string, options: { scope?: "account
   for (const next of valid.slice(1)) {
     const other = next.request
     const factor = liquidFactor(other.units.liquid, request.units.liquid, request.units.oilDensityKgM3)
-    if (factor === null || other.units.gas !== request.units.gas || other.units.gasReference !== request.units.gasReference || other.dataset.granularity !== request.dataset.granularity || other.dataset.calendar !== request.dataset.calendar)
+    if (factor === null || other.units.gas !== request.units.gas || other.units.gasReference !== request.units.gasReference || other.units.pressure?.datum !== request.units.pressure?.datum || other.dataset.granularity !== request.dataset.granularity || other.dataset.calendar !== request.dataset.calendar)
       return { kind: "needs-input", code: "TABLE_UNITS_OR_PERIODS_CONFLICT", columns: [JSON.stringify(request.units), JSON.stringify(other.units)], language: first.language, tableText: message }
     for (const source of other.dataset.wells) {
       const well = { ...source, oil: source.oil.map(v => v * factor), water: source.water?.map(v => v === null ? null : v * factor) || null }

@@ -11,6 +11,7 @@ import assert from "node:assert/strict"
 import { performance } from "node:perf_hooks"
 import { createRequire } from "node:module"
 import { workTestLoader } from "./work-test-loader.mjs"
+import {prompt as titanPrompt} from "./fixtures/oil-titan-field.mjs"
 
 const require = createRequire(import.meta.url)
 const React = require("react")
@@ -374,6 +375,18 @@ test("stream: a pasted table is answered locally with the report — no model, o
     assert.match(view.request.metadata.sourceHash, /^[a-f0-9]{64}$/)
   }
 })
+test("MPCE: exact TITAN request with selected Oil or MAX uses verified fast path, no mandatory paid ensemble",async()=>{
+  const before=comprehensiveCalls.length
+  for(const modelId of ["malik-max","malik-oil-1tb"]) {
+    const {answer,done,events}=await stream({originalQuestion:titanPrompt,modelId})
+    assert.equal(done.length,1);assert.equal(done[0].provider,"malik-petroleum-local")
+    const view=readOilReportBlock(answer.split(/\r\n?|\n/)[1]);assert.ok(view);assert.equal(view.execution.modelCalls.length,0)
+    close(view.result.wells[0].forecast.exponential[0],601.1807539242155)
+    assert.equal(answer.match(/```malik-oil-report/g).length,1)
+    assert.ok(events.some(e=>e.stage==="COMPUTATIONS_VERIFIED"))
+  }
+  assert.equal(comprehensiveCalls.length,before)
+})
 test("grand challenge: Ling and MAX both receive a real model call and the verified charts remain in one answer", async () => {
   const { requiresPetroleumExpertSynthesis } = load("lib/work/petroleum/expert-routing.ts")
   assert.equal(requiresPetroleumExpertSynthesis("Проанализируй добычу нефти\n" + GOLDEN), false)
@@ -442,7 +455,9 @@ test('production incident: six wells through Chat and Work, one final report and
   assert.ok(view.result.chartSeries.some(c=>c.id==='pressure'))
   assert.deepEqual(events.filter(e=>e.phase==='petroleum'&&/^[A-Z_]+$/.test(e.stage)).map(e=>e.stage),['INPUT_PARSED','UNITS_RESOLVED','DATA_VALIDATED','COMPUTATIONS_STARTED','COMPUTATIONS_VERIFIED','VISUALS_PREPARED','RESPONSE_SYNTHESIZED','COMPLETED'])
   assert.doesNotMatch(answer,/нет единиц|generatedMedia|участвовала|3\/3/)
-  assert.match(answer,/расчёты сохранены/)
+  assert.equal(done[0].provider,'malik-petroleum-local')
+  assert.equal(view.execution.modelCalls.length,0)
+  assert.doesNotMatch(answer,/Ансамбль не вернул|участие моделей не подтверждено/)
  }
 })
 test('production incident: long prompt, scheduling words and draw chart cannot invoke another tool',async()=>{

@@ -61,10 +61,12 @@ const WORDS = {
   linear: ["Линейный тренд", "Linear trend", "Сызықтық тренд", "اتجاه خطي"],
   exponential: ["Экспоненциальная (Arps b = 0)", "Exponential (Arps b = 0)", "Экспоненциалды (Arps b = 0)", "أسي (Arps b = 0)"],
   harmonic: ["Гармоническая (Arps b = 1)", "Harmonic (Arps b = 1)", "Гармоникалық (Arps b = 1)", "توافقي (Arps b = 1)"],
+  hyperbolic: ["Гиперболическая (0 ≤ b ≤ 1)", "Hyperbolic (0 ≤ b ≤ 1)", "Гиперболалық (0 ≤ b ≤ 1)", "زائدي (0 ≤ b ≤ 1)"],
   linearShort: ["Линейная", "Linear", "Сызықтық", "خطي"],
   exponentialShort: ["Экспонента b=0", "Exponential b=0", "Экспонента b=0", "أسي b=0"],
   harmonicShort: ["Гармоническая b=1", "Harmonic b=1", "Гармоникалық b=1", "توافقي b=1"],
-  forecastChart: ["Нефть: факт и три модели тренда", "Oil: actual and three trend models", "Мұнай: нақты және үш тренд моделі", "النفط: الفعلي وثلاثة نماذج اتجاه"],
+  hyperbolicShort: ["Гиперболическая", "Hyperbolic", "Гиперболалық", "زائدي"],
+  forecastChart: ["Нефть: факт и модели тренда", "Oil: actual and trend models", "Мұнай: нақты және тренд модельдері", "النفط: الفعلي ونماذج الاتجاه"],
   expandAll: ["Развернуть все разделы", "Expand all sections", "Барлық бөлімдерді ашу", "توسيع كل الأقسام"],
   collapseAll: ["Свернуть разделы", "Collapse sections", "Бөлімдерді жию", "طي الأقسام"],
   unitsCaption: ["Единицы: {unit}", "Units: {unit}", "Бірліктер: {unit}", "الوحدات: {unit}"],
@@ -232,7 +234,7 @@ const CODES: Record<string, Four> = {
   // Warnings and limitations
   ENGINEER_REVIEW_REQUIRED: ["Решения по скважине принимает уполномоченный инженер.", "Well decisions belong to an authorised engineer.", "Ұңғыма бойынша шешімді уәкілетті инженер қабылдайды.", "قرارات البئر من صلاحية مهندس مخوّل."],
   TREND_EXTRAPOLATION_NOT_RESERVOIR_FORECAST: ["Сценарии — продолжение тренда, не прогноз пласта.", "Scenarios extend the trend; they are not a reservoir forecast.", "Сценарийлер — тренд жалғасы, қабат болжамы емес.", "السيناريوهات امتداد للاتجاه وليست توقعًا للمكمن."],
-  SCENARIOS_NOT_CONFIDENCE_INTERVALS: ["Три модели — сценарии, а не доверительный интервал.", "The three models are scenarios, not a confidence interval.", "Үш модель — сценарийлер, сенімділік аралығы емес.", "النماذج الثلاثة سيناريوهات وليست فاصل ثقة."],
+  SCENARIOS_NOT_CONFIDENCE_INTERVALS: ["Модели — сценарии, а не доверительный интервал.", "The models are scenarios, not a confidence interval.", "Модельдер — сценарийлер, сенімділік аралығы емес.", "النماذج سيناريوهات وليست فاصل ثقة."],
   MECHANISM_NOT_DETERMINED: ["Механизм изменения воды и газа по дебитам не определяется.", "Rates alone do not determine why water and gas changed.", "Су мен газ өзгерісінің механизмі дебиттер бойынша анықталмайды.", "لا تحدد المعدلات وحدها سبب تغير الماء والغاز."],
   USER_DATA_UNVERIFIED: ["Замеры получены от пользователя и не верифицированы (калибровка, распределение).", "Measurements come from the user and are unverified (calibration, allocation).", "Өлшемдер пайдаланушыдан алынған және тексерілмеген (калибрлеу, бөлу).", "القياسات من المستخدم وغير موثقة (المعايرة والتوزيع)."],
   NO_PRESSURE_PVT_DATA: ["Без давления и PVT выводы о пласте невозможны.", "Without pressure and PVT data no reservoir conclusion is possible.", "Қысым мен PVT деректерінсіз қабат туралы қорытынды мүмкін емес.", "لا يمكن استنتاج شيء عن المكمن دون بيانات الضغط وPVT."],
@@ -370,6 +372,7 @@ export function oilCount(language: OilLanguage, count: number, kind: keyof typeo
 // ─── Conclusion ──────────────────────────────────────────────────────────
 
 const MODEL_IN_SENTENCE: Record<string, Four> = {
+  hyperbolic: ["гиперболической", "hyperbolic", "гиперболалық", "الزائدي"],
   linear: ["линейной", "the linear", "сызықтық", "الخطي"],
   exponential: ["экспоненциальной", "the exponential", "экспоненциалды", "الأسي"],
   harmonic: ["гармонической", "the harmonic", "гармоникалық", "التوافقي"],
@@ -429,7 +432,7 @@ export function oilConclusion(result: PetroleumAnalysisResult, well: OilWellAnal
     const pct = oilPercent(Math.abs(change.gorRel), language)
     const gasPart = change.gas === null ? "" : ` ${["газ", "gas", "газ", "الغاز"][INDEX[language]]} ${oilPercent(change.gas, language, { sign: true })}`
     const range = `${oilRate(first.gor, language)} → ${oilRate(last.gor, language)} ${R}`
-    if (change.gorRel > 0) say(`GOR вырос на ${pct} (${range}); газ снижается медленнее нефти:${gasPart}.`, `GOR rose by ${pct} (${range}); gas falls more slowly than oil:${gasPart}.`, `GOR ${pct} өсті (${range}); газ мұнайдан баяу азаяды:${gasPart}.`, `ارتفع GOR بنسبة ${pct} ‏(${range})؛ ينخفض الغاز أبطأ من النفط:${gasPart}.`)
+    if (change.gorRel > 0) say(`GOR вырос на ${pct} (${range}); изменение газа:${gasPart}. Причина роста отношения не установлена.`, `GOR rose by ${pct} (${range}); gas change:${gasPart}. The cause of the ratio change is not established.`, `GOR ${pct} өсті (${range}); газ өзгерісі:${gasPart}. Қатынас өзгеруінің себебі анықталмаған.`, `ارتفع GOR بنسبة ${pct} ‏(${range})؛ تغير الغاز:${gasPart}. سبب تغير النسبة غير مثبت.`)
     else if (change.gorRel < 0) say(`GOR снизился на ${pct} (${range}).`, `GOR fell by ${pct} (${range}).`, `GOR ${pct} төмендеді (${range}).`, `انخفض GOR بنسبة ${pct} ‏(${range}).`)
     else say(`GOR не изменился: ${oilRate(last.gor, language)} ${R}.`, `GOR did not change: ${oilRate(last.gor, language)} ${R}.`, `GOR өзгерген жоқ: ${oilRate(last.gor, language)} ${R}.`, `لم يتغير GOR: ‏${oilRate(last.gor, language)} ${R}.`)
     void G

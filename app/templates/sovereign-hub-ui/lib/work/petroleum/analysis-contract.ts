@@ -17,7 +17,7 @@ import { z } from "zod"
  */
 
 export const OIL_ANALYSIS_SCHEMA_VERSION = "malik-oil-analysis/1" as const
-export const OIL_ANALYSIS_ENGINE_VERSION = "malik-oil-analysis-1.1.0" as const
+export const OIL_ANALYSIS_ENGINE_VERSION = "malik-oil-analysis-1.2.0" as const
 export const OIL_REPORT_FENCE = "malik-oil-report" as const
 export const OIL_LANGUAGES = ["ru", "en", "kk", "ar"] as const
 export type OilLanguage = typeof OIL_LANGUAGES[number]
@@ -76,7 +76,10 @@ export const petroleumAnalysisRequestSchema = z.object({
     granularity: z.enum(["month", "day", "index"]),
     calendar: z.boolean(),
     wells: z.array(oilWellSeriesSchema).min(1).max(120),
-  }).strict(),
+  }).strict().superRefine((dataset,context)=>{
+    if(dataset.wells.reduce((n,w)=>n+w.t.length,0)>5000)context.addIssue({code:"custom",message:"TOTAL_POINT_BUDGET_5000",path:["wells"]})
+    if(new Set(dataset.wells.map(w=>w.id)).size!==dataset.wells.length)context.addIssue({code:"custom",message:"DUPLICATE_WELL_ID",path:["wells"]})
+  }),
   metadata: z.object({
     source: z.enum(["chat-table", "csv", "xlsx", "docx", "pdf", "api"]),
     dataKind: z.enum(["user", "synthetic"]),
@@ -93,9 +96,13 @@ export const petroleumAnalysisRequestSchema = z.object({
     gas: z.enum(GAS_UNITS).nullable(),
     gasReference: z.string().max(160).nullable(),
     oilDensityKgM3: z.number().finite().positive().max(2000).nullable(),
+    pressure: z.object({ unit: z.literal("psi"), datum: z.enum(["absolute", "gauge", "unknown"]), sourceUnit: z.string().max(40) }).strict().nullable().optional(),
   }).strict(),
   parameters: z.object({
     forecastPeriods: z.number().int().min(0).max(24),
+    /** Explicit coordinates in the dataset time basis, never a guessed year. */
+    forecastTargets: z.array(z.number().finite()).min(1).max(24).optional(),
+    rateBasis:z.enum(["snapshot","calendar-average"]).optional(),
     price: z.object({
       value: z.number().finite().positive().max(1e6),
       currency: z.string().regex(/^[A-Z]{3}$/),
@@ -104,14 +111,18 @@ export const petroleumAnalysisRequestSchema = z.object({
   }).strict(),
   requestedAnalyses: z.array(z.enum(OIL_ANALYSES)).min(1),
   language: z.enum(OIL_LANGUAGES),
-}).strict()
+}).strict().superRefine((request,context)=>{
+  const last=Math.max(...request.dataset.wells.map(w=>w.t[w.t.length-1]))
+  const targets=request.parameters.forecastTargets
+  if(targets&&(targets.some((t,i)=>t<=last||(request.dataset.granularity==="month"&&t-last>24)||(i>0&&t<=targets[i-1]))))context.addIssue({code:"custom",message:"INVALID_FORECAST_TARGET_COORDINATES",path:["parameters","forecastTargets"]})
+})
 
 export type PetroleumAnalysisRequest = z.infer<typeof petroleumAnalysisRequestSchema>
 export type OilWellSeries = z.infer<typeof oilWellSeriesSchema>
 
 const num = z.number().finite().nullable()
 const series = z.array(num)
-const modelId = z.enum(["linear", "exponential", "harmonic"])
+const modelId = z.enum(["linear", "exponential", "harmonic", "hyperbolic"])
 
 export const oilModelFitSchema = z.object({
   model: modelId,
@@ -120,6 +131,7 @@ export const oilModelFitSchema = z.object({
   /** linear: q = a + b·τ; exponential: q = qi·e^(−D·τ); harmonic: q = qi / (1 + D·τ). τ counts periods from the first. */
   a: num, b: num, qi: num, D: num,
   r2: num, rmse: num, n: z.number().int().min(0),
+  r2Log: num.optional(), arpsB: num.optional(),
 }).strict()
 
 export const oilWellAnalysisSchema = z.object({
@@ -139,6 +151,7 @@ export const oilWellAnalysisSchema = z.object({
   forecast: z.object({
     t: z.array(z.number()),
     linear: series, exponential: series, harmonic: series,
+    hyperbolic: series.optional(),
     linearClamped: z.boolean(),
     linearZeroT: num,
   }).strict().nullable(),
@@ -167,7 +180,7 @@ export const petroleumAnalysisResultSchema = z.object({
   }).strict(),
   validatedInputs: z.object({
     acceptedRows: z.number().int(), rejectedRows: z.number().int(),
-    units: z.object({ liquid: z.string(), gas: z.string().nullable(), gor: z.string().nullable(), gasReference: z.string().nullable(), basis: z.enum(["volume", "mass"]) }).strict(),
+    units: z.object({ liquid: z.string(), gas: z.string().nullable(), gor: z.string().nullable(), gasReference: z.string().nullable(), basis: z.enum(["volume", "mass"]), pressure: z.string().nullable().optional() }).strict(),
     notes: z.array(z.string()),
   }).strict(),
   calculatedMetrics: z.array(z.object({ id: z.string(), well: z.string(), value: num, unit: z.string(), evidence: z.enum(EVIDENCE) }).strict()),
@@ -199,10 +212,20 @@ export type OilModelFit = z.infer<typeof oilModelFitSchema>
 export type OilModelId = OilModelFit["model"]
 
 /** What travels inside a chat answer: the validated request and the metrics it produced. */
+export const mpceReceiptSchema=z.object({
+  version:z.literal("mpce-1.0.0"),inputHash:z.string().regex(/^[a-f0-9]{64}$/),datasetRef:z.string().nullable(),engineVersion:z.string(),
+  durationMs:z.number().finite().min(0),codeExecuted:z.literal(true),modelCalls:z.array(z.never()).max(0),
+  functions:z.array(z.object({id:z.enum(["production-identities","decline-fit","independent-validation"]),module:z.string().max(80),version:z.string().max(80),executed:z.literal(true)}).strict()).max(3),
+  parameters:z.object({timeUnit:z.enum(["month","day","index"]),forecastTargets:z.array(z.number()).nullable(),forecastPeriods:z.number(),arpsExponentBounds:z.tuple([z.literal(0),z.literal(1)]),hyperbolicPointBudget:z.literal(512)}).strict(),
+  validation:z.object({status:z.enum(["passed","failed"]),checked:z.number().int().min(0),errors:z.array(z.string().max(300)).max(60)}).strict(),
+  stages:z.array(z.enum(["SCHEMA_VALIDATED","UNITS_RESOLVED","COMPUTED","NUMERICALLY_VERIFIED"])).max(4),
+}).strict()
+export type MpceReceipt=z.infer<typeof mpceReceiptSchema>
 export const oilReportBlockSchema = z.object({
   kind: z.literal("malik-oil-report"),
   request: petroleumAnalysisRequestSchema,
   /** Metric values computed when the answer was written; the report recalculates and compares. */
   metrics: z.array(z.tuple([z.string(), num])).max(20_000),
+  execution:mpceReceiptSchema.optional(),
 }).strict()
 export type OilReportBlock = z.infer<typeof oilReportBlockSchema>

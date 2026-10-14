@@ -31,6 +31,7 @@ type Props = {
   forecastFrom?: number | null
   forecastLabel?: string
   toggleLabel: (name: string) => string
+  factStep?: number
 }
 
 const TONES = ["#fafafa", "#a3a3a3", "#d4d4d4", "#737373"] as const
@@ -49,7 +50,7 @@ export function niceTicks(low: number, high: number, count = 5) {
   return ticks
 }
 
-export function OilChart({ title, unit, x, series, formatX, formatY, zero = false, forecastFrom = null, forecastLabel, toggleLabel }: Props) {
+export function OilChart({ title, unit, x, series, formatX, formatY, zero = false, forecastFrom = null, forecastLabel, toggleLabel, factStep }: Props) {
   const id = useId().replace(/[^a-zA-Z0-9_-]/g, "")
   const frame = useRef<HTMLDivElement>(null)
   const [width, setWidth] = useState(640)
@@ -75,16 +76,16 @@ export function OilChart({ title, unit, x, series, formatX, formatY, zero = fals
     return () => document.removeEventListener("pointerdown", away)
   }, [hover])
 
-  const visible = series.filter((item) => !hidden.has(item.id))
+  const visible = useMemo(()=>series.filter((item) => !hidden.has(item.id)),[series,hidden])
   const height = width < 480 ? 220 : 250
   const margin = { top: 18, right: 14, bottom: 30, left: width < 480 ? 46 : 56 }
   const plotWidth = width - margin.left - margin.right
   const plotHeight = height - margin.top - margin.bottom
 
   const scale = useMemo(() => {
-    const values = visible.flatMap((item) => item.values.filter(isNum))
-    const low = values.length ? Math.min(...values) : 0
-    const high = values.length ? Math.max(...values) : 1
+    let low=Infinity,high=-Infinity
+    for(const item of visible) for(const value of item.values) if(isNum(value)){if(value<low)low=value;if(value>high)high=value}
+    if(low===Infinity){low=0;high=1}
     const span = high - low || Math.abs(high) || 1
     const ticks = niceTicks(zero ? Math.min(0, low) : low - span * 0.08, high + span * 0.04, width < 480 ? 4 : 5)
     return { min: ticks[0], max: ticks[ticks.length - 1], ticks }
@@ -96,10 +97,11 @@ export function OilChart({ title, unit, x, series, formatX, formatY, zero = fals
   const labelEvery = Math.max(1, Math.ceil(x.length / Math.max(2, Math.floor(plotWidth / (width < 480 ? 52 : 64)))))
   const markers = x.length <= 36
 
-  const path = (values: Array<number | null>) => {
+  const path = (values: Array<number | null>, role: "fact" | "model") => {
     let d = "", open = false
     values.forEach((value, index) => {
       if (!isNum(value)) { open = false; return }
+      if(role==="fact"&&factStep&&index>0&&x[index]-x[index-1]>factStep) open=false
       d += `${open ? "L" : "M"}${px(x[index]).toFixed(1)} ${py(value).toFixed(1)}`
       open = true
     })
@@ -158,7 +160,7 @@ export function OilChart({ title, unit, x, series, formatX, formatY, zero = fals
             <text key={t} x={px(t)} y={height - 9} textAnchor={index === 0 ? "start" : index === x.length - 1 ? "end" : "middle"} className="malik-oil-chart__tick">{formatX(t, true)}</text>
           ) : null)}
           {visible.map((item) => (
-            <path key={item.id} d={path(item.values)} fill="none" stroke={TONES[item.tone]} strokeWidth="2" strokeDasharray={DASH[item.style]} strokeLinecap="round" strokeLinejoin="round" />
+            <path key={item.id} d={path(item.values,item.role)} fill="none" stroke={TONES[item.tone]} strokeWidth="2" strokeDasharray={DASH[item.style]} strokeLinecap="round" strokeLinejoin="round" />
           ))}
           {markers ? visible.map((item) => item.values.map((value, index) => isNum(value) && (item.role === "fact" || index > 0 && isNum(item.values[index - 1]) || index === item.values.length - 1) ? (
             <circle key={`${item.id}-${index}`} cx={px(x[index])} cy={py(value)} r={item.role === "fact" ? 3.5 : 3} fill={item.role === "fact" ? TONES[item.tone] : "#000"} stroke={TONES[item.tone]} strokeWidth={item.role === "fact" ? 2 : 1.6} />

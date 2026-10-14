@@ -10,6 +10,7 @@ import { isRtl, oilCode, oilConclusion, oilCount, oilNumber, oilPercent, oilPeri
 import { CROSS_CHECK_ENGINE } from "@/lib/work/petroleum/cross-check"
 import { oilColumn, oilCsv, oilKpis, oilPeriodContext, oilProductionTable, oilWellName, readOilReportBlock, type OilReportView } from "@/lib/work/petroleum/visual-report"
 import "./oil-report.css"
+import {RISK_POLICY} from "@/lib/work/petroleum/risk"
 
 /**
  * The visual oil report (```malik-oil-report). Everything on it is computed
@@ -22,7 +23,7 @@ export function MalikOilReport({ raw }: { raw: string }) {
   return <OilReport view={view} />
 }
 
-const SERIES_TONE: Record<string, OilChartSeries["tone"]> = { oil: 0, water: 1, liquid: 2, gas: 0, gor: 0, wc: 0, wor: 0, worDerivative: 1, linear: 1, exponential: 2, harmonic: 3 }
+const SERIES_TONE: Record<string, OilChartSeries["tone"]> = { oil: 0, water: 1, liquid: 2, gas: 0, gor: 0, wc: 0, wor: 0, worDerivative: 1, linear: 1, exponential: 2, harmonic: 3, hyperbolic: 0 }
 const ANOMALY_CODES = new Set(["ZERO_OIL", "GAP", "OIL_JUMP", "LIQUID_JUMP", "GOR_JUMP", "WC_JUMP", "RESIDUAL_OUTLIER"])
 const VISIBLE_ROWS = 12
 
@@ -103,6 +104,7 @@ function OilReport({ view }: { view: OilReportView }) {
         forecastFrom={source.forecastFrom}
         forecastLabel={word("forecastZone")}
         toggleLabel={(name) => word("toggleSeries", { name })}
+        factStep={1}
       />
     )
   }
@@ -123,6 +125,10 @@ function OilReport({ view }: { view: OilReportView }) {
     link.click()
     link.remove()
     window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+  }
+  const downloadReceipt=()=>{
+    const url=URL.createObjectURL(new Blob([JSON.stringify({request:view.request,result,execution:view.execution,risk:view.risk,evidence:view.evidenceLedger},null,2)],{type:"application/json"}))
+    const link=document.createElement("a");link.href=url;link.download=`malik-oil-${result.analysisId}.json`;document.body.appendChild(link);link.click();link.remove();window.setTimeout(()=>URL.revokeObjectURL(url),1000)
   }
 
   const badge = tampered.length ? "tampered" : crossCheck.status
@@ -226,9 +232,10 @@ function OilReport({ view }: { view: OilReportView }) {
         </div>
       ) : null}
 
-      {result.chartSeries.some(c => c.id === "pressure" && c.well === well.id) ? <OilSection id="pressure" title="Pwf · psi" open>
-        {chart("pressure", "Pwf · psi", rate, { unit: "psi" })}
-        <p className="malik-oil__note">{oilCode(language, "PRESSURE_DATUM_NOT_STATED")}</p>
+      {result.chartSeries.some(c => c.id === "pressure" && c.well === well.id) ? <OilSection id="pressure" title={`Pwf · ${units.pressure||"psi"}`} open>
+        {chart("pressure", `Pwf · ${units.pressure||"psi"}`, rate)}
+        {units.pressure==="psi"?<p className="malik-oil__note">{oilCode(language, "PRESSURE_DATUM_NOT_STATED")}</p>:null}
+        <dl className="malik-oil__facts">{result.calculatedMetrics.filter(m=>m.well===well.id&&m.id.startsWith("pressure_")).map(m=><div key={m.id}><dt>{m.id.replace(/_/g," ")}{well.isField?" (arithmetic mean)":""}</dt><dd dir="ltr">{oilNumber(m.value,language,2)} {m.unit}</dd></div>)}</dl>
       </OilSection> : null}
 
       <OilSection id="forecast" title={word("s.forecast")} open>
@@ -238,8 +245,8 @@ function OilReport({ view }: { view: OilReportView }) {
             <p className="malik-oil__note">{word("unitsCaption", { unit: L })}</p>
             <OilTableView
               language={language}
-              columns={[word("period"), word("linearShort"), word("exponentialShort"), word("harmonicShort")]}
-              rows={well.forecast.t.map((t, index) => [periodLabel(t), ...(["linear", "exponential", "harmonic"] as const).map((model) => oilColumn(well.forecast![model], language)(well.forecast![model][index]))])}
+              columns={[word("period"), word("linearShort"), word("exponentialShort"), word("harmonicShort"),word("hyperbolicShort")]}
+              rows={well.forecast.t.map((t, index) => [periodLabel(t), ...(["linear", "exponential", "harmonic", "hyperbolic"] as const).map((model) => oilColumn(well.forecast![model]||[], language)(well.forecast![model]?.[index]))])}
             />
             <p className="malik-oil__caveat">{word("forecastCaveat")}</p>
             {well.forecast.linearZeroT !== null ? <p className="malik-oil__note">{word("linearZero", { period: oilPeriod(Math.ceil(well.forecast.linearZeroT), context, language) })}</p> : null}
@@ -287,11 +294,12 @@ function OilReport({ view }: { view: OilReportView }) {
         <OilSection id="decline-models" title={word("s.decline-models")}>
           <OilTableView
             language={language}
-            columns={[word("model"), word("parameters"), "R²", `RMSE, ${L}`, word("best")]}
+            columns={[word("model"), word("parameters"), "R²(rate)", "R²(log)", `RMSE, ${L}`, word("best")]}
             rows={well.models.map((fit) => [
               word(`${fit.model}Short` as OilWordKey),
-              !fit.valid ? `${word("notValid")} (${oilCode(language, fit.reason || "")})` : fit.model === "linear" ? `a = ${rate(fit.a as number)}; b = ${oilNumber(fit.b, language, 4)}` : `qᵢ = ${rate(fit.qi as number)}; D = ${oilNumber(fit.D, language, 5)}`,
+              !fit.valid ? `${word("notValid")} (${oilCode(language, fit.reason || "")})` : fit.model === "linear" ? `a = ${rate(fit.a as number)}; b = ${oilNumber(fit.b, language, 4)} ${L}/${kind}` : `qᵢ fitted = ${rate(fit.qi as number)}; D nominal = ${oilNumber(fit.D, language, 7)} 1/${kind}${fit.model==="hyperbolic"?`; b = ${oilNumber(fit.arpsB,language,5)}`:""}`,
               fit.r2 === null ? "—" : oilNumber(fit.r2, language, 4),
+              oilNumber(fit.r2Log,language,6),
               fit.rmse === null ? "—" : oilNumber(fit.rmse, language, 3),
               fit.model === well.selected ? "✓" : "",
             ])}
@@ -423,6 +431,21 @@ function OilReport({ view }: { view: OilReportView }) {
         </OilSection>
       ) : null}
 
+      <OilSection id="risk" title={{ru:"Скрининговый индекс — не диагноз",en:"Screening index — not a diagnosis",kk:"Скрининг индексі — диагноз емес",ar:"مؤشر فرز وليس تشخيصًا"}[language]}>
+        <p className="malik-oil__note" dir="ltr">{RISK_POLICY.version}; weights: WC .35, decline .30, GOR growth .20, pressure drop .15; scales: .50, .30, 1.0, 500 psi; bands: 35 / 65. Uncalibrated; not economic priority or failure probability.</p>
+        <OilTableView language={language} columns={[word("well"),"Index / 100","Category","Data quality"]} rows={view.risk.map(r=>[r.well,oilNumber(r.index,language,2),r.category,r.dataQuality])}/>
+        {view.risk.filter(r=>r.well===well.id).map(r=><OilTableView key={r.well} language={language} columns={["Component","Value","Scale","Weight","Normalized"]} rows={r.components.map(c=>[c.id,oilNumber(c.value,language,5)+" "+c.unit,oilNumber(c.scale,language,2),oilNumber(c.weight,language,2),oilNumber(c.normalized,language,4)])}/>)}
+      </OilSection>
+      <OilSection id="evidence" title={{ru:"Факты, расчёты и гипотезы",en:"Facts, calculations and hypotheses",kk:"Фактілер, есептер және гипотезалар",ar:"حقائق وحسابات وفرضيات"}[language]}>
+        <ul className="malik-oil__list">{view.evidenceLedger.map(c=><li key={c.id}><strong>{c.status}</strong> · {c.scope}: {c.qualification}</li>)}</ul>
+      </OilSection>
+      {view.execution ? <OilSection id="execution" title={{ru:"Реально исполнено · MPCE",en:"Actually executed · MPCE",kk:"Нақты орындалды · MPCE",ar:"التنفيذ الفعلي · MPCE"}[language]}>
+        <p className="malik-oil__note" dir="ltr">{view.execution.version} · code executed: true · AI model calls: 0 · {oilNumber(view.execution.durationMs,language,1)} ms · validation {view.execution.validation.status}: {view.execution.validation.checked} checks</p>
+        <ul className="malik-oil__list" dir="ltr">{view.execution.functions.map(f=><li key={f.id}>{f.id}: {f.module} · {f.version}</li>)}</ul>
+        <p className="malik-oil__note" dir="ltr">SHA256: {view.execution.inputHash}</p>
+        <button type="button" className="malik-oil__button" onClick={downloadReceipt}><Download size={15} aria-hidden="true"/>JSON · {{ru:"Скачать расчёт и протокол",en:"Download result and receipt",kk:"Есеп пен хаттаманы жүктеу",ar:"تنزيل النتيجة وسجل التنفيذ"}[language]}</button>
+        <p className="malik-oil__note">{word("engineerReview")}</p>
+      </OilSection>:null}
       <OilSection id="limitations" title={word("s.limitations")}>
         <ul className="malik-oil__list">{[...result.warnings, ...result.limitations].map((code) => <li key={code}>{oilCode(language, code)}</li>)}</ul>
         <p className="malik-oil__provenance" dir="ltr">{word("provenance", { engine: result.engineVersion, schema: result.schemaVersion, id: result.analysisId })}</p>

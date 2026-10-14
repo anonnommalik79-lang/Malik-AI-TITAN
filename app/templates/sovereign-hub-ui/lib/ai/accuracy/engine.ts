@@ -202,6 +202,7 @@ export function checkAccuracy(answer: string, question: string, sources: readonl
   const lineBoundary = answer.slice(0, characterBoundary).split("\n").slice(0, MAX_LINES).join("\n").length
   const boundary = Math.min(characterBoundary, lineBoundary)
   const tail = answer.slice(boundary), lines = answer.slice(0, boundary).split("\n")
+  const withheldScientific: string[] = []
   for (let i = 0; i < lines.length && i < MAX_LINES && scanned < MAX_CHARS; i++) {
     let line = lines[i]
     scanned += line.length + 1
@@ -354,7 +355,11 @@ export function checkAccuracy(answer: string, question: string, sources: readonl
     const scientificSource = sourceMatch && citationIndexes.some(index => Boolean(sources[index]?.url) && supportsQuantities(line, sources[index]?.snippet || ""))
     if (scientificEstimate && !scientificSource && !supportsQuantities(line, question)) {
       addIssue({ code: "scientific-precision", line: i + 1, detail: "Количественная научная оценка без входных данных, формулы или соответствующего источника", resolution: "withheld" })
-      line = "Для этой количественной оценки недостаточно подтверждённых данных. Нужны исходные параметры и физическая модель; точное значение не установлено."
+      // One diagnostic for the group, rather than a full fallback paragraph
+      // substituted into every table/prose line. Keep table shape intact.
+      withheldScientific.push(String(i + 1))
+      if (line.includes("|")) line = "| " + markdownTableCells(line).map(cell => QUANTITY.test(cell) ? "—" : cell).join(" | ") + " |"
+      else line = ""
     }
     if (numbers.length && claims.length < 48) claims.push({ line: i + 1, origin, text: line.slice(0, 240), evidence: deterministic ? "deterministic" : userMatch && origin === "user-data" ? "user" : sourceMatch ? "source-number-match" : "unverified" })
     lines[i] = line
@@ -363,7 +368,14 @@ export function checkAccuracy(answer: string, question: string, sources: readonl
     issues.unshift({ code: "limit", line: 0, detail: "Проверка ограничена 60 000 символами / 800 строками; остальная часть не проверена", resolution: "unresolved" })
     issues.length = Math.min(issues.length, MAX_ISSUES)
   }
-  return { content: lines.join("\n") + tail, report: { scope: "recognized-deterministic-claims-only", version: "1", status: issues.some(item => item.resolution === "unresolved") ? "limited" : issues.length ? "corrected" : "checked", checked, issues, claims, verificationMs: performance.now() - start, repairCalls: 0, additionalModelTokens: 0, scannedCharacters: Math.min(scanned, MAX_CHARS) } }
+  const language = /[\u0600-\u06ff]/.test(question) ? "ar" : /[әғқңөұүһі]/i.test(question) ? "kk" : /[а-яё]/i.test(question) ? "ru" : "en"
+  const note = {
+    ru: "Неподтверждённые количественные оценки скрыты: исходные параметры, физическая модель или соответствующий источник не установлены. Проверенные расчёты и данные пользователя сохранены.",
+    en: "Unsupported quantitative estimates were withheld: inputs, a physical model or matching source were not established. Verified calculations and supplied data were retained.",
+    kk: "Расталмаған сандық бағалар жасырылды: бастапқы параметрлер, физикалық модель немесе сәйкес дереккөз жоқ. Тексерілген есептер мен берілген деректер сақталды.",
+    ar: "حُجبت التقديرات الكمية غير المدعومة لعدم ثبوت المدخلات أو النموذج الفيزيائي أو المصدر المناسب. حُفظت الحسابات الموثقة والبيانات المقدمة.",
+  }[language]
+  return { content: lines.join("\n") + tail + (withheldScientific.length ? `\n\n> ${note}` : ""), report: { scope: "recognized-deterministic-claims-only", version: "1", status: issues.some(item => item.resolution === "unresolved") ? "limited" : issues.length ? "corrected" : "checked", checked, issues, claims, verificationMs: performance.now() - start, repairCalls: 0, additionalModelTokens: 0, scannedCharacters: Math.min(scanned, MAX_CHARS) } }
 }
 
 /** At most two deterministic passes; no recursive model calls or unbounded retries. */

@@ -1,5 +1,25 @@
 export const BARREL_M3 = 0.158987294928
 export const FT3_M3 = 0.028316846592
+export type PressureDatum = "absolute" | "gauge" | "unknown"
+export const PRESSURE_PA = { psi: 6894.757293168, psia: 6894.757293168, psig: 6894.757293168, bar: 100000, kPa: 1000, MPa: 1000000 } as const
+export type PressureUnit = keyof typeof PRESSURE_PA
+/** Datum is independent of scale. No implicit 1-atm offset or standard gas conditions. */
+export function convertPressure(value: number, from: PressureUnit, to: PressureUnit, options: { fromDatum?: PressureDatum; toDatum?: PressureDatum; ambientPa?: number } = {}) {
+  finite(value, "pressure", false)
+  const datum = (unit: PressureUnit, explicit?: PressureDatum): PressureDatum => unit === "psia" ? "absolute" : unit === "psig" ? "gauge" : explicit || "unknown"
+  const a = datum(from, options.fromDatum), b = datum(to, options.toDatum)
+  if (!Object.hasOwn(PRESSURE_PA, from) || !Object.hasOwn(PRESSURE_PA, to)) throw new RangeError("PRESSURE_UNIT_UNKNOWN")
+  if ((from === "psia" && options.fromDatum === "gauge") || (from === "psig" && options.fromDatum === "absolute") || (to === "psia" && options.toDatum === "gauge") || (to === "psig" && options.toDatum === "absolute")) throw new RangeError("PRESSURE_DATUM_CONFLICT")
+  let pa = value * PRESSURE_PA[from]
+  if (a === "absolute" && pa < 0) throw new RangeError("NEGATIVE_ABSOLUTE_PRESSURE")
+  if (a !== b) {
+    if (a === "unknown" || b === "unknown") throw new RangeError("PRESSURE_DATUM_REQUIRED")
+    if (options.ambientPa === undefined || !Number.isFinite(options.ambientPa) || options.ambientPa <= 0) throw new RangeError("AMBIENT_PRESSURE_REQUIRED")
+    pa += a === "gauge" ? options.ambientPa : -options.ambientPa
+  }
+  if (b === "absolute" && pa < 0) throw new RangeError("NEGATIVE_ABSOLUTE_PRESSURE")
+  return finite(pa / PRESSURE_PA[to], "converted pressure", false)
+}
 const UNITS = {
   bbl: ["liquid-volume", BARREL_M3], m3: ["liquid-volume", 1],
   "bbl/day": ["liquid-rate", BARREL_M3], "m3/day": ["liquid-rate", 1],

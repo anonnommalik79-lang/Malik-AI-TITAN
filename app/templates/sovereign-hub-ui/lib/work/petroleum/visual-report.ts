@@ -1,7 +1,10 @@
-import { OIL_REPORT_FENCE, oilReportBlockSchema, type OilLanguage, type OilReportBlock, type OilWellAnalysis, type PetroleumAnalysisRequest, type PetroleumAnalysisResult } from "./analysis-contract"
+import { OIL_REPORT_FENCE, oilReportBlockSchema, type MpceReceipt, type OilLanguage, type OilReportBlock, type OilWellAnalysis, type PetroleumAnalysisRequest, type PetroleumAnalysisResult } from "./analysis-contract"
 import { FIELD_ID, analyzePetroleumDataset, compareOilMetrics, oilMetricPairs } from "./analysis"
 import { CROSS_CHECK_ENGINE, crossCheckOil, type OilCrossCheck } from "./cross-check"
 import { oilBidi, oilCode, oilConclusion, oilCount, oilNumber, oilPercent, oilPeriod, oilRate, oilUnit, oilWord, type PeriodContext } from "./analysis-i18n"
+import {verifyOilAnalysis} from "./verify-analysis"
+import {screenProductionRisk} from "./risk"
+import {oilEvidenceLedger} from "./evidence-ledger"
 
 /**
  * The visual oil report inside a chat answer: a ```malik-oil-report fence
@@ -17,10 +20,13 @@ export type OilReportView = {
   result: PetroleumAnalysisResult
   crossCheck: OilCrossCheck
   tampered: string[]
+  execution?:MpceReceipt
+  risk:ReturnType<typeof screenProductionRisk>
+  evidenceLedger:ReturnType<typeof oilEvidenceLedger>
 }
 
-export function oilReportFence(request: PetroleumAnalysisRequest, result = analyzePetroleumDataset(request)) {
-  const block: OilReportBlock = { kind: "malik-oil-report", request, metrics: oilMetricPairs(result) }
+export function oilReportFence(request: PetroleumAnalysisRequest, result = analyzePetroleumDataset(request), execution?:MpceReceipt) {
+  const block: OilReportBlock = { kind: "malik-oil-report", request, metrics: oilMetricPairs(result),...(execution?{execution}:{}) }
   return `\`\`\`${OIL_REPORT_FENCE}\n${JSON.stringify(block)}\n\`\`\``
 }
 
@@ -31,11 +37,19 @@ export function readOilReportBlock(raw: string): OilReportView | null {
   if (!parsed.success) return null
   let result: PetroleumAnalysisResult
   try { result = analyzePetroleumDataset(parsed.data.request) } catch { return null }
+  const verification=verifyOilAnalysis(parsed.data.request,result), other=crossCheckOil(parsed.data.request,result)
+  const tampered=compareOilMetrics(parsed.data.metrics,oilMetricPairs(result))
+  const execution=parsed.data.execution
+  const receiptValid=!execution || execution.datasetRef===parsed.data.request.metadata.sourceHash && execution.engineVersion===result.engineVersion && execution.parameters.timeUnit===parsed.data.request.dataset.granularity && JSON.stringify(execution.parameters.forecastTargets)===JSON.stringify(parsed.data.request.parameters.forecastTargets??null) && execution.validation.status===(verification.ok?"passed":"failed") && execution.validation.checked===verification.checked
+  if(!receiptValid) tampered.push("execution:receipt-mismatch")
   return {
     request: parsed.data.request,
     result,
-    crossCheck: crossCheckOil(parsed.data.request, result),
-    tampered: compareOilMetrics(parsed.data.metrics, oilMetricPairs(result)),
+    crossCheck: {status:verification.ok&&other.status!=="failed"?"passed":"failed",checked:verification.checked+other.checked,mismatches:[...verification.mismatches,...other.mismatches],reason:other.reason},
+    tampered,
+    execution:receiptValid?execution:undefined,
+    risk:screenProductionRisk(parsed.data.request,result),
+    evidenceLedger:oilEvidenceLedger(parsed.data.request,result),
   }
 }
 
@@ -140,6 +154,17 @@ export function oilReportText(view: OilReportView): string {
       ...well.forecast.t.map((t, index) => `| ${oilPeriod(t, context, language)} | ${oilRate(well.forecast!.linear[index], language)} | ${oilRate(well.forecast!.exponential[index], language)} | ${oilRate(well.forecast!.harmonic[index], language)} |`),
       "", oilWord(language, "forecastCaveat"), "")
   }
+  // Every fit uses the same raw series. Sum-of-well extrapolation is a different
+  // method from fitting field totals; show both, never silently substitute.
+  lines.push("### DCA — "+result.sourceSummary.granularity,"","| Well | Model | qi fitted | D nominal | b (Arps) | R²(rate) | R²(log) |","|---|---|---|---|---|---|---|",
+    ...result.wells.flatMap(w=>w.models.filter(f=>f.valid).map(f=>`| ${oilWellName(w,language)} | ${f.model} | ${f.qi??f.a} | ${f.D??f.b} | ${f.arpsB??"—"} | ${f.r2??"—"} | ${f.r2Log??"—"} |`)),"")
+  for(const w of result.wells.filter(w=>!w.isField&&w.forecast)) lines.push(`#### ${w.id}: MODELLED`,"","| Period | Exponential |","|---|---|",...w.forecast!.t.map((t,i)=>`| ${oilPeriod(t,context,language)} | ${oilRate(w.forecast!.exponential[i],language)} ${result.validatedInputs.units.liquid} |`),"")
+  const summed=result.tableDatasets.find(t=>t.id==="summed-well-forecast")
+  if(summed) lines.push("#### MODELLED — sum of well fits (not field-total fit)","","| Period | Exponential |","|---|---|",...summed.rows.map(row=>`| ${oilPeriod(Number(row[0]),context,language)} | ${oilRate(Number(row[1]),language)} ${result.validatedInputs.units.liquid} |`),"")
+  const pressure=result.tableDatasets.find(t=>t.id==="pressure"&&t.well===well.id)
+  if(pressure) lines.push(`### Pressure — ${result.validatedInputs.units.pressure}`,"","| Period | Pressure |","|---|---|",...pressure.rows.map(row=>`| ${row[0]} | ${row[1]??"—"} |`),"")
+  if(view.execution) lines.push("### MPCE — execution receipt", "", `Version: ${view.execution.version}; code executed: true; AI model calls: 0; validation: ${view.execution.validation.status} (${view.execution.validation.checked} checks).`, `Dataset: ${view.execution.datasetRef}; input SHA256: ${view.execution.inputHash}.`,...view.execution.functions.map(f=>`- ${f.id}: ${f.module} (${f.version}), executed=true.`),"")
+  lines.push("### Evidence ledger", "",...view.evidenceLedger.map(c=>`- **${c.status}** — ${c.scope}: ${c.qualification}.`),"")
   if (well.hypotheses.measurements.length) {
     lines.push(`### ${oilWord(language, "s.hypotheses")}`, "", oilWord(language, "hypothesesIntro"), "",
       ...[...well.hypotheses.water, ...well.hypotheses.gas, ...well.hypotheses.productivity].map((code) => `- ${oilCode(language, code)}`), "",

@@ -39,7 +39,7 @@ import { executePetroleumAttachmentTable, executePetroleumTable, withOilVisual }
 import { oilReportBlocksToText } from "@/lib/work/petroleum/visual-report"
 import { guardOilInterpretation } from "@/lib/work/petroleum/interpretation-policy"
 import { oilLanguage } from "@/lib/work/petroleum/table-input"
-import { requiresPetroleumExpertSynthesis } from "@/lib/work/petroleum/expert-routing"
+import { requestsOilModelInterpretation } from "@/lib/work/petroleum/expert-routing"
 import { routePetroleum } from "@/lib/work/petroleum/router"
 import { buildOilGasSkillInstruction } from "@/lib/ai/oil-gas-skill"
 import { resolveWorkspaceMode, workModeInstruction } from "@/lib/ai/work-mode"
@@ -424,7 +424,7 @@ async function runSelectedAnswer(
     const step = fieldStep || activity?.start("Нефтегазовый расчёт и аудит", "code", petroleum.receipt.version)
     activity?.finish(step, { ok: petroleum.receipt.ok, inputHash: petroleum.receipt.inputHash }, petroleum.receipt.ok ? "completed" : "failed", petroleum.receipt.error)
     const content = withOilVisual(petroleum, originalPrompt, oilScope)
-    if (selection?.modelId === "malik-oil-1tb" && petroleum.receipt.ok) {
+    if (selection?.modelId === "malik-oil-1tb" && petroleum.receipt.ok && requestsOilModelInterpretation(originalPrompt)) {
       // Preserve the verified field receipt and then activate all three models.
       const engineeringBody = {
         ...body,
@@ -460,7 +460,7 @@ async function runSelectedAnswer(
   if (oilTable) {
     const step = activity?.start("Нефтегазовый расчёт и аудит", "code", oilTable.version)
     activity?.finish(step, { ok: oilTable.ok, inputHash: oilTable.inputHash }, oilTable.ok ? "completed" : "failed", oilTable.ok ? undefined : "Units or rate basis missing")
-    if (oilTable.ok && (selection?.modelId === "malik-oil-1tb" || requiresPetroleumExpertSynthesis(originalPrompt))) {
+    if (oilTable.ok && requestsOilModelInterpretation(originalPrompt)) {
       // A comprehensive oil/field/economics brief cannot end at the fast visual report.
       // The validated engineering data feed the model as evidence, not new instructions.
       // Keep this out of provider logs and preserve the actual selected model identity.
