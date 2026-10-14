@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" preserveAspectRatio="xMidYMid slice">
+<defs>
+<radialGradient id="space"><stop stop-color="#15304f"/><stop offset=".39" stop-color="#081428"/><stop offset=".74" stop-color="#020711"/><stop offset="1" stop-color="#010207"/></radialGradient>
+<radialGradient id="halo"><stop offset=".05" stop-color="#0a1226"/><stop offset=".44" stop-color="#020307"/><stop offset=".58" stop-color="#000"/><stop offset=".63" stop-color="#4e9dff" stop-opacity=".55"/><stop offset=".74" stop-color="#142e6c" stop-opacity=".2"/><stop offset="1" stop-color="#030713" stop-opacity="0"/></radialGradient>
+<linearGradient id="line"><stop stop-color="#1e5c98" stop-opacity="0"/><stop offset=".44" stop-color="#72bbff" stop-opacity=".7"/><stop offset=".57" stop-color="#e9f7ff"/><stop offset="1" stop-color="#1e5c98" stop-opacity="0"/></linearGradient>
+<pattern id="stars" width="205" height="163" patternUnits="userSpaceOnUse"><circle cx="16" cy="24" r="1" fill="#b4dcff" opacity=".52"/><circle cx="158" cy="57" r=".85" fill="#f3f9ff" opacity=".66"/><circle cx="78" cy="136" r="1.1" fill="#aacaf2" opacity=".49"/></pattern>
+</defs>
+<rect width="1920" height="1080" fill="#02050c"/>
+<rect width="1920" height="1080" fill="url(#space)"/>
+<rect width="1920" height="1080" fill="url(#stars)"/>
+<circle cx="810" cy="445" r="445" fill="url(#halo)"/>
+<ellipse cx="810" cy="445" rx="545" ry="168" transform="rotate(-23 810 445)" fill="none" stroke="url(#line)" stroke-width="13" opacity=".5"/>
+<ellipse cx="810" cy="445" rx="628" ry="201" transform="rotate(-23 810 445)" fill="none" stroke="#54a4ff" stroke-width="2" opacity=".2"/>
+<circle cx="810" cy="445" r="126" fill="#000"/>
+<rect width="1920" height="1080" fill="#01030a" opacity=".12"/>
+</svg>
