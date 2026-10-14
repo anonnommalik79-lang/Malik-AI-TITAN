@@ -93,10 +93,10 @@ export const MODEL_REGISTRY: Record<AIProviderId, Partial<Record<AITaskType, str
     general: process.env.DEEPSEEK_MODEL || "deepseek-chat",
   },
   openrouter: {
-    chat: process.env.OPENROUTER_MODEL || "google/gemma-2-9b-it:free",
-    code: process.env.OPENROUTER_CODE_MODEL || "google/gemma-2-9b-it:free",
-    project: process.env.OPENROUTER_CODE_MODEL || "google/gemma-2-9b-it:free",
-    research: process.env.OPENROUTER_MODEL || "google/gemma-2-9b-it:free",
+    chat: process.env.OPENROUTER_MODEL || "deepseek/deepseek-v4-flash-0731:free",
+    code: process.env.OPENROUTER_CODE_MODEL || "deepseek/deepseek-v4-flash-0731:free",
+    project: process.env.OPENROUTER_CODE_MODEL || "deepseek/deepseek-v4-flash-0731:free",
+    research: process.env.OPENROUTER_MODEL || "deepseek/deepseek-v4-flash-0731:free",
   },
   openai: {
     chat: process.env.OPENAI_MODEL || "gpt-4.1-mini",
