@@ -41,6 +41,8 @@ import { guardOilInterpretation } from "@/lib/work/petroleum/interpretation-poli
 import { oilLanguage } from "@/lib/work/petroleum/table-input"
 import { requestsOilModelInterpretation } from "@/lib/work/petroleum/expert-routing"
 import { routePetroleum } from "@/lib/work/petroleum/router"
+import { analyzeChatData, computedEvidenceInstruction } from "@/lib/analysis/chat"
+import { oilInterpretationHeading, oilModelsUnavailable } from "@/lib/ai/oil-answer-copy"
 import { buildOilGasSkillInstruction } from "@/lib/ai/oil-gas-skill"
 import { resolveWorkspaceMode, workModeInstruction } from "@/lib/ai/work-mode"
 import { analyzeMalikBrainV1, buildMalikBrainSystemInstruction } from "@/lib/ai/brain-v1"
@@ -439,14 +441,13 @@ async function runSelectedAnswer(
       try {
         const answer = await runSelectedAnswerUnchecked(engineeringBody, selection, onProgress, maxOutputTokens, undefined, activity, signal)
         const guarded = guardOilInterpretation(answer.content, oilLanguage(originalPrompt))
-        const appendix = "### Инженерная интерпретация моделей — требует проверки\n\n" + guarded.content
+        const appendix = oilInterpretationHeading(oilLanguage(originalPrompt)) + guarded.content
         const combined = prefix + appendix
         onToken?.(appendix)
         return { ...answer, content: combined }
       } catch (error) {
         signal?.throwIfAborted()
-        const diagnostic = error instanceof MalikModelRouteError && error.code === "OIL_ENSEMBLE_UNAVAILABLE" ? "Участие моделей: 0/3 — ответы провайдеров не получены." : "Ансамбль не вернул итоговый ответ; участие моделей не подтверждено."
-        const appendix = diagnostic + " Детерминированные расчёты сохранены."
+        const appendix = oilModelsUnavailable(oilLanguage(originalPrompt), "ensemble", error instanceof MalikModelRouteError && error.code === "OIL_ENSEMBLE_UNAVAILABLE")
         const combined = prefix + appendix
         onToken?.(appendix)
         return { content: combined, provider: "malik-petroleum-local", model: petroleum.receipt.version, selectedModelId: selection.modelId, usedWeb: false, sources: [], attempts: [] }
@@ -479,7 +480,7 @@ async function runSelectedAnswer(
         const answer = await runSelectedAnswerUnchecked(modelBody, selection, onProgress, maxOutputTokens, undefined, activity, signal)
         activity?.finish(modelStep, { provider: answer.provider, model: answer.model, characters: answer.content.length })
         const guarded = guardOilInterpretation(answer.content, oilLanguage(originalPrompt))
-        const appendix = "### Инженерная интерпретация моделей — требует проверки\n\n" + guarded.content
+        const appendix = oilInterpretationHeading(oilLanguage(originalPrompt)) + guarded.content
         const content = prefix + appendix
         oilProgress({ stage: "RESPONSE_SYNTHESIZED", status: "completed" })
         onToken?.(appendix)
@@ -488,8 +489,7 @@ async function runSelectedAnswer(
       } catch (error) {
         signal?.throwIfAborted()
         activity?.finish(modelStep, { ok: false }, "failed", "MODEL_UNAVAILABLE")
-        const diagnostic = error instanceof MalikModelRouteError && error.code === "OIL_ENSEMBLE_UNAVAILABLE" ? "Участие моделей: 0/3 — ответы провайдеров не получены." : "Модель не вернула итоговый ответ; участие провайдеров не подтверждено."
-        const appendix = diagnostic + " Детерминированные расчёты сохранены."
+        const appendix = oilModelsUnavailable(oilLanguage(originalPrompt), "model", error instanceof MalikModelRouteError && error.code === "OIL_ENSEMBLE_UNAVAILABLE")
         const content = prefix + appendix
         oilProgress({ stage: "RESPONSE_SYNTHESIZED", status: "completed", reason: "DETERMINISTIC_REPORT_MODEL_UNAVAILABLE" })
         onToken?.(appendix)
@@ -501,6 +501,25 @@ async function runSelectedAnswer(
     onToken?.(oilTable.content)
     if (oilTable.ok) oilProgress({ stage: "COMPLETED", status: "completed" })
     return { content: oilTable.content, provider: "malik-petroleum-local", model: oilTable.version, selectedModelId: selection?.modelId || DEFAULT_MALIK_MODEL_ID, usedWeb: false, sources: [], attempts: [] }
+  }
+  // Data in the message or one CSV/XLSX file: the numbers are computed here and
+  // shown at once, like the oil report; the model then writes the takeaways.
+  const dataAnalysis = routePetroleum(originalPrompt, body?.selectedSkillId).domain ? null : analyzeChatData({ prompt: originalPrompt, attachments: body?.attachments })
+  if (dataAnalysis) {
+    const step = activity?.start("Расчёт по вашим данным", "code", "malik.analyst", { rows: dataAnalysis.rows, source: dataAnalysis.source })
+    activity?.finish(step, { rows: dataAnalysis.rows, measures: dataAnalysis.measures, inputHash: dataAnalysis.inputHash })
+    const prefix = `${dataAnalysis.report}\n\n${dataAnalysis.narrativeHeading}\n\n`
+    onToken?.(prefix)
+    const modelBody = { ...body, attachments: [], metadata: { ...body?.metadata, computedEvidence: dataAnalysis.evidence } }
+    try {
+      const answer = await runSelectedAnswerUnchecked(modelBody, selection, onProgress, maxOutputTokens, onToken ? accuracyTokenGate(originalPrompt, onToken) : undefined, activity, signal)
+      const verified = finalizeAccuracy(answer.content, originalPrompt, answer.sources)
+      return { ...answer, content: prefix + verified.content, accuracy: verified.report }
+    } catch {
+      signal?.throwIfAborted()
+      onToken?.(dataAnalysis.narrativeUnavailable)
+      return { content: prefix + dataAnalysis.narrativeUnavailable, provider: "malik-analyst-local", model: "malik-analyst", selectedModelId: selection?.modelId || DEFAULT_MALIK_MODEL_ID, usedWeb: false, sources: [], attempts: [] }
+    }
   }
   if (routePetroleum(originalPrompt, body?.selectedSkillId).domain) body = { ...body, metadata: { ...body?.metadata, petroleumDomain: true } }
   const bypassesMainResearch = shouldRunMalikCoder(selection) || hasMalikAttachments(body?.attachments)
@@ -695,6 +714,7 @@ async function runSelectedAnswerUnchecked(
       "Answer in the user's language unless explicitly asked otherwise.",
       artifactSkillPrompt,
       buildOilGasSkillInstruction(coderInput),
+      computedEvidenceInstruction(executionBody?.metadata),
       workModeInstruction(coderInput, resolveWorkspaceMode(executionBody?.workspaceMode)),
     ].filter(Boolean).join("\n"),
     maxTokens: maxOutputTokens || brain.outputTokenTarget,
