@@ -28,6 +28,7 @@ import {
   Copy,
   FilePlus2,
   FileSearch,
+  FileCode2,
   FileText,
   FolderTree,
   Globe,
@@ -89,6 +90,7 @@ import { isSheetRequest } from "@/lib/ai/answer-sheet"
 import { loadAnswerFeedback, nextAnswerMark, saveAnswerFeedback } from "@/lib/ai/answer-feedback-client"
 import type { WorkspaceMode } from "@/lib/ai/work-mode"
 import { openOs } from "./os/os-client"
+import { openWorkCode } from "./work-code/open"
 import { WorkStartPanel } from "./WorkStartPanel"
 import { MalikChatHome, MalikChatControls } from "./MalikChatExperience"
 
@@ -2982,6 +2984,7 @@ export function ChatView({ messages, workspaceMode = "chat", onSendMessage, onIm
         <button type="button" onClick={() => openOs("tasks")}><Check size={15} />Задачи</button>
         <button type="button" onClick={() => openOs("library")}><BookOpen size={15} />Результаты</button>
         <button type="button" onClick={() => setLibraryOpen(true)}><FileSearch size={15} />Мои файлы</button>
+        <button type="button" onClick={openWorkCode} data-work-code-open=""><FileCode2 size={15} />Код и превью</button>
         {onOpenProjects ? <button type="button" onClick={onOpenProjects}><FolderTree size={15} />Проекты</button> : null}
         <button type="button" onClick={() => openOs("plugins")}><Layers size={15} />Плагины</button>
         <button type="button" onClick={() => { setResearchMode("deep"); focusComposerEnd() }}><Globe size={15} />Исследование</button>
