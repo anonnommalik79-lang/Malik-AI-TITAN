@@ -2,6 +2,7 @@ import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
 import {
   DEFAULT_MALIK_MODEL_ID,
+  DEEPSEEK_FREE_FLASH_MODELS,
   FREE_MALIK_MODELS,
   GOOGLE_AI_POOL_MODELS,
   MALIK_OIL_1TB_MODEL,
@@ -27,7 +28,7 @@ assert.equal(getMalikModel("malik-max").label, "MalikLLM MAX")
 assert.equal(getMalikModel("malik-max").provider, "malik-orchestrator")
 assert.equal(PUBLIC_MALIK_MODELS[1]?.id, "malik-oil-1tb", "Oil BETA must be the second model, directly below MAX")
 assert.deepEqual(
-  PUBLIC_MALIK_MODELS.slice(2, 2 + GOOGLE_AI_POOL_MODELS.length).map((model) => model.id),
+  PUBLIC_MALIK_MODELS.slice(2 + DEEPSEEK_FREE_FLASH_MODELS.length, 2 + DEEPSEEK_FREE_FLASH_MODELS.length + GOOGLE_AI_POOL_MODELS.length).map((model) => model.id),
   GOOGLE_AI_POOL_MODELS.map((model) => model.id),
   "Official Google Gemini/Gemma pool must remain below MAX and Oil BETA",
 )
@@ -37,11 +38,18 @@ assert.deepEqual(
 )
 assert.ok(GOOGLE_AI_POOL_MODELS.every((model) => model.provider === "google-ai" && model.brand === "google" && model.tier === "pro"))
 
-assert.equal(PUBLIC_MALIK_MODELS.length, 133, "Selector must expose MAX + Oil + 6 Google + Ling + 123 router text + LLM7 Default")
+assert.equal(PUBLIC_MALIK_MODELS.length, 135, "Selector must expose MAX + Oil + 2 free DeepSeek + 6 Google + Ling + 123 router text + LLM7 Default")
 // Oil BETA is publicly selectable second, while remaining special provider
 // availability is reported by the real runtime rather than promising 3/3.
-assert.deepEqual(FREE_MALIK_MODELS.map((model) => model.id), ["malik-max", "malik-oil-1tb"])
+assert.deepEqual(FREE_MALIK_MODELS.map((model) => model.id), ["malik-max", "malik-oil-1tb", ...DEEPSEEK_FREE_FLASH_MODELS.map((model) => model.id)])
 assert.equal(PRO_MALIK_MODELS.length, 131, "Other paid model choices must remain gated")
+assert.deepEqual(
+  DEEPSEEK_FREE_FLASH_MODELS.map((model) => model.providerModel),
+  ["deepseek/deepseek-v4-flash-0731:free", "deepseek/deepseek-v4-flash:free"],
+  "Free tier must NEVER point to a paid DeepSeek slug",
+)
+assert.ok(DEEPSEEK_FREE_FLASH_MODELS.every((model) => model.provider === "openrouter-free" && model.tier === "free" && model.access === "free"))
+assert.ok(DEEPSEEK_FREE_FLASH_MODELS.every((model) => MAX_ROUTER_MODEL_IDS.includes(model.id)), "Both free variants must be in MAX failover")
 assert.equal(new Set(MALIK_MODELS.map((model) => model.id)).size, MALIK_MODELS.length, "Model IDs must be unique")
 
 for (const model of FREE_MALIK_MODELS) {
@@ -64,6 +72,18 @@ assert.ok(MAX_ROUTER_MODEL_IDS.some((id) => id.startsWith("router:xkiro:")), "xK
 assert.ok(MAX_ROUTER_MODEL_IDS.some((id) => id.startsWith("router:nara:")), "Nara pool missing from MAX")
 assert.ok(MAX_ROUTER_MODEL_IDS.includes("malik-20b"), "Existing Malik provider pool must remain a MAX fallback")
 
+
+const freeRoute = readFileSync("lib/server/malik-model-router.ts", "utf8")
+assert.match(freeRoute, /model\.provider === "openrouter-free"/)
+assert.match(freeRoute, /OPENROUTER_API_KEY/)
+assert.match(freeRoute, /FREE_MODEL_NOT_ALLOWED/)
+assert.match(freeRoute, /FREE_DEEPSEEK_UNAVAILABLE/)
+assert.match(freeRoute, /automatic MAX rescue/)
+assert.doesNotMatch(
+  freeRoute.slice(freeRoute.indexOf('if (model.provider === "openrouter-free")'), freeRoute.indexOf('if (model.provider === "deepseek")')),
+  /deepseek-v4\.1-flash/,
+  "Free DeepSeek router may not mention the paid V4.1 model",
+)
 
 const oil = getMalikModel("malik-oil-1tb")
 assert.deepEqual(oil, MALIK_OIL_1TB_MODEL)
@@ -101,7 +121,7 @@ assert.equal(ling.tier, "pro")
 assert.equal(ling.access, "free")
 assert.equal(canUseMalikModel(ling.id, "owner"), true)
 assert.equal(canUseMalikModel(ling.id, "free"), false)
-assert.equal(PUBLIC_MALIK_MODELS[2 + GOOGLE_AI_POOL_MODELS.length]?.id, ling.id)
+assert.equal(PUBLIC_MALIK_MODELS[2 + DEEPSEEK_FREE_FLASH_MODELS.length + GOOGLE_AI_POOL_MODELS.length]?.id, ling.id)
 assert.ok(!MAX_ROUTER_MODEL_IDS.includes(ling.id), "Ling quota must not be auto-spent")
 const lingSelector = readFileSync("components/sovereign/MalikModelSelector.tsx", "utf8")
 const selectedRouter = readFileSync("lib/server/malik-model-router.ts", "utf8")
