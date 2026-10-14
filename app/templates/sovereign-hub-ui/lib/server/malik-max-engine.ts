@@ -120,6 +120,7 @@ const CATALOG_KEY_ENV: Record<string, { base: string; aliases?: string[] }> = {
   cerebras: { base: "CEREBRAS_API_KEY" },
   together: { base: "TOGETHER_API_KEY" },
   deepseek: { base: "DEEPSEEK_API_KEY" },
+  "openrouter-free": { base: "OPENROUTER_API_KEY" },
   modelscope: { base: "MODELSCOPE_API_KEY" },
   aihubmix: { base: "AIHUBMIX_API_KEY" },
   "nemotron-openrouter": { base: "NEMOTRON_OPENROUTER_API_KEY" },
@@ -421,7 +422,7 @@ async function directLanes(codeMode: boolean): Promise<MaxLane[]> {
     outputCap: 8_000,
   }))
 
-  const routerModel = env(codeMode ? "OPENROUTER_CODE_MODEL" : "OPENROUTER_MODEL") || env("OPENROUTER_MODEL") || "deepseek/deepseek-v4-flash"
+  const routerModel = env(codeMode ? "OPENROUTER_CODE_MODEL" : "OPENROUTER_MODEL") || env("OPENROUTER_MODEL") || "deepseek/deepseek-v4-flash-0731:free"
   lanes.push(...openAiDirect({
     provider: "openrouter",
     keys: keysFor("OPENROUTER_API_KEY"),
