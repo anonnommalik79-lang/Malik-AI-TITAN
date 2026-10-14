@@ -5,7 +5,7 @@ export type MalikModelId = string
 export type MalikModelTier = "free" | "pro"
 export type MalikModelProvider =
   | "malik-orchestrator" | "modelscope" | "aihubmix" | "groq" | "cloudflare"
-  | "cerebras" | "nemotron-openrouter" | "together" | "deepseek"
+  | "cerebras" | "nemotron-openrouter" | "together" | "deepseek" | "openrouter-free"
   | "xkiro" | "llm7" | "nara" | "google-ai" | "ling-openrouter" | "malik-oil-ensemble"
 
 export type MalikModelBrand = RouterCatalogBrand | "malik" | "baidu" | "ling" | "malik-oil"
@@ -219,9 +219,42 @@ export const MALIK_OIL_1TB_MODEL: MalikModelDefinition = {
   autoEligible: false,
 }
 
+/**
+ * Verified zero-price OpenRouter variants only. DeepSeek V4.1 Flash is NOT
+ * included here: it is a paid endpoint. API requests require the existing
+ * server-side OPENROUTER_API_KEY and remain subject to provider quotas.
+ */
+export const DEEPSEEK_FREE_FLASH_MODELS: readonly MalikModelDefinition[] = [
+  {
+    id: "deepseek-v4-flash-0731-free",
+    label: "DeepSeek V4 Flash 0731 (Free)",
+    description: "OpenRouter · бесплатный API с ограничениями",
+    tier: "free",
+    provider: "openrouter-free",
+    providerModel: "deepseek/deepseek-v4-flash-0731:free",
+    capabilities: ["text", "code", "tools", "reasoning"],
+    brand: "deepseek",
+    access: "free",
+    autoEligible: true,
+  },
+  {
+    id: "deepseek-v4-flash-0423-free",
+    label: "DeepSeek V4 Flash 0423 (Free)",
+    description: "OpenRouter · резервная бесплатная версия",
+    tier: "free",
+    provider: "openrouter-free",
+    providerModel: "deepseek/deepseek-v4-flash:free",
+    capabilities: ["text", "code", "tools", "reasoning"],
+    brand: "deepseek",
+    access: "free",
+    autoEligible: true,
+  },
+]
+
 export const MALIK_MODELS: readonly MalikModelDefinition[] = [
   MALIK_MAX_MODEL,
   MALIK_OIL_1TB_MODEL,
+  ...DEEPSEEK_FREE_FLASH_MODELS,
   ...GOOGLE_AI_POOL_MODELS,
   LING_3_1_FLASH_MODEL,
   ...ROUTER_TEXT_MODELS,
@@ -239,6 +272,7 @@ const LEGACY_AUTO_IDS = LEGACY_INTERNAL_MODELS
   .filter((model) => model.provider !== "malik-orchestrator")
   .map((model) => model.id)
 export const MAX_ROUTER_MODEL_IDS: readonly MalikModelId[] = [
+  ...DEEPSEEK_FREE_FLASH_MODELS.map((model) => model.id),
   ...ROUTER_AUTO_IDS,
   LLM7_DEFAULT_MODEL.id,
   ...LEGACY_AUTO_IDS,
