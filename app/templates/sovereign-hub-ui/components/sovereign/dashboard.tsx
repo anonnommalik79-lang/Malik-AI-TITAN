@@ -102,6 +102,11 @@ const MissionControlHost = dynamic(
   () => import("./os/MissionControl").then((mod) => mod.MissionControlHost),
   { ssr: false, loading: () => null },
 )
+// Malik Work Code Studio: upload/open a project, real diagnostics, preview, ZIP.
+const WorkCodeStudioHost = dynamic(
+  () => import("./work-code/WorkCodeStudioHost").then((mod) => mod.WorkCodeStudioHost),
+  { ssr: false, loading: () => null },
+)
 // Gamma-class deck studio: plan → slides that arrive as they are written →
 // edit on the slide → present / PPTX / PDF, metered by presentation credits.
 const PresentationStudio = dynamic(
@@ -8528,6 +8533,7 @@ const shouldShowMobilePreviewButton =
   <MalikCodexModal open={codexOpen} onClose={() => setCodexOpen(false)} onSendToCanvas={(code) => safeOpenCanvas(code, "generator-panel")} />
   <CommandPalette open={commandPaletteOpen} onOpenChange={setCommandPaletteOpen} onRunAction={runCommandPaletteAction} />
   <MissionControlHost />
+  <WorkCodeStudioHost />
   {voiceModeOpen ? <VoiceMode onClose={() => setVoiceModeOpen(false)} onSubmit={(prompt) => handleSendMessage(prompt)} onConversation={appendVoiceConversation} /> : null}
 </main>
         </div>

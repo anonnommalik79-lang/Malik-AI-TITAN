@@ -9,6 +9,7 @@ import { OverlayPortal } from "../OverlayPortal"
 import type { Artifact, ArtifactKind, ArtifactSummary } from "@/lib/os/types"
 
 import { newRequestId, osFetch, useLiveFlow, type FlowView } from "./os-client"
+import { WorkCodeStudio } from "../work-code/WorkCodeStudio"
 import { PREVIEW_ERROR_MESSAGE, downloadBlob, foldProjectForPreview, safeFileName, withErrorReporter, zipFiles, type ProjectFile } from "./preview"
 import "./os.css"
 
@@ -428,22 +429,9 @@ export function ArtifactViewer({ artifactId, onClose }: { artifactId: string; on
                   {artifact.summary ? <p>{artifact.summary}</p> : null}
                 </div>
               ) : artifact.kind === "code" ? (
-                <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
-                  <div className="malik-os-toolbar">
-                    <span className="malik-os-note">{files.length} файлов{artifact.metadata?.fileCount && Number(artifact.metadata.fileCount) > files.length ? ` (показаны ${files.length} из ${String(artifact.metadata.fileCount)})` : ""}</span>
-                    {html ? <button type="button" className="malik-os-button" style={{ marginLeft: "auto" }} onClick={() => setShowPreview(!showPreview)}>{showPreview ? "Файлы" : "Предпросмотр"}</button> : <span className="malik-os-note" style={{ marginLeft: "auto" }}>Этому проекту нужна сборка — скачайте ZIP и запустите локально.</span>}
-                    {typeof artifact.metadata?.downloadUrl === "string" ? <a className="malik-os-button" href={artifact.metadata.downloadUrl}>ZIP с сервера</a> : null}
-                  </div>
-                  {html && showPreview ? (
-                    <iframe ref={frameRef} className="malik-os-frame" style={{ flex: 1 }} title={`Предпросмотр ${artifact.title}`} sandbox="allow-scripts allow-forms allow-popups allow-modals" srcDoc={previewDoc} />
-                  ) : (
-                    <div className="malik-os-files" style={{ flex: 1 }}>
-                      <nav aria-label="Файлы проекта">
-                        {files.map((file, index) => <button key={file.path} type="button" className={index === activeFile ? "is-active" : ""} onClick={() => setActiveFile(index)}>{file.path}</button>)}
-                      </nav>
-                      <pre>{files[activeFile]?.content || ""}</pre>
-                    </div>
-                  )}
+                <div style={{ height: "100%", display: "flex", flexDirection: "column", gap: 8 }}>
+                  {artifact.metadata?.fileCount && Number(artifact.metadata.fileCount) > files.length ? <span className="malik-os-note">Показаны {files.length} из {String(artifact.metadata.fileCount)} файлов{typeof artifact.metadata?.downloadUrl === "string" ? <> · <a href={artifact.metadata.downloadUrl}>полный ZIP с сервера</a></> : null}</span> : null}
+                  <WorkCodeStudio key={artifact.id} embedded initialFiles={files} title={artifact.title} onFixWithAi={(errors) => void startEdit(errors)} />
                 </div>
               ) : html ? (
                 <iframe ref={frameRef} className="malik-os-frame" title={`Предпросмотр ${artifact.title}`} sandbox="allow-scripts allow-forms allow-popups allow-modals" srcDoc={previewDoc} />
