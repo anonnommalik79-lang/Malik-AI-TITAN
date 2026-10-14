@@ -43,6 +43,8 @@ import { requestsOilModelInterpretation } from "@/lib/work/petroleum/expert-rout
 import { routePetroleum } from "@/lib/work/petroleum/router"
 import { analyzeChatData, computedEvidenceInstruction } from "@/lib/analysis/chat"
 import { oilInterpretationHeading, oilModelsUnavailable } from "@/lib/ai/oil-answer-copy"
+import { runSiteForgeTurn } from "@/lib/sites/forge/chat-turn"
+import { compactForgeHistory } from "@/lib/sites/forge/chat"
 import { buildOilGasSkillInstruction } from "@/lib/ai/oil-gas-skill"
 import { resolveWorkspaceMode, workModeInstruction } from "@/lib/ai/work-mode"
 import { analyzeMalikBrainV1, buildMalikBrainSystemInstruction } from "@/lib/ai/brain-v1"
@@ -502,6 +504,19 @@ async function runSelectedAnswer(
     if (oilTable.ok) oilProgress({ stage: "COMPLETED", status: "completed" })
     return { content: oilTable.content, provider: "malik-petroleum-local", model: oilTable.version, selectedModelId: selection?.modelId || DEFAULT_MALIK_MODEL_ID, usedWeb: false, sources: [], attempts: [] }
   }
+  // A website request becomes a finished multi-page site; a change to that site
+  // edits its plan. Everything after this sees the site as one line of history.
+  const siteForge = routePetroleum(originalPrompt, body?.selectedSkillId).domain ? null : await runSiteForgeTurn({
+    prompt: originalPrompt, body, modelId: selection?.modelId || DEFAULT_MALIK_MODEL_ID, defaultModelId: DEFAULT_MALIK_MODEL_ID,
+    allowCatalog: Boolean(selection && hasMalikProAccess(selection.entitlement.plan)), signal, onProgress,
+  })
+  if (siteForge) {
+    const step = activity?.start(siteForge.mode === "edit" ? "Правка сайта" : "Сборка сайта", "code", "malik.site-forge")
+    activity?.finish(step, { pages: siteForge.result.pages.length, quality: siteForge.result.quality.score, planner: siteForge.result.planner.used, photos: siteForge.result.photoStats.filled }, siteForge.result.quality.ok ? "completed" : "failed", siteForge.result.quality.ok ? undefined : siteForge.result.quality.issues.map((issue) => issue.code).join(", "))
+    onToken?.(siteForge.content)
+    return { content: siteForge.content, provider: "malik-site-forge", model: "Malik Site Forge", selectedModelId: selection?.modelId || DEFAULT_MALIK_MODEL_ID, usedWeb: false, sources: [], attempts: [] }
+  }
+  body = { ...body, messages: compactForgeHistory(body?.messages) }
   // Data in the message or one CSV/XLSX file: the numbers are computed here and
   // shown at once, like the oil report; the model then writes the takeaways.
   const dataAnalysis = routePetroleum(originalPrompt, body?.selectedSkillId).domain ? null : analyzeChatData({ prompt: originalPrompt, attachments: body?.attachments })
