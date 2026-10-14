@@ -24,7 +24,7 @@ const TIME_WORDS = /(?:последн|новейш|свеж|актуальн|н�
 const VOLATILE = /(?:новост|погод|курс\s+(?:валют|доллар|евро)|цен[ауы]|стоимост|сколько\s+стоит|президент|министр|расписани|спикер|релиз|выпуст|выш[её]л|(?<!\p{L})(?:версии?|версия)|доступност|\b(?:news|weather|price|pricing|exchange rate|president|ceo|schedule|release|version|available|availability)\b|жаңалық|бағасы|бағам|нұсқа|шығарыл|президент|министр)/iu
 const AI = /(?:\b(?:AI|LLM|GPT|OpenAI|Anthropic|Claude|Gemini|DeepMind|Meta|Llama|DeepSeek|Alibaba|Qwen|Mistral|xAI|Grok)\b|ИИ[ -]?модел|модел.{0,20}ИИ|искусственн.{0,20}интеллект|жасанды\s+интеллект|ЖИ[ -]?модел)/iu
 /** A ranked model list is a changing factual claim, even without words like "today". */
-const LEADERBOARD = /(?:\b(?:top[\s-]?\d+|rankings?|leaderboards?|benchmarks?|best|strongest)\b|(?:^|[^\p{L}])топ(?:[\s-]?\d+|(?=[^\p{L}]|$))|рейтинг\p{L}*|лидерборд\p{L}*|бенчмарк\p{L}*|үздік\p{L}*)/iu
+const LEADERBOARD = /(?:\b(?:top[\s-]?\d+|rankings?|leaderboards?|benchmarks?|best|strongest)\b|(?:^|[^\p{L}])топ(?:[\s-]?\d+|(?=[^\p{L}]|$))|рейтинг\p{L}*|лидерборд\p{L}*|бенчмарк\p{L}*|лучш\p{L}*\s+\d+|үздік\p{L}*)/iu
 const LANGUAGE_MODEL = /(?:языков\p{L}*\s+модел\p{L}*|текстов\p{L}*(?:\s+\p{L}+){0,2}\s+модел\p{L}*|модел\p{L}*.{0,20}(?:языков|ИИ)|(?:large\s+)?language\s+models?|foundation\s+models?|чат-?бот\p{L}*|тілдік\s+модел\p{L}*|үлкен\s+тілдік)/iu
 
 export function isModelLeaderboardRequest(prompt: string): boolean {
