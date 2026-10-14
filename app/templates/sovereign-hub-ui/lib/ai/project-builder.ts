@@ -1,5 +1,6 @@
 import type { MalikModelId } from "@/lib/ai/malik-models"
 import { runStrictMalikModel } from "@/lib/server/malik-model-router"
+import { analyzeProject } from "@/lib/work/code/diagnostics"
 
 export type ProjectFile = {
   path: string
@@ -252,7 +253,14 @@ function validateProject(files: ProjectFile[]) {
   if (totalChars > MAX_TOTAL_CHARS) issues.push("Generated project exceeds safe bundle size")
   else checks.push(`bundle size ${Math.round(totalChars / 1024)}KB`)
 
-  return { issues, checks }
+  // Compiler-level checks: syntax of every file, every import resolved,
+  // package.json coverage and Next.js server/client rules.
+  const compiler = analyzeProject(files.map((file) => ({ path: file.path, content: file.content })))
+  const compilerErrors = compiler.diagnostics.filter((item) => item.severity === "error")
+  for (const item of compilerErrors.slice(0, 20)) issues.push(`${item.file}:${item.line}:${item.column} ${item.message} [${item.code}]`)
+  if (!compilerErrors.length) checks.push(`compiler diagnostics clean (${compiler.checks.join("; ")})`)
+
+  return { issues, checks, compilerErrors: compilerErrors.length }
 }
 
 function projectSnapshot(files: ProjectFile[], maxChars = 18_000) {
@@ -347,13 +355,17 @@ export async function generateProjectWithBrain(input: ProjectBuilderInput): Prom
     let staticQa = validateProject(files)
     let reviewer = staticQa.issues.length ? "" : await aiReview(input, files)
 
-    if (staticQa.issues.length || !reviewerPassed(reviewer)) {
+    // Repair with the real diagnostics; a second repair only when the first
+    // one reduced the problems, so a model that cannot fix it is not looped.
+    for (let repair = 0; repair < 2 && (staticQa.issues.length || !reviewerPassed(reviewer)); repair++) {
+      const before = staticQa.issues.length
       const feedback = [...staticQa.issues, reviewer && !reviewerPassed(reviewer) ? reviewer : ""].filter(Boolean).join("\n")
       generated = await generateFiles(input, feedback)
       rounds += 1
       files = mergeBaseFiles(generated.files, title)
       staticQa = validateProject(files)
       reviewer = staticQa.issues.length ? "" : await aiReview(input, files)
+      if (staticQa.issues.length && staticQa.issues.length >= before) break
     }
 
     const reviewOk = staticQa.issues.length === 0 && reviewerPassed(reviewer)
