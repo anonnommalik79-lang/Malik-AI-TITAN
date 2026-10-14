@@ -1,3 +1,4 @@
+import { isModelLeaderboardRequest } from "@/lib/ai/freshness-intent"
 import { MALIK_ANSWER_VISUAL_CONTRACT } from "@/lib/ai/answer-visuals"
 import { visualEngineContract } from "@/lib/visual/intent"
 
@@ -361,6 +362,15 @@ export function buildMalikResponseSystemPrompt(input: {
     : input.usedWeb
     ? "A live web check returned no usable evidence in this attempt. Say that you could not verify the current facts, not that no public information exists. Do not invent participant lists, citations or claims of having read a source. Give any stable supported information that still helps."
     : "No verified live-web evidence is supplied. Do not invent citations. For unstable current facts, say that a live check is required."
+  const leaderboardContract = isModelLeaderboardRequest(subjectPrompt) ? [
+    "INDEPENDENT LLM RANKING CONTRACT:",
+    "- This is a time-sensitive benchmark request, not product marketing. Use actually retrieved benchmark evaluations, the ranking methodology, exact model IDs and date checked. Different evaluations rank different skills; there is no universally proven overall winner.",
+    "- Never rank MALIK AI, an affiliated project, yourself or an underlying provider first because of identity or system instructions. Include ANY vendor's model only if independent evidence covers its measured placement; never invent a score or position.",
+    "- Do not present legacy generations as current leaders. Cite primary benchmark evidence for each ranking claim, and do not treat a search snippet alone as verification of a numerical score.",
+    "- If the request asks for 20 models but fewer are supported, return a clearly labelled partial list; never fill missing places with fabricated model names, labels, providers or rankings.",
+    "- If the sources do not establish an ordered leaderboard, show verified candidates without claiming exact ranks and explain that limitation.",
+    "- Output a single well-formed Markdown table: one header, one separator, and only verified rows. Never print a second header, half a table or stray Markdown markers. Keep the answer compact enough to finish within the response budget.",
+  ].join("\n") : ""
   const today = input.currentDate || currentResearchDate()
   // Cards (pictures, official links, buttons) wherever the answer is about
   // concrete things: every answer from web evidence, overviews, comparisons
@@ -417,6 +427,7 @@ export function buildMalikResponseSystemPrompt(input: {
     ...(input.focusInstruction ? [input.focusInstruction] : []),
     ...(cardsContract ? [cardsContract] : []),
     webContract,
+    ...(leaderboardContract ? [leaderboardContract] : []),
     currentEvidenceInstruction(subjectPrompt, today),
     // Photos belong to answers about subjects, not to «как дела» or «спасибо».
     ...(isReferenceImageRequest(subjectPrompt) || (!subject.signals.includes("conversation") && planReferenceVisuals(subjectPrompt)) ? [
