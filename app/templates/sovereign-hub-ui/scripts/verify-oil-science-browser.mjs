@@ -26,13 +26,15 @@ const server=http.createServer((request,response)=>{
 await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve))
 const browser=await chromium.launch({headless:true,executablePath:process.env.MALIK_QA_CHROMIUM_PATH,args:['--no-sandbox','--disable-dev-shm-usage']})
 let passed=0
-try{for(const width of [390,1280])for(const language of ['ru','en','kk','ar'])for(const method of ['corey','vogel','nodal','net-pay']){
+const methods=['corey','vogel','nodal','net-pay','pipe-profile','esp','forecast-uncertainty','pvt-plot','log-plot','wellbore-stability','formation-evaluation','monte-carlo']
+try{for(const width of [390,1280])for(const language of ['ru','en','kk','ar'])for(const method of methods){
  const context=await browser.newContext({viewport:{width,height:844},isMobile:width===390,hasTouch:width===390,acceptDownloads:true}),page=await context.newPage(),errors=[]
  page.on('pageerror',e=>errors.push(String(e)))
  await page.goto(`http://127.0.0.1:${server.address().port}/?method=${method}&lang=${language}`)
  await page.locator('.malik-md-table').first().waitFor({timeout:30000}).catch(async error=>{throw new Error(`${width}/${language}/${method}: ${error.message}; browser errors: ${errors.join('; ')}; body: ${(await page.locator('body').innerText()).slice(0,600)}`)})
  const text=await page.locator('#root').innerText();assert.match(text,/PASS/);assert.match(text,/model calls: 0/);assert.ok(text.includes(method));assert.ok(!text.includes('NaN'));assert.ok(!text.includes('Infinity'))
- if(['corey','vogel'].includes(method)){
+ if(['corey','vogel','pipe-profile','esp','forecast-uncertainty','pvt-plot','log-plot'].includes(method)){
+  assert.match(text,/X: .*Y:/,'Axis names and physical units are visibly captioned')
   await page.locator('.recharts-scatter-symbol').first().waitFor({timeout:30000}).catch(async error=>{throw new Error(`${width}/${language}/${method}: ${error.message}; browser errors: ${errors.join('; ')}; charts: ${(await page.locator('[data-malik-visual-engine], [data-malik-visual-fallback]').allTextContents()).join('; ')}; SVG: ${(await page.locator('svg').allInnerTexts()).join('; ')}`)})
   assert.equal(await page.locator('[data-malik-visual-fallback]').count(),0)
   if(method==='corey'){const toggle=page.locator('.mv-legend button').first();await toggle.click();assert.equal(await toggle.getAttribute('aria-pressed'),'false');await toggle.click();assert.equal(await toggle.getAttribute('aria-pressed'),'true')}
@@ -41,7 +43,7 @@ try{for(const width of [390,1280])for(const language of ['ru','en','kk','ar'])fo
  assert.equal(await page.locator('html').getAttribute('dir'),language==='ar'?'rtl':'ltr')
  await page.evaluate(()=>scrollTo(0,document.documentElement.scrollHeight));assert.ok(await page.evaluate(()=>document.getElementById('root').getBoundingClientRect().bottom<=document.querySelector('.qa-composer').getBoundingClientRect().top))
  assert.equal(errors.length,0,errors.join('\n'))
- if(process.env.MALIK_QA_SCREENSHOT_DIR&&language==='ru'&&method==='corey'){fs.mkdirSync(process.env.MALIK_QA_SCREENSHOT_DIR,{recursive:true});await page.locator('[data-malik-visual-engine]').screenshot({path:path.join(process.env.MALIK_QA_SCREENSHOT_DIR,`science-${width}.png`)})}
+ if(process.env.MALIK_QA_SCREENSHOT_DIR&&language==='ru'&&['corey','forecast-uncertainty','log-plot'].includes(method)){fs.mkdirSync(process.env.MALIK_QA_SCREENSHOT_DIR,{recursive:true});await page.locator('[data-malik-visual-engine]').screenshot({path:path.join(process.env.MALIK_QA_SCREENSHOT_DIR,`science-${method}-${width}.png`)})}
  console.log(`PASS ${width}px/${language}/${method}`)
  await context.close();passed++
-}console.log(`PASS ${passed}/32 actual Markdown/Recharts scenarios: 390/1280px, RU/EN/KK/AR, model curves, numerical tables, legends, RTL and no page overflow. App auth and real-device Safari/Android excluded.`)}finally{await browser.close();server.closeAllConnections();await new Promise(resolve=>server.close(resolve))}
+}console.log(`PASS ${passed}/${methods.length*8} actual Markdown/Recharts scenarios: 390/1280px, RU/EN/KK/AR, model curves, numerical tables, legends, RTL and no page overflow. App auth and real-device Safari/Android excluded.`)}finally{await browser.close();server.closeAllConnections();await new Promise(resolve=>server.close(resolve))}

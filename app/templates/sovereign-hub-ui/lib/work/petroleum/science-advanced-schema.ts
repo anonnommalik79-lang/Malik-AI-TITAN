@@ -1,0 +1,54 @@
+import {z} from "zod"
+
+// No implicit units, correlations, vendor curves, cutoffs or probability distributions.
+const n=z.number().finite().min(0).max(1e15),p=z.number().finite().min(1e-12).max(1e15),f=z.number().finite().min(0).max(1)
+const signed=z.number().finite().min(-1e15).max(1e15),id=z.string().regex(/^[\p{L}\p{N}_ -]{1,48}$/u)
+const common={dataKind:z.enum(["user","synthetic"])}
+const points=z.array(z.object({x:n,y:signed}).strict()).min(3).max(120)
+const tri=z.object({min:n,mode:n,max:n}).strict()
+const samples={seed:z.number().int().min(1).max(4294967295),samples:z.number().int().min(100).max(10000)}
+const archie={a:p,m:p.max(10),n:p.max(10),waterResistivityOhmM:p}
+const test={stockQM3Day:p,bo:p,viscosityPaS:p,thicknessM:p,porosity:p.max(1),compressibilityPerPa:p,wellRadiusM:p}
+const log={matrixKgM3:p,fluidKgM3:p,shalePorosity:f,cleanAPI:n,shaleAPI:p,...archie,minPorosity:f,maxWaterSaturation:f,maxShaleVolume:f}
+export const advancedScienceSchemas=[
+  z.object({...common,method:z.literal("pipe-profile"),densityKgM3:p,diameterM:p,lengthM:p,tvdM:n,darcyFrictionFactor:f,surfaceAbsolutePa:n,ratesM3Day:z.array(n).min(2).max(120),applicability:z.literal("steady-incompressible-single-phase-upflow")}).strict(),
+  z.object({...common,method:z.literal("choke"),densityKgM3:p,deltaPa:n,dischargeCoefficient:p.max(1),diametersM:z.array(p).min(1).max(120),applicability:z.literal("incompressible-orifice")}).strict(),
+  z.object({...common,method:z.literal("lift-screen"),requiredRateM3Day:p,requiredHeadM:p,temperatureK:p,candidates:z.array(z.object({id,minRateM3Day:n,maxRateM3Day:p,maxHeadM:p,maxTemperatureK:p}).strict()).min(1).max(120)}).strict(),
+  z.object({...common,method:z.literal("esp"),densityKgM3:p,referenceRpm:p,rpm:p,stages:z.number().int().min(1).max(10000),operatingM3Day:n,curve:z.array(z.object({qM3Day:n,headM:n,efficiency:p.max(1)}).strict()).min(2).max(120),applicability:z.literal("supplied-pump-curve-affinity-no-gas")}).strict(),
+  z.object({...common,method:z.literal("gas-lift"),gasBudgetM3Day:n,minMarginalGain:n,tests:z.array(z.object({injectionM3Day:n,oilM3Day:n}).strict()).min(2).max(120),volumeReference:z.string().min(5).max(160)}).strict(),
+  z.object({...common,method:z.literal("scenario-compare"),purpose:z.enum(["intervention","eor","development"]),currency:z.string().regex(/^[A-Z]{3}$/),discountPerPeriod:z.number().finite().min(0).max(10),period:z.string().min(1).max(40),baselineId:id,scenarios:z.array(z.object({id,capex:n,pricePerM3:n,variablePerM3:n,fixedPerPeriod:n,volumesM3:z.array(n).min(1).max(60)}).strict()).min(2).max(20)}).strict(),
+  z.object({...common,method:z.literal("gas-material-balance"),history:z.array(z.object({cumulativeStandardM3:n,pressureAbsolutePa:p,z:p}).strict()).min(3).max(120),standardConditions:z.string().min(5).max(160),applicability:z.literal("closed-dry-gas-no-aquifer-no-injection")}).strict(),
+  z.object({...common,method:z.literal("drive-screen"),withdrawalReservoirM3:p,oilExpansionM3:n,gasCapExpansionM3:n,rockWaterExpansionM3:n,aquiferInfluxM3:n}).strict(),
+  z.object({...common,method:z.literal("reservoir-sensitivity"),areaM2:tri,netPayM:tri,porosity:tri,waterSaturation:tri,bo:tri}).strict(),
+  z.object({...common,method:z.literal("forecast-uncertainty"),history:z.array(z.object({tDays:n,qM3Day:p}).strict()).min(8).max(120),horizonsDays:z.array(p).min(1).max(24),...samples,samples:z.number().int().min(100).max(2000),applicability:z.literal("iid-log-residual-bootstrap-exponential")}).strict(),
+  z.object({...common,method:z.literal("drawdown-test"),...test,initialAbsolutePa:p,history:z.array(z.object({seconds:p,flowingAbsolutePa:p}).strict()).min(3).max(120),applicability:z.literal("selected-late-time-IARF-constant-rate")}).strict(),
+  z.object({...common,method:z.literal("buildup-horner"),...test,productionSeconds:p,history:z.array(z.object({shutInSeconds:p,absolutePa:p}).strict()).min(3).max(120),applicability:z.literal("constant-prior-rate-IARF-before-shut-in")}).strict(),
+  z.object({...common,method:z.literal("pressure-derivative"),points,radialWindow:z.object({minSeconds:p,maxSeconds:p}).strict(),lateWindow:z.object({minSeconds:p,maxSeconds:p}).strict(),relativePlateauTolerance:f,slopeTolerance:f,applicability:z.literal("Bourdet-three-point-log-time-screening")}).strict(),
+  z.object({...common,method:z.literal("interference-screen"),intervalSeconds:p,injectionChanges:z.array(signed).min(8).max(120),pressureChangesPa:z.array(signed).min(8).max(120),maxLag:z.number().int().min(0).max(30)}).strict(),
+  z.object({...common,method:z.literal("well-test-qc"),points:z.array(z.object({seconds:p,absolutePa:p,rateM3Day:n}).strict()).min(3).max(120),gaugeUncertaintyPa:n,maximumRateCv:f}).strict(),
+  z.object({...common,method:z.literal("oil-viscosity"),lab:z.array(z.object({temperatureK:p,viscosityPaS:p}).strict()).length(2),temperatureK:p,pressureAbsolutePa:p,applicability:z.literal("same-oil-same-pressure-Andrade-interpolation")}).strict(),
+  z.object({...common,method:z.literal("gas-viscosity"),pressureAbsolutePa:p,temperatureK:p,molarMassKgMol:p,z:p,applicability:z.literal("sweet-natural-gas-Lee-Gonzalez-Eakin-1966")}).strict(),
+  z.object({...common,method:z.literal("standing-pvt"),temperatureK:p,oilGravityAPI:p,gasGravity:p,solutionGasStandardM3PerStockM3:p,pressureAbsolutePa:p,referenceConditions:z.literal("gas-and-stock-oil-60F-14.7psia"),applicability:z.literal("Standing-1947-California-oil-saturated-Rs")}).strict(),
+  z.object({...common,method:z.literal("pvt-plot"),property:z.enum(["Bo","Bg","Z","viscosity"]),unit:z.enum(["reservoir/stock","reservoir/standard","dimensionless","Pa.s"]),points}).strict(),
+  z.object({...common,method:z.literal("pvt-compare"),property:z.enum(["Bo","Bg","Z","viscosity"]),unit:z.enum(["reservoir/stock","reservoir/standard","dimensionless","Pa.s"]),reference:points,candidates:z.array(z.object({id,values:z.array(p).min(3).max(120)}).strict()).min(1).max(3)}).strict(),
+  z.object({...common,method:z.literal("density-neutron"),matrixKgM3:p,fluidKgM3:p,bulkKgM3:p,neutronPorosity:f,crossoverThreshold:f,applicability:z.literal("same-lithology-corrected-logs")}).strict(),
+  z.object({...common,method:z.literal("resistivity-log"),...archie,porosity:p.max(1),waterSaturation:p.max(1),measuredOhmM:p,temperatureBasis:z.string().min(5).max(160)}).strict(),
+  z.object({...common,method:z.literal("formation-evaluation"),...log,intervals:z.array(z.object({topM:n,baseM:p,gammaAPI:n,bulkKgM3:p,resistivityOhmM:p}).strict()).min(1).max(120),depthBasis:z.literal("true-vertical-thickness"),applicability:z.literal("linear-shale-density-Archie-screening")}).strict(),
+  z.object({...common,method:z.literal("log-plot"),property:z.enum(["gammaAPI","resistivityOhmM","densityKgM3","porosity"]),unit:z.enum(["API","ohm.m","kg/m3","fraction"]),points}).strict(),
+  z.object({...common,method:z.literal("petrophysical-uncertainty"),...archie,porosity:tri,formationResistivityOhmM:tri,...samples,applicability:z.literal("independent-triangular-Archie-inputs")}).strict(),
+  z.object({...common,method:z.literal("drilling-hydraulics"),densityKgM3:p,rateM3S:n,lengthM:p,pipeIdM:p,annulusOuterM:p,annulusInnerM:p,pipeDarcyFactor:f,annulusDarcyFactor:f,applicability:z.literal("supplied-Darcy-factors-single-phase")}).strict(),
+  z.object({...common,method:z.literal("wellbore-stability"),horizontalMaxPa:p,horizontalMinPa:p,verticalPa:p,porePa:p,wellPa:p,poisson:f.max(.49),ucsPa:p,tensilePa:n,frictionDegrees:n.max(60),applicability:z.literal("vertical-isotropic-elastic-Kirsch-Biot-one")}).strict(),
+  z.object({...common,method:z.literal("completion"),rateM3S:n,densityKgM3:p,perforations:z.number().int().min(1).max(100000),diameterM:p,dischargeCoefficient:p.max(1),maxVelocityMPS:p,applicability:z.literal("supplied-perforation-orifice-screen")}).strict(),
+  z.object({...common,method:z.literal("formation-damage"),permeabilityM2:p,thicknessM:p,viscosityPaS:p,rateReservoirM3S:p,deltaPa:p,drainageRadiusM:p,wellRadiusM:p,baselineSkin:signed,applicability:z.literal("pseudo-steady-radial-total-skin")}).strict(),
+  z.object({...common,method:z.literal("integrity-assessment"),points:z.array(z.object({seconds:n,absolutePa:p,temperatureK:p}).strict()).min(2).max(120),allowedDropPa:n,allowedTemperatureChangeK:n,isolated:z.boolean(),barrierVerified:z.boolean().nullable(),applicability:z.literal("isolated-pressure-hold-screen-not-certification")}).strict(),
+  z.object({...common,method:z.literal("waterflood"),waterRelPerm:p.max(1),oilRelPerm:p.max(1),waterViscosityPaS:p,oilViscosityPaS:p,injectedReservoirM3:n,producedReservoirM3:p,poreVolumeM3:p}).strict(),
+  z.object({...common,method:z.literal("injectivity"),reservoirAbsolutePa:p,history:z.array(z.object({tDays:n,rateReservoirM3Day:n,bottomAbsolutePa:p}).strict()).min(2).max(120),intervalConvention:z.literal("right-endpoint-constant-over-preceding-interval")}).strict(),
+  z.object({...common,method:z.literal("polymer-screen"),waterViscosityPaS:p,polymerViscosityPaS:p,oilViscosityPaS:p,waterRelPerm:p.max(1),oilRelPerm:p.max(1),injectedM3:n,concentrationKgM3:n,retentionFraction:f,applicability:z.literal("supplied-compatible-lab-viscosities-and-retention")}).strict(),
+  z.object({...common,method:z.literal("co2-screen"),minimumMmpPa:p,maximumMmpPa:p,operatingMinPa:p,operatingMaxPa:p,fracturePa:p,fractureMarginPa:n,co2Purity:f,minimumPurity:f,applicability:z.literal("supplied-lab-MMP-window-screen")}).strict(),
+  z.object({...common,method:z.literal("thermal-screen"),bulkM3:p,porosity:f,rockKgM3:p,fluidKgM3:p,rockCpJkgK:p,fluidCpJkgK:p,initialK:p,targetK:p,injectionEnthalpyJkg:p,referenceEnthalpyJkg:n,heatEfficiency:p.max(1),applicability:z.literal("lumped-sensible-heat-not-reservoir-simulation")}).strict(),
+  z.object({...common,method:z.literal("injection-allocation"),budgetM3Day:n,wells:z.array(z.object({id,weight:n,capacityM3Day:n}).strict()).min(1).max(120),applicability:z.literal("capped-proportional-not-oil-optimization")}).strict(),
+  z.object({...common,method:z.literal("breakthrough-screen"),history:z.array(z.object({tDays:n,oilM3Day:n,waterM3Day:n}).strict()).min(3).max(120),thresholdWaterCut:f,minRiseFraction:f,sustainedPoints:z.number().int().min(2).max(30)}).strict(),
+  z.object({...common,method:z.literal("monte-carlo"),purpose:z.enum(["eor","finance"]),currency:z.string().regex(/^[A-Z]{3}$/),period:z.string().min(1).max(40),discountPerPeriod:n.max(10),volumesM3:z.array(n).min(1).max(60),pricePerM3:tri,volumeScale:tri,variablePerM3:tri,capex:tri,fixedPerPeriod:n,...samples,applicability:z.literal("independent-triangular-inputs-not-market-forecast")}).strict(),
+] as const
+export type AdvancedScienceInput=z.infer<typeof advancedScienceSchemas[number]>
+export type AdvancedScienceMethod=AdvancedScienceInput["method"]

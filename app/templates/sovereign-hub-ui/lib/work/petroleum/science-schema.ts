@@ -1,4 +1,5 @@
 import {z} from "zod"
+import {advancedScienceSchemas} from "./science-advanced-schema"
 
 // SI is part of every key, not inferred from prose. All operations are local, read-only and bounded.
 const nonnegative=z.number().finite().min(0).max(1e15)
@@ -9,6 +10,7 @@ const common={dataKind:z.enum(["user","synthetic"])}
 const curve=z.array(z.object({qM3Day:nonnegative,pPa:nonnegative}).strict()).min(2).max(120)
 const series=z.array(z.object({tDays:nonnegative,qM3Day:positive}).strict()).min(6).max(240)
 export const scienceInputSchema=z.discriminatedUnion("method",[
+  ...advancedScienceSchemas,
   z.object({...common,method:z.literal("linear-ipr"),reservoirPa:positive,testFlowingPa:nonnegative,testQM3Day:positive,flowingPa:nonnegative,applicability:z.literal("single-phase-constant-PI")}).strict(),
   z.object({...common,method:z.literal("vogel"),reservoirPa:positive,bubblePointPa:positive,testFlowingPa:nonnegative,testQM3Day:positive,flowingPa:nonnegative,applicability:z.literal("saturated-solution-gas-drive")}).strict(),
   z.object({...common,method:z.literal("nodal"),ipr:curve,vlp:curve,pressureBasis:z.literal("same-absolute-node-pressure"),rateBasis:z.literal("same-stock-tank-m3/day")}).strict(),
@@ -38,11 +40,11 @@ export type ScienceMethod=ScienceInput["method"]
 const methodNames=scienceInputSchema.options.map(option=>option.shape.method.value) as [ScienceMethod,...ScienceMethod[]]
 const outputNumber=z.number().finite().min(-1e100).max(1e100)
 export const scienceResultSchema=z.object({
-  kind:z.literal("mpce-science"),version:z.literal("oil-science-1.0.0"),method:z.enum(methodNames),
+  kind:z.literal("mpce-science"),version:z.enum(["oil-science-1.0.0","oil-science-1.1.0"]),method:z.enum(methodNames),
   dataKind:z.enum(["user","synthetic"]),status:z.enum(["CALCULATED","MODELLED"]),
   metrics:z.record(z.string(),z.object({value:outputNumber.nullable(),unit:z.string().min(1).max(80)}).strict()),
   table:z.object({columns:z.array(z.object({key:z.string().min(1).max(80),unit:z.string().min(1).max(80)}).strict()).min(1).max(8),rows:z.array(z.array(outputNumber.or(z.string().max(160)).nullable()).min(1).max(8)).max(240)}).strict().optional(),
-  curve:z.object({xLabel:z.string().max(40),xUnit:z.string().max(16),yLabel:z.string().max(40),yUnit:z.string().max(16),series:z.array(z.object({name:z.string().max(40),points:z.array(z.object({x:outputNumber,y:outputNumber}).strict()).min(1).max(120)}).strict()).min(1).max(3)}).strict().optional(),
+  curve:z.object({xLabel:z.string().max(40),xUnit:z.string().max(40),yLabel:z.string().max(40),yUnit:z.string().max(40),series:z.array(z.object({name:z.string().max(40),points:z.array(z.object({x:outputNumber,y:outputNumber}).strict()).min(1).max(120)}).strict()).min(1).max(3)}).strict().optional(),
   warnings:z.array(z.string().max(500)).max(30),
   execution:z.object({codeExecuted:z.literal(true),modelCalls:z.array(z.never()).max(0),durationMs:z.number().finite().min(0),validation:z.object({ok:z.literal(true),checked:z.number().int().positive()}).strict()}).strict(),
 }).strict().superRefine((value,ctx)=>{

@@ -3,6 +3,7 @@ import {scienceInputSchema,scienceResultSchema,type ScienceInput,type ScienceRes
 import {SCIENCE_METHODS} from "./science-methods"
 import {verifyScience} from "./science-verify"
 import {q,mul,add,toNumber,type Q} from "../math/rational"
+import {calculateAdvanced} from "./science-advanced"
 
 const G=9.80665,R=8.31446261815324
 type Payload=Omit<ScienceResult,"execution">
@@ -25,6 +26,7 @@ function calculate(s:ScienceInput):Payload {
   const metric=(name:string,value:number|null,unit:string)=>{result.metrics[name]={value,unit}}
   const table=(columns:[string,string][],rows:(number|string|null)[][])=>{result.table={columns:columns.map(([key,unit])=>({key,unit})),rows}}
   switch(s.method) {
+    default:return calculateAdvanced(s)
     case "linear-ipr":case "vogel": {
       requireDomain(s.testFlowingPa<s.reservoirPa&&s.flowingPa<=s.reservoirPa,"FLOWING_PRESSURE_OUTSIDE_IPR")
       if(s.method==="vogel")requireDomain(s.reservoirPa<=s.bubblePointPa,"VOGEL_REQUIRES_SATURATED_RESERVOIR")

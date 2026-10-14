@@ -1,4 +1,5 @@
 import type {ScienceMethod} from "./science-schema"
+import {ADVANCED_SCIENCE_METHODS} from "./science-advanced-methods"
 const pvt="https://courses.ems.psu.edu/png520/node/2004"
 const flow="https://pflotran.org/documentation-release/theory_guide/constitutive_relations.html"
 const gravity="https://glossary.slb.com/en/terms/e/equivalent_circulating_density"
@@ -6,6 +7,7 @@ const archie="https://www.epa.gov/environmental-geophysics/electrical-conductivi
 export type ScienceDefinition={ids:string[];equation:string;scope:string;reference:string;modelled:boolean}
 /** Executable scopes, not full commercial simulators or certified field recommendations. */
 export const SCIENCE_METHODS:Record<ScienceMethod,ScienceDefinition>={
+  ...ADVANCED_SCIENCE_METHODS,
   "linear-ipr":{ids:["B11","B13"],equation:"J=q_test/(Pr-Pwf_test); q=J(Pr-Pwf)",scope:"Single-phase constant PI calibrated to ONE supplied test, pressures absolute at same datum. No skin/multiphase prediction.",reference:"https://glossary.slb.com/terms/p/productivity_index_pi",modelled:true},
   vogel:{ids:["B12"],equation:"q/qmax=1-0.2(Pwf/Pr)-0.8(Pwf/Pr)^2",scope:"Saturated solution-gas-drive empirical IPR, Pr <= supplied bubble point. One supplied test; not composite undersaturated IPR.",reference:"https://csee.engr.utexas.edu/images/pdfs/Drilling_and_Production.pdf",modelled:true},
   nodal:{ids:["B14"],equation:"P_IPR(q)-P_VLP(q)=0; piecewise-linear interpolation on shared rate interval",scope:"Intersection of supplied strictly monotone curves only; no generated VLP, no extrapolation or operational recommendation.",reference:"https://glossary.slb.com/en/terms/i/ipr",modelled:true},

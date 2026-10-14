@@ -6,7 +6,7 @@ import {volumetricOil} from "./volumetric"
 import {SCIENCE_METHODS} from "./science-methods"
 import {executeScience} from "./science"
 import type {ScienceMethod} from "./science-schema"
-export const OIL_CAPABILITY_VERSION="mpce-catalog-1.1.0"
+export const OIL_CAPABILITY_VERSION="mpce-catalog-1.2.0"
 export const CAPABILITY_STATUSES=["IMPLEMENTED & VERIFIED","IMPLEMENTED VALIDATION PENDING","PROTOTYPE","NOT IMPLEMENTED","NOT APPLICABLE"] as const
 export type CapabilityStatus=typeof CAPABILITY_STATUSES[number]
 const groups={
@@ -18,7 +18,7 @@ const groups={
   F:["Oil formation volume factor","Gas formation volume factor","Oil viscosity","Gas viscosity","Z factor","Bubble point","Solution GOR","Density","PVT visualization","Correlation comparison"],
   G:["Archie saturation","Porosity","Shale volume","Gamma ray","Density-neutron","Resistivity","Net pay","Formation classification","Log visualization","Petrophysical uncertainty"],
   H:["Hydrostatic pressure","ECD","Drilling hydraulics","Pressure window","Mud weight","Wellbore stability","Completion","Tubing","Formation damage","Well integrity"],
-  I:["Waterflood screening","Injection optimization","Polymer flooding","CO2 flooding","Miscibility","Thermal recovery","EOR sensitivity","Injection allocation","Breakthrough analysis","EOR uncertainty"],
+  I:["Waterflood screening","Water injection performance","Polymer flooding","CO2 flooding","Miscibility","Thermal recovery","EOR sensitivity","Injection allocation","Breakthrough analysis","EOR uncertainty"],
   J:["Development scenarios","Production allocation","Revenue scenario","Water-handling costs","CAPEX/OPEX scenario","NPV","IRR","Break-even","Monte Carlo","Integrated report"],
 } as const
 const production=new Set(["A01","A02","A03","A04","A05","A06","A07","A08","A09","A10","C25","D31","D32","D33","D34","D35","D36","D37","D39","J100"])
@@ -49,7 +49,12 @@ export function invokeOilCapability(id:string,input:unknown) {
   const cap=OIL_CAPABILITIES.find(c=>c.id===id)
   if(!cap?.callable) throw new RangeError("CAPABILITY_NOT_IMPLEMENTED: "+id)
   const scienceMethod=scientific.get(id)
-  if(scienceMethod){if(!input||typeof input!=="object"||(input as {method?:unknown}).method!==scienceMethod)throw new RangeError("CAPABILITY_METHOD_MISMATCH");return executeScience(input)}
+  if(scienceMethod){
+    if(!input||typeof input!=="object"||(input as {method?:unknown}).method!==scienceMethod)throw new RangeError("CAPABILITY_METHOD_MISMATCH")
+    const requiredPurpose:Record<string,string>={B20:"intervention",I87:"eor",J91:"development",I90:"eor",J99:"finance"}
+    if(requiredPurpose[id]&&(input as {purpose?:unknown}).purpose!==requiredPurpose[id])throw new RangeError("CAPABILITY_PURPOSE_MISMATCH")
+    return executeScience(input)
+  }
   if(id==="C21")return volumetricOil(input)
   if(economic.has(id)) {
     if(!input||typeof input!=="object"||!["npv","economics"].includes(String((input as {op?:unknown}).op))) throw new RangeError("INVALID_ECONOMICS_TASK")

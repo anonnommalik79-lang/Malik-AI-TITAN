@@ -1,5 +1,8 @@
 import {scienceResultSchema,type ScienceInput} from "./science-schema"
 import {SCIENCE_METHODS} from "./science-methods"
+import {ADVANCED_SCIENCE_METHODS} from "./science-advanced-methods"
+import {verifyAdvanced} from "./science-advanced-verify"
+import type {AdvancedScienceInput} from "./science-advanced-schema"
 
 /** Independent dimensional identities / physical bounds. Does not import or re-run the calculator. */
 export function verifyScience(s:ScienceInput,raw:unknown) {
@@ -18,6 +21,11 @@ export function verifyScience(s:ScienceInput,raw:unknown) {
   }
   check(r.method===s.method&&r.dataKind===s.dataKind,"input-provenance")
   check(r.status===(SCIENCE_METHODS[s.method].modelled?"MODELLED":"CALCULATED"),"evidence-status")
+  check(r.execution.modelCalls.length===0&&r.execution.codeExecuted,"execution")
+  if(Object.hasOwn(ADVANCED_SCIENCE_METHODS,s.method)) {
+    const advanced=verifyAdvanced(s as AdvancedScienceInput,r)
+    return{ok:errors.length===0&&advanced.ok,checked:checked+advanced.checked,errors:[...errors,...advanced.errors]}
+  }
   check(Boolean(r.curve)===["linear-ipr","vogel","corey"].includes(s.method),"unexpected-or-missing-curve")
   check(Boolean(r.table)===["nodal","capillary","net-pay","allocation","decline-backtest"].includes(s.method),"unexpected-or-missing-table")
   if(r.curve)check(r.curve.xUnit===(s.method==="corey"?"fraction":"Pa")&&r.curve.yUnit===(s.method==="corey"?"fraction":"m3/day"),"curve:units")

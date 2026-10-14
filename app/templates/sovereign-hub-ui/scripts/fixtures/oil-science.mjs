@@ -1,4 +1,5 @@
 // Synthetic numerical references. Never field observations, simulator validation or calibrated reserves.
+import {advancedScienceCases} from './oil-science-advanced.mjs'
 export const scienceCases=[
  {method:'linear-ipr',reservoirPa:20e6,testFlowingPa:15e6,testQM3Day:100,flowingPa:10e6,applicability:'single-phase-constant-PI',expected:{qM3Day:200,qMaxM3Day:400,piM3DayPa:.00002}},
  {method:'vogel',reservoirPa:20e6,bubblePointPa:21e6,testFlowingPa:10e6,testQM3Day:70,flowingPa:5e6,applicability:'saturated-solution-gas-drive',expected:{qMaxM3Day:100,qM3Day:90}},
@@ -23,5 +24,6 @@ export const scienceCases=[
  {method:'allocation',totalM3:600,weights:[{id:'W-1',weight:1},{id:'W-2',weight:2},{id:'W-3',weight:3}],phase:'oil',volumeReference:'stock tank m3; same reference',period:'2026-01',expected:{allocatedM3:600,balanceResidualM3:0}},
  {method:'water-cost',waterM3:1000,variableCostPerM3:2.5,fixedCost:100,currency:'USD',period:'2026-01',expected:{variableCost:2500,totalCost:2600}},
  {method:'decline-backtest',history:[64,32,16,8,4,2].map((qM3Day,tDays)=>({tDays,qM3Day})),holdout:2,applicability:'positive-rate-exponential-log-OLS',expected:{nominalDeclinePerDay:.6931471805599453,fittedInitialM3Day:64,rmseM3Day:0,mapeFraction:0,trainCount:4,holdoutCount:2}},
+ ...advancedScienceCases,
 ]
 export const scienceInput=example=>{const {expected,...input}=example;return{dataKind:'synthetic',...structuredClone(input)}}

@@ -5,7 +5,8 @@ on:
     paths:
       - "app/templates/sovereign-hub-ui/lib/work/petroleum/**"
       - "app/templates/sovereign-hub-ui/scripts/verify-oil-science*"
-      - "app/templates/sovereign-hub-ui/scripts/fixtures/oil-science.mjs"
+      - "app/templates/sovereign-hub-ui/scripts/verify-oil-advanced.mjs"
+      - "app/templates/sovereign-hub-ui/scripts/fixtures/oil-science*.mjs"
       - ".github/workflows/petroleum-engine-check.yml"
   pull_request:
     paths:
@@ -20,7 +21,8 @@ on:
       - "app/templates/sovereign-hub-ui/scripts/verify-oil-ensemble.mjs"
       - "app/templates/sovereign-hub-ui/scripts/verify-mpce*"
       - "app/templates/sovereign-hub-ui/scripts/verify-oil-science*"
-      - "app/templates/sovereign-hub-ui/scripts/fixtures/oil-science.mjs"
+      - "app/templates/sovereign-hub-ui/scripts/verify-oil-advanced.mjs"
+      - "app/templates/sovereign-hub-ui/scripts/fixtures/oil-science*.mjs"
       - "app/templates/sovereign-hub-ui/scripts/fixtures/oil-titan-field.mjs"
       - "app/templates/sovereign-hub-ui/lib/ai/accuracy/**"
       - ".github/workflows/petroleum-engine-check.yml"
