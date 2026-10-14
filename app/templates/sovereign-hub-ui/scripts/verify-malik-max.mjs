@@ -156,6 +156,37 @@ await check("the first lane to write wins; a slower stronger lane is cancelled, 
   assert.ok(Array.isArray(status))
 })
 
+await check("hidden reasoning cannot stall a short question: faster provider starts at first hedge", async () => {
+  const thinker = lane("reasoning-only-primary")
+  const backup = lane("fast-after-thinking")
+  const start = Date.now()
+  let backupStartedAt = -1
+  const fetcher = async (url, init) => {
+    const name = new URL(url).pathname.slice(1)
+    if (name === "reasoning-only-primary") {
+      const data = new TextEncoder().encode('data: {"choices":[{"delta":{"reasoning_content":"thinking silently"}}]}\\n\\n'.replace(/\\n/g, "\n"))
+      const pending = new ReadableStream({
+        start(controller) {
+          controller.enqueue(data)
+          init.signal.addEventListener("abort", () => {
+            try { controller.error(new Error("aborted")) } catch {}
+          }, { once: true })
+        },
+      })
+      return new Response(pending, { headers: { "content-type": "text/event-stream" } })
+    }
+    if (name === "fast-after-thinking") backupStartedAt = Date.now() - start
+    return makeFetcher()(url, init)
+  }
+  const result = await engine.raceLanes({
+    lanes: [thinker, backup], call: { ...call, fastMode: true }, fetcher,
+    onToken: () => {}, minFlush: 2, maxParallel: 2, ...raceTiming, hedgeMs: 200,
+  })
+  assert.equal(result.lane.id, backup.id)
+  assert.ok(backupStartedAt >= 0 && backupStartedAt < 380,
+    `backup was blocked by hidden thoughts for ${backupStartedAt}ms`)
+})
+
 await check("fast chat hedges at most two lanes without sacrificing a fast fallback", async () => {
   const log = []
   const slow = lane("slow-cap1")
@@ -501,7 +532,8 @@ await check("billing-depleted Gemini keys rest for two hours instead of cycling 
   assert.equal(engine.classifyMaxProviderFailure(503, "high demand").reason, "http-503")
 })
 await check("MAX response uses finite wall times instead of hanging fourteen minutes", async () => {
-  assert.equal(engine.maxResponseWallMs(true, false, false), 60000)
+  assert.equal(engine.maxResponseWallMs(true, false, false), 90000)
+  assert.ok(engine.maxResponseWallMs(true, false, false) < 100000, "short chat stays below common proxy cutoffs")
   assert.equal(engine.maxResponseWallMs(false, true, true), 180000)
   assert.equal(engine.maxResponseWallMs(false, false, true), 160000)
   assert.ok(engine.maxResponseWallMs(false, false, false) < 180000)

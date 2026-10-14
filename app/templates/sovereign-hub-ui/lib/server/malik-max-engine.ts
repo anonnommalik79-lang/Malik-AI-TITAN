@@ -952,7 +952,9 @@ export function raceLanes(options: RaceOptions): Promise<RaceResult> {
         if (settled || winner) return
         // A lane that is visibly reasoning is given a little longer before a
         // second one is started beside it.
-        const thinking = [...running].some((attempt) => attempt.thinking && Date.now() - attempt.startedAt < options.hedgeMs * 2)
+        // Hidden provider reasoning is not user-visible progress. On simple
+        // questions it must not prevent a ready, faster backup from racing.
+        const thinking = !options.call.fastMode && [...running].some((attempt) => attempt.thinking && Date.now() - attempt.startedAt < options.hedgeMs * 2)
         if (!thinking && running.size < maxParallel) launch()
         scheduleHedge()
       }, options.hedgeMs)
@@ -1175,11 +1177,12 @@ function estimateTokens(text: string) {
   return Math.ceil(String(text || "").length / 3.2)
 }
 
-/** A free host should not hold an HTTP answer open for fourteen minutes.
- * Larger briefs keep a larger allowance, but incomplete work remains partial.
+/** Keep ordinary chat responsive without cutting a good explanation at 60 seconds.
+ * A finite 90s ceiling leaves room for slower free providers and recovery,
+ * while staying below common 100s reverse-proxy limits.
  */
 export function maxResponseWallMs(fastMode: boolean, codeMode: boolean, longBrief: boolean) {
-  if (fastMode) return 60_000
+  if (fastMode) return 90_000
   if (codeMode) return longBrief ? 180_000 : 145_000
   return longBrief ? 160_000 : 115_000
 }
@@ -1224,15 +1227,19 @@ export async function runMalikMax(input: MaxInput, deps: { fetcher?: typeof fetc
   const rankingRequest = !codeMode && isModelLeaderboardRequest(taskPrompt)
   const perCall = (spent: number) => Math.max(256, Math.min(fastMode ? 1_500 : rankingRequest ? 2_800 : 16_000, budget - spent + 200))
   const timing = fastMode
-    ? { hedgeMs: 3_500, firstTokenMs: 30_000, firstDeadlineMs: 60_000, idleMs: 45_000 }
+    ? { hedgeMs: 1_500, firstTokenMs: 13_000, firstDeadlineMs: 40_000, idleMs: 22_000 }
     : codeMode
       ? { hedgeMs: 12_000, firstTokenMs: 120_000, firstDeadlineMs: 180_000, idleMs: 90_000 }
       : { hedgeMs: 8_000, firstTokenMs: 75_000, firstDeadlineMs: 150_000, idleMs: 60_000 }
   const totalMs = maxResponseWallMs(fastMode, codeMode, briefNeedsDeep(taskPrompt))
   const timeLeft = () => Math.max(0, totalMs - (Date.now() - started))
-  // Both pre-token and streamed waits must obey the same outer deadline.
-  const boundedTiming = () => {
-    const remaining = Math.max(1_000, timeLeft())
+  // Do not let a stalled *first* answer consume the entire time window.
+  // Reserve a recovery window for another provider to finish a partial stream.
+  // Follow-up rounds may use the remaining wall time, but never exceed it.
+  const boundedTiming = (reserveRecovery = false) => {
+    const left = timeLeft()
+    const recovery = reserveRecovery && fastMode ? Math.min(18_000, Math.floor(left / 3)) : 0
+    const remaining = Math.max(1_000, left - recovery)
     return {
       ...timing,
       firstTokenMs: Math.min(timing.firstTokenMs, remaining),
@@ -1266,7 +1273,7 @@ export async function runMalikMax(input: MaxInput, deps: { fetcher?: typeof fetc
     lanes,
     call: base,
     onToken: emit,
-    ...boundedTiming(),
+    ...boundedTiming(true),
     minFlush: fastMode ? 2 : 24,
     maxParallel: fastMode ? 2 : MAX_PARALLEL,
     fetcher: deps.fetcher,
