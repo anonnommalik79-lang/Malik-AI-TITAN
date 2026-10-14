@@ -2,6 +2,7 @@
 
 import { memo, useDeferredValue, useEffect, useMemo, useRef, useState } from "react"
 import { buildCanvasSrcDoc, createCanvasBlobUrl, stripCodeFence, CANVAS_DEFAULT_PREVIEW_HTML } from "@/lib/canvas-preview"
+import { withSandboxStorage } from "@/lib/work/code/sandbox-shim"
 import type { ReactNode } from "react"
 import {
   Check,
@@ -115,7 +116,9 @@ function PreviewPanelInner({
 
   useEffect(() => {
     if (busy && !deferredCode) return
-    const url = createCanvasBlobUrl(srcDoc)
+    // Generated code runs without Malik AI's origin (no cookies, storage or
+    // parent access); it gets in-memory storage instead.
+    const url = createCanvasBlobUrl(withSandboxStorage(srcDoc))
     setIframeSrc(url)
     return () => URL.revokeObjectURL(url)
   }, [srcDoc, iframeKey, busy, deferredCode])
@@ -423,7 +426,7 @@ function PreviewPanelInner({
                     className="min-h-0 flex-1 bg-white"
                     title="Malik Preview"
                     loading={busy ? "eager" : "lazy"}
-                    sandbox="allow-scripts allow-forms allow-modals allow-same-origin"
+                    sandbox="allow-scripts allow-forms allow-modals"
                   />
                 )
               ) : viewMode === "code" ? (
