@@ -34,6 +34,7 @@ function functionsFrom(file, names, dependencies = {}) {
 
 const { fetchResearchResponse } = load("lib/malik-research/bounded-fetch.ts")
 const { shouldUseWeb } = load("lib/ai/web-search-policy.ts")
+const freshness = load("lib/ai/freshness-intent.ts")
 const query = load("lib/ai/web-search-query.ts")
 const currentEvidence = load("lib/ai/current-evidence.ts")
 const truth = load("lib/ai/truth-engine.ts")
@@ -57,7 +58,7 @@ try {
     assert.equal(query.eventSearchTitle(screenshotPrompt), "Ai Digital Bridge")
   })
   await check("search keeps the named event and rejects generic AI links", () => {
-    const router = functionsFrom("lib/malik-god-router.ts", ["extractNamedSubject", "knownPersonSearchName", "buildQueries", "SEARCH_STOP_WORDS", "searchTokens", "knownNameAliases", "identityTokensForNamedSubject", "rankSourcesForPrompt"], { ...query, ...currentEvidence, ...truth })
+    const router = functionsFrom("lib/malik-god-router.ts", ["extractNamedSubject", "knownPersonSearchName", "buildQueries", "SEARCH_STOP_WORDS", "searchTokens", "knownNameAliases", "identityTokensForNamedSubject", "rankSourcesForPrompt"], { ...query, ...currentEvidence, ...truth, ...freshness })
     assert.ok(router.buildQueries(screenshotPrompt).every((q) => /Ai Digital Bridge/i.test(q)))
     assert.ok(!router.buildQueries(screenshotPrompt).some((q) => /hackathon accelerator/i.test(q)))
     const event = { title: "AI Digital Bridge programme and speakers", url: "https://example.test/digital-bridge", domain: "example.test", snippet: "Confirmed programme" }
@@ -71,7 +72,7 @@ try {
     assert.equal(shouldUseWeb("Напиши код на Python"), false)
     assert.equal(shouldUseWeb(prompt, { research: false }), false)
     assert.deepEqual(currentEvidence.currentModelSubjects(prompt), ["Gemini 4 pro", "GPT 6.1S SOL"])
-    const router = functionsFrom("lib/malik-god-router.ts", ["extractNamedSubject", "knownPersonSearchName", "buildQueries"], { ...query, ...currentEvidence, ...truth })
+    const router = functionsFrom("lib/malik-god-router.ts", ["extractNamedSubject", "knownPersonSearchName", "buildQueries"], { ...query, ...currentEvidence, ...truth, ...freshness })
     const queries = router.buildQueries(prompt)
     assert.equal(queries.length, 3)
     assert.ok(queries.some((q) => q.includes('"Gemini 4 pro"') && q.includes("site:deepmind.google")))
