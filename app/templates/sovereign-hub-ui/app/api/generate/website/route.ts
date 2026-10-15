@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { runStrictMalikModel } from "@/lib/server/malik-model-router"
+import { SITE_VISUAL_QUALITY_RULES } from "@/lib/website/design-quality"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -18,6 +19,8 @@ Requirements:
 - Put all CSS in the document and all JavaScript in the document.
 - Use semantic HTML, responsive layout, accessible contrast and controls.
 - Make the visual system feel premium and finished: typography, spacing, hierarchy, hover/focus states, mobile behavior.
+- Apply the following mandatory visual audit before returning the document:
+${SITE_VISUAL_QUALITY_RULES}
 - Honor the user's requested brand direction without copying third-party logos, copyrighted copy, or proprietary page layouts.
 - Preserve concrete product, market, pricing and CTA decisions from the brief instead of inventing a different business.
 - Never fabricate customers, testimonials, revenue, investors, partnerships or traction.
