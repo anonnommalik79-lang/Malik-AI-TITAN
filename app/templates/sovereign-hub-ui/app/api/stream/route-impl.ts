@@ -51,6 +51,9 @@ import { detectScheduleIntent } from "@/lib/ai/schedule-intent"
 import { detectWorkScheduleIntent } from "@/lib/work/intent"
 import { createScheduledTask, scheduledTasksStatus } from "@/lib/server/scheduled-tasks"
 import { createExecutionReporter, type ExecutionReporter } from "@/lib/ai/chat-execution"
+import {conversationIntentInstruction,requiresChatDelivery,resolveConversationIntent} from "@/lib/ai/conversation-intent"
+import {conversationRepairInstruction,conversationValidationFailure,validateConversationAnswer} from "@/lib/ai/conversation-validation"
+import {conversationSource,deliverConversationDocument,deliveryProblem} from "@/lib/server/conversation-delivery"
 
 import { withCompute, observeComputeResult } from "@/lib/malik-compute/runtime"
 import { chatComputeOperation } from "@/lib/malik-compute/policies"
@@ -403,11 +406,44 @@ function shouldRunMalikCoder(selection: Awaited<ReturnType<typeof resolveStrictM
 }
 
 async function runSelectedAnswer(
-  ...args: Parameters<typeof runSelectedAnswerUnchecked>
+  ...args: [...Parameters<typeof runSelectedAnswerUnchecked>,RequestEntitlement?]
 ) {
-  const [initialBody, selection, onProgress, maxOutputTokens, onToken, activity, signal] = args
+  const [initialBody, selection, onProgress, maxOutputTokens, originalOnToken, activity, signal,,serverOwner] = args
   let body = initialBody
   const originalPrompt = coderPrompt(body), freshness = classifyFreshness(originalPrompt)
+  const intent=resolveConversationIntent({prompt:originalPrompt,messages:body?.history||body?.messages,attachments:body?.attachments})
+  const owner=serverOwner||selection?.entitlement
+  const fileFormat=intent.target==="document"?intent.requirements.format:undefined
+  const validateText=intent.target==="text"&&(intent.requirements.presentation==="json"||intent.action==="repair")&&!hasMalikAttachments(body?.attachments)&&!freshness.needsSearch&&!routePetroleum(originalPrompt,body?.selectedSkillId).domain&&!parsePluginCommand(originalPrompt)
+  const requestedCap=Number(body?.maxTokens)
+  const plannedCap=validateText?analyzeMalikBrainV1({prompt:originalPrompt,historyLength:Array.isArray(body?.history)?body.history.length:0,requestedDepth:body?.responseDepth||body?.metadata?.responseDepth}).outputTokenTarget:4000
+  const validationCap=Math.min(maxOutputTokens||Number.POSITIVE_INFINITY,Number.isFinite(requestedCap)&&requestedCap>0?Math.max(1,Math.floor(requestedCap)):plannedCap)
+  // Reserve at most half of the existing output allowance for one repair.
+  // A repair is not permitted to double a finite account allowance.
+  const generationCap=validateText?Math.max(1,Math.floor(validationCap/2)):maxOutputTokens
+  const localAnswer=(content:string)=>({content,provider:"malik-document-export",model:"local-export",selectedModelId:selection?.modelId||DEFAULT_MALIK_MODEL_ID,usedWeb:false,sources:[],attempts:[]})
+  if(intent.action==="stop")return localAnswer("Новые действия не запускаю. Активную генерацию можно остановить кнопкой «Стоп»; отмена другой задачи этим сообщением не подтверждена.")
+  if(intent.clarification==="missing-attachment")return localAnswer("Указанного вложения нет среди доступных файлов этого сообщения. Прикрепите нужное изображение — его содержимое не было угадано или отредактировано.")
+  let source:Awaited<ReturnType<typeof conversationSource>>=null
+  if(intent.source?.artifactId||intent.action==="export"){
+    try{source=await conversationSource(intent,owner)}catch(error){return localAnswer(deliveryProblem(intent,error instanceof Error?error.message:"SOURCE_NOT_AVAILABLE"))}
+  }
+  if(fileFormat&&intent.clarification==="missing-source")return localAnswer(deliveryProblem(intent,"MISSING_SOURCE"))
+  if(intent.action==="export"&&fileFormat){
+    if(!source)return localAnswer(deliveryProblem(intent,"MISSING_SOURCE"))
+    const delivery=await deliverConversationDocument({owner,intent,markdown:source.content,previous:source.artifact,signal,activity})
+    return localAnswer(delivery.content)
+  }
+  if(source?.artifact){
+    const key=Array.isArray(body?.history)?"history":"messages"
+    const messages=Array.isArray(body?.[key])?body[key]:[]
+    body={...body,[key]:messages.map((m:any,index:number)=>index===intent.source?.index?{...m,content:source!.content}:m)}
+  }
+  // Binary deliverables are constructed and checked before any success text
+  // reaches the stream. Ordinary replies retain their existing streaming path.
+  const onToken=fileFormat||validateText?undefined:originalOnToken
+  let ranToolLane=false
+  const runCurrent=async()=>{
   const safety = routePetroleum(originalPrompt, body?.selectedSkillId).domain ? petroleumSafetyMessage(originalPrompt) : null
   if (safety) { onToken?.(safety); return { content: safety, provider: "malik-petroleum-safety", model: "advisory-guard", selectedModelId: selection?.modelId || DEFAULT_MALIK_MODEL_ID, usedWeb: false, sources: [], attempts: [] } }
   let fieldStep: string | undefined
@@ -468,6 +504,7 @@ async function runSelectedAnswer(
     allowCatalog: Boolean(selection && hasMalikProAccess(selection.entitlement.plan)), signal, onProgress,
   })
   if (siteForge) {
+    ranToolLane=true
     const step = activity?.start(siteForge.mode === "edit" ? "Правка сайта" : "Сборка сайта", "code", "malik.site-forge")
     activity?.finish(step, { pages: siteForge.result.pages.length, quality: siteForge.result.quality.score, planner: siteForge.result.planner.used, photos: siteForge.result.photoStats.filled }, siteForge.result.quality.ok ? "completed" : "failed", siteForge.result.quality.ok ? undefined : siteForge.result.quality.issues.map((issue) => issue.code).join(", "))
     onToken?.(siteForge.content)
@@ -478,6 +515,7 @@ async function runSelectedAnswer(
   // shown at once, like the oil report; the model then writes the takeaways.
   const dataAnalysis = routePetroleum(originalPrompt, body?.selectedSkillId).domain ? null : analyzeChatData({ prompt: originalPrompt, attachments: body?.attachments })
   if (dataAnalysis) {
+    ranToolLane=true
     const step = activity?.start("Расчёт по вашим данным", "code", "malik.analyst", { rows: dataAnalysis.rows, source: dataAnalysis.source })
     activity?.finish(step, { rows: dataAnalysis.rows, measures: dataAnalysis.measures, inputHash: dataAnalysis.inputHash })
     const prefix = `${dataAnalysis.report}\n\n${dataAnalysis.narrativeHeading}\n\n`
@@ -504,10 +542,39 @@ async function runSelectedAnswer(
     if (!currentEvidenceAvailable(sources, freshness)) return { content: unavailableFreshAnswer(freshness), provider: "live-evidence-gate", model: "no-current-evidence", selectedModelId: selection?.modelId || DEFAULT_MALIK_MODEL_ID, usedWeb: sources.length > 0, sources, attempts: [] }
     preparedEvidence = { prompt: originalPrompt, sources }
   }
-  const answer = await runSelectedAnswerUnchecked(body, selection, onProgress, maxOutputTokens, freshness.needsSearch ? undefined : accuracyTokenGate(originalPrompt, onToken), activity, signal, preparedEvidence)
+  const answer = await runSelectedAnswerUnchecked(body, selection, onProgress, generationCap, freshness.needsSearch ? undefined : accuracyTokenGate(originalPrompt, onToken), activity, signal, preparedEvidence)
   if ("accuracy" in answer && answer.accuracy) return answer
   const verified = finalizeAccuracy(answer.content, originalPrompt, answer.sources)
   return { ...answer, content: needsLaneEvidence ? finalizeFreshAnswer(verified.content, freshness, preparedEvidence?.sources || [], answer.sources) : verified.content, accuracy: verified.report }
+  }
+  let answer=await runCurrent()
+  if(validateText&&!ranToolLane&&!/petroleum|site-forge|analyst|plugin|unavailable|safety|evidence-gate/.test(answer.provider)&&!("incomplete" in answer&&answer.incomplete)){
+    const first=validateConversationAnswer(intent,answer.content,source?.content||intent.source?.content)
+    answer={...answer,content:first.content}
+    if(first.issue){
+      const step=activity?.start("Проверяю и исправляю формат ответа","model","conversation.validation",{issue:first.issue})
+      let last=first
+      let attempts=0
+      if(generationCap!>=128){
+        // No website/project/sandbox action is replayed. The original user
+        // question is unchanged; only a fixed server validation code is added.
+        const repairBody={...body,chatRecovery:true,metadata:{...body?.metadata,conversationRepair:first.issue}}
+        try{
+          const repair=await runSelectedAnswerUnchecked(repairBody,selection,onProgress,validationCap-generationCap!,undefined,activity,signal)
+          attempts=1
+          if(!("incomplete" in repair&&repair.incomplete)){
+            const checked="accuracy" in repair&&repair.accuracy?repair.content:finalizeAccuracy(repair.content,originalPrompt,repair.sources).content
+            last=validateConversationAnswer(intent,checked,source?.content||intent.source?.content)
+          }
+        }catch{signal?.throwIfAborted()}
+      }
+      activity?.finish(step,{attempts,valid:!last.issue},last.issue?"failed":"completed",last.issue?"OUTPUT_VALIDATION_FAILED":undefined)
+      answer={...answer,content:last.issue?conversationValidationFailure(intent,last.issue):last.content}
+    }
+  }
+  if(!fileFormat||"incomplete" in answer&&answer.incomplete||/safety|unavailable|evidence-gate/.test(answer.provider))return answer
+  const delivery=await deliverConversationDocument({owner,intent,markdown:answer.content,previous:source?.artifact,signal,activity})
+  return{...answer,content:delivery.ok?delivery.content:answer.content+"\n\n"+delivery.content}
 }
 
 async function runSelectedAnswerUnchecked(
@@ -575,6 +642,7 @@ async function runSelectedAnswerUnchecked(
         superpowerPrompt,
         preparedEvidence ? freshnessEvidenceInstruction(classifyFreshness(preparedEvidence.prompt)) + "\n" + sourceContext(preparedEvidence.sources, preparedEvidence.prompt) : "",
         buildChatArtifactSkillPrompt(coderPrompt(body)),
+        conversationIntentInstruction(resolveConversationIntent({prompt:coderPrompt(body),messages:coderHistory(body),attachments:body?.attachments})),
         buildOilGasSkillInstruction(coderPrompt(body)),
         workModeInstruction(coderPrompt(body), resolveWorkspaceMode(body?.workspaceMode)),
       ].filter(Boolean).join("\n"),
@@ -670,6 +738,7 @@ async function runSelectedAnswerUnchecked(
     requestedDepth: executionBody?.responseDepth || executionBody?.metadata?.responseDepth,
   })
   const artifactSkillPrompt = buildChatArtifactSkillPrompt(coderInput)
+  const intentInstruction=conversationIntentInstruction(resolveConversationIntent({prompt:coderPrompt(body),messages:coderHistoryItems,attachments:body?.attachments}))
   const codeCall = activity?.start("Написание кода моделью", "code", "MalikCoder 1.0", { historyMessages: coderHistoryItems.length })
   const result = await runMalikCoderOrchestrator({
     prompt: coderInput,
@@ -685,6 +754,8 @@ async function runSelectedAnswerUnchecked(
       "Treat MALIK_MEDIA_ACTION_FACT / MALIK_MEDIA_ACTION_HISTORY entries in history as factual completed actions and describe them accurately when asked.",
       "Answer in the user's language unless explicitly asked otherwise.",
       artifactSkillPrompt,
+      intentInstruction,
+      conversationRepairInstruction(body?.metadata?.conversationRepair),
       buildOilGasSkillInstruction(coderInput),
       computedEvidenceInstruction(executionBody?.metadata),
       workModeInstruction(coderInput, resolveWorkspaceMode(executionBody?.workspaceMode)),
@@ -906,6 +977,8 @@ function liveSseResponse(
             },
             activity,
             generation.signal,
+            undefined,
+            entitlement,
           )
 
       void answerPromise.then(async (answer) => {
@@ -1047,6 +1120,8 @@ async function handlePOST(request: Request) {
     })
   }
 
+  const requestIntent=resolveConversationIntent({prompt:coderPrompt(body),messages:body?.history||body?.messages,attachments:body?.attachments})
+  if(requiresChatDelivery(requestIntent))body={...body,isProjectRequest:false,forceCanvas:false,responseMode:"chat",isCodeRequest:false}
   const freshness = classifyFreshness(coderPrompt(body))
   console.info("[MALIK_FRESHNESS_INTENT]", { category: freshness.category, needsSearch: freshness.needsSearch })
 
@@ -1151,7 +1226,7 @@ async function handlePOST(request: Request) {
     if (wantsSse(request, body)) return liveSseResponse(routedBody, selection, entitlement, maxOutputTokens, workReceipt)
     const answer = isProjectBuildRequest(routedBody)
       ? await runProjectAnswer(routedBody, selection, entitlement.userId)
-      : await runSelectedAnswer(routedBody, selection, undefined, maxOutputTokens)
+      : await runSelectedAnswer(routedBody, selection, undefined, maxOutputTokens,undefined,undefined,undefined,undefined,entitlement)
     const multimodalCost = estimateMultimodalTokens(hasMalikAttachments(routedBody?.attachments) ? routedBody.attachments : [])
     if (multimodalCost > 0) {
       try {

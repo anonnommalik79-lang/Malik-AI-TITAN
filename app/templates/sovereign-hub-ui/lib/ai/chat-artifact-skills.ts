@@ -19,7 +19,7 @@ export const CHAT_ARTIFACT_SKILLS: readonly ChatArtifactSkill[] = [
     name: "Presentation Studio",
     priority: 120,
     patterns: [/презентац|слайд|питч[ -]?дек|pitch[ -]?deck|presentation|slides?|\.pptx\b/iu],
-    instruction: "Build a real presentation with a clear narrative arc, concise slide copy, useful visuals or data callouts, speaker notes when useful, and a strong final action. For a directly downloadable result, prefer one polished self-contained presentation.html with responsive 16:9 slides, keyboard/touch navigation and print-to-PDF support unless the user explicitly requests another format.",
+    instruction: "Build a real presentation with a clear narrative arc, concise copy, useful grounded data and a strong final action. For native PowerPoint export, author Markdown with a heading for each slide, at most six concise points per slide and no unsupported quantitative claims; the existing server engine creates editable slides. Only produce an HTML presentation when HTML is explicitly requested. Do not claim an image or chart was inserted unless the actual tool confirms it.",
   },
   {
     id: "software",
@@ -32,15 +32,15 @@ export const CHAT_ARTIFACT_SKILLS: readonly ChatArtifactSkill[] = [
     id: "document",
     name: "Document Studio",
     priority: 105,
-    patterns: [/документ|отч[её]т|бриф|инструкц|руководств|договор|предложен|whitepaper|report|document|brief|manual|\.docx\b|\.pdf\b/iu],
-    instruction: "Create a publication-ready document with a useful hierarchy, concrete content, consistent terminology, tables only where they improve comprehension, and no filler. Return editable Markdown or a polished self-contained HTML document when a downloadable file is requested.",
+    patterns: [/документ|отч[её]т|бриф|инструкц|руководств|договор|предложен|whitepaper|report|document|brief|manual|\bword\b|ворд|\bdocx\b|\bpdf\b/iu],
+    instruction: "Create a publication-ready document with useful hierarchy, concrete content, consistent terminology and no filler. When Word or PDF is requested, author complete Markdown content for the real server exporter; never substitute an HTML file or claim the binary file exists before export is confirmed.",
   },
   {
     id: "spreadsheet",
     name: "Spreadsheet Lab",
     priority: 104,
     patterns: [/таблиц|excel|spreadsheet|\.xlsx\b|\.csv\b|бюджет|финансовая\s+модель|прогноз|калькулятор/iu],
-    instruction: "Produce analysis-ready tabular data with clear headers, consistent units, valid formulas or calculations, and no invented figures presented as facts. Use a complete CSV code block named data.csv for portable data and add a short data dictionary when columns are not self-explanatory.",
+    instruction: "Produce analysis-ready tables with headers, units, calculations grounded in supplied data and no invented figures. For explicitly requested Excel/XLSX, author complete Markdown tables for the native workbook exporter, with local arithmetic formulas only when requested. Do not substitute CSV for XLSX. For explicitly requested CSV use correctly escaped CSV. Never claim formulas were recalculated unless an execution receipt confirms it.",
   },
   {
     id: "data-analysis",

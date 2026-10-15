@@ -77,6 +77,10 @@ export function validateArtifact(draft: ArtifactDraft, context: ValidationContex
     add("files", files.length >= 1, "в проекте нет файлов")
     if (role === "repository-patch") {
       add("patch", draft.metadata?.patchVerified === true && draft.metadata?.testsExecuted === false, "patch должен пройти заявленные проверки без ложного утверждения о запуске тестов")
+    } else if(role==="code-edit"){
+      const records=files as Array<{path?:unknown;content?:unknown}>
+      add("edit-structure",draft.metadata?.structureVerified===true&&new Set(records.map(f=>f.path)).size===records.length&&records.every(f=>typeof f.path==="string"&&!/^(?:\/|[a-z]:)/i.test(f.path)&&!f.path.includes("\\")&&!f.path.split("/").some(p=>p===".."||p===".")&&typeof f.content==="string"),"проверяются структура и пути изменённого проекта")
+      add("execution-honesty",draft.metadata?.buildExecuted===false&&draft.metadata?.testsExecuted===false&&draft.metadata?.qaPassed===false,"без sandbox нельзя утверждать успешную сборку или запуск тестов")
     } else add("qa", draft.metadata?.qaPassed === true, "проект не прошёл проверку сборки")
   } else if (draft.kind === "analysis" && role === "data") {
     add("tables", /\|---/.test(content), "в анализе должна быть таблица статистики")

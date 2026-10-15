@@ -108,7 +108,7 @@ export const editTool: ToolDefinition = {
           content,
           summary: result.value.note || clip(instruction, 240),
           // The zip of the first version is not this version: no stale download link.
-          metadata: { role: "code", qaPassed: true, fileCount: next.length, changed: result.value.files.map((file) => safePath(file.path)), deleted: result.value.deleted, edit: instruction, fixedErrors: errors.length ? errors : undefined },
+          metadata: { role: "code-edit", structureVerified: true, qaPassed: false, buildExecuted: false, testsExecuted: false, fileCount: next.length, changed: result.value.files.map((file) => safePath(file.path)), deleted: result.value.deleted, edit: instruction, fixedErrors: errors.length ? errors : undefined },
         }],
       }
     }

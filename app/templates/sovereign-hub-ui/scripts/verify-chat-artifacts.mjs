@@ -17,7 +17,11 @@ assert.equal(detectChatArtifactSkills("подготовь OpenAPI и SQL схе�
 const deckPrompt = buildChatArtifactSkillPrompt("создай презентацию стартапа")
 assert.match(deckPrompt, /selected model is the author/i)
 assert.match(deckPrompt, /filename=relative\/path\.ext/i)
-assert.match(deckPrompt, /presentation\.html/i)
+// Native PPTX replaces the old unconditional HTML substitution. The actual
+// OOXML result is independently tested in verify-universal-delivery.mjs.
+assert.match(deckPrompt, /native PowerPoint export/i)
+assert.match(deckPrompt, /Markdown with a heading for each slide/i)
+assert.match(deckPrompt, /Only produce an HTML presentation when HTML is explicitly requested/i)
 assert.match(deckPrompt, /do not substitute a fixed MALIK template/i)
 
 const markdown = readFileSync("components/sovereign/MalikMarkdown.tsx", "utf8")

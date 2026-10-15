@@ -1,5 +1,5 @@
 import { parseMarkdown, tablesOf } from "./markdown"
-export const DOCUMENT_FORMATS = ["docx", "pdf", "xlsx", "csv", "md", "txt", "html", "json", "zip"] as const
+export const DOCUMENT_FORMATS = ["docx", "pdf", "xlsx", "csv", "md", "txt", "html", "json", "zip", "pptx"] as const
 export type DocumentFormat = typeof DOCUMENT_FORMATS[number]
 export function hasDocumentTable(markdown: string) { return tablesOf(parseMarkdown(markdown)).length > 0 }
 export function artifactFormats(kind: string, content?: string): string[] {

@@ -6,6 +6,7 @@
     "node": ">=20 <23"
   },
   "scripts": {
+    "test:universal-intelligence": "node --test scripts/verify-universal-intent.mjs scripts/verify-universal-delivery.mjs && node scripts/verify-universal-50.mjs",
     "test:accuracy": "node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs scripts/verify-accuracy-engine.mjs",
     "test:accuracy-routing": "node scripts/verify-accuracy-routing.mjs",
     "test:accuracy-browser": "node scripts/verify-accuracy-browser.mjs",

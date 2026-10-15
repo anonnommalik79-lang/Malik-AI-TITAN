@@ -12,7 +12,7 @@ export function documentFilename(title: string, format: string) {
   return `${name}.${format}`
 }
 export function documentDisposition(filename: string) { return `attachment; filename="document.${filename.split(".").pop()}"; filename*=UTF-8''${encodeURIComponent(filename).replace(/['()*]/g, (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`)}` }
-export async function exportDocument(input: { format: DocumentFormat; title: string; markdown: string; csv?: string }): Promise<{ bytes: Uint8Array; mime: string; filename: string }> {
+export async function exportDocument(input: { format: DocumentFormat; title: string; markdown: string; csv?: string; allowFormulas?:boolean }): Promise<{ bytes: Uint8Array; mime: string; filename: string }> {
   if (!DOCUMENT_FORMATS.includes(input.format)) throw new Error("Этот формат не поддерживается.")
   const markdown = answerCardsToText(input.markdown)
   if (input.format === "pdf" && markdown.includes("Malik Oil AI") && /[\u0600-\u06ff]/.test(markdown)) throw new Error("ARABIC_PDF_NOT_VALIDATED_USE_DOCX_HTML")
@@ -25,9 +25,10 @@ export async function exportDocument(input: { format: DocumentFormat; title: str
   switch (input.format) {
     case "docx": bytes = buildDocx(model); mime = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"; break
     case "pdf": bytes = await buildPdf(model); mime = "application/pdf"; break
+    case "pptx": {const {markdownPptx}=await import("./pptx");bytes=await markdownPptx(markdown,input.title);mime="application/vnd.openxmlformats-officedocument.presentationml.presentation";break}
     case "xlsx":
       if (!tables.length) throw new Error("В документе нет таблиц")
-      bytes = buildXlsx(tables.map((table) => ({ name: table.title, header: table.header, rows: table.rows })), { title: input.title }); mime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"; break
+      bytes = buildXlsx(tables.map((table) => ({ name: table.title, header: table.header, rows: table.rows })), { title: input.title,allowFormulas:input.allowFormulas }); mime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"; break
     case "csv":
       if (!tables.length) throw new Error("В документе нет таблиц")
       bytes = encode(buildCsv(tables[0].header, tables[0].rows)); mime = "text/csv; charset=utf-8"; break
@@ -37,7 +38,8 @@ export async function exportDocument(input: { format: DocumentFormat; title: str
     case "html":
       bytes = encode(`<!doctype html><html lang="${/[\u0600-\u06ff]/.test(markdown) ? "ar" : "en"}" dir="${/[\u0600-\u06ff]/.test(markdown) ? "rtl" : "ltr"}"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${xmlEscape(input.title)}</title><style>body{max-width:900px;margin:48px auto;padding:24px;color:#111;background:white;font:16px/1.6 system-ui}pre{white-space:pre-wrap;overflow-wrap:anywhere}</style><body><h1>${xmlEscape(input.title)}</h1><pre>${xmlEscape(blocksToText(model.blocks))}</pre></body></html>`); mime = "text/html; charset=utf-8"; break
     case "zip": {
-      const formats = DOCUMENT_FORMATS.filter((format) => format !== "zip" && (tables.length || !["xlsx", "csv"].includes(format)))
+      // A document bundle is not an implicit slide-generation request.
+      const formats = DOCUMENT_FORMATS.filter((format) => !["zip","pptx"].includes(format) && (tables.length || !["xlsx", "csv"].includes(format)))
       const files = []
       // Serial rendering bounds memory when a long document includes a PDF.
       for (const format of formats) { const file = await exportDocument({ ...input, format }); files.push({ name: file.filename, data: file.bytes }) }

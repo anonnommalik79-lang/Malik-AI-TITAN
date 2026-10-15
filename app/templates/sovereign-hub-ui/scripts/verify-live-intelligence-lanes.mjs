@@ -11,6 +11,8 @@ let queries = [], modelInputs = [], fileInputs = [], godInputs = [], fail = fals
 const deps = {
   ...freshness, ...evidence, ...accuracy, ...gates, ...brain,
   ...load("lib/ai/web-search-policy.ts"),
+  ...load("lib/ai/conversation-intent.ts"),
+  ...load("lib/ai/conversation-validation.ts"),
   // Petroleum execution is exercised by its dedicated suite. These seven
   // non-petroleum lane checks must not create files or call paid providers.
   // Inject explicit no-op boundaries for the newer petroleum pre-routing path.
