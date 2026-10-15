@@ -5,6 +5,7 @@ import { checkRateLimit } from "@/lib/ai/rate-limit"
 import { incrementUsage } from "@/lib/ai/usage"
 import { createAIJob, updateAIJob, type AIJobInput } from "@/lib/ai/jobs"
 import { resolveRequestEntitlement } from "@/lib/server/request-entitlement"
+import { SITE_VISUAL_QUALITY_RULES } from "@/lib/website/design-quality"
 import type { AIPlan } from "@/lib/ai/types"
 
 type GenerationBody = {
@@ -616,7 +617,8 @@ function textPrompt(kind: GenerationKind, prompt: string, body: GenerationBody) 
     return `Create a polished text artifact with structure, clarity, and action steps. ${safe}\n\nRequest:\n${prompt}`
   }
 
-  return `Create a complete standalone HTML artifact for a ${kind}. It must be responsive, premium, investor-readable, production-styled, and ready for Canvas preview.${language}${quality}\n${safe}\n\nRequest:\n${prompt}`
+  const visualRules = kind === "website" || kind === "landing" || kind === "template" ? `\n\n${SITE_VISUAL_QUALITY_RULES}` : ""
+  return `Create a complete standalone HTML artifact for a ${kind}. It must be responsive, premium, investor-readable, production-styled, and ready for Canvas preview.${language}${quality}\n${safe}${visualRules}\n\nRequest:\n${prompt}`
 }
 
 function buildRouteMetadata(ctx: RequestContext, body: GenerationBody, extra: Record<string, unknown> = {}) {
