@@ -27,7 +27,9 @@ export function attachmentCsv(file:Attachment) {
 /** Only an explicit loss/surveillance request expands uploaded production analysis. */
 export function fieldTaskFromMessage(prompt:string, attachments?:Attachment[]):unknown|null {
   const structured=taskFromPetroleumPrompt(prompt) as {op?:string}|null
+  if (structured && attachments?.length) return attachmentTaskConflict()
   if (structured?.op === "field-surveillance") return structured
+  if (structured) return structured
   if (!attachments?.length || !/потер[ьиь]|наблюден|surveillance|production\s+loss|field\s+intelligence|خسائر\s+الإنتاج/iu.test(stripPetroleumToken(prompt))) return null
   if (attachments.length !== 1) return {op:"import-error",error:"Upload one production table per field workflow"}
   try {
@@ -40,6 +42,7 @@ export function fieldTaskFromMessage(prompt:string, attachments?:Attachment[]):u
 }
 export async function executePetroleumMessageAsync(input:{prompt:string;selectedSkillId?:unknown;attachments?:Attachment[];task?:unknown;signal?:AbortSignal;onProgress?:(event:FieldProgress)=>void}):Promise<{receipt:PetroleumReceipt;content:string}|null> {
   if (routePetroleum(input.prompt,input.selectedSkillId).engine !== "petroleum") return null
+  if (input.task != null && input.attachments?.length) return executePetroleumMessage(input)
   const task=input.task ?? fieldTaskFromMessage(input.prompt,input.attachments)
   if (!task) return executePetroleumMessage(input)
   const receipt=await runPetroleumAsync(task,{signal:input.signal,onProgress:input.onProgress})
@@ -79,6 +82,7 @@ export function executePetroleumMessage(input:{prompt:string;selectedSkillId?:un
   let task=input.task??taskFromPetroleumPrompt(input.prompt)
   try {
     if(input.attachments?.length) {
+      if(task)throw new Error(attachmentTaskConflict().error)
       if(input.attachments.length!==1)throw new Error("Upload one production table per calculation; no silent file merging")
       const gasReference= input.prompt.match(/gasReference\s*[:=]\s*([^\n]+)/i)?.[1]?.trim()
       const forecastMonths=Number(input.prompt.match(/(?:forecastMonths|прогноз)\s*[:=]\s*(\d+)/i)?.[1]??12)
@@ -89,4 +93,8 @@ export function executePetroleumMessage(input:{prompt:string;selectedSkillId?:un
   const receipt=runPetroleum(task)
   if((task as {op?:string})?.op==="import-error")receipt.error=String((task as {error:string}).error)
   return {receipt,content:petroleumReport(receipt,petroleumLanguage(input.prompt))}
+}
+/** Never substitute a production import for an explicit calculation or silently ignore a file. */
+function attachmentTaskConflict() {
+  return {op:"import-error",error:"ATTACHMENT_TASK_CONFLICT: An explicit calculation and an attachment were supplied together. Submit the calculation without the file, or send a separate file-analysis request; no operation was substituted and no file data were guessed."}
 }

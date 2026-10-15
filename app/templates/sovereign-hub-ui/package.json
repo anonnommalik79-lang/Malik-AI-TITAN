@@ -152,7 +152,7 @@
     "test:petroleum-full-ui": "node scripts/verify-petroleum-full-ui.mjs",
     "test:oil-report": "node scripts/verify-oil-report.mjs",
     "test:mpce": "node --test scripts/verify-mpce.mjs",
-    "test:oil-science": "node --test scripts/verify-oil-science.mjs scripts/verify-oil-advanced.mjs",
+    "test:oil-science": "node --test scripts/verify-oil-science.mjs scripts/verify-oil-advanced.mjs scripts/verify-oil-query-reliability.mjs",
     "test:oil-science-browser": "node scripts/verify-oil-science-browser.mjs",
     "test:petroleum-context": "node --test scripts/verify-petroleum-context.mjs",
     "test:oil-ensemble": "node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs scripts/verify-oil-ensemble.mjs",

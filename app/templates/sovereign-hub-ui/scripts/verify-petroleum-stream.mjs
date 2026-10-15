@@ -34,6 +34,17 @@ for(const example of scienceCases) {
   for(const deferred of after.splice(0))await deferred()
 }
 const csv='well_id,date,oil_bbl_day,water_bbl_day\nA,2025-01-01,80,20\nA,2025-02-01,60,40'
+for(const name of ['reference.csv','reference.xlsx','reference.pdf','reference.docx']) {
+  const prompt='@Malik Oil AI method=waterflood dataKind=synthetic waterRelPerm=.2 oilRelPerm=.8 waterViscosityPaS=.001 oilViscosityPaS=.004 injectedReservoirM3=1200 producedReservoirM3=1000 poreVolumeM3=10000'
+  const response=await POST(new Request('http://fixture/api/stream',{method:'POST',headers:{'content-type':'application/json','accept':'text/event-stream'},body:JSON.stringify({originalQuestion:prompt,selectedSkillId:'petroleum.analyze',attachments:[{name,text:csv,base64:Buffer.from(csv).toString('base64'),kind:'file'}],workspaceMode:'work',stream:true})}))
+  assert.equal(response.status,200)
+  const events=(await response.text()).split('\n\n').filter(x=>x.includes('data: ')).map(frame=>JSON.parse(frame.split('\ndata: ')[1]))
+  const answer=events.filter(e=>e.type==='content').map(e=>e.content).join('')
+  assert.match(answer,/ATTACHMENT_TASK_CONFLICT/,name)
+  assert.ok(!answer.includes('```oil-report'),name+' must not fall back to an unrelated production report')
+  assert.equal(events.filter(e=>e.type==='done').length,1)
+  for(const deferred of after.splice(0))await deferred()
+}
 for(const language of ['ru','ar','en','kk']) {
   const text={ru:'Проанализируй нефтяную скважину',ar:'حلل إنتاج النفط',en:'Analyze oil well production',kk:'Мұнай ұңғымаларын талда'}[language]
   const response=await POST(new Request('http://fixture/api/stream',{method:'POST',headers:{'content-type':'application/json','accept':'text/event-stream'},body:JSON.stringify({originalQuestion:text,selectedSkillId:'petroleum.analyze',attachments:[{name:'production.csv',mime:'text/csv',kind:'file',text:csv}],workspaceMode:'work',isProjectRequest:true,forceCanvas:true,responseMode:'canvas',stream:true})}))

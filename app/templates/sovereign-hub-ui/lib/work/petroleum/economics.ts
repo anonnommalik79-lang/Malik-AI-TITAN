@@ -1,4 +1,5 @@
 import { finite } from "./units"
+import { decimalCashflows } from "./decimal-cashflow"
 /** Periodic end-period cash flows; CF0 at t=0. Rate is per period, not implicitly annual. */
 export function npv(cashflows: number[], rate: number) {
   if (!cashflows.length || cashflows.length > 1201 || !Number.isFinite(rate) || rate <= -1 || rate > 100) throw new RangeError("Invalid periodic cashflows/discount rate")
@@ -34,12 +35,12 @@ export function economics(input: EconomicsInput) {
   const { volumes, price, variableOpex, fixedOpex, capex, discountRate } = input
   if (!volumes.length || volumes.length > 1200) throw new RangeError("Volume horizon required")
   for (const v of [price, variableOpex, fixedOpex, capex, ...volumes]) finite(v)
-  const cashflows = [-capex, ...volumes.map(v => finite(v * (price - variableOpex) - fixedOpex, "cashflow", false))]
+  const cashflows = [-capex, ...decimalCashflows(volumes, price, variableOpex, fixedOpex)]
   let cumulative = -capex, payback: number | null = capex === 0 ? 0 : null
   cashflows.slice(1).forEach((cf, i) => { const previous = cumulative; cumulative += cf; if (payback === null && previous < 0 && cumulative >= 0 && cf > 0) payback = i + (-previous / cf) })
   const pvVolumes = npv([0, ...volumes], discountRate)
   const breakEvenPrice = pvVolumes > 0 ? variableOpex + (capex + npv([0, ...volumes.map(() => fixedOpex)], discountRate)) / pvVolumes : null
   return { cashflows, npv: npv(cashflows, discountRate), irr: irr(cashflows), paybackPeriods: payback, breakEvenPrice,
-    sensitivity: [0.8, 1, 1.2].map(factor => ({ price: price * factor, npv: npv([-capex, ...volumes.map(v => v * (price * factor - variableOpex) - fixedOpex)], discountRate) })),
+    sensitivity: [0.8, 1, 1.2].map(factor => ({ price: price * factor, npv: npv([-capex, ...decimalCashflows(volumes, price * factor, variableOpex, fixedOpex)], discountRate) })),
     assumptions: ["Pre-tax, unlevered; no royalties, tax, inflation, FX, abandonment or working capital included", `Price and variable OPEX per unit of supplied volumes; fixed OPEX per ${input.period}; discount rate per ${input.period}`, "Price scenarios ±20% are assumptions, not probabilities; payback uses uniform cash accrual within period"] }
 }

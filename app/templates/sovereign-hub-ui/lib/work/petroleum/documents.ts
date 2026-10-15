@@ -5,6 +5,7 @@ import { crc32 } from "../documents/zip"
 import { runPetroleum } from "./engine"
 import { routePetroleum } from "./router"
 import { petroleumLanguage, petroleumReport } from "./report"
+import { taskFromPetroleumPrompt } from "./message"
 const LIMIT=4*1024*1024, TEXT_LIMIT=1_000_000
 type DocumentAttachment={name?:string;mime?:string;base64?:string;size?:number}
 function xmlText(xml:string) {
@@ -73,6 +74,8 @@ export function productionTableCsv(tables:string[][][]) {
 }
 export async function executePetroleumDocument(input:{prompt:string;selectedSkillId?:unknown;attachments?:DocumentAttachment[]}) {
   if(routePetroleum(input.prompt,input.selectedSkillId).engine!=="petroleum"||!Array.isArray(input.attachments)||!input.attachments.some(f=>/\.(?:pdf|docx)$/i.test(f.name||'')))return null
+  // Let the message dispatcher report an explicit task/file conflict before extracting a document.
+  if(taskFromPetroleumPrompt(input.prompt))return null
   let task:unknown
   try {
     if(input.attachments.length!==1)throw new Error("Upload one document per analysis; files are never silently merged")

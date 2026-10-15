@@ -9,7 +9,7 @@ export function scienceTaskFromPrompt(text:string):{op:"scientific";input:Record
   for(const match of text.matchAll(/\b([A-Za-z][A-Za-z0-9]*)\s*[:=]\s*(?:"([^"\r\n]*)"|'([^'\r\n]*)'|([^\s;]+))/g)){
     const key=match[1],value=match[2]??match[3]??match[4]
     if(Object.hasOwn(input,key))return {op:"scientific",input:{method,duplicateParameter:key}}
-    input[key]=/^[+-]?\d+(?:\.\d+)?(?:e[+-]?\d+)?$/i.test(value)?Number(value):value
+    input[key]=/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i.test(value)?Number(value):value
   }
   input.method=method
   return {op:"scientific",input}

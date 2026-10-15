@@ -5,7 +5,7 @@ import { petroleumLanguage, petroleumReport } from "./report"
 import type { analyzeProduction } from "./production"
 import { parseProductionTable, readPrice, type TableParse } from "./table-input"
 import { analyzePetroleumDataset } from "./analysis"
-import { attachmentCsv } from "./message"
+import { attachmentCsv, taskFromPetroleumPrompt } from "./message"
 import {executeMpce} from "./mpce"
 import { oilReportFence } from "./visual-report"
 import { oilNeedsInput, oilWord } from "./analysis-i18n"
@@ -144,6 +144,7 @@ export function withOilVisual(petroleum: { receipt: PetroleumReceipt; content: s
 /** Reuse the same contextual units for uploaded CSV/TSV and visible XLSX cell metadata. */
 export function executePetroleumAttachmentTable(input: Parameters<typeof executePetroleumTable>[0] & { attachments?: Array<{ name?: string; mime?: string; text?: string; base64?: string; size?: number }> }) {
   if (input.attachments?.length !== 1 || !/\.(?:csv|tsv|xlsx)$/i.test(input.attachments[0].name || "")) return null
+  if (taskFromPetroleumPrompt(input.prompt)) return null
   try {
     const file = input.attachments[0]
     return executePetroleumTable({ ...input, prompt: input.prompt + "\n\n" + attachmentCsv(file), source: /\.xlsx$/i.test(file.name || "") ? "xlsx" : "csv" })

@@ -8,7 +8,7 @@ import { analyzeField, analyzeFieldAsync, type FieldResult, type FieldRunOptions
 import {volumetricOil} from "./volumetric"
 import {executeScience} from "./science"
 import {SCIENCE_METHODS} from "./science-methods"
-export const PETROLEUM_ALGORITHM_VERSION="malik-petroleum-1.4.0"
+export const PETROLEUM_ALGORITHM_VERSION="malik-petroleum-1.4.1"
 export type EvidenceClass = "Verified Measurement" | "Verified External Source" | "Deterministic Calculation" | "Statistical Estimate" | "Engineering Assumption" | "AI Hypothesis" | "Missing Evidence"
 export type PetroleumReceipt = {ok:boolean;version:string;inputHash:string;task:unknown;result?:unknown;error?:string;method:string;variables:string;units:string;assumptions:string[];evidence:EvidenceClass[];humanReview:boolean;uncertainty:string;limitations:string[]}
 const methods:Record<PetroleumTask["op"],[string,string,string]>={
