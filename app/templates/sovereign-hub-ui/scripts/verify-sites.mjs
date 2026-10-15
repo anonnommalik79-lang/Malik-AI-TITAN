@@ -38,6 +38,17 @@ async function loadModule(file, stubs = {}) {
   return import(`data:text/javascript,${encodeURIComponent(code)}`)
 }
 
+// ------------------------------------ AI / SaaS generated site visual quality
+// The Sites studio and generic artifact generator must share the same
+// responsive header, relevant hero media, and no-fabricated-claims guidance.
+const visualQuality = codeOf("lib/website/design-quality.ts")
+assert.match(visualQuality, /DESKTOP HEADER.*Never let desktop navigation wrap/, "Десктопное меню не должно переноситься")
+assert.match(visualQuality, /MOBILE HEADER.*accessible menu button/, "Должно быть адаптивное мобильное меню")
+assert.match(visualQuality, /AI \/ SaaS \/ developer products.*generic office meetings/, "Для AI hero не подходит случайный офис")
+assert.match(visualQuality, /CONTENT INTEGRITY.*never invent prices/i, "Запрещены выдуманные данные")
+assert.match(codeOf("app/api/generate/website/route.ts"), /SITE_VISUAL_QUALITY_RULES/, "Студия сайтов должна применять требования")
+assert.match(codeOf("lib/generation-route.ts"), /SITE_VISUAL_QUALITY_RULES/, "Генерация артефактов должна применять требования")
+
 // ---------------------------------------------------------------- no pinning
 
 const route = codeOf("lib/sites/generate-site-route.ts")
