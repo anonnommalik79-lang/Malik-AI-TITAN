@@ -177,6 +177,20 @@ export function serverToolDeps(): ToolDeps {
       },
     },
     async site(request) {
+      // A local business (café, salon, clinic, hotel, shop) gets a forge site;
+      // software products keep the landing-page engine below.
+      const { forgeSiteWithRouter } = await import("@/lib/sites/forge/server")
+      const forged = await forgeSiteWithRouter({ prompt: request.prompt, userId: request.userId, signal: request.signal, lane: "os-site", strict: true })
+      if (forged) {
+        return {
+          html: forged.result.html,
+          plan: forged.result.plan as never,
+          provider: forged.provider,
+          model: forged.model,
+          plannerUsed: forged.result.planner.used,
+          quality: { score: forged.result.quality.score, issues: forged.result.quality.issues.map((issue) => issue.message) },
+        }
+      }
       const [{ buildPlannerPrompt, fallbackWebsitePlan, renderWebsiteFromPlan }, { selectSiteSkills }, { planWebsite, scoreWebsitePlan }] = await Promise.all([
         import("@/lib/sites/skill-engine"),
         import("@/lib/sites/skill-registry"),

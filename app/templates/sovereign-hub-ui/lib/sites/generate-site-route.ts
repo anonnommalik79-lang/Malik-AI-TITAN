@@ -1,3 +1,5 @@
+import { forgeSiteWithRouter } from "./forge/server"
+import { FORGE_VERSION } from "./forge/plan"
 import { buildPlannerPrompt, fallbackWebsitePlan, renderWebsiteFromPlan } from "./skill-engine"
 import { publicSkillSources, selectSiteSkills } from "./skill-registry"
 import { planWebsite, scoreWebsitePlan } from "./site-planner"
@@ -7,6 +9,8 @@ export const SITES_SKILL_ENGINE_VERSION = "malik-sites/v4"
 type SiteRequestBody = {
   prompt?: string
   message?: string
+  /** The site being edited; a Malik Site Forge page is changed through its embedded plan. */
+  previousHtml?: string
   template?: string
   style?: string
   quality?: string
@@ -62,10 +66,53 @@ export async function handleSkillWebsiteGenerationRequest(request: Request) {
     }, 400)
   }
 
+  const userId = text(body.userId || body.userEmail || "sites-guest", 180) || "sites-guest"
+
+  // Places people visit or buy from (cafés, salons, clinics, hotels, shops) and
+  // edits of a forge site go to Malik Site Forge: six working pages, basket,
+  // booking, photographs and the interface skills checked in the page.
+  const forged = await forgeSiteWithRouter({
+    prompt,
+    userId,
+    lane: "sites-forge",
+    signal: request.signal,
+    previousHtml: typeof body.previousHtml === "string" ? body.previousHtml.slice(0, 600_000) : "",
+  })
+  if (forged) {
+    const { result } = forged
+    const name = result.plan.brand.name
+    const skillSources = result.skills.map((skill) => ({ id: skill.id, name: skill.name, category: skill.group, source: skill.name, repo: skill.repo, url: skill.url, role: skill.does, capabilities: [] as string[] }))
+    return json({
+      ok: true,
+      kind: "website",
+      status: "ready",
+      engine: FORGE_VERSION,
+      model: result.planner.used ? forged.model : "Malik Site Forge",
+      provider: result.planner.used ? forged.provider : "local",
+      format: "ForgePlan -> Malik Site Forge -> standalone multi-page HTML/CSS/JS",
+      html: result.html,
+      code: result.html,
+      content: result.html,
+      plan: result.plan,
+      pages: result.pages,
+      understood: result.plan.understood || "",
+      quality: { score: result.quality.score, issues: result.quality.issues.map((issue) => issue.message) },
+      skills: skillSources,
+      skillCount: skillSources.length,
+      photos: result.photoStats,
+      samples: result.plan.samples,
+      planner: { used: result.planner.used, attempts: result.planner.attempts, fallbackUsed: !result.planner.used },
+      fallback: !result.planner.used,
+      message: forged.mode === "edit"
+        ? `Сайт «${name}» обновлён через его план: изменено только то, что вы попросили.`
+        : `Сайт «${name}» собран Malik Site Forge: ${result.pages.length} страниц, ${skillSources.length} скиллов интерфейсов, проверка качества ${result.quality.score}/100.${result.planner.used ? "" : " Тексты из шаблона: модель сейчас не ответила."}`,
+      latencyMs: Date.now() - startedAt,
+    })
+  }
+
   const skills = selectSiteSkills(prompt, template)
   const sources = publicSkillSources(skills)
   const plannerPrompt = buildPlannerPrompt(prompt, template, skills)
-  const userId = text(body.userId || body.userEmail || "sites-guest", 180) || "sites-guest"
 
   // Model-independent: whatever text provider is configured gets a turn, the
   // plan it returns is scored against the request, and a weak plan is sent back

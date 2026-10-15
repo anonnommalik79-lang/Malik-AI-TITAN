@@ -202,6 +202,36 @@ test("skills: every site carries 20+ GitHub interface skills, and only the ones 
   assert.equal(realLd.telephone, "+7 701 555 44 33")
 })
 
+test("studio and OS: local businesses get the forge, edits go through the plan, software keeps its engine", async () => {
+  const routed = []
+  const studio = workTestLoader({
+    "@/lib/ai/router": { routeAI: async (input) => { routed.push(input); const plan = input.prompt.includes("CURRENT PLAN:") ? { ...JSON.parse(input.prompt.split("CURRENT PLAN:\n")[1].split("\n\nUSER REQUEST")[0]), direction: "edge" } : PLAN; return { success: true, provider: "groq", model: "fixture-model", output: JSON.stringify(plan) } } },
+    "@/lib/server/presentation-photos": { findPhoto: async () => null },
+  })
+  const { handleSkillWebsiteGenerationRequest } = studio("lib/sites/generate-site-route.ts")
+  const { forgeTakes } = studio("lib/sites/forge/server.ts")
+  const call = async (body) => (await handleSkillWebsiteGenerationRequest(new Request("http://fixture/api/generate/website", { method: "POST", body: JSON.stringify(body) }))).json()
+
+  const made = await call({ prompt: "создай сайт для кофейни в Алматы" })
+  assert.equal(made.engine, "malik-forge/v1")
+  assert.equal(made.provider, "groq")
+  assert.match(made.html, /data-page="booking"/)
+  assert.ok(made.skillCount >= 20 && made.skills.every((skill) => skill.url.startsWith("https://github.com/")))
+  assert.equal(made.plan.brand.name, "Aroma Beans")
+  assert.ok(routed.every((input) => !input.provider && !input.model), "no provider or model is pinned")
+
+  const edited = await call({ prompt: "сделай темнее", previousHtml: made.html })
+  assert.equal(edited.plan.brand.name, "Aroma Beans")
+  assert.equal(edited.plan.direction, "edge")
+  assert.match(edited.message, /обновлён/)
+
+  const saas = await call({ prompt: "создай лендинг для SaaS платформы аналитики" })
+  assert.equal(saas.engine, "malik-sites/v4", "a software landing keeps the landing-page engine")
+
+  assert.equal(forgeTakes("Создай лендинг для компании Brew. Продукт: приложение для заказа кофе", { strict: true }), false)
+  assert.equal(forgeTakes("Создай лендинг для компании «Brew». Продукт: кофейня с собственной обжаркой", { strict: true }), true)
+})
+
 test("quality: forge sites pass; a typical model site's faults are named", async () => {
   for (const prompt of ["создай сайт на кофейню", "сайт барбершопа", "website for a boutique hotel", "сайт стоматологии", "сайт салона красоты", "сайт пиццерии", "сайт магазина одежды", "сайт фитнес клуба", "сайт юриста"]) {
     const site = await forgeSite({ prompt })
