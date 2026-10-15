@@ -232,6 +232,75 @@ test("studio and OS: local businesses get the forge, edits go through the plan, 
   assert.equal(forgeTakes("Создай лендинг для компании «Brew». Продукт: кофейня с собственной обжаркой", { strict: true }), true)
 })
 
+test("publish: a forge site gets a public link; only a re-rendered forge page can be published", async () => {
+  const objects = new Map()
+  let etagCounter = 0
+  const store = {
+    privateJsonStoreConfigured: () => true,
+    readPrivateJson: async (key) => (objects.has(key) ? JSON.parse(objects.get(key).body) : null),
+    readPrivateJsonVersioned: async (key) => (objects.has(key) ? { value: JSON.parse(objects.get(key).body), etag: objects.get(key).etag } : { value: null, etag: null }),
+    writePrivateJson: async (key, value) => { objects.set(key, { body: JSON.stringify(value), etag: `e${++etagCounter}` }); return true },
+    writePrivateJsonConditional: async (key, value, etag) => {
+      const current = objects.get(key)
+      if ((etag === null && current) || (etag !== null && current?.etag !== etag)) return { stored: false, conflict: true }
+      objects.set(key, { body: JSON.stringify(value), etag: `e${++etagCounter}` })
+      return { stored: true, conflict: false }
+    },
+    deletePrivateJson: async (key) => objects.delete(key),
+  }
+  let viewer = { authenticated: true, userId: "user-aliya", plan: "free" }
+  const pub = workTestLoader({
+    "./private-json-store": store,
+    "@/lib/server/private-json-store": store,
+    "@/lib/server/request-entitlement": { resolveRequestEntitlement: async () => viewer },
+  })
+  const { preparePublishedSite, PUBLISHED_SITE_CSP } = pub("lib/sites/forge/publish.ts")
+  const { publishSite, readPublishedSite, unpublishSite } = pub("lib/server/published-sites.ts")
+  const { POST } = pub("app/api/sites/publish/route.ts")
+  const { GET } = pub("app/site/[id]/route.ts")
+
+  const site = await forgeSite({ prompt: "создай сайт на кофейню «Арома»" })
+  assert.equal(preparePublishedSite("<!doctype html><html><body><script>steal()</script></body></html>").code, "NOT_A_SITE")
+  // Whatever was added to the posted page is gone: the server renders the plan again.
+  const tampered = site.html.replace("</main>", "<script>fetch('/api/account').then(r=>r.text()).then(t=>top.postMessage(t,'*'))</script></main>").replace(/"url":"https:[^"]+"/, '"url":"javascript:alert(1)"')
+  const prepared = preparePublishedSite(tampered)
+  assert.equal(prepared.ok, true)
+  assert.doesNotMatch(prepared.html, /api\/account|javascript:alert/)
+  assert.equal(prepared.brand, "Арома")
+  assert.match(PUBLISHED_SITE_CSP, /^sandbox allow-scripts/)
+  assert.doesNotMatch(PUBLISHED_SITE_CSP, /allow-same-origin/, "the page never shares the app's origin")
+
+  const first = await publishSite("user-aliya", site.html)
+  assert.equal(first.ok, true)
+  assert.equal(first.updated, false)
+  const again = await publishSite("user-aliya", site.html.replace(/Ваши контакты/, "Ваши контакты"))
+  assert.equal(again.record.id, first.record.id, "the same site keeps its link")
+  assert.equal(again.updated, true)
+  const other = await publishSite("user-aliya", (await forgeSite({ prompt: "сайт барбершопа «Бритва»" })).html)
+  assert.notEqual(other.record.id, first.record.id)
+
+  const page = await GET(new Request("http://fixture/site/x"), { params: Promise.resolve({ id: first.record.id }) })
+  assert.equal(page.status, 200)
+  assert.match(page.headers.get("content-security-policy"), /sandbox/)
+  assert.equal(page.headers.get("x-robots-tag"), "noindex, nofollow")
+  assert.match(await page.text(), /data-page="booking"/)
+  assert.equal((await GET(new Request("http://fixture/site/x"), { params: Promise.resolve({ id: "ABCDEFGHJKLM" }) })).status, 404)
+
+  assert.equal((await unpublishSite(first.record.id, { userId: "user-someone-else" })).code, "FORBIDDEN")
+  assert.equal((await unpublishSite(first.record.id, { userId: "user-aliya" })).ok, true)
+  assert.equal(await readPublishedSite(first.record.id), null)
+
+  const post = (html) => POST(new Request("http://fixture/api/sites/publish", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ html }) }))
+  const created = await post(site.html)
+  assert.equal(created.status, 201)
+  assert.match((await created.json()).site.path, /^\/site\/[A-Za-z0-9]{12}$/)
+  assert.equal((await post("<html>not a forge site</html>")).status, 422)
+  viewer = { authenticated: false, userId: "guest-1", plan: "free" }
+  const guest = await post(site.html)
+  assert.equal(guest.status, 401)
+  assert.match((await guest.json()).message, /Войдите/)
+})
+
 test("quality: forge sites pass; a typical model site's faults are named", async () => {
   for (const prompt of ["создай сайт на кофейню", "сайт барбершопа", "website for a boutique hotel", "сайт стоматологии", "сайт салона красоты", "сайт пиццерии", "сайт магазина одежды", "сайт фитнес клуба", "сайт юриста"]) {
     const site = await forgeSite({ prompt })

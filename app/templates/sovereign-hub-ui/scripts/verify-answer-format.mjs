@@ -103,6 +103,8 @@ new Function("require", "module", "exports", "React", js.replace(/require\("reac
     if (name === "./MalikAnswerQuiz") return loadPure("components/sovereign/MalikAnswerQuiz.tsx")
     if (name === "./MalikOilReport") return loadPure("components/sovereign/MalikOilReport.tsx")
     if (name === "./MalikAnswerChecklist") return loadPure("components/sovereign/MalikAnswerChecklist.tsx")
+    // Site publishing has its own suite (test:site-forge); here a code block only needs to render.
+    if (name === "./SitePublish") return { isForgeSiteHtml: (code) => String(code).includes('id="malik-site"'), SitePublishButton: () => null, SitePublishStrip: () => null, useSitePublish: () => ({ state: { status: "idle" }, publish() {}, unpublish() {}, reset() {} }) }
     // Interactive Visual Engine blocks have their own suite (test:visual-engine);
     // here only their placement in the answer matters.
     if (name === "@/lib/visual/detect") return loadPure("lib/visual/detect.ts")

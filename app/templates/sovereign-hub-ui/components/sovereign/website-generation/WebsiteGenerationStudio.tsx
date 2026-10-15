@@ -5,6 +5,7 @@ import { ArrowLeft, Code2, Download, ExternalLink, Globe2, Loader2, Monitor, Plu
 import { clientFetchWithTimeout } from "@/lib/api-client"
 import { buildTemplateSite } from "@/lib/website/site-template-builder"
 import { OverlayPortal } from "@/components/sovereign/OverlayPortal"
+import { isForgeSiteHtml, SitePublishButton, SitePublishStrip, useSitePublish } from "@/components/sovereign/SitePublish"
 
 export type WebsiteGenerationStudioProps = {
   username?: string
@@ -290,6 +291,9 @@ export function WebsiteGenerationStudio({ onOpenCodex, onOpenCanvas }: WebsiteGe
   const [device, setDevice] = useState<"desktop" | "mobile">("desktop")
   const [opening, setOpening] = useState<string | null>(null)
   const [openCard, setOpenCard] = useState<string | null>(null)
+  // A Malik Site Forge site gets a public link in one click.
+  const publishable = isForgeSiteHtml(html)
+  const publishing = useSitePublish(publishable ? html : "")
   const fileRef = useRef<HTMLInputElement>(null)
 
   /**
@@ -568,7 +572,9 @@ export function WebsiteGenerationStudio({ onOpenCodex, onOpenCanvas }: WebsiteGe
             {onOpenCanvas && <button className="secondaryButton" disabled={!html} onClick={() => onOpenCanvas(html)}>Canvas</button>}
             <button className="secondaryButton" disabled={!html} onClick={openInNewTab}><ExternalLink /> Открыть</button>
             <button className="secondaryButton" disabled={!html} onClick={downloadHtml}><Download /> Скачать HTML</button>
+            {publishable && <SitePublishButton className="primaryButton" state={publishing.state} onPublish={() => void publishing.publish()} />}
           </div>
+          {publishable && <SitePublishStrip state={publishing.state} onUnpublish={(id) => void publishing.unpublish(id)} onClose={publishing.reset} />}
 
           {html && <section className="livePreview"><div className="browserBar"><i /><i /><i /><span>Live preview</span></div><iframe title="Generated website" srcDoc={html} sandbox="allow-scripts allow-forms allow-modals allow-popups" /></section>}
           <input ref={fileRef} hidden type="file" accept=".html,.htm,text/html" onChange={importHtml} />

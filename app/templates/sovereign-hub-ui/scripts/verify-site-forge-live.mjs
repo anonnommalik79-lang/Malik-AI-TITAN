@@ -207,6 +207,27 @@ for (const [id, prompt] of prompts) {
   ok(`${id}/sandbox: no script errors`, errors.length === 0, errors.join(" | "))
   await ctx.close()
 }
+// A published page (/site/<id>) under its real headers: it works, and it is isolated from the app.
+{
+  const { preparePublishedSite, publishedSiteHeaders } = load("lib/sites/forge/publish.ts")
+  const prepared = preparePublishedSite((await forgeSite({ prompt: "создай сайт на кофейню" })).html)
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true })
+  await ctx.route("**/*", (route) => (route.request().url() === "https://malikaiworld.test/site/ABCDEFGHJKLM" ? route.fulfill({ status: 200, headers: publishedSiteHeaders(), body: prepared.html }) : route.abort()))
+  const page = await ctx.newPage()
+  const errors = []
+  page.on("pageerror", (error) => errors.push(error.message))
+  await page.goto("https://malikaiworld.test/site/ABCDEFGHJKLM")
+  await page.waitForFunction(() => document.documentElement.getAttribute("data-ready") === "true")
+  ok("published: the page runs under its sandboxing policy", true)
+  ok("published: it cannot read the app's cookies or storage", await page.evaluate(() => { try { void document.cookie; localStorage.getItem("x"); return false } catch { return true } }))
+  await page.click("[data-menu-toggle]")
+  await page.click('#mnav [data-nav="catalog"]')
+  ok("published: pages switch", (await page.evaluate(() => document.querySelector(".page.is-active")?.getAttribute("data-page"))) === "catalog")
+  await page.click(`[data-catalog-page] [data-add="${prepared.plan.catalog.items[0].id}"]`)
+  ok("published: the basket works without storage", (await page.textContent(".hdr [data-cart-count]")) === "1")
+  ok("published: no script errors", errors.length === 0, errors.join(" | "))
+  await ctx.close()
+}
 await browser.close()
 assert.equal(failures, 0, `${failures} live checks failed`)
 console.log("all site forge live checks passed")

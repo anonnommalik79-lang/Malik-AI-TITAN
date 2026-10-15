@@ -56,7 +56,7 @@ export function siteForgeTurn(prompt: string, input: { messages?: unknown; attac
 const COPY: Record<ForgeLocale, {
   ready: (name: string, count: number, pages: string) => string; updated: (name: string) => string; works: string; order: string; booking: Record<string, string>
   catalog: string; menu: string; gallery: string; map: string; samples: (fields: string) => string; fields: Record<string, string>; photosCurated: string; photosFound: string; photosNone: string
-  next: string; fallback: string; pageNames: Record<string, string>; skills: (count: number) => string
+  next: string; fallback: string; pageNames: Record<string, string>; skills: (count: number) => string; publish: string
 }> = {
   ru: {
     ready: (name, count, pages) => `**Сайт «${name}» готов** — ${count} страниц: ${pages}.`,
@@ -68,6 +68,7 @@ const COPY: Record<ForgeLocale, {
     fields: { phone: "телефон", email: "почту", address: "адрес" },
     photosCurated: "Фото подобраны по теме из бесплатной библиотеки Unsplash (можно использовать в коммерческих проектах).", photosFound: "Фото найдены по теме; авторы и лицензии указаны внизу сайта.", photosNone: "Фото подставить не удалось — на их местах аккуратные цветные плитки, их можно заменить своими снимками.",
     next: "Можно попросить: «сделай темнее», «добавь в меню раф за 1800», «поменяй название на …».",
+    publish: "**Ссылка на сайт:** нажмите «Опубликовать» в панели кода — сайт откроется у любого по адресу malikaiworld.world/site/…; после правок публикация обновляется по той же ссылке.",
     skills: (count) => `**Скиллы интерфейсов: ${count}** — паттерны из открытых дизайн-систем GitHub, написанные заново в коде сайта (без чужих библиотек и внешних скриптов). Каждый проверен в готовой странице:`,
     fallback: "Тексты взяты из шаблона Malik для этой отрасли: модель сейчас не ответила. Напишите «перепиши тексты под мою кофейню», когда захотите обновить.",
     pageNames: { home: "Главная", catalog: "", about: "О нас", gallery: "Галерея", booking: "", contacts: "Контакты" },
@@ -82,6 +83,7 @@ const COPY: Record<ForgeLocale, {
     fields: { phone: "телефон", email: "пошта", address: "мекенжай" },
     photosCurated: "Фотолар тақырып бойынша Unsplash тегін кітапханасынан алынды.", photosFound: "Фотолар тақырып бойынша табылды; авторлары сайттың төменгі жағында көрсетілген.", photosNone: "Фото қою мүмкін болмады — орнында түсті плиткалар тұр, өз суреттеріңізбен ауыстыруға болады.",
     next: "Сұрауға болады: «қараңғырақ қыл», «мәзірге раф қос», «атауын … деп өзгерт».",
+    publish: "**Сайтқа сілтеме:** код панеліндегі «Опубликовать» батырмасын басыңыз — сайт кез келген адамға malikaiworld.world/site/… мекенжайында ашылады; өзгерістерден кейін сол сілтеме жаңарады.",
     skills: (count) => `**Интерфейс скиллдері: ${count}** — GitHub ашық дизайн-жүйелерінің үлгілері, сайт кодында қайта жазылған (бөгде кітапханасыз). Әрқайсысы дайын бетте тексерілді:`,
     fallback: "Мәтіндер Malik үлгісінен алынды: модель қазір жауап бермеді.",
     pageNames: { home: "Басты бет", catalog: "", about: "Біз туралы", gallery: "Галерея", booking: "", contacts: "Байланыс" },
@@ -96,6 +98,7 @@ const COPY: Record<ForgeLocale, {
     fields: { phone: "phone", email: "email", address: "address" },
     photosCurated: "Photos are on-topic picks from the free Unsplash library (commercial use allowed).", photosFound: "Photos were found for the topic; authors and licences are credited in the footer.", photosNone: "No photos could be placed — calm colour tiles hold their spots; swap in your own pictures.",
     next: "Try next: «make it darker», «add a flat white for $5 to the menu», «rename it to …».",
+    publish: "**A link to the site:** press «Опубликовать» (Publish) in the code bar — anyone can open it at malikaiworld.world/site/…; after edits the same link is updated.",
     skills: (count) => `**Interface skills: ${count}** — patterns from open-source GitHub design systems, rewritten in the site's own code (no third-party libraries or scripts). Each one is checked in the finished page:`,
     fallback: "The copy comes from Malik's template for this business: the model did not answer just now. Ask «rewrite the copy for my business» later.",
     pageNames: { home: "Home", catalog: "", about: "About", gallery: "Gallery", booking: "", contacts: "Contact" },
@@ -122,6 +125,8 @@ export function forgeChatMessage(result: ForgeResult, mode: "new" | "edit") {
     "```",
     "",
     ...(fields.length ? [copy.samples(fields.join(", ")), ""] : []),
+    copy.publish,
+    "",
     photoLine,
     ...(result.planner.used ? [] : ["", copy.fallback]),
     "",

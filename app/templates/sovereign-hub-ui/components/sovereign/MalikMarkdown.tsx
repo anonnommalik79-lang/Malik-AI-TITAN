@@ -33,6 +33,7 @@ import { parseAnswerQuiz, type AnswerQuiz } from "@/lib/ai/answer-quiz"
 import { diffLines } from "@/lib/os/diff"
 import { MalikAnswerQuiz } from "./MalikAnswerQuiz"
 import { MalikOilReport } from "./MalikOilReport"
+import { isForgeSiteHtml, SitePublishButton, SitePublishStrip, useSitePublish } from "./SitePublish"
 export type { MalikCitation } from "@/lib/ai/citation-names"
 
 type Props = { text: string; className?: string; allowImages?: boolean; autoPreview?: boolean; citations?: MalikCitation[]; /** A public answer page: see SharedPageContext. */ shared?: boolean; visualContext?: { question: string; messageId?: string; previousQuestion?: string; previousAnswer?: string; hasAttachment?: boolean; isLatest?: boolean; streaming?: boolean } }
@@ -964,6 +965,9 @@ function CodeBlock({ language, filename, code, previewFiles, autoPreview = false
   const diff = useMemo(() => isUnifiedDiff(language, code) ? diffStats(code) : null, [language, code])
   const tree = useMemo(() => diff || !/^(?:|text|txt|plaintext|tree|bash|sh|shell|md|markdown)$/i.test(language) ? null : parseTextTree(code), [diff, language, code])
   const [treeAsText, setTreeAsText] = useState(false)
+  // A Malik Site Forge page can be published by link straight from the answer.
+  const publishable = !shared && isForgeSiteHtml(code)
+  const site = useSitePublish(publishable ? code : "")
 
   const copy = async () => {
     try {
@@ -1006,6 +1010,7 @@ function CodeBlock({ language, filename, code, previewFiles, autoPreview = false
                 {previewOpen ? "Скрыть" : "Предпросмотр"}
               </button>
             ) : null}
+            {publishable ? <SitePublishButton state={site.state} onPublish={() => void site.publish()} /> : null}
             <button type="button" onClick={() => downloadTextArtifact(filename, code)} aria-label={"Скачать " + filename}>
               <Download aria-hidden="true" />
               Скачать
@@ -1016,6 +1021,7 @@ function CodeBlock({ language, filename, code, previewFiles, autoPreview = false
             </button>
           </div>
         </div>
+        {publishable ? <SitePublishStrip state={site.state} onUnpublish={(id) => void site.unpublish(id)} onClose={site.reset} /> : null}
         {tree && !treeAsText
           ? <div className="malik-md-tree" role="tree" aria-label="Структура проекта"><FileTree nodes={tree} level={1} /></div>
           : <pre className={"malik-md-pre" + (diff ? " is-diff" : "")} data-language={language || undefined} data-filename={filename}>

@@ -602,3 +602,45 @@
 @media (max-width: 767px) {
   body:has(.malik-chat-scroll .malik-md-table-scroll) { touch-action: auto; }
 }
+
+/* «Опубликовать» под кодом сайта: ссылка, копирование, снятие с публикации. Чёрно-белое, как весь чат. */
+.site-publish-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+  padding: 12px 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  background: #0b0b0b;
+  color: #f5f5f5;
+  font-size: 13px;
+  line-height: 1.45;
+}
+.site-publish-strip.is-error { background: #141414; }
+.site-publish-strip__text { display: grid; gap: 2px; min-width: 0; }
+.site-publish-strip__text strong { font-weight: 600; }
+.site-publish-strip__text a { color: #fff; text-decoration: underline; text-underline-offset: 3px; overflow-wrap: anywhere; }
+.site-publish-strip__actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.site-publish-strip__actions button,
+.site-publish-strip__actions a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 999px;
+  background: transparent;
+  color: #fff;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+}
+.site-publish-strip__actions button:hover,
+.site-publish-strip__actions a:hover { background: #fff; color: #000; }
+.site-publish-strip svg { width: 14px; height: 14px; }
+.malik-md-codebar-actions .spin, .site-publish-strip .spin { animation: site-publish-spin 0.9s linear infinite; }
+@keyframes site-publish-spin { to { transform: rotate(360deg); } }
