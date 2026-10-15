@@ -124,9 +124,16 @@ for (const [id, prompt] of prompts) {
     await page.fill("#b-date", tomorrow)
     await page.dispatchEvent("#b-date", "change")
     if (await page.$("#b-time")) ok(`${tag}: time slots for tomorrow`, (await page.$$eval("#b-time option", (options) => options.filter((option) => option.value).length)) > 3)
+    if (await page.$("[data-slots] .slot")) {
+      const third = page.locator("[data-slots] .slot").nth(2)
+      const value = await third.getAttribute("data-slot")
+      await third.click()
+      ok(`${tag}: a time button picks that time`, (await page.inputValue("#b-time")) === value && (await third.getAttribute("aria-checked")) === "true", value)
+    }
     if (await page.$("#b-checkout")) { const after = await page.evaluate(() => new Date(Date.now() + 3 * 864e5).toISOString().slice(0, 10)); await page.fill("#b-checkout", after) }
     await page.click("[data-booking] button[type=submit]")
     ok(`${tag}: booking asks for a name`, await page.isVisible("[data-booking] .field[data-invalid]"))
+    ok(`${tag}: error summary lists every problem`, (await page.isVisible("[data-booking] [data-errsum]")) && (await page.$$eval("[data-booking] [data-errsum] li", (items) => items.length)) >= 2)
     await page.fill("#b-name", "Данияр")
     await page.fill("#b-phone", "87011234567")
     await page.click("[data-booking] button[type=submit]")
@@ -139,8 +146,38 @@ for (const [id, prompt] of prompts) {
     await page.waitForTimeout(100)
     await page.click(".masonry [data-lb] >> nth=0")
     ok(`${tag}: photo opens full screen`, await page.isVisible("[data-lightbox-root]"))
+    ok(`${tag}: the full-screen photo shows its number`, /^1 \/ \d+$/.test((await page.textContent("[data-lb-count]")) || ""))
+    for (let i = 0; i < 12; i++) await page.keyboard.press("Tab")
+    ok(`${tag}: focus stays inside the full-screen gallery`, await page.evaluate(() => document.querySelector("[data-lightbox-root]").contains(document.activeElement)))
     await page.keyboard.press("Escape")
     ok(`${tag}: Escape closes it`, !(await page.isVisible("[data-lightbox-root]")))
+
+    // Home: sections appear while scrolling, numbers count, the carousel steps.
+    await page.evaluate(() => { location.hash = "#/" })
+    await page.waitForTimeout(150)
+    const hidden = await page.$$eval('[data-page="home"] [data-reveal]', (nodes) => nodes.filter((node) => !node.classList.contains("is-in")).length)
+    for (let y = 0; y < 20000; y += 400) { await page.evaluate((top) => window.scrollTo({ top, behavior: "instant" }), y); await page.waitForTimeout(40); if (await page.evaluate((top) => top > document.documentElement.scrollHeight, y)) break }
+    await page.waitForTimeout(1300)
+    const left = await page.$$eval('[data-page="home"] [data-reveal]', (nodes) => nodes.filter((node) => !node.classList.contains("is-in")).map((node) => node.className))
+    ok(`${tag}: every home section appears on scroll`, hidden > 0 && left.length === 0, left.join(","))
+    const counted = await page.$eval('[data-page="home"] .tile--stat [data-count]', (node) => node.textContent === node.getAttribute("data-count"))
+    ok(`${tag}: the opening-hours number counts up to the real value`, counted)
+    ok(`${tag}: back-to-top appears far down the page`, await page.isVisible("[data-top]"))
+    if (!phone && (await page.$("[data-rail]")) && !(await page.$eval("[data-rail]", (rail) => rail.classList.contains("is-static")))) {
+      await page.evaluate(() => document.querySelector("[data-rail]").scrollIntoView({ block: "center", behavior: "instant" }))
+      const before = await page.$eval(".rail__track", (track) => track.scrollLeft)
+      await page.click("[data-rail-next]")
+      await page.waitForTimeout(700)
+      ok(`${tag}: carousel arrow moves one card`, (await page.$eval(".rail__track", (track) => track.scrollLeft)) > before && !(await page.isDisabled("[data-rail-prev]")))
+    }
+    ok(`${tag}: home fits the screen`, (await overflow()) <= 0)
+    if (site.plan.order) {
+      await page.click(phone ? ".sticky-cta [data-cart-open]" : ".hdr [data-cart-open]")
+      await page.waitForSelector("[data-cart].is-open")
+      for (let i = 0; i < 15; i++) await page.keyboard.press("Tab")
+      ok(`${tag}: focus stays inside the basket`, await page.evaluate(() => document.querySelector("[data-cart]").contains(document.activeElement)))
+      await page.keyboard.press("Escape")
+    }
 
     ok(`${tag}: no script errors`, errors.length === 0, errors.join(" | "))
     if (shots) {

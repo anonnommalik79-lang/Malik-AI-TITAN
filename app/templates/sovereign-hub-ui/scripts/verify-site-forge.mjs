@@ -42,7 +42,7 @@ const load = workTestLoader({
 })
 
 const { pickBlueprint, BLUEPRINTS } = load("lib/sites/forge/blueprints.ts")
-const { fallbackPlan, mergePlan, withSampleContacts, parseDays, nameFromPrompt, cityFromPrompt, reviewPlan } = load("lib/sites/forge/plan.ts")
+const { fallbackPlan, mergePlan, withSampleContacts, parseDays, nameFromPrompt, cityFromPrompt, reviewPlan, plannerPrompt } = load("lib/sites/forge/plan.ts")
 const { forgeSite, readForgeSite } = load("lib/sites/forge/index.ts")
 const { siteForgeTurn, compactForgeHistory, forgeChatMessage } = load("lib/sites/forge/chat.ts")
 const { reviewSiteHtml } = load("lib/sites/forge/quality.ts")
@@ -170,6 +170,36 @@ test("render: six pages, escaping, embedded plan, readable accent", async () => 
   assert.equal(readForgeSite(html).plan.brand.name, "</script><img src=x onerror=alert(1)>")
   assert.ok(contrast(resolveAccent("roastery", "#FFFF00").accent, "#FBFAF8") >= 2.6, "an unreadable accent falls back")
   assert.equal(resolveAccent("roastery", "#123456").accentInk, "#FFFFFF")
+})
+
+test("skills: every site carries 20+ GitHub interface skills, and only the ones it really has are claimed", async () => {
+  const { FORGE_SKILLS, appliedSkills, plannerSkillRules, skillLines } = load("lib/sites/forge/skills.ts")
+  for (const prompt of ["создай сайт на кофейню", "сайт барбершопа", "website for a boutique hotel", "сайт стоматологии"]) {
+    const site = await forgeSite({ prompt })
+    assert.ok(site.skills.length >= 20, `${prompt}: ${site.skills.length} skills`)
+    assert.ok(site.skills.every((skill) => /^https:\/\/github\.com\//.test(skill.url)), "each skill links to its GitHub project")
+    for (const id of ["magicui-bento", "swiper-rail", "photoswipe", "govuk-forms", "aos-reveal", "schema-org"]) assert.ok(site.skills.some((skill) => skill.id === id), `${prompt}: ${id}`)
+    assert.equal(site.skills.some((skill) => skill.id === "polaris-cart"), site.plan.order, "the basket skill only where there is a basket")
+  }
+  // Nothing is claimed for a page that does not carry it.
+  assert.deepEqual(appliedSkills("<!doctype html><p>plain</p>", fallbackPlan("кофейня")).map((skill) => skill.id), [])
+  assert.ok(FORGE_SKILLS.length >= 24)
+  const rules = plannerSkillRules("создай лендинг кофейни с ценами", "coffee")
+  assert.ok(rules.some((line) => /Never invent customer names/.test(line)), rules.join("\n"))
+  assert.match(plannerPrompt("создай сайт на кофейню", fallbackPlan("кофейня")), /DESIGN-SYSTEM COPY RULES/)
+  const site = await forgeSite({ prompt: "создай сайт на кофейню" })
+  const message = forgeChatMessage(site, "new")
+  assert.match(message, /\*\*Скиллы интерфейсов: \d+\*\*/)
+  assert.match(message, /\[Magic UI · Bento Grid\]\(https:\/\/github\.com\/magicuidesign\/magicui\)/)
+  assert.equal(skillLines(site.skills, "ru").length, 5)
+  // Search engines never learn an example phone or address.
+  const ld = JSON.parse(site.html.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/)[1])
+  assert.equal(ld.telephone, undefined)
+  assert.equal(ld.address.streetAddress, undefined)
+  assert.equal(ld.openingHoursSpecification[0].opens, "08:00")
+  const real = await forgeSite({ prompt: "сайт кофейни «Арома», ул. Сатпаева 5, телефон +7 701 555 44 33" })
+  const realLd = JSON.parse(real.html.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/)[1])
+  assert.equal(realLd.telephone, "+7 701 555 44 33")
 })
 
 test("quality: forge sites pass; a typical model site's faults are named", async () => {

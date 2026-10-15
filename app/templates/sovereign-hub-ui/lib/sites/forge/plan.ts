@@ -1,4 +1,5 @@
 import { BLUEPRINTS, ICONS, blueprintById, pickBlueprint, type Blueprint, type BookingKind, type DirectionId, type ForgeLocale, type IconId } from "./blueprints"
+import { plannerSkillRules } from "./skills"
 
 /**
  * Malik Site Forge — the content plan.
@@ -24,7 +25,8 @@ export type ForgePlan = {
   accent: string | null
   order: boolean
   brand: { name: string; tagline: string; description: string }
-  hero: { title: string; subtitle: string; primaryCta: string; secondaryCta: string; badges: string[] }
+  /** eyebrow: the short line above the headline — what and where («Кофейня-обжарщик · Алматы»). */
+  hero: { eyebrow?: string; title: string; subtitle: string; primaryCta: string; secondaryCta: string; badges: string[] }
   highlights: Array<{ icon: IconId; title: string; text: string }>
   catalog: { title: string; subtitle: string; currency: string; categories: Array<{ id: string; name: string }>; items: CatalogItem[] }
   about: { title: string; paragraphs: string[]; values: Array<{ title: string; text: string }> }
@@ -193,7 +195,7 @@ export function fallbackPlan(prompt: string, blueprintInput?: Blueprint): ForgeP
     accent: null,
     order: blueprint.order,
     brand: { name: brand, tagline: copy.tagline, description: copy.heroSubtitle },
-    hero: { title: copy.heroTitle(brand), subtitle: copy.heroSubtitle, primaryCta: CTA[locale][blueprint.booking.kind], secondaryCta: browseLabel(locale, blueprint.catalog[locale]), badges: copy.highlights.slice(0, 3).map((item) => item.title) },
+    hero: { eyebrow: city, title: copy.heroTitle(brand), subtitle: copy.heroSubtitle, primaryCta: CTA[locale][blueprint.booking.kind], secondaryCta: browseLabel(locale, blueprint.catalog[locale]), badges: copy.highlights.slice(0, 3).map((item) => item.title) },
     highlights: copy.highlights,
     catalog: { title: blueprint.catalog[locale], subtitle: copy.tagline, currency: currencyFor(prompt, locale), categories: copy.categories, items },
     about: { title: copy.aboutTitle, paragraphs: copy.about, values: copy.values },
@@ -293,6 +295,7 @@ export function mergePlan(raw: unknown, base: ForgePlan): ForgePlan {
     order: typeof data.order === "boolean" ? data.order && useCatalog : base.order,
     brand: { name, tagline: clean(brand.tagline, 90, base.brand.tagline), description: clean(brand.description, 240, base.brand.description) },
     hero: {
+      eyebrow: clean(hero.eyebrow, 48) || base.hero.eyebrow || "",
       title: clean(hero.title, 90) || base.hero.title.replace(base.brand.name, name),
       subtitle: clean(hero.subtitle, 220, base.hero.subtitle),
       primaryCta: clean(hero.primaryCta, 28, base.hero.primaryCta),
@@ -389,6 +392,8 @@ export function plannerPrompt(prompt: string, base: ForgePlan, feedback: string[
     "- 8 to 14 catalogue items in 3 to 5 categories; each description is one appetising, factual sentence.",
     "- Never invent reviews, ratings, awards, years in business, staff names or press quotes.",
     "- If the user gave no phone, email or address, leave those fields as empty strings.",
+    "- hero.eyebrow is 2-5 words above the headline: the kind of place and the city («Кофейня-обжарщик · Алматы»).",
+    ...(() => { const rules = plannerSkillRules(prompt, base.blueprint); return rules.length ? ["", "DESIGN-SYSTEM COPY RULES (from the skills this site uses):", ...rules] : [] })(),
     "",
     "SHAPE (all keys required):",
     JSON.stringify({
@@ -398,7 +403,7 @@ export function plannerPrompt(prompt: string, base: ForgePlan, feedback: string[
       accent: "#RRGGBB that fits the subject, or null",
       order: "true if visitors should be able to order items to a basket",
       brand: { name: "string", tagline: "string", description: "string" },
-      hero: { title: "string", subtitle: "string", primaryCta: "string", secondaryCta: "string", badges: ["three short facts"] },
+      hero: { eyebrow: "string", title: "string", subtitle: "string", primaryCta: "string", secondaryCta: "string", badges: ["three short facts"] },
       highlights: [{ icon: ICONS.join("|"), title: "string", text: "string" }],
       catalog: { title: "string", subtitle: "string", currency: "₸|₽|$|€|сом", categories: [{ id: "latin-id", name: "string" }], items: [{ name: "string", description: "string", price: 1200, category: "category id", badge: "optional short label", photo: "english photo query" }] },
       about: { title: "string", paragraphs: ["2-3 paragraphs"], values: [{ title: "string", text: "string" }] },

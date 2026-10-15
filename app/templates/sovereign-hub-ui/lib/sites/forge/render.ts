@@ -2,7 +2,7 @@ import { blueprintById, type ForgeLocale } from "./blueprints"
 import { icon, iconSprite, inlineIcon } from "./icons"
 import type { ForgePlan } from "./plan"
 import { SITE_RUNTIME, imageGuardScript } from "./runtime"
-import { fontLink, siteCss } from "./styles"
+import { fontLink, resolveAccent, siteCss } from "./styles"
 
 /**
  * Malik Site Forge — plan + photographs → one self-contained index.html.
@@ -36,6 +36,7 @@ const UI: Record<ForgeLocale, Ui> = {
     orderTitle: "Заказ", bookingTitle: "Бронирование", howGet: "Получение", name: "Имя", openUntil: "Открыто до", openAllDay: "Открыто круглосуточно", closedNow: "Сейчас закрыто", opensAt: "откроется", tomorrow: "завтра",
     noSlotsToday: "На сегодня мест нет — выберите другой день", closedThatDay: "В этот день мы не работаем", downloadBlocked: "Скачивание недоступно в предпросмотре — откройте сайт в браузере", madeWith: "Сайт создан в Malik AI",
     photoCredits: "Фото", rights: "Все права защищены", check: "Проверить даты", facts: "Коротко о нас", items: "позиций", categories: "разделов", daysOpen: "дней в неделю", findUs: "Мы на карте",
+    hoursWeek: "часов в неделю мы открыты", prev: "Назад", next: "Дальше", faqLead: "Не нашли ответ? Напишите нам — ответим в рабочее время.", errSummary: "Проверьте форму", toTop: "Наверх", noSlots: "Свободного времени нет",
   },
   kk: {
     home: "Басты бет", about: "Біз туралы", gallery: "Галерея", contacts: "Байланыс", notFound: "Мұндай бет жоқ", notFoundText: "Сілтеме ескірген болуы мүмкін. Басты бетке оралыңыз.", toHome: "Басты бетке",
@@ -54,6 +55,7 @@ const UI: Record<ForgeLocale, Ui> = {
     orderTitle: "Тапсырыс", bookingTitle: "Брондау", howGet: "Алу тәсілі", name: "Аты", openUntil: "Ашық, жабылуы", openAllDay: "Тәулік бойы ашық", closedNow: "Қазір жабық", opensAt: "ашылады", tomorrow: "ертең",
     noSlotsToday: "Бүгінге орын жоқ — басқа күнді таңдаңыз", closedThatDay: "Бұл күні жұмыс істемейміз", downloadBlocked: "Алдын ала қарауда жүктеу мүмкін емес — сайтты браузерде ашыңыз", madeWith: "Сайт Malik AI-да жасалған",
     photoCredits: "Фото", rights: "Барлық құқықтар қорғалған", check: "Күндерді тексеру", facts: "Біз туралы қысқаша", items: "позиция", categories: "бөлім", daysOpen: "күн аптасына", findUs: "Біз картада",
+    hoursWeek: "сағат аптасына ашықпыз", prev: "Артқа", next: "Әрі қарай", faqLead: "Жауап таппадыңыз ба? Бізге жазыңыз — жұмыс уақытында жауап береміз.", errSummary: "Форманы тексеріңіз", toTop: "Жоғары", noSlots: "Бос уақыт жоқ",
   },
   en: {
     home: "Home", about: "About", gallery: "Gallery", contacts: "Contact", notFound: "This page doesn't exist", notFoundText: "The link may be out of date. The home page has everything important.", toHome: "Go to home page",
@@ -72,6 +74,7 @@ const UI: Record<ForgeLocale, Ui> = {
     orderTitle: "Order", bookingTitle: "Booking", howGet: "Fulfilment", name: "Name", openUntil: "Open until", openAllDay: "Open 24 hours", closedNow: "Closed now", opensAt: "opens", tomorrow: "tomorrow",
     noSlotsToday: "No times left today — choose another day", closedThatDay: "We're closed that day", downloadBlocked: "Downloads are blocked in the preview — open the site in a browser", madeWith: "Made with Malik AI",
     photoCredits: "Photos", rights: "All rights reserved", check: "Check dates", facts: "At a glance", items: "items", categories: "sections", daysOpen: "days a week", findUs: "On the map",
+    hoursWeek: "hours a week we're open", prev: "Previous", next: "Next", faqLead: "Didn't find the answer? Message us — we reply during working hours.", errSummary: "Please check the form", toTop: "Back to top", noSlots: "No free times",
   },
 }
 
@@ -86,6 +89,10 @@ export function escapeHtml(value: unknown) {
   return String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char] as string)
 }
 const e = escapeHtml
+
+function escapeXml(value: string) {
+  return value.replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&apos;" })[char] as string)
+}
 
 export function siteSlug(name: string) {
   const map: Record<string, string> = { а: "a", б: "b", в: "v", г: "g", д: "d", е: "e", ё: "e", ж: "zh", з: "z", и: "i", й: "y", к: "k", л: "l", м: "m", н: "n", о: "o", п: "p", р: "r", с: "s", т: "t", у: "u", ф: "f", х: "h", ц: "c", ч: "ch", ш: "sh", щ: "sch", ы: "y", э: "e", ю: "yu", я: "ya", ә: "a", ғ: "g", қ: "k", ң: "n", ө: "o", ұ: "u", ү: "u", һ: "h", і: "i" }
@@ -104,6 +111,11 @@ function img(photo: SitePhoto | undefined, alt: string, options: { eager?: boole
   if (!photo) return `<div class="art" role="img" aria-label="${e(alt)}">${icon("sparkle")}</div>`
   const fallbacks = (photo.alts || []).filter((url) => url !== photo.url).slice(0, 1)
   return `<img src="${e(photo.url)}" alt="${e(photo.alt || alt)}"${fallbacks.length ? ` data-alt="${e(fallbacks.join("|"))}"` : ""} ${options.eager ? 'fetchpriority="high"' : 'loading="lazy"'} decoding="async"${options.sizes ? ` sizes="${options.sizes}"` : ""}>`
+}
+
+function minutesOf(hhmm: string) {
+  const [h, m] = String(hhmm).split(":").map(Number)
+  return (h || 0) * 60 + (m || 0)
 }
 
 function mapQuery(plan: ForgePlan) {
@@ -152,10 +164,12 @@ function bookingForm(plan: ForgePlan, ui: Ui, maxGuests: number) {
   const party = plan.booking.kind === "table" || stay
   const services = plan.booking.services.map((service) => `<option>${e(service)}</option>`).join("")
   const f = (name: string, label: string, input: string, required = true) => `<div class="field"><label for="b-${name}">${e(label)}${required ? "" : ` <span class="muted">(${e(ui.optional)})</span>`}</label>${input}<div class="field__error" aria-live="polite"></div></div>`
+  const timeField = f("time", ui.time, `<select id="b-time" name="time" class="slots__select" required aria-hidden="true" tabindex="-1"></select><div class="slots" data-slots role="radiogroup" aria-labelledby="b-time-l" data-empty-text="${e(ui.noSlots)}"></div>`).replace('<label for="b-time">', '<label for="b-time" id="b-time-l">')
   return `<form class="form panel" data-booking novalidate>
+<div class="errsum" data-errsum role="alert" tabindex="-1" hidden><b>${e(ui.errSummary)}</b><ul></ul></div>
 ${services && !stay ? f("service", ui.service, `<select id="b-service" name="service">${services}</select>`) : ""}
 ${stay ? `<div class="form__row">${f("date", ui.checkin, '<input id="b-date" name="date" type="date" required>')}${f("checkout", ui.checkoutLabel, '<input id="b-checkout" name="checkout" type="date" required>')}</div>${services ? f("service", ui.service, `<select id="b-service" name="service">${services}</select>`) : ""}`
-    : `<div class="form__row">${f("date", ui.date, '<input id="b-date" name="date" type="date" required>')}${f("time", ui.time, '<select id="b-time" name="time" required></select>')}</div>`}
+    : `${f("date", ui.date, '<input id="b-date" name="date" type="date" required>')}${timeField}`}
 ${party ? `<div class="field"><span class="field__label" id="b-guests-l"><b>${e(ui.guests)}</b></span><div class="stepper" role="group" aria-labelledby="b-guests-l"><button type="button" data-step="-1" aria-label="${e(ui.less)}">−</button><output data-guests-out>2</output><button type="button" data-step="1" aria-label="${e(ui.more)}">+</button></div><input type="hidden" name="guests" value="2" data-max="${maxGuests}"></div>` : ""}
 <div class="form__row">${f("name", ui.yourName, '<input id="b-name" name="name" autocomplete="name" required>')}${f("phone", ui.yourPhone, '<input id="b-phone" name="phone" type="tel" inputmode="tel" autocomplete="tel" required>')}</div>
 ${f("comment", ui.comment, '<textarea id="b-comment" name="comment" rows="3"></textarea>', false)}
@@ -171,12 +185,13 @@ ${f("comment", ui.comment, '<textarea id="b-comment" name="comment" rows="3"></t
 
 function cartDrawer(plan: ForgePlan, ui: Ui, delivery: boolean) {
   const f = (name: string, label: string, input: string, extra = "") => `<div class="field"${extra}><label for="c-${name}">${e(label)}</label>${input}<div class="field__error" aria-live="polite"></div></div>`
-  return `<div class="drawer" data-cart hidden role="dialog" aria-modal="true" aria-label="${e(ui.cart)}"><div class="drawer__panel">
+  return `<div class="drawer" data-cart data-trap hidden role="dialog" aria-modal="true" aria-label="${e(ui.cart)}"><div class="drawer__panel">
 <div class="drawer__head"><h2 style="font-size:24px">${e(ui.cart)}</h2><button type="button" class="x" data-cart-close aria-label="${e(ui.closeMenu)}">${icon("close")}</button></div>
 <div data-stage="cart" class="drawer__body"><div data-cart-empty class="empty">${e(ui.cartEmpty)} <a class="link" href="#/catalog" data-cart-close>${e(ui.toCatalog)}: ${e(plan.catalog.title)}</a></div><div data-lines></div></div>
 <div data-stage="cart" class="drawer__foot" data-cart-foot hidden><div class="total"><span>${e(ui.total)}</span><span data-total></span></div><button type="button" class="btn btn--accent btn--block" data-checkout>${e(ui.checkout)}</button></div>
 <form data-stage="checkout" class="drawer__body form" data-checkout-form novalidate hidden>
 <button type="button" class="link" style="border:0;background:none;padding:0;cursor:pointer;justify-self:start" data-back-cart>← ${e(ui.backToCart)}</button>
+<div class="errsum" data-errsum role="alert" tabindex="-1" hidden><b>${e(ui.errSummary)}</b><ul></ul></div>
 ${delivery ? `<div class="seg" role="group"><button type="button" data-mode="delivery" aria-pressed="true">${e(ui.delivery)}</button><button type="button" data-mode="pickup" aria-pressed="false">${e(ui.pickup)}</button></div>` : ""}
 ${f("name", ui.yourName, '<input id="c-name" name="name" autocomplete="name">')}
 ${f("phone", ui.yourPhone, '<input id="c-phone" name="phone" type="tel" inputmode="tel" autocomplete="tel">')}
@@ -223,26 +238,64 @@ export function renderSite(plan: ForgePlan, photos: PhotoMap): RenderResult {
     [String(plan.catalog.categories.length), ui.categories],
     [String(new Set(plan.contacts.hours.flatMap((hours) => hours.days)).size), ui.daysOpen],
   ]
+  const phoneHref = `tel:+${e(plan.contacts.phone.replace(/\D/g, ""))}`
+  const waHref = `https://wa.me/${e(plan.contacts.whatsapp.replace(/\D/g, ""))}`
+  const address = [plan.contacts.address, plan.contacts.city].filter(Boolean).join(", ")
+  let kickerAt = 0
+  const kicker = () => `<p class="kicker" aria-hidden="true">${String(++kickerAt).padStart(2, "0")}</p>`
+
+  // Bento: one large photographed reason, the others as tiles, and the opening hours as a counted fact.
+  const weekHours = Math.min(168, Math.round(plan.contacts.hours.reduce((sum, hours) => {
+    const open = minutesOf(hours.open), close = minutesOf(hours.close === "00:00" ? "24:00" : hours.close)
+    return sum + (close > open ? close - open : close + 1440 - open) * new Set(hours.days).size
+  }, 0) / 60))
+  const [lead, ...rest] = plan.highlights
+  const bentoPhoto = plan.gallery.length >= 5 ? photos[`gallery:${plan.gallery.length - 1}`] : photos.about
+  const tiles = [
+    ...rest.map((item) => `<article class="tile" data-reveal>${icon(item.icon)}<h3>${e(item.title)}</h3><p>${e(item.text)}</p></article>`),
+    `<article class="tile tile--stat" data-reveal><strong data-count="${weekHours}">${weekHours}</strong><span>${e(ui.hoursWeek)}</span><span class="status" data-open-status></span></article>`,
+  ]
+  const spans = tiles.length <= 3 ? tiles.map((_, index) => (index === tiles.length - 1 ? 4 - tiles.length + 1 : 1)) : tiles.map((_, index) => (index < 4 ? 1 : 4 / Math.max(1, tiles.length - 4)))
+  const bento = `<div class="bento">
+<article class="tile tile--photo" data-reveal>${img(bentoPhoto, lead.title)}<div class="tile__in">${icon(lead.icon)}<h3>${e(lead.title)}</h3><p>${e(lead.text)}</p></div></article>
+${tiles.map((tile, index) => (spans[index] > 1 ? tile.replace('class="tile', `style="--span:${spans[index]}" class="tile`) : tile)).join("\n")}
+</div>`
+
+  // A band of what the place offers, moving slowly (still for reduced motion).
+  const marqueeWords = [...plan.catalog.categories.map((category) => category.name), ...plan.highlights.map((item) => item.title)].slice(0, 9)
+  const marqueeRun = marqueeWords.map((word) => `<span>${e(word)}</span><i>✦</i>`).join("")
+  const marquee = marqueeWords.length >= 3 ? `<div class="marquee" aria-hidden="true"><div class="marquee__track">${marqueeRun}${marqueeRun}</div></div>` : ""
+
+  const mosaicCount = plan.gallery.length >= 6 ? 5 : Math.min(4, plan.gallery.length)
+  const featured = board
+    ? `<div class="items items--board">${itemsMarkup(plan, photos, ui, { limit: 6, board, withTitles: false })}</div>`
+    : `<div class="rail" data-rail><div class="rail__track" tabindex="0" role="region" aria-label="${e(catalogTitle)}">${itemsMarkup(plan, photos, ui, { limit: 8, board: false, withTitles: false })}</div>
+<div class="rail__nav"><button type="button" class="rail__btn" data-rail-prev aria-label="${e(ui.prev)}">${icon("arrow")}</button><button type="button" class="rail__btn" data-rail-next aria-label="${e(ui.next)}">${icon("arrow")}</button></div></div>`
+  const mapLinksFor = (query: string) => (query ? `<div class="map__links"><a href="https://2gis.kz/search/${encodeURIComponent(query)}" target="_blank" rel="noopener">2GIS</a><a href="https://yandex.ru/maps/?text=${encodeURIComponent(query)}" target="_blank" rel="noopener">Яндекс Карты</a><a href="https://www.google.com/maps/search/?api=1&amp;query=${encodeURIComponent(query)}" target="_blank" rel="noopener">Google Maps</a></div>` : "")
 
   const home = `<section class="page" data-page="home" data-title="${e(plan.seo.title)}">
 <section class="hero"><div class="wrap hero__grid">
-<div class="hero__in"><h1>${e(plan.hero.title)}</h1><p class="hero__sub">${e(plan.hero.subtitle)}</p>
+<div class="hero__in">${plan.hero.eyebrow ? `<p class="eyebrow">${e(plan.hero.eyebrow)}</p>` : ""}<h1>${e(plan.hero.title)}</h1><p class="hero__sub">${e(plan.hero.subtitle)}</p>
 <div class="hero__ctas"><a class="btn btn--accent" href="#/booking">${e(plan.hero.primaryCta)}</a><a class="btn btn--light" href="#/catalog">${e(plan.hero.secondaryCta)}</a></div>
 <ul class="hero__facts">${plan.hero.badges.map((badge) => `<li>${icon(plan.highlights.find((item) => item.title === badge)?.icon || "check")}${e(badge)}</li>`).join("")}</ul></div>
 <div class="hero__media">${img(photos.hero, plan.brand.name, { eager: true })}</div>
+${plan.direction === "coast" ? "" : `<div class="hero__card"><span class="status" data-open-status></span><p data-bind="address">${e(address)}</p><a class="link" href="#/contacts">${e(ui.route)}</a></div>`}
 </div></section>
 ${plan.direction === "coast" ? `<div class="wrap quickbook"><form data-quickbook aria-label="${e(bookingTitle)}"><div class="field"><label for="q-date">${e(ui.checkin)}</label><input id="q-date" name="date" type="date"></div><div class="field"><label for="q-out">${e(ui.checkoutLabel)}</label><input id="q-out" name="checkout" type="date"></div><div class="field"><label for="q-g">${e(ui.guests)}</label><select id="q-g" name="guests">${[1, 2, 3, 4, 5, 6].map((n) => `<option${n === 2 ? " selected" : ""}>${n}</option>`).join("")}</select></div><button class="btn btn--accent" type="submit">${e(ui.check)}</button></form></div>` : ""}
-<section class="section"><div class="wrap"><div class="section__head"><h2>${e(ui.why)}</h2><p class="lead">${e(plan.brand.tagline)}</p></div>
-<div class="reasons">${plan.highlights.map((item) => `<div class="reason">${icon(item.icon)}<h3>${e(item.title)}</h3><p>${e(item.text)}</p></div>`).join("")}</div></div></section>
-<section class="section" style="padding-top:0"><div class="wrap"><div class="section__head"><h2>${e(catalogTitle)}</h2><a class="link" href="#/catalog">${e(ui.seeAll)}</a></div>
-<div class="items${board ? " items--board" : ""}">${itemsMarkup(plan, photos, ui, { limit: 6, board, withTitles: false })}</div></div></section>
-<section class="section section--dark"><div class="wrap split"><div class="split__media">${img(photos.about, plan.about.title)}</div>
-<div class="split__text"><h2>${e(plan.about.title)}</h2>${plan.about.paragraphs.slice(0, 1).map((p) => `<p class="lead">${e(p)}</p>`).join("")}<a class="btn btn--light" href="#/about">${e(ui.moreAbout)}</a></div></div></section>
-<section class="section"><div class="wrap"><div class="section__head"><h2>${e(ui.howItWorks)}</h2></div><ol class="steps">${plan.steps.map((step) => `<li><h3>${e(step.title)}</h3><p>${e(step.text)}</p></li>`).join("")}</ol></div></section>
-<section class="section" style="padding-top:0"><div class="wrap"><div class="section__head"><h2>${e(ui.photos)}</h2><a class="link" href="#/gallery">${e(ui.seeAll)}</a></div><div class="strip">${galleryFigures.slice(0, 4).join("")}</div></div></section>
-<section class="section--tight"><div class="wrap band"><div><h2>${e(bookingTitle)}</h2><p>${e(plan.booking.subtitle)}</p></div><a class="btn" href="#/booking">${e(plan.hero.primaryCta)}</a></div></section>
-<section class="section"><div class="wrap visit"><div><h2>${e(ui.visit)}</h2><p style="margin:18px 0 24px"><span class="status" data-open-status></span></p>${contactList(plan, ui)}</div>
-<div><h3 style="margin-bottom:12px">${e(ui.hours)}</h3><table class="hours"><tbody>${hoursRows(plan)}</tbody></table><div class="faq" style="margin-top:32px">${plan.faq.slice(0, 3).map((item) => `<details><summary>${e(item.q)}</summary><p>${e(item.a)}</p></details>`).join("")}</div></div></div></section>
+${marquee}
+<section class="section"><div class="wrap"><div class="section__head" data-reveal><div>${kicker()}<h2>${e(ui.why)}</h2></div><p class="lead">${e(plan.brand.tagline)}</p></div>
+${bento}</div></section>
+<section class="section" style="padding-top:0"><div class="wrap"><div class="section__head" data-reveal><div>${kicker()}<h2>${e(catalogTitle)}</h2></div><a class="link" href="#/catalog">${e(ui.seeAll)}</a></div>
+${featured}</div></section>
+<section class="section section--dark"><div class="wrap split"><div class="split__media" data-reveal>${img(photos.about, plan.about.title)}</div>
+<div class="split__text" data-reveal>${kicker()}<h2>${e(plan.about.title)}</h2>${plan.about.paragraphs.slice(0, 1).map((p) => `<p class="lead">${e(p)}</p>`).join("")}<a class="btn btn--light" href="#/about">${e(ui.moreAbout)}</a></div></div></section>
+<section class="section"><div class="wrap"><div class="section__head" data-reveal><div>${kicker()}<h2>${e(ui.howItWorks)}</h2></div></div><ol class="steps steps--line">${plan.steps.map((step, index) => `<li data-reveal style="--i:${index}"><h3>${e(step.title)}</h3><p>${e(step.text)}</p></li>`).join("")}</ol></div></section>
+<section class="section" style="padding-top:0"><div class="wrap"><div class="section__head" data-reveal><div>${kicker()}<h2>${e(ui.photos)}</h2></div><a class="link" href="#/gallery">${e(ui.seeAll)}</a></div><div class="mosaic mosaic--${mosaicCount}" data-reveal>${galleryFigures.slice(0, mosaicCount).join("")}</div></div></section>
+<section class="section--tight"><div class="wrap"><div class="cta" data-reveal><div class="cta__media">${img(photos.booking, bookingTitle)}</div><div class="cta__in"><h2>${e(bookingTitle)}</h2><p>${e(plan.booking.subtitle)}</p><div class="cta__actions"><a class="btn btn--accent" href="#/booking">${e(plan.hero.primaryCta)}</a><a class="btn btn--light" data-href="tel" href="${phoneHref}">${icon("phone")}<span data-bind="phone">${e(plan.contacts.phone)}</span></a></div></div></div></div></section>
+<section class="section"><div class="wrap visit"><div data-reveal>${kicker()}<h2>${e(ui.visit)}</h2><p style="margin:18px 0 24px"><span class="status" data-open-status></span></p>${contactList(plan, ui)}${mapLinksFor(query)}</div>
+<div data-reveal><h3 style="margin-bottom:12px">${e(ui.hours)}</h3><table class="hours"><tbody>${hoursRows(plan)}</tbody></table></div></div></section>
+<section class="section" style="padding-top:0"><div class="wrap faqwrap"><div data-reveal>${kicker()}<h2>${e(ui.questions)}</h2><p class="lead" style="margin:16px 0 24px">${e(ui.faqLead)}</p><a class="btn" data-href="wa" href="${waHref}" target="_blank" rel="noopener">${icon("whatsapp")}${e(ui.write)}</a></div>
+<div class="faq" data-reveal>${plan.faq.slice(0, 6).map((item) => `<details><summary>${e(item.q)}</summary><p>${e(item.a)}</p></details>`).join("")}</div></div></section>
 </section>`
 
   const catalog = `<section class="page" data-page="catalog" data-title="${e(pageTitle(catalogTitle))}" hidden><div data-catalog-page>
@@ -258,7 +311,7 @@ ${plan.direction === "coast" ? `<div class="wrap quickbook"><form data-quickbook
 <div class="wrap pagehead"><h1>${e(plan.about.title)}</h1><p class="lead">${e(plan.brand.description)}</p></div>
 <section class="section--tight"><div class="wrap split"><div class="collage"><figure>${img(photos.about, plan.about.title)}</figure><figure>${img(photos["gallery:1"], plan.brand.name)}</figure><figure>${img(photos["gallery:2"], plan.brand.name)}</figure></div>
 <div class="split__text">${plan.about.paragraphs.map((p) => `<p>${e(p)}</p>`).join("")}<ul class="values">${plan.about.values.map((value) => `<li>${icon("check")}<div><b>${e(value.title)}</b><br><span class="muted">${e(value.text)}</span></div></li>`).join("")}</ul></div></div></section>
-<section class="section"><div class="wrap"><h2>${e(ui.facts)}</h2><ul class="facts">${facts.map(([value, label]) => `<li><strong>${e(value)}</strong><span class="muted">${e(label)}</span></li>`).join("")}</ul></div></section>
+<section class="section"><div class="wrap"><h2>${e(ui.facts)}</h2><ul class="facts">${facts.map(([value, label]) => `<li data-reveal><strong data-count="${e(value)}">${e(value)}</strong><span class="muted">${e(label)}</span></li>`).join("")}</ul></div></section>
 <section class="section section--dark"><div class="wrap"><div class="section__head"><h2>${e(ui.howItWorks)}</h2></div><ol class="steps">${plan.steps.map((step) => `<li><h3>${e(step.title)}</h3><p>${e(step.text)}</p></li>`).join("")}</ol></div></section>
 </section>`
 
@@ -273,7 +326,7 @@ ${plan.direction === "coast" ? `<div class="wrap quickbook"><form data-quickbook
 <div class="panel"><h3 style="margin-bottom:10px">${e(ui.hours)}</h3><p><span class="status" data-open-status></span></p><table class="hours"><tbody>${hoursRows(plan)}</tbody></table></div></aside></div>
 <div class="section--tight"></div></section>`
 
-  const mapLinks = query ? `<div class="map__links"><a href="https://2gis.kz/search/${encodeURIComponent(query)}" target="_blank" rel="noopener">2GIS</a><a href="https://yandex.ru/maps/?text=${encodeURIComponent(query)}" target="_blank" rel="noopener">Яндекс Карты</a><a href="https://www.google.com/maps/search/?api=1&amp;query=${encodeURIComponent(query)}" target="_blank" rel="noopener">Google Maps</a></div>` : ""
+  const mapLinks = mapLinksFor(query)
   const contacts = `<section class="page" data-page="contacts" data-title="${e(pageTitle(ui.contacts))}" hidden>
 <div class="wrap pagehead"><h1>${e(ui.contacts)}</h1><p class="lead"><span class="status" data-open-status></span></p></div>
 <div class="wrap visit"><div>${contactList(plan, ui)}<div class="socials" style="margin-top:28px"><a data-href="ig" href="#" target="_blank" rel="noopener" aria-label="Instagram" style="border-color:var(--line)">${icon("instagram")}</a><a data-href="tg" href="#" target="_blank" rel="noopener" aria-label="Telegram" style="border-color:var(--line)">${icon("telegram")}</a><a data-href="wa" href="#" target="_blank" rel="noopener" aria-label="WhatsApp" style="border-color:var(--line)">${icon("whatsapp")}</a></div>
@@ -291,7 +344,8 @@ ${plan.direction === "coast" ? `<div class="wrap quickbook"><form data-quickbook
 <div><h3>${e(ui.hours)}</h3><ul>${plan.contacts.hours.map((hours) => `<li>${e(hours.label)}: ${hours.open === "00:00" && hours.close === "24:00" ? "24/7" : `${e(hours.open)}–${e(hours.close)}`}</li>`).join("")}</ul></div>
 </div>
 <div class="ftr__bottom"><span>© <span data-year></span> ${e(plan.brand.name)}. ${e(ui.rights)}.</span><span>${unsplash ? `${e(ui.photoCredits)}: Unsplash${uniqueCredits.length ? "; " : ""}` : uniqueCredits.length ? `${e(ui.photoCredits)}: ` : ""}${uniqueCredits.map((photo) => (photo.link ? `<a href="${e(photo.link)}" target="_blank" rel="noopener">${e(photo.credit!.replace(/^Фото:\s*/u, ""))}</a>` : e(photo.credit!.replace(/^Фото:\s*/u, "")))).join("; ")}</span><a href="https://malikaiworld.world" target="_blank" rel="noopener">${e(ui.madeWith)}</a></div>
-</div></footer>`
+</div><div class="ftr__word" aria-hidden="true" style="font-size:clamp(32px,${Math.min(17, Math.round(1200 / Math.max(5, plan.brand.name.length)) / 10)}vw,240px)">${e(plan.brand.name)}</div></footer>
+<button type="button" class="totop" data-top hidden aria-label="${e(ui.toTop)}">${icon("arrow")}</button>`
 
   const data = {
     brand: plan.brand.name, title: plan.seo.title, slug, currency: plan.catalog.currency, currencyBefore: plan.catalog.currency === "$" || plan.catalog.currency === "€",
@@ -310,6 +364,30 @@ ${plan.direction === "coast" ? `<div class="wrap quickbook"><form data-quickbook
   const description = plan.seo.description
   const editNote = plan.locale === "en" ? "Your contacts: change them here and the whole site updates." : plan.locale === "kk" ? "Байланыс деректері: осында өзгертсеңіз, бүкіл сайт жаңарады." : "Ваши контакты: поменяйте их здесь — обновится весь сайт."
 
+  const colors = resolveAccent(plan.direction, plan.accent)
+  const letter = escapeXml(plan.brand.name.slice(0, 1).toUpperCase() || "M")
+  const favicon = `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="16" fill="${colors.accent}"/><text x="32" y="43" font-family="Arial,Helvetica,sans-serif" font-size="32" font-weight="700" text-anchor="middle" fill="${colors.accentInk}">${letter}</text></svg>`)}`
+  const currencyCode: Record<string, string> = { "₸": "KZT", "₽": "RUB", "$": "USD", "€": "EUR", "сом": "KGS", "сум": "UZS" }
+  const dayCodes = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
+  const schemaType = blueprint?.id === "coffee" ? "CafeOrCoffeeShop" : blueprint?.id === "restaurant" ? "Restaurant" : blueprint?.id === "hotel" ? "Hotel" : blueprint?.id === "clinic" ? "Dentist" : blueprint?.id === "barber" ? "HairSalon" : blueprint?.id === "beauty" ? "BeautySalon" : blueprint?.id === "fitness" ? "HealthClub" : blueprint?.id === "shop" ? "Store" : "LocalBusiness"
+  const structured = {
+    "@context": "https://schema.org",
+    "@type": schemaType === "Dentist" && !/стомат|dent|тіс/iu.test(`${plan.brand.name} ${plan.brand.description} ${plan.catalog.items.map((item) => item.name).join(" ")}`) ? "MedicalClinic" : schemaType,
+    name: plan.brand.name,
+    description: plan.seo.description,
+    // Example contacts are left out: search engines must never learn a placeholder phone.
+    ...(plan.samples.includes("phone") ? {} : { telephone: plan.contacts.phone }),
+    address: { "@type": "PostalAddress", ...(plan.samples.includes("address") ? {} : { streetAddress: plan.contacts.address }), addressLocality: plan.contacts.city },
+    openingHoursSpecification: plan.contacts.hours.map((hours) => ({ "@type": "OpeningHoursSpecification", dayOfWeek: hours.days.map((day) => dayCodes[day]), opens: hours.open, closes: hours.close === "24:00" ? "23:59" : hours.close })),
+    ...(photos.hero ? { image: photos.hero.url } : {}),
+    hasOfferCatalog: {
+      "@type": "OfferCatalog",
+      name: plan.catalog.title,
+      itemListElement: plan.catalog.items.slice(0, 24).map((item) => ({ "@type": "Offer", name: item.name, ...(item.price > 0 ? { price: item.price, priceCurrency: currencyCode[plan.catalog.currency] || undefined } : {}) })),
+    },
+  }
+  const ogLocale = plan.locale === "en" ? "en_US" : plan.locale === "kk" ? "kk_KZ" : "ru_RU"
+
   const body = [home, catalog, about, gallery, booking, contacts, notFound, footer, plan.order ? cartDrawer(plan, ui, delivery) : "", icon("close"), icon("phone"), icon("cart")].join("")
   const html = `<!doctype html>
 <html lang="${plan.locale}">
@@ -319,16 +397,19 @@ ${plan.direction === "coast" ? `<div class="wrap quickbook"><form data-quickbook
 <title>${e(plan.seo.title)}</title>
 <meta name="description" content="${e(description)}">
 <meta name="generator" content="Malik Site Forge">
+<link rel="icon" href="${e(favicon)}">
+<meta property="og:type" content="website">
+<meta property="og:locale" content="${ogLocale}">
 <meta property="og:title" content="${e(plan.seo.title)}">
 <meta property="og:description" content="${e(description)}">
-${photos.hero ? `<meta property="og:image" content="${e(photos.hero.url)}">` : ""}
+${photos.hero ? `<meta property="og:image" content="${e(photos.hero.url)}"><meta name="twitter:card" content="summary_large_image">` : ""}
 <meta name="theme-color" content="${plan.direction === "edge" ? "#16171A" : "#FFFFFF"}">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="${fontLink(plan.direction)}">
 ${photos.hero ? `<link rel="preload" as="image" href="${e(photos.hero.url)}">` : ""}
 <style>${siteCss(plan.direction, plan.accent)}</style>
-<script>${imageGuardScript(inlineIcon("sparkle"))}</script>
-<script type="application/ld+json">${json({ "@context": "https://schema.org", "@type": blueprint?.id === "coffee" ? "CafeOrCoffeeShop" : blueprint?.id === "restaurant" ? "Restaurant" : blueprint?.id === "hotel" ? "Hotel" : "LocalBusiness", name: plan.brand.name, description, telephone: plan.contacts.phone, address: config.address })}</script>
+<script>document.documentElement.classList.add("js");setTimeout(function(){if(!document.documentElement.hasAttribute("data-ready"))document.documentElement.classList.remove("js")},4000);${imageGuardScript(inlineIcon("sparkle"))}</script>
+<script type="application/ld+json">${json(structured)}</script>
 </head>
 <body class="d-${plan.direction}">
 ${iconSprite(body.match(/#i-[a-z]+/g)?.map((ref) => ref.slice(3)) || [])}
@@ -354,7 +435,7 @@ ${notFound}
 ${footer}
 <div class="sticky-cta">${plan.order ? `<button type="button" class="btn" style="background:var(--surface)" data-cart-open>${icon("cart")}<span data-cart-count data-zero>0</span></button>` : ""}<a class="btn btn--accent" href="#/booking">${e(plan.hero.primaryCta)}</a></div>
 ${plan.order ? cartDrawer(plan, ui, delivery) : ""}
-<div class="lightbox" data-lightbox-root hidden role="dialog" aria-modal="true" aria-label="${e(ui.gallery)}"><button type="button" class="x" aria-label="${e(ui.closeMenu)}">${icon("close")}</button><button type="button" class="lb-nav lb-prev" aria-label="←">‹</button><figure style="margin:0"><img alt=""><figcaption></figcaption></figure><button type="button" class="lb-nav lb-next" aria-label="→">›</button></div>
+<div class="lightbox" data-lightbox-root data-trap hidden role="dialog" aria-modal="true" aria-label="${e(ui.gallery)}"><span class="lb-count" data-lb-count aria-live="polite"></span><button type="button" class="x" aria-label="${e(ui.closeMenu)}">${icon("close")}</button><button type="button" class="lb-nav lb-prev" aria-label="←">‹</button><figure style="margin:0"><img alt=""><figcaption></figcaption></figure><button type="button" class="lb-nav lb-next" aria-label="→">›</button></div>
 <div class="toasts" aria-live="polite"></div>
 <script id="malik-site" type="application/json">${json({ version: plan.version, plan, photos: Object.fromEntries(Object.entries(photos).filter(([, photo]) => photo).map(([key, photo]) => [key, { url: photo!.url, alt: photo!.alt, ...(photo!.credit ? { credit: photo!.credit, link: photo!.link } : {}) }])) })}</script>
 <script id="malik-data" type="application/json">${json(data)}</script>
