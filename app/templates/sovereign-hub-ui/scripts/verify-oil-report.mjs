@@ -20,29 +20,29 @@ const after = []
 const forbidden = () => { throw new Error("Forbidden provider/tool invoked during the oil report") }
 const comprehensiveCalls = []
 let economicGate, modelReached = false
-const fakeDeepModel = async (body, selection, _progress, onToken) => {
-  if (!String(body?.originalQuestion || body?.prompt || "").includes("GRAND CHALLENGE FIXTURE")) return forbidden()
-  comprehensiveCalls.push({ modelId: selection?.modelId, evidence: body?.metadata?.petroleumComputedEvidence, domain: body?.metadata?.petroleumDomain })
-  if (String(body?.originalQuestion).includes("ECONOMIC CLAIM FIXTURE")) {
+const fakeDeepModel = async (input) => {
+  assert.equal(input.responseContract,"petroleum-evidence-review-v1")
+  const data=JSON.parse(input.prompt)
+  comprehensiveCalls.push({ modelId: input.modelId, evidence: JSON.stringify(data.verifiedEngineEvidence), domain: input.taskPrompt.startsWith("Petroleum engineering review") })
+  if (data.questionExcerpt.includes("ECONOMIC CLAIM FIXTURE")) {
     modelReached = true
     await economicGate
-    return { content: "Экономика: без ГТМ фонд станет нерентабельным в течение 18–24 месяцев (в зависимости от OPEX).\n\n### Проверка участия моделей (2/3)\n- NVIDIA: участвовала\n- MAX: участвовала", provider: "mock-selected-model", model: selection.modelId, selectedModelId: selection.modelId, sources: [], usedWeb: false, attempts: [] }
+    return { content: "Экономика: без ГТМ фонд станет нерентабельным в течение 18–24 месяцев (в зависимости от OPEX).", provider: "mock-selected-model", model: input.modelId, selectedModelId: input.modelId }
   }
-  const content = "MULTIDISCIPLINARY MODEL ANALYSIS: 8 months; water cut, GOR, reservoir pressure and NPV need review."
-  onToken?.(content)
-  return { content, provider: "mock-selected-model", model: selection?.modelId, selectedModelId: selection?.modelId, usedWeb: false, sources: [], attempts: [{ provider: "mock-selected-model", model: selection?.modelId, ok: true }] }
+  const content=JSON.stringify({conclusion:"MULTIDISCIPLINARY MODEL ANALYSIS",findings:[{kind:"interpretation",factIds:[data.verifiedEngineEvidence.facts[0].id],text:"The computed trend needs an engineering interpretation within its stated scope."}],assumptions:[],missingData:["Field calibration is not available."],nextChecks:["Verify the original measurements."],limitations:["These are conditional calculations, not field certification."]})
+  return { content, provider: "mock-selected-model", model: input.modelId, selectedModelId: input.modelId, usage:{participantModels:[{id:"ling-3.1-flash"},{id:"malik-max"}],synthesized:true} }
 }
 class RouteError extends Error {}
 const owner = { userId: "fixture-account", authenticated: true, plan: "pro" }
 const load = workTestLoader({
   "./oil-report.css": {}, "./malik-tex.css": {},
   "next/server": { after: (fn) => after.push(fn) },
-  "@/lib/malik-god-router": { asPlainText: (answer) => answer.content, malikGodAnswer: fakeDeepModel, gatherSourcesForPrompt: forbidden, sourceContext: () => "" },
+  "@/lib/malik-god-router": { asPlainText: (answer) => answer.content, malikGodAnswer: forbidden, gatherSourcesForPrompt: forbidden, sourceContext: () => "" },
   "@/lib/server/plugin-runtime": { parsePluginCommand: () => null },
   "@/lib/server/plugin-model-answer": { runPluginModelAnswer: forbidden },
   "@/lib/ai/project-builder": { generateProjectWithBrain: forbidden },
   "@/lib/limits/rate-limit": { checkUsageLimit: async () => ({ ok: true }), recordChatUsage: async () => {} },
-  "@/lib/server/malik-model-router": { resolveStrictMalikSelection: async (_request, body) => ({ modelId: body?.model || "malik-20b", entitlement: owner }), MalikModelRouteError: RouteError, malikModelErrorPayload: (error) => ({ error: error.message }) },
+  "@/lib/server/malik-model-router": { runStrictMalikModel:fakeDeepModel,resolveStrictMalikSelection: async (_request, body) => ({ modelId: body?.model || "malik-20b", entitlement: owner }), MalikModelRouteError: RouteError, malikModelErrorPayload: (error) => ({ error: error.message }) },
   "@/lib/server/malik-coder-orchestrator": { runMalikCoderOrchestrator: forbidden },
   "@/lib/server/malik-agent-runtime": { prepareMalikAgentRuntime: forbidden },
   "@/lib/server/request-entitlement": { resolveRequestEntitlement: async () => owner },
@@ -375,19 +375,20 @@ test("stream: a pasted table is answered locally with the report — no model, o
     assert.match(view.request.metadata.sourceHash, /^[a-f0-9]{64}$/)
   }
 })
-test("MPCE: exact TITAN request with selected Oil or MAX uses verified fast path, no mandatory paid ensemble",async()=>{
+test("MPCE: exact TITAN request with selected Oil or MAX preserves verified calculations and invokes model review",async()=>{
   const before=comprehensiveCalls.length
   for(const modelId of ["malik-max","malik-oil-1tb"]) {
     const {answer,done,events}=await stream({originalQuestion:titanPrompt,modelId})
-    assert.equal(done.length,1);assert.equal(done[0].provider,"malik-petroleum-local")
+    assert.equal(done.length,1);assert.equal(done[0].provider,"mock-selected-model")
     const view=readOilReportBlock(answer.split(/\r\n?|\n/)[1]);assert.ok(view);assert.equal(view.execution.modelCalls.length,0)
     close(view.result.wells[0].forecast.exponential[0],601.1807539242155)
     assert.equal(answer.match(/```malik-oil-report/g).length,1)
     assert.ok(events.some(e=>e.stage==="COMPUTATIONS_VERIFIED"))
   }
-  assert.equal(comprehensiveCalls.length,before)
+  assert.equal(comprehensiveCalls.length,before+2)
 })
 test("grand challenge: Ling and MAX both receive a real model call and the verified charts remain in one answer", async () => {
+  const before=comprehensiveCalls.length
   const { requiresPetroleumExpertSynthesis } = load("lib/work/petroleum/expert-routing.ts")
   assert.equal(requiresPetroleumExpertSynthesis("Проанализируй добычу нефти\n" + GOLDEN), false)
   assert.equal(requiresPetroleumExpertSynthesis("UAE PETROLEUM ENGINEERING GRAND CHALLENGE"), true)
@@ -408,9 +409,9 @@ test("grand challenge: Ling and MAX both receive a real model call and the verif
     assert.equal(recent.modelId, modelId)
     assert.equal(recent.domain, true)
     assert.match(recent.evidence, /8/)
-    assert.match(recent.evidence, /500/)
+    assert.match(recent.evidence, /"facts"/)
   }
-  assert.equal(comprehensiveCalls.length, 3)
+  assert.equal(comprehensiveCalls.length, before+3)
 })
 
 test("stream: missing units get a question, not numbers", async () => {
@@ -453,9 +454,9 @@ test('production incident: six wells through Chat and Work, one final report and
   close(view.result.wells[0].first.oil,4000);close(view.result.wells[0].last.oil,3240);close(view.result.wells[0].decline.total,0.19)
   close(view.result.wells[0].last.wc,2070/5310)
   assert.ok(view.result.chartSeries.some(c=>c.id==='pressure'))
-  assert.deepEqual(events.filter(e=>e.phase==='petroleum'&&/^[A-Z_]+$/.test(e.stage)).map(e=>e.stage),['INPUT_PARSED','UNITS_RESOLVED','DATA_VALIDATED','COMPUTATIONS_STARTED','COMPUTATIONS_VERIFIED','VISUALS_PREPARED','RESPONSE_SYNTHESIZED','COMPLETED'])
+  assert.deepEqual(events.filter(e=>e.phase==='petroleum'&&/^[A-Z_]+$/.test(e.stage)).map(e=>e.stage),['INPUT_PARSED','UNITS_RESOLVED','DATA_VALIDATED','COMPUTATIONS_STARTED','COMPUTATIONS_VERIFIED','VISUALS_PREPARED','MODEL_MODEL','MODEL_VALIDATION','RESPONSE_SYNTHESIZED','COMPLETED'])
   assert.doesNotMatch(answer,/нет единиц|generatedMedia|участвовала|3\/3/)
-  assert.equal(done[0].provider,'malik-petroleum-local')
+  assert.equal(done[0].provider,'mock-selected-model')
   assert.equal(view.execution.modelCalls.length,0)
   assert.doesNotMatch(answer,/Ансамбль не вернул|участие моделей не подтверждено/)
  }
@@ -499,18 +500,19 @@ test('production incident: XLSX visible metadata cells supply units before the p
  const raw=answer.match(/```malik-oil-report[\r\n]+([^\r\n]+)/)?.[1];assert.ok(raw,answer.slice(0,150));close(readOilReportBlock(raw).result.wells[0].last.oil,3240)
 })
 
-test('stream: computed report is available before models finish; unsupported economic forecast is withheld',async()=>{
+test('stream: final report waits for checked model response; unsupported economic forecast is withheld',async()=>{
  let release;economicGate=new Promise(resolve=>{release=resolve});modelReached=false
  const request=new Request('http://fixture/api/stream',{method:'POST',headers:{'content-type':'application/json',accept:'text/event-stream'},body:JSON.stringify({stream:true,workspaceMode:'chat',originalQuestion:'@Malik Oil AI GRAND CHALLENGE FIXTURE ECONOMIC CLAIM FIXTURE\n'+GOLDEN,model:'malik-oil-1tb'})})
  const response=await POST(request),reader=response.body.getReader(),decoder=new TextDecoder();let first=''
  try {
-  while(!first.includes('```malik-oil-report')){const part=await reader.read();assert.equal(part.done,false);first+=decoder.decode(part.value)}
+  while(!first.includes('MODEL_MODEL')){const part=await reader.read();assert.equal(part.done,false);first+=decoder.decode(part.value)}
   assert.ok(!first.includes('RESPONSE_SYNTHESIZED'),'No fake finalization while providers are pending')
+  assert.ok(!first.includes('```malik-oil-report'),'One final response after model validation, not a premature final answer')
   assert.ok(!first.includes('нерентабельным'))
   release();let text=first;for(;;){const part=await reader.read();if(part.done)break;text+=decoder.decode(part.value)}
   const events=text.split('\n').filter(l=>l.startsWith('data: ')).map(l=>JSON.parse(l.slice(6))),answer=events.filter(e=>e.type==='content').map(e=>e.content).join('')
   assert.equal(modelReached,true);assert.equal(events.filter(e=>e.type==='done').length,1);assert.equal(answer.match(/```malik-oil-report/g)?.length,1)
-  assert.doesNotMatch(answer,/нерентабельным|18–24/);assert.match(answer,/economic claims from model interpretation were withheld/);assert.match(answer,/2\/3/)
+  assert.doesNotMatch(answer,/нерентабельным|18–24/);assert.match(answer,/accepted review: no/)
   for(const deferred of after.splice(0))await deferred()
  }finally{release()}
 })

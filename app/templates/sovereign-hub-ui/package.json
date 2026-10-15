@@ -148,6 +148,8 @@
     "test:petroleum-field": "node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs --test scripts/verify-petroleum-field.mjs && node scripts/verify-petroleum-field-api.mjs",
     "test:petroleum-api": "node scripts/verify-petroleum-api.mjs",
     "test:petroleum-stream": "node scripts/verify-petroleum-stream.mjs",
+    "test:petroleum-model-review": "node --test scripts/verify-petroleum-model-review.mjs scripts/verify-petroleum-model-review-api.mjs",
+    "test:petroleum-model-review-browser": "node scripts/verify-petroleum-model-review-browser.mjs",
     "test:petroleum-documents": "node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs --test --experimental-test-coverage scripts/verify-petroleum-documents.mjs",
     "test:petroleum-full-ui": "node scripts/verify-petroleum-full-ui.mjs",
     "test:oil-report": "node scripts/verify-oil-report.mjs",

@@ -16,7 +16,8 @@ export function requiresPetroleumExpertSynthesis(prompt: string): boolean {
   ]
   return subjects.filter(pattern => pattern.test(text)).length >= 3
 }
-/** Selecting Oil enables its domain, not an unconditional paid ensemble. */
+/** Explicit-review intent for other selections. Default MAX/Oil review policy
+ * after a verified calculation lives in model-review.ts. */
 export function requestsOilModelInterpretation(prompt:string) {
   return requiresPetroleumExpertSynthesis(prompt) || /(?:ансамбл|ensemble|multi.model|нескольк\p{L}*\s+модел|интерпретаци\p{L}*\s+модел|model\s+interpretation)/iu.test(prompt)
 }

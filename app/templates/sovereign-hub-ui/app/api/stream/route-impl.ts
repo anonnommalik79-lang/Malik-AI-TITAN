@@ -36,13 +36,11 @@ import { petroleumSafetyMessage } from "@/lib/work/petroleum/safety"
 import { executePetroleumDocument } from "@/lib/work/petroleum/documents"
 import { executePetroleumMessageAsync } from "@/lib/work/petroleum/message"
 import { executePetroleumAttachmentTable, executePetroleumTable, withOilVisual } from "@/lib/work/petroleum/table-message"
-import { oilReportBlocksToText } from "@/lib/work/petroleum/visual-report"
-import { guardOilInterpretation } from "@/lib/work/petroleum/interpretation-policy"
 import { oilLanguage } from "@/lib/work/petroleum/table-input"
-import { requestsOilModelInterpretation } from "@/lib/work/petroleum/expert-routing"
+import { needsOilModelReview, receiptReviewEvidence, tableReviewEvidence, type OilReviewEvidence } from "@/lib/work/petroleum/model-review"
+import { runPetroleumModelReview } from "@/lib/server/petroleum-model-review"
 import { routePetroleum } from "@/lib/work/petroleum/router"
 import { analyzeChatData, computedEvidenceInstruction } from "@/lib/analysis/chat"
-import { oilInterpretationHeading, oilModelsUnavailable } from "@/lib/ai/oil-answer-copy"
 import { runSiteForgeTurn } from "@/lib/sites/forge/chat-turn"
 import { compactForgeHistory } from "@/lib/sites/forge/chat"
 import { buildOilGasSkillInstruction } from "@/lib/ai/oil-gas-skill"
@@ -422,39 +420,28 @@ async function runSelectedAnswer(
   } })
   const oilScope = selection?.entitlement?.authenticated ? "account" as const : "guest" as const
   const oilProgress = (event: { stage: string; status: string; reason?: string; checked?: number }) => onProgress?.({ phase: "petroleum", kind: "petroleum", ...event })
+  const reviewModelId=selection?.modelId||DEFAULT_MALIK_MODEL_ID
+  const reviewOilReport=async(content:string,evidence:OilReviewEvidence)=>{
+    const language=oilLanguage(originalPrompt)
+    const modelStep=activity?.start("Инженерный разбор моделью", "model", reviewModelId)
+    const review=await runPetroleumModelReview({prompt:originalPrompt,modelId:reviewModelId,language,evidence,allowCatalog:Boolean(selection&&hasMalikProAccess(selection.entitlement.plan)),maxTokens:maxOutputTokens,signal,onStage:event=>{
+      const text=event.stage==="validation"?"Проверяю ссылки модели на расчёты":event.stage==="retry"?"Исправляю неподтверждённый разбор модели":"Модель анализирует проверенные результаты"
+      onProgress?.({phase:"petroleum",kind:"petroleum",stage:"MODEL_"+event.stage.toUpperCase(),text,attempt:event.attempt})
+    }})
+    activity?.finish(modelStep,{status:review.status,attempts:review.receipt.attempts,evidenceHash:evidence.hash},review.status==="completed"?"completed":"failed",review.status==="completed"?undefined:"MODEL_REVIEW_NOT_ACCEPTED")
+    const combined=content+"\n\n"+review.content
+    // The outer SSE writer publishes one authoritative final response. Never
+    // stream an unchecked model draft or a second competing answer.
+    return {content:combined,provider:review.provider,model:review.model,selectedModelId:reviewModelId,usedWeb:false,sources:[],attempts:[],usage:{petroleumModelReview:review.receipt}}
+  }
   const attachmentTable = petroleum && !petroleum.receipt.ok ? executePetroleumAttachmentTable({ prompt: originalPrompt, selectedSkillId: body?.selectedSkillId, scope: oilScope, attachments: body?.attachments, onEvent: oilProgress, deferCompletion: true }) : null
   if (attachmentTable) petroleum = null
   if (petroleum) {
     const step = fieldStep || activity?.start("Нефтегазовый расчёт и аудит", "code", petroleum.receipt.version)
     activity?.finish(step, { ok: petroleum.receipt.ok, inputHash: petroleum.receipt.inputHash }, petroleum.receipt.ok ? "completed" : "failed", petroleum.receipt.error)
     const content = withOilVisual(petroleum, originalPrompt, oilScope)
-    if (selection?.modelId === "malik-oil-1tb" && petroleum.receipt.ok && requestsOilModelInterpretation(originalPrompt)) {
-      // Preserve the verified field receipt and then activate all three models.
-      const engineeringBody = {
-        ...body,
-        metadata: {
-          ...body?.metadata,
-          petroleumDomain: true,
-          petroleumComputedEvidence: oilReportBlocksToText(content).slice(0, 16_000),
-        },
-      }
-      const prefix = content + "\n\n"
-      onToken?.(prefix)
-      try {
-        const answer = await runSelectedAnswerUnchecked(engineeringBody, selection, onProgress, maxOutputTokens, undefined, activity, signal)
-        const guarded = guardOilInterpretation(answer.content, oilLanguage(originalPrompt))
-        const appendix = oilInterpretationHeading(oilLanguage(originalPrompt)) + guarded.content
-        const combined = prefix + appendix
-        onToken?.(appendix)
-        return { ...answer, content: combined }
-      } catch (error) {
-        signal?.throwIfAborted()
-        const appendix = oilModelsUnavailable(oilLanguage(originalPrompt), "ensemble", error instanceof MalikModelRouteError && error.code === "OIL_ENSEMBLE_UNAVAILABLE")
-        const combined = prefix + appendix
-        onToken?.(appendix)
-        return { content: combined, provider: "malik-petroleum-local", model: petroleum.receipt.version, selectedModelId: selection.modelId, usedWeb: false, sources: [], attempts: [] }
-      }
-    }
+    const evidence=petroleum.receipt.ok&&needsOilModelReview(originalPrompt,reviewModelId)?receiptReviewEvidence(petroleum.receipt):null
+    if(evidence)return reviewOilReport(content,evidence)
     onToken?.(content)
     return { content, provider: "malik-petroleum-local", model: petroleum.receipt.version, selectedModelId: selection?.modelId || DEFAULT_MALIK_MODEL_ID, usedWeb: false, sources: [], attempts: [] }
   }
@@ -463,41 +450,11 @@ async function runSelectedAnswer(
   if (oilTable) {
     const step = activity?.start("Нефтегазовый расчёт и аудит", "code", oilTable.version)
     activity?.finish(step, { ok: oilTable.ok, inputHash: oilTable.inputHash }, oilTable.ok ? "completed" : "failed", oilTable.ok ? undefined : "Units or rate basis missing")
-    if (oilTable.ok && requestsOilModelInterpretation(originalPrompt)) {
-      // A comprehensive oil/field/economics brief cannot end at the fast visual report.
-      // The validated engineering data feed the model as evidence, not new instructions.
-      // Keep this out of provider logs and preserve the actual selected model identity.
-      const modelBody = {
-        ...body,
-        metadata: {
-          ...body?.metadata,
-          petroleumDomain: true,
-          petroleumComputedEvidence: oilReportBlocksToText(oilTable.content).slice(0, 16_000),
-        },
-      }
-      const prefix = oilTable.content + "\n\n"
-      onToken?.(prefix)
-      const modelStep = activity?.start("Мультидисциплинарный нефтегазовый анализ", "model", selection?.modelId || DEFAULT_MALIK_MODEL_ID)
-      try {
-        const answer = await runSelectedAnswerUnchecked(modelBody, selection, onProgress, maxOutputTokens, undefined, activity, signal)
-        activity?.finish(modelStep, { provider: answer.provider, model: answer.model, characters: answer.content.length })
-        const guarded = guardOilInterpretation(answer.content, oilLanguage(originalPrompt))
-        const appendix = oilInterpretationHeading(oilLanguage(originalPrompt)) + guarded.content
-        const content = prefix + appendix
-        oilProgress({ stage: "RESPONSE_SYNTHESIZED", status: "completed" })
-        onToken?.(appendix)
-        oilProgress({ stage: "COMPLETED", status: "completed" })
-        return { ...answer, content }
-      } catch (error) {
-        signal?.throwIfAborted()
-        activity?.finish(modelStep, { ok: false }, "failed", "MODEL_UNAVAILABLE")
-        const appendix = oilModelsUnavailable(oilLanguage(originalPrompt), "model", error instanceof MalikModelRouteError && error.code === "OIL_ENSEMBLE_UNAVAILABLE")
-        const content = prefix + appendix
-        oilProgress({ stage: "RESPONSE_SYNTHESIZED", status: "completed", reason: "DETERMINISTIC_REPORT_MODEL_UNAVAILABLE" })
-        onToken?.(appendix)
-        oilProgress({ stage: "COMPLETED", status: "completed" })
-        return { content, provider: "malik-petroleum-local", model: oilTable.version, selectedModelId: selection?.modelId || DEFAULT_MALIK_MODEL_ID, usedWeb: false, sources: [], attempts: [] }
-      }
+    if(oilTable.ok&&oilTable.reviewResult&&oilTable.inputHash&&needsOilModelReview(originalPrompt,reviewModelId)){
+      const answer=await reviewOilReport(oilTable.content,tableReviewEvidence(oilTable.reviewResult,oilTable.inputHash))
+      oilProgress({stage:"RESPONSE_SYNTHESIZED",status:"completed",reason:"MODEL_REVIEW_FINISHED"})
+      oilProgress({stage:"COMPLETED",status:"completed"})
+      return answer
     }
     if (oilTable.ok) oilProgress({ stage: "RESPONSE_SYNTHESIZED", status: "completed" })
     onToken?.(oilTable.content)

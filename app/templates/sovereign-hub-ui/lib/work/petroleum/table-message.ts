@@ -22,7 +22,7 @@ import { OIL_ANALYSES, OIL_ANALYSIS_ENGINE_VERSION, OIL_ANALYSIS_SCHEMA_VERSION,
 
 export const OIL_EXECUTION_STAGES = ["INPUT_PARSED", "UNITS_RESOLVED", "DATA_VALIDATED", "COMPUTATIONS_STARTED", "COMPUTATIONS_VERIFIED", "VISUALS_PREPARED", "RESPONSE_SYNTHESIZED", "COMPLETED"] as const
 export type OilExecutionEvent = { stage: typeof OIL_EXECUTION_STAGES[number]; status: "completed" | "blocked"; reason?: string; checked?: number }
-export type OilTableAnswer = { ok: boolean; content: string; version: string; inputHash: string | null; events: OilExecutionEvent[] }
+export type OilTableAnswer = { ok: boolean; content: string; version: string; inputHash: string | null; events: OilExecutionEvent[]; reviewResult?:ReturnType<typeof analyzePetroleumDataset> }
 type Scope = PetroleumAnalysisRequest["authenticatedContext"]["scope"]
 const MAX_FENCE_CHARS = 900_000
 const SYNTHETIC = /синтетич|synthetic|тестов\p{L}*\s+данн|test\s+data|demo|демо|вымышлен|fictional|اصطناعي|синтетикалық/iu
@@ -81,7 +81,7 @@ export function executePetroleumTable(input: { prompt: string; selectedSkillId?:
     emit({ stage: "RESPONSE_SYNTHESIZED", status: "completed" })
     emit({ stage: "COMPLETED", status: "completed" })
   }
-  return { ok: true, content, version: OIL_ANALYSIS_ENGINE_VERSION, inputHash: sourceHash, events }
+  return { ok: true, content, version: OIL_ANALYSIS_ENGINE_VERSION, inputHash: sourceHash, events, reviewResult:result }
 }
 
 type ProductionResult = ReturnType<typeof analyzeProduction>

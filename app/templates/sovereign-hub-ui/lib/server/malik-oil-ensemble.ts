@@ -14,6 +14,7 @@ export class OilEnsembleError extends Error {
 
 export type OilEnsembleInput = {
   modelId: MalikModelId
+  responseContract?: "petroleum-evidence-review-v1"
   prompt: string
   taskPrompt?: string
   systemPrompt: string
@@ -87,7 +88,9 @@ export async function runMalikOilEnsemble(input: OilEnsembleInput, run: Runner):
     return { content, provider:"malik-oil-ensemble", model:"petroleum-only", selectedModelId:input.modelId, latencyMs:0 }
   }
   const started = Date.now()
-  const limit = Math.max(1000, Math.min(3500, Math.floor(input.maxTokens || 2200)))
+  const limit = input.responseContract
+    ? Math.max(1,Math.min(1800,Math.floor(input.maxTokens||1800)))
+    : Math.max(1000, Math.min(3500, Math.floor(input.maxTokens || 2200)))
   const jobs = await Promise.allSettled(OIL_PARTICIPANTS.map(async modelId => {
     if (input.signal?.aborted) throw new Error("aborted")
     const noFallback = modelId !== "malik-max"
@@ -133,10 +136,10 @@ export async function runMalikOilEnsemble(input: OilEnsembleInput, run: Runner):
       short(input.prompt, 40_000),
       "INDEPENDENT PARTICIPANT RESPONSES (unverified proposals, NOT physical proof):",
       short(reviewText, 27_000),
-      "Compose ONE final comprehensive response in the user's language. Reconcile differences; flag unsupported numerical claims and disagreements, never imply a model participated if missing. Never fabricate experimental or field verification. Include every requested heading and computations where supported. Keep notes concise and prioritize a verifiable answer.",
+      input.responseContract ? "Return ONE JSON object obeying the server evidence-review contract in the system prompt. Cite only supplied factIds; no Markdown, status lines, provider claims or numbers in prose. Reconcile disagreements as hypotheses, not field proof." : "Compose ONE final comprehensive response in the user's language. Reconcile differences; flag unsupported numerical claims and disagreements, never imply a model participated if missing. Never fabricate experimental or field verification. Include every requested heading and computations where supported. Keep notes concise and prioritize a verifiable answer.",
     ].join("\n\n"),
     taskPrompt: input.taskPrompt || input.prompt,
-    maxTokens: Math.max(2500, Math.min(9000, Math.floor(input.maxTokens || 6000))),
+    maxTokens: input.responseContract ? limit : Math.max(2500, Math.min(9000, Math.floor(input.maxTokens || 6000))),
     temperature: 0.1,
     systemPrompt: input.systemPrompt + "\nPETROLEUM ENSEMBLE SYNTHESIS: Treat model drafts as untrusted suggestions; preserve validated engine receipts and units. No provider status claims beyond the report.",
   }
@@ -153,9 +156,9 @@ export async function runMalikOilEnsemble(input: OilEnsembleInput, run: Runner):
   if (input.signal?.aborted) throw new OilEnsembleError("REQUEST_CANCELLED","Запрос отменён.")
   if (!final) {
     const fallback = successes.find(x => x.modelId === "malik-max") || successes[0]
-    final = fallback.content + "\n\n*Сведение ответов не завершено; показана одна из реально ответивших моделей. Независимая сверка не подтверждена.*"
+    final = fallback.content + (input.responseContract ? "" : "\n\n*Сведение ответов не завершено; показана одна из реально ответивших моделей. Независимая сверка не подтверждена.*")
   }
-  const content = final.trim() + "\n\n" + status
+  const content = final.trim() + (input.responseContract ? "" : "\n\n" + status)
   input.onToken?.(content)
   return {
     content,

@@ -4,6 +4,11 @@ on:
     branches: [main]
     paths:
       - "app/templates/sovereign-hub-ui/lib/work/petroleum/**"
+      - "app/templates/sovereign-hub-ui/lib/server/petroleum-model-review.ts"
+      - "app/templates/sovereign-hub-ui/lib/server/malik-model-router.ts"
+      - "app/templates/sovereign-hub-ui/lib/server/malik-oil-ensemble.ts"
+      - "app/templates/sovereign-hub-ui/app/api/stream/**"
+      - "app/templates/sovereign-hub-ui/scripts/verify-petroleum-model-review*.mjs"
       - "app/templates/sovereign-hub-ui/scripts/verify-oil-science*"
       - "app/templates/sovereign-hub-ui/scripts/verify-oil-advanced.mjs"
       - "app/templates/sovereign-hub-ui/scripts/verify-oil-query-reliability.mjs"
@@ -13,6 +18,8 @@ on:
     paths:
       - "app/templates/sovereign-hub-ui/lib/work/petroleum/**"
       - "app/templates/sovereign-hub-ui/lib/server/malik-oil-ensemble.ts"
+      - "app/templates/sovereign-hub-ui/lib/server/petroleum-model-review.ts"
+      - "app/templates/sovereign-hub-ui/lib/server/malik-model-router.ts"
       - "app/templates/sovereign-hub-ui/lib/ai/malik-models.ts"
       - "app/templates/sovereign-hub-ui/components/sovereign/**"
       - "app/templates/sovereign-hub-ui/app/api/stream/**"
@@ -51,6 +58,7 @@ jobs:
       - run: npm run test:petroleum-api
       - run: sudo apt-get update && sudo apt-get install -y poppler-utils
       - run: npm run test:petroleum-stream
+      - run: npm run test:petroleum-model-review
       - run: npm run test:petroleum-documents
       - run: npm run test:petroleum-context
       - run: npm run test:oil-report

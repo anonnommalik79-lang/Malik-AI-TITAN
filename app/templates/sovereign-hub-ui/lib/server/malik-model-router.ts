@@ -864,6 +864,8 @@ export function longOutputContinuationPrompt(originalPrompt: string, content: st
 
 export async function runStrictMalikModel(input: {
   modelId: MalikModelId
+  /** Trusted server review contract; not read from public request metadata. */
+  responseContract?: "petroleum-evidence-review-v1"
   prompt: string
   /** The user's request before retrieved excerpts are appended. */
   taskPrompt?: string
