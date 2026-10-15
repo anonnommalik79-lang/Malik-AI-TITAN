@@ -1,3 +1,5 @@
+import { asksAnalysis } from "@/lib/ai/analysis-shape"
+
 export function answerBudget(body: any, prompt: string, taskTarget: number) {
   const requested = Number(body?.maxTokens) || 0
   const tokenMatch = prompt.match(/(?:на|about|around|approximately|примерно)\s+(\d{3,6})\s*(?:токен|tokens?)/i)
@@ -19,7 +21,9 @@ export function answerBudget(body: any, prompt: string, taskTarget: number) {
         ? 7_000
         : 0
 
-  const wanted = Math.max(requested, taskTarget, structuredFloor, Math.min(asked, 32_000))
+  // A professional analysis (findings, tables, KPI blocks, scenarios, risks) must not be cut off midway.
+  const analysisFloor = asksAnalysis(prompt) ? 7_000 : 0
+  const wanted = Math.max(requested, taskTarget, structuredFloor, analysisFloor, Math.min(asked, 32_000))
   const cap = Number(body?.maxTokensCap)
   return Number.isFinite(cap) && cap > 0 ? Math.min(wanted, Math.floor(cap)) : wanted
 }

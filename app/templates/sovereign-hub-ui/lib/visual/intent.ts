@@ -70,5 +70,11 @@ export function visualEngineContract(prompt: string): string {
   return [...COMMON, `Suitable for this request: ${kinds.join(", ")}.`, ...guidance, ...kinds.map((kind) => SCHEMAS[kind])].join("\n")
 }
 
+/** The contract for an explicit set of kinds (the analyst asks for KPI cards, a chart and a table). */
+export function visualContractFor(kinds: VisualEngineType[]): string {
+  const unique = [...new Set(kinds)].filter((kind) => SCHEMAS[kind]).slice(0, 4)
+  return unique.length ? [...COMMON, `Suitable for this request: ${unique.join(", ")}.`, ...unique.map((kind) => SCHEMAS[kind])].join("\n") : ""
+}
+
 /** Full catalogue, for documentation and tests. */
 export const VISUAL_ENGINE_SCHEMAS = SCHEMAS

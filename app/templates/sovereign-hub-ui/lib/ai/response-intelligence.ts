@@ -1,6 +1,7 @@
 import { isModelLeaderboardRequest } from "@/lib/ai/freshness-intent"
 import { MALIK_ANSWER_VISUAL_CONTRACT } from "@/lib/ai/answer-visuals"
-import { visualEngineContract } from "@/lib/visual/intent"
+import { selectVisualKinds, visualContractFor, visualEngineContract } from "@/lib/visual/intent"
+import { analysisFrame, analysisVisualKinds, asksAnalysis, buildAnalystContract } from "@/lib/ai/analysis-shape"
 
 export type ResponseLanguage = "ru" | "kk" | "en" | "auto"
 import { buildChatArtifactSkillPrompt } from "@/lib/ai/chat-artifact-skills"
@@ -239,10 +240,11 @@ export function analyzeResponseRequest(promptValue: string, usedWeb = false): Ma
   const isExplicitlyDeep = matches(lower, /подробн|детальн|глубок|полный разбор|пошаг|in depth|detailed|толық|ж[её]стк\p{L}*\s+(?:уровн|разбор|сравн|анализ)|по[- ]ж[её]стк|по полной|на максимум|hardcore/u)
   const asksOverview = asksSubjectOverview(prompt)
   const headToHead = asksHeadToHead(prompt)
+  const analysis = asksAnalysis(prompt)
   const compoundCount = (prompt.match(/\?|\n|;|\bи\b|\band\b/giu) || []).length
   const complexity: ResponseComplexity = isExplicitlyShort
     ? "simple"
-    : isExplicitlyDeep || prompt.length > 320 || compoundCount >= 4
+    : isExplicitlyDeep || prompt.length > 320 || compoundCount >= 4 || analysis
       ? "complex"
       // A short question about a whole subject is not a short question.
       : asksOverview || headToHead
@@ -308,6 +310,8 @@ export function analyzeResponseRequest(promptValue: string, usedWeb = false): Ma
 
   const targetLength = complexity === "simple"
     ? "2-4 sentences unless the user explicitly asks for a list, code or steps"
+    : analysis && !isExplicitlyShort
+      ? "a complete professional analysis: verdict, key findings, the sections of its frame, scenarios where the future matters, a risk table and concrete recommendations"
     : signals.has("headtohead")
       ? "a full head-to-head: verdict first, the contenders side by side, measured differences, who wins where and a recommendation"
     : signals.has("overview")
@@ -356,7 +360,13 @@ export function buildMalikResponseSystemPrompt(input: {
   const oilGasContract = buildOilGasSkillInstruction(input.prompt)
   // Interactive blocks (charts, dashboards, calculators, tables, graphs): the
   // schemas are added only when the request calls for one of them.
-  const visualContract = visualEngineContract(subjectPrompt)
+  const today = input.currentDate || currentResearchDate()
+  // «проанализируй рынок…», «разбери риски…»: the structure of a professional
+  // analysis on any subject, with KPI cards and charts where numbers justify them.
+  const analystContract = !brief && !profile.signals.includes("code") && asksAnalysis(subjectPrompt) ? buildAnalystContract(subjectPrompt, today) : ""
+  const visualContract = analystContract
+    ? visualContractFor([...selectVisualKinds(subjectPrompt), ...analysisVisualKinds(analysisFrame(subjectPrompt))]) || visualEngineContract(subjectPrompt)
+    : visualEngineContract(subjectPrompt)
   const webContract = input.usedWeb && input.hasWebEvidence !== false
     ? "Verified web excerpts are supplied below. Answer the user's request using the actual evidence; do not send them to perform the search themselves. For a requested list, return the confirmed names and label it partial unless the source establishes completeness. Cite supported factual claims inline as [n]. Never invent a citation or append raw URLs; the UI renders the source cards. Missing details in these excerpts do not prove that no public information exists. If excerpts conflict or do not confirm a detail, say so."
     : input.usedWeb
@@ -371,7 +381,6 @@ export function buildMalikResponseSystemPrompt(input: {
     "- If the sources do not establish an ordered leaderboard, show verified candidates without claiming exact ranks and explain that limitation.",
     "- Output a single well-formed Markdown table: one header, one separator, and only verified rows. Never print a second header, half a table or stray Markdown markers. Keep the answer compact enough to finish within the response budget.",
   ].join("\n") : ""
-  const today = input.currentDate || currentResearchDate()
   // Cards (pictures, official links, buttons) wherever the answer is about
   // concrete things: every answer from web evidence, overviews, comparisons
   // and purchases - never code or small talk.
@@ -435,6 +444,7 @@ export function buildMalikResponseSystemPrompt(input: {
     ] : []),
     ...(briefContract ? [briefContract] : []),
     ...(shapeContract ? [shapeContract] : []),
+    ...(analystContract ? [analystContract] : []),
     ...(codeContract ? [codeContract] : []),
     ...(artifactContract ? [artifactContract] : []),
     ...(oilGasContract ? [oilGasContract] : []),

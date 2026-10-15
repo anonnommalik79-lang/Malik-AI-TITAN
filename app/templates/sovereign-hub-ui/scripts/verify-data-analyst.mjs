@@ -243,3 +243,39 @@ test("language: the words around an oil report follow the question's language", 
   assert.equal(oilModelsUnavailable("ru", "ensemble", true), "Участие моделей: 0/3 — ответы провайдеров не получены. Детерминированные расчёты сохранены.")
   assert.match(oilModelsUnavailable("en", "model", false), /^The model returned no final answer/)
 })
+
+test("any subject: an analysis question without data gets a professional analyst's structure", () => {
+  const { asksAnalysis, analysisFrame, buildAnalystContract } = load("lib/ai/analysis-shape.ts")
+  const { buildMalikResponseSystemPrompt } = load("lib/ai/response-intelligence.ts")
+  const { shouldUseWeb } = load("lib/ai/web-search-policy.ts")
+
+  const market = buildMalikResponseSystemPrompt({ prompt: "проанализируй рынок кофеен в Алматы", currentDate: "2026-10-15" })
+  assert.match(market, /ANALYST CONTRACT/)
+  assert.match(market, /MARKET frame/)
+  assert.match(market, /Актуально на 2026-10-15/)
+  assert.match(market, /dashboard \(KPI panel/, "KPI cards are available to the analyst")
+  assert.match(market, /риск \| вероятность \| влияние/)
+  assert.ok(shouldUseWeb("проанализируй рынок кофеен в Алматы"), "a market analysis checks current numbers")
+  assert.ok(shouldUseWeb("стоит ли открывать кофейню в Шымкенте"), "a business decision checks current numbers")
+
+  const poem = buildMalikResponseSystemPrompt({ prompt: "проанализируй стихотворение Абая «Қараңғы түнде тау қалғып»" })
+  assert.match(poem, /WORK OF ART\/TEXT frame/)
+  assert.doesNotMatch(poem, /dashboard \(KPI panel/, "no KPI cards for a poem")
+
+  for (const prompt of ["привет, как дела?", "проанализируй мой код на python", "разбери слово по составу: подоконник", "мой анализ крови показал низкий гемоглобин", "что такое анализ данных"]) {
+    assert.equal(asksAnalysis(prompt), false, prompt)
+    assert.doesNotMatch(buildMalikResponseSystemPrompt({ prompt }), /ANALYST CONTRACT/, prompt)
+  }
+  assert.equal(analysisFrame("сделай SWOT анализ Kaspi"), "company")
+  assert.equal(analysisFrame("разбери причины инфляции в Казахстане"), "event")
+  assert.equal(analysisFrame("стоит ли открывать кофейню"), "decision")
+  assert.ok(asksAnalysis("нарықты талдап бер"), "Kazakh")
+  assert.ok(asksAnalysis("analyze the EV market in Europe"), "English")
+  assert.match(buildAnalystContract("стоит ли открывать кофейню", "2026-10-15"), /Вес %/)
+  // A short question is still a full report, with room to finish it.
+  const { analyzeResponseRequest } = load("lib/ai/response-intelligence.ts")
+  const { answerBudget } = load("lib/ai/answer-budget.ts")
+  assert.equal(analyzeResponseRequest("проанализируй рынок кофеен в Алматы").complexity, "complex")
+  assert.ok(answerBudget({}, "проанализируй рынок кофеен в Алматы", 4500) >= 7000)
+  assert.equal(answerBudget({}, "привет", 700), 700)
+})

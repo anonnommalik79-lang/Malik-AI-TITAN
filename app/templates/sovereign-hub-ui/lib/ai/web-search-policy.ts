@@ -1,4 +1,5 @@
 import { asksHeadToHead, asksPurchaseAdvice, asksSubjectOverview } from "@/lib/ai/question-shape"
+import { analysisFrame, asksAnalysis } from "@/lib/ai/analysis-shape"
 import { needsCurrentEvidence } from "./current-evidence"
 import { truthNeedsLiveEvidence } from "./truth-engine"
 import { classifyFreshness, NO_WEB } from "./freshness-intent"
@@ -28,6 +29,8 @@ export function shouldUseWeb(prompt: string, options: WebSearchOptions = {}): bo
   // or API keyword must not bypass checks of releases, prices and availability.
   if (needsCurrentEvidence(text)) return true
   if (truthNeedsLiveEvidence(text)) return true
+  // An analyst checks the current numbers before analysing a market, a company, a technology or an event.
+  if (asksAnalysis(text) && (["market", "company", "technology", "event"].includes(analysisFrame(text)) || (analysisFrame(text) === "decision" && /бизнес|кофейн|магазин|салон|открыва|открыть|инвест|вклад|акци|крипт|недвиж|business|invest|stock|crypto/iu.test(text)))) return true
   const freshness = classifyFreshness(text)
   if (freshness.category === "STATIC" && !options.forceResearch) return false
 
