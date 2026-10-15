@@ -40,13 +40,43 @@ A website request in the chat («создай сайт на кофейню», «
    - basket and booking wiring.
 7. **Edits.** The plan is embedded in the page (`script#malik-site`). A follow-up («сделай темнее», «добавь матча латте за 1900») edits the plan and the site is rendered again. In later model calls the 100 KB page is replaced by a one-line summary.
 
+8. **Interface skills.** `lib/sites/forge/skills.ts` lists 26 patterns from open-source GitHub design systems. They are rewritten in the forge's own code; no library or script is loaded from them. Examples:
+   - Magic UI: the bento grid, the marquee and the number ticker;
+   - Swiper: the snap carousel;
+   - PhotoSwipe: the photo counter;
+   - AOS: scroll reveal;
+   - GOV.UK Frontend: the form error summary;
+   - Cal.com: time slots as buttons;
+   - focus-trap: focus stays inside dialogs;
+   - Radix Colors and Open Props: colour and motion tokens;
+   - Schema.org: opening hours and offers;
+   - HTML5 Boilerplate: meta tags and the favicon.
+
+   A skill is reported only when its markup is in the finished page. The chat lists the skills by group, with links. The copy rules of the matching registry skills go into the planner prompt.
+
+## Other entry points
+
+- The Sites studio (`/api/generate/website`) sends local businesses to the forge, keeping the same response shape. «Изменить» posts `previousHtml`, and a forge page is edited through its embedded plan. Other requests (SaaS, product landings) keep the older engine.
+- The OS `site.generate` tool uses the forge only for local businesses. Software products and startups keep the landing engine.
+
 ## Tests
 
-- `npm run test:site-forge` runs detection, merging, contacts, photos, escaping, quality, edits, and the real chat route with stubs. It is part of `test:release-core`.
-- `npm run test:site-forge-live` uses Playwright. It clicks through four generated sites at 1366 and 390 px and inside the chat's sandboxed frame.
+- `npm run test:site-forge` (part of `test:release-core`) covers:
+  - detection, merging and contacts;
+  - photos and escaping;
+  - quality and edits;
+  - skills and structured data;
+  - the studio and OS routing;
+  - the real chat route with stubs.
+- `npm run test:site-forge-live` uses Playwright to click through four generated sites at 1366 and 390 px and inside the chat's sandboxed frame. It also checks the new behaviour:
+  - time buttons;
+  - the error summary;
+  - the photo counter;
+  - focus traps;
+  - scroll reveal and counters;
+  - the carousel.
 
 ## Not done yet
 
-- The Sites studio (`/api/generate/website`) and the OS `site.generate` tool still use the older single-page engine.
-- The curated photo library covers coffee, bakery and restaurant topics only. Other businesses rely on the live finder or tiles. Adding `PEXELS_API_KEY` (free) improves photos for every business.
+- The curated photo library covers only coffee, bakery and restaurant topics. Other businesses rely on the live finder or on colour tiles. Adding `PEXELS_API_KEY` (free) improves photos for every business.
 - Publishing a site to its own link is not built yet.
