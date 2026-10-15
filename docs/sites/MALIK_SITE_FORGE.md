@@ -59,6 +59,14 @@ A website request in the chat («создай сайт на кофейню», «
 - The Sites studio (`/api/generate/website`) sends local businesses to the forge, keeping the same response shape. «Изменить» posts `previousHtml`, and a forge page is edited through its embedded plan. Other requests (SaaS, product landings) keep the older engine.
 - The OS `site.generate` tool uses the forge only for local businesses. Software products and startups keep the landing engine.
 
+## Publishing by link
+
+Press «Опубликовать» in the chat's code bar or in the Sites studio. The site becomes available at `malikaiworld.world/site/<id>`. Publishing again after an edit updates the same link, and the author can take it down.
+
+Only forge pages can be published. The server renders the page again from its cleaned plan; the HTML the browser sent is never stored. The page is served with a sandboxing CSP, so it cannot read the visitor's session.
+
+Publishing needs the same private bucket as chat history (`PRIVATE_STATE_BUCKET` or `R2_BUCKET` with keys). Without the bucket, the button says that publishing is unavailable.
+
 ## Tests
 
 - `npm run test:site-forge` (part of `test:release-core`) covers:
@@ -79,4 +87,3 @@ A website request in the chat («создай сайт на кофейню», «
 ## Not done yet
 
 - The curated photo library covers only coffee, bakery and restaurant topics. Other businesses rely on the live finder or on colour tiles. Adding `PEXELS_API_KEY` (free) improves photos for every business.
-- Publishing a site to its own link is not built yet.
