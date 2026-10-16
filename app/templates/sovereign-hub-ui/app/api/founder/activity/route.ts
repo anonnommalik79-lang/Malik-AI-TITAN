@@ -1,5 +1,5 @@
 import { getOptionalWorkOSAuth } from "@/lib/auth/server"
-import { canReadFounderHistory } from "@/lib/server/founder-history-access"
+import { verifyFounderHistoryViewer, founderHistoryAccessDenied } from "@/lib/server/founder-viewer-verification"
 import { fetchWithTimeout } from "@/lib/server/request-safety"
 import { founderMessageStorageMode, founderMessageStorageWarning, readFounderMessageLog, type FounderMessageEntry } from "@/lib/server/founder-message-log"
 
@@ -107,9 +107,7 @@ async function readAllSpellings(user: WorkOSUser): Promise<FounderMessageEntry[]
 
 export async function GET(request: Request) {
   const { user } = await getOptionalWorkOSAuth()
-  if (!canReadFounderHistory(user)) {
-    return Response.json({ ok: false, error: "FOUNDER_VERIFIED_ACCOUNT_REQUIRED" }, { status: 403, headers: { "Cache-Control": "private, no-store" } })
-  }
+  if (!await verifyFounderHistoryViewer(user)) return founderHistoryAccessDenied(user, request)
 
   const url = new URL(request.url)
   const search = String(url.searchParams.get("q") || "").trim().toLowerCase()

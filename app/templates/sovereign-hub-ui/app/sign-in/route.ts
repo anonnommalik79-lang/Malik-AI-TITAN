@@ -21,7 +21,7 @@ export const GET = async (request: Request) => {
   if (canonical) redirect(canonical)
 
   const requested = requestUrl.searchParams.get("returnTo") || ""
-  const returnTo = requested.startsWith("/shorts") ? shortsPath(requested) : "/dashboard"
+  const returnTo = requested === "/founder/history" ? requested : requested.startsWith("/shorts") ? shortsPath(requested) : "/dashboard"
 
   const authorizationUrl = await getSignInUrl({
     returnTo,
