@@ -906,6 +906,20 @@ export async function runStrictMalikModel(input: {
     }
   }
 
+  // MalikCoder is an orchestrator: the chat runs it through its own pipeline.
+  // A server caller that asks this router for it directly (the business
+  // project builder, its reviewer) used to get «использует оркестратор…»
+  // thrown back on every request. It now gets the MAX engine under its name.
+  if (model.provider === "malik-orchestrator") {
+    const engine = await import("./malik-max-engine")
+    const result = await engine.runMalikMax({
+      prompt: input.prompt, taskPrompt: input.taskPrompt, systemPrompt: input.systemPrompt, history: input.history, attachments: input.attachments,
+      maxTokens: input.maxTokens, temperature: input.temperature, reasoningEffort: input.reasoningEffort, allowCatalog: input.allowCatalog,
+      onToken: input.onToken, signal: input.signal, publicLabel: model.label,
+    })
+    return { ...result, selectedModelId: model.id }
+  }
+
   // MalikLLM MAX and models picked by name run on the streaming engine:
   // every key of every model is a lane, lanes race, and a lane that stalls
   // is replaced in seconds instead of minutes. Internal single-model calls
@@ -926,7 +940,7 @@ export async function runStrictMalikModel(input: {
       signal: input.signal,
     }
     if (model.id === "malik-max") return engine.runMalikMax(engineInput)
-    if (model.provider !== "malik-orchestrator") {
+    if ((model.provider as string) !== "malik-orchestrator") {
       let wrote = false
       try {
         const result = await engine.runSelectedModel({ ...engineInput, onToken: (chunk: string) => { wrote = true; input.onToken?.(chunk) } }, model)

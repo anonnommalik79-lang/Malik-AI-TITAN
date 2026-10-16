@@ -42,8 +42,28 @@ function sameUser(left: string, right: string) {
   return String(left || "").trim().toLowerCase() === String(right || "").trim().toLowerCase()
 }
 
+// The cache is bounded (it used to grow for the life of the process) and a
+// job still rendering is re-read from storage after a few seconds, because
+// another server instance may be the one that saw it finish.
+const CACHE_LIMIT = 5000
+const LIVE_REFRESH_MS = 5000
+const cachedAt = new Map<string, number>()
+
+function remember(job: StoredVideoJob) {
+  const map = jobs()
+  map.delete(job.taskId)
+  map.set(job.taskId, job)
+  cachedAt.set(job.taskId, Date.now())
+  while (map.size > CACHE_LIMIT) {
+    const oldest = map.keys().next().value
+    if (oldest === undefined) break
+    map.delete(oldest)
+    cachedAt.delete(oldest)
+  }
+}
+
 async function persist(job: StoredVideoJob) {
-  jobs().set(job.taskId, job)
+  remember(job)
   await writePrivateJson(jobKey(job.userId, job.taskId), job)
   return job
 }
@@ -59,7 +79,8 @@ export async function getVideoJob(taskId: string, userId?: string): Promise<Stor
   const cached = jobs().get(id) || null
   if (cached) {
     if (userId && !sameUser(cached.userId, userId)) return null
-    return cached
+    const live = cached.status === "queued" || cached.status === "generating"
+    if (!live || !userId || Date.now() - (cachedAt.get(id) || 0) < LIVE_REFRESH_MS) return cached
   }
 
   // Durable lookup requires the authenticated owner because private state is
@@ -67,8 +88,8 @@ export async function getVideoJob(taskId: string, userId?: string): Promise<Stor
   if (!userId) return null
 
   const stored = await readPrivateJson<StoredVideoJob>(jobKey(userId, id))
-  if (!stored || stored.taskId !== id || !sameUser(stored.userId, userId)) return null
-  jobs().set(stored.taskId, stored)
+  if (!stored || stored.taskId !== id || !sameUser(stored.userId, userId)) return cached
+  remember(stored)
   return stored
 }
 

@@ -39,6 +39,7 @@ import {
   Video,
 } from "lucide-react"
 import { buildFallbackAvatar, getStoredAuthSnapshot, signOutMalik } from "@/lib/auth/client-session"
+import { founderAccess } from "@/lib/auth/founder-access-client"
 import { prefillPrompt } from "@/lib/malik-context"
 import { openOs } from "./os/os-client"
 import type { AIPlan } from "@/lib/ai/types"
@@ -73,6 +74,8 @@ interface SidebarProps {
   onTogglePinChat?: (chatId: string) => void
   activeChatId?: string | null
   activeView?: string
+  /** «Чат» or «Работа»: Malik Work is the active item in work mode, not «Новый чат». */
+  workspaceMode?: string
   onViewChange?: (view: string) => void
   chats?: Chat[]
   onLogout?: () => void
@@ -216,6 +219,7 @@ function SidebarInner({
   onTogglePinChat,
   activeChatId,
   activeView = "home",
+  workspaceMode = "chat",
   onViewChange,
   chats = [],
   onLogout,
@@ -247,12 +251,8 @@ function SidebarInner({
   useEffect(() => {
     let alive = true
     const checkFounderAccess = async () => {
-      try {
-        const response = await fetch("/api/founder/access", { credentials: "same-origin", cache: "no-store" })
-        if (alive) setFounderAllowed(response.ok)
-      } catch {
-        if (alive) setFounderAllowed(false)
-      }
+      const ok = await founderAccess()
+      if (alive) setFounderAllowed(ok)
     }
     void checkFounderAccess()
     window.addEventListener("malik-auth-updated", checkFounderAccess)
@@ -376,9 +376,10 @@ function SidebarInner({
   }, [isPro, onNewChat, onOpenVoice, onViewChange, openView])
 
   const actionIsActive = useCallback((action: SidebarAction) => {
-    if (action.id === "new") return activeView === "home" && !activeChatId
+    if (action.id === "new") return activeView === "home" && !activeChatId && workspaceMode !== "work"
+    if (action.id === "work") return activeView === "home" && workspaceMode === "work"
     return Boolean(action.view && action.view === activeView)
-  }, [activeChatId, activeView])
+  }, [activeChatId, activeView, workspaceMode])
 
   const saveRename = useCallback((chatId: string) => {
     const title = editingTitle.trim()
