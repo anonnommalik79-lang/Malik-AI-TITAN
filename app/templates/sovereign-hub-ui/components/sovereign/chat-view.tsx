@@ -3075,6 +3075,9 @@ export function ChatView({ messages, workspaceMode = "chat", onSendMessage, onIm
                     && !message.generatedMedia
                     && !message.imageConfirmation
                     && !message.superflow
+                    // «Подробнее / Короче» make no sense under an error or a stopped answer.
+                    && message.execution?.state !== "failed"
+                    && message.execution?.state !== "cancelled"
                   }
                 />
               ))}
