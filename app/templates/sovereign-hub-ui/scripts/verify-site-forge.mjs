@@ -5,6 +5,7 @@
 //   node scripts/verify-site-forge.mjs
 import test from "node:test"
 import assert from "node:assert/strict"
+import fs from "node:fs"
 import { workTestLoader } from "./work-test-loader.mjs"
 
 const after = []
@@ -299,6 +300,27 @@ test("publish: a forge site gets a public link; only a re-rendered forge page ca
   const guest = await post(site.html)
   assert.equal(guest.status, 401)
   assert.match((await guest.json()).message, /Войдите/)
+})
+
+test("the Sites studio route works: forge for businesses, a provider-agnostic edit for other pages", async () => {
+  const routed = []
+  const studio = workTestLoader({
+    "@/lib/ai/router": { routeAI: async (input) => { routed.push(input); return input.task === "code" ? { success: true, provider: "groq", model: "fixture", output: "<!doctype html><html><head><meta name=\"viewport\" content=\"width=device-width\"></head><body>edited</body></html>", latencyMs: 1 } : { success: false } } },
+    "@/lib/server/presentation-photos": { findPhoto: async () => null },
+    "@/lib/malik-compute/runtime": { withCompute: (handler) => handler },
+  })
+  const { POST } = studio("app/api/generate/website/route.ts")
+  const post = async (body) => { const response = await POST(new Request("http://fixture/api/generate/website", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) })); return { status: response.status, data: await response.json() } }
+  const made = await post({ prompt: "Создай сайт для кофейни «Зерно» в Алматы" })
+  assert.equal(made.status, 200, JSON.stringify(made.data).slice(0, 200))
+  assert.equal(made.data.engine, "malik-forge/v1")
+  const edited = await post({ prompt: "сделай темнее", previousHtml: made.data.html })
+  assert.equal(edited.data.plan.brand.name, "Зерно", "a forge page is edited through its plan")
+  const other = await post({ prompt: "сделай кнопку синей", previousHtml: "<!doctype html><html><body>old</body></html>" })
+  assert.equal(other.status, 200)
+  assert.match(other.data.html, /edited/)
+  assert.ok(routed.every((input) => !input.model && !input.provider), "no model is pinned")
+  assert.doesNotMatch(fs.readFileSync("app/api/generate/website/route.ts", "utf8"), /runStrictMalikModel\(|malik-coder-32b/, "MalikCoder cannot be run through the strict router")
 })
 
 test("quality: forge sites pass; a typical model site's faults are named", async () => {
