@@ -8474,6 +8474,7 @@ const shouldShowMobilePreviewButton =
           onTogglePinChat={handleTogglePinChat}
           activeChatId={activeChatId}
           activeView={activeView}
+          workspaceMode={workspaceMode}
           onViewChange={(view) => safeOpenView(view, "manual")}
           chats={modeChats}
           onLogout={handleLogout}
@@ -8495,6 +8496,7 @@ const shouldShowMobilePreviewButton =
           onTogglePinChat={handleTogglePinChat}
           activeChatId={activeChatId}
           activeView={activeView}
+          workspaceMode={workspaceMode}
           onViewChange={(view) => safeOpenView(view, "sidebar")}
           chats={modeChats}
           onLogout={handleLogout}

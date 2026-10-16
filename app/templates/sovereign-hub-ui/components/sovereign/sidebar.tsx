@@ -74,6 +74,8 @@ interface SidebarProps {
   onTogglePinChat?: (chatId: string) => void
   activeChatId?: string | null
   activeView?: string
+  /** «Чат» or «Работа»: Malik Work is the active item in work mode, not «Новый чат». */
+  workspaceMode?: string
   onViewChange?: (view: string) => void
   chats?: Chat[]
   onLogout?: () => void
@@ -217,6 +219,7 @@ function SidebarInner({
   onTogglePinChat,
   activeChatId,
   activeView = "home",
+  workspaceMode = "chat",
   onViewChange,
   chats = [],
   onLogout,
@@ -373,9 +376,10 @@ function SidebarInner({
   }, [isPro, onNewChat, onOpenVoice, onViewChange, openView])
 
   const actionIsActive = useCallback((action: SidebarAction) => {
-    if (action.id === "new") return activeView === "home" && !activeChatId
+    if (action.id === "new") return activeView === "home" && !activeChatId && workspaceMode !== "work"
+    if (action.id === "work") return activeView === "home" && workspaceMode === "work"
     return Boolean(action.view && action.view === activeView)
-  }, [activeChatId, activeView])
+  }, [activeChatId, activeView, workspaceMode])
 
   const saveRename = useCallback((chatId: string) => {
     const title = editingTitle.trim()
