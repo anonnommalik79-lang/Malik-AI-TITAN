@@ -68,6 +68,12 @@ effect warnings. The build used the existing `MALIK_BUILD_NO_CACHE=1` option
 after the generated QA webpack cache filled the local disk. No source or
 conversation data was removed to resolve that build-space issue.
 
+The first Render build omitted dev dependencies and therefore lacked `@types/pg`.
+It is a build-time requirement on this host (as are the existing Node/React
+types), so it was moved to regular dependencies. Runtime source is unchanged;
+production dependency inclusion is checked against `npm ls --omit=dev` and the
+lockfile before retrying deployment.
+
 Scope is account chat snapshots and authenticated request/reply audit, not all
 binary media. Existing limits still apply: 256,000 characters per audited side
 (truncation is flagged), 8 MiB per private state object. Guests and direct Live
