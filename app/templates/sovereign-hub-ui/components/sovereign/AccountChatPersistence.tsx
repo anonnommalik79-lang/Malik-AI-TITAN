@@ -315,9 +315,29 @@ function forgetWhenFinished(response: Response, onFinished: () => void) {
   return new Response(response.body.pipeThrough(watch), { status: response.status, statusText: response.statusText, headers: response.headers })
 }
 
-function scheduleRecoveryReload(runtime: BackgroundRuntime) {
+/**
+ * Automatic recovery may legitimately refresh the dashboard once after restoring
+ * a chat. Session storage survives a reload, so a persistent cloud/local merge
+ * disagreement cannot trigger an infinite browser refresh loop.
+ *
+ * Fail closed when session storage is unavailable: keeping the existing screen
+ * is safer than repeatedly refreshing it.
+ */
+function claimAutomaticWorkspaceReload(accountKey: string) {
+  try {
+    const key = `malik_workspace_auto_reload_v1:${accountKey}`
+    if (window.sessionStorage.getItem(key) === "1") return false
+    window.sessionStorage.setItem(key, "1")
+    return true
+  } catch {
+    return false
+  }
+}
+
+function scheduleRecoveryReload(runtime: BackgroundRuntime, accountKey: string) {
   if (runtime.reloadScheduled) return
   if (!/\/(?:dashboard|compute)(?:\/|$)/.test(window.location.pathname)) return
+  if (!claimAutomaticWorkspaceReload(accountKey)) return
   runtime.reloadScheduled = true
   window.setTimeout(() => window.location.reload(), 650)
 }
@@ -376,7 +396,7 @@ function pollDetachedTurn(runtime: BackgroundRuntime, accountKey: string, turnId
           return
         }
         removePending(runtime, accountKey, turnId)
-        scheduleRecoveryReload(runtime)
+        scheduleRecoveryReload(runtime, accountKey)
       }
     } catch {
       retryLater(RECOVERY_OUTAGE_POLL_MS)
@@ -721,21 +741,21 @@ export function AccountChatPersistence({ accountId, children }: { accountId: str
 
         hydrationFailures = 0
         remoteReady = true
-        if (remoteRaw && remoteSavedAt > localSavedAt) {
+        const cloudIsNewer = Boolean(remoteRaw && remoteSavedAt > localSavedAt)
+        if (cloudIsNewer) {
           try { window.localStorage.setItem(savedAtKey, String(payload.savedAt || new Date().toISOString())) } catch {}
-          // Reload reads the merged snapshot, rather than losing local drafts.
-          // The next hydration will detect local/remote differences and upload.
-          if (mergedRaw && mergedRaw !== localRaw && !disposed) {
-            window.localStorage.setItem(DASHBOARD_STORAGE_KEY, mergedRaw)
-            pendingRaw = ""
+        }
+        if (mergedRaw && mergedRaw !== localRaw && !disposed) {
+          // Preserve the merged chat history first, even when a refresh is
+          // suppressed to protect the browser from a hydration/reload loop.
+          window.localStorage.setItem(DASHBOARD_STORAGE_KEY, mergedRaw)
+          if (cloudIsNewer) pendingRaw = ""
+          if (claimAutomaticWorkspaceReload(accountKey)) {
             window.location.reload()
             return
           }
-        }
-        if (mergedRaw && mergedRaw !== localRaw && !disposed) {
-          window.localStorage.setItem(DASHBOARD_STORAGE_KEY, mergedRaw)
-          window.location.reload()
-          return
+          // When a different cloud snapshot disagrees again, keep the durable
+          // local merge and sync it without refreshing the whole application.
         }
         const candidate = pendingRaw || mergedRaw || localRaw
         if (candidate && candidate !== remoteRaw) pushSnapshot(candidate)
