@@ -36,12 +36,13 @@ assert.match(route, /previewUrl,/, "API must expose the display derivative")
 assert.match(route, /#malik-master=/, "display URL must carry a master download reference")
 assert.match(resultExperience, /function masterImageUrl/, "result tools must resolve the master URL")
 assert.match(resultExperience, /fullQualitySrc\s*=\s*masterImageUrl\(src\)/, "downloads must use full quality")
-// The Photo Generation studio was replaced by the Voltframe teaser - the panel
-// deliberately renders one picture and calls no API at all, so there is nothing
-// left in it to paint a derivative. The contract it used to consume is still
-// guarded above, on the route that produces it.
+// The Photo Generation section shows the Voltframe artwork and opens the shared
+// ImageStudio (the same one the chat uses), which owns generation. The section
+// itself only reads the image credits: it never calls the generation API and
+// never paints a derivative. The contract is guarded above, on the route.
 assert.match(studio, /data-view="photo-generation"/, "the photo-generation panel must still be the one the dashboard mounts")
-assert.equal(/fetch\(|previewUrl/.test(studio), false, "the teaser must not call the generation API")
+assert.equal(/previewUrl|\/api\/(?:generate|media\/image)\b/.test(studio), false, "the section must not call the generation API itself")
+assert.match(studio, /<ImageStudio/, "the section must open the working image studio")
 // Both of these described code inside the studio that no longer exists. The
 // master/derivative contract itself is still guarded, on the route that hands
 // the two URLs out and on the result tools that resolve the master for a
