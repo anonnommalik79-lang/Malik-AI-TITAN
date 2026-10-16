@@ -193,6 +193,28 @@ async function translateClassic(text: string, source: string, target: string) {
   return translatedText.trim()
 }
 
+/**
+ * When Gemini is not configured or does not answer (a rate limit under load),
+ * the Malik MAX engine translates: it races every configured text provider.
+ * The free MyMemory service is the last resort — its daily per-IP quota is
+ * far too small for one shared server at scale.
+ */
+async function translateWithMalik(text: string, source: string, target: string) {
+  try {
+    const { runStrictMalikModel } = await import("@/lib/server/malik-model-router")
+    const result = await runStrictMalikModel({
+      modelId: "malik-max",
+      systemPrompt: "You are Malik Translator. Return ONLY the translated text. Preserve paragraph breaks, punctuation, numbers, URLs, product names, code identifiers and proper names. Never explain, never add quotation marks or notes.",
+      prompt: `Translate from ${LANGUAGE_NAMES[source] || source} to ${LANGUAGE_NAMES[target] || target}.\n\nTEXT:\n${text}`,
+      maxTokens: Math.min(6000, Math.ceil(text.length / 2) + 400),
+      temperature: 0.1,
+    })
+    return String(result.content || "").replace(/<think>[\s\S]*?<\/think>/gi, "").trim()
+  } catch {
+    return ""
+  }
+}
+
 export const POST = withCompute(handlePOST, "chat")
 
 async function handlePOST(request: NextRequest) {
@@ -210,7 +232,7 @@ async function handlePOST(request: NextRequest) {
     if (source === target) return NextResponse.json({ translatedText: text, detectedSource: source, provider: "malik-translator" })
 
     const gemini = await translateWithGemini(text, source, target)
-    const translatedText = gemini || await translateClassic(text, source, target)
+    const translatedText = gemini || await translateWithMalik(text, source, target) || await translateClassic(text, source, target)
 
     return NextResponse.json({
       translatedText,
