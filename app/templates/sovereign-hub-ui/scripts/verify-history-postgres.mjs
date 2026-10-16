@@ -17,12 +17,15 @@ for (const key of Object.keys(process.env)) if (sensitive.test(key)) delete proc
 process.env.FOUNDER_DATABASE_URL = "postgres://fixture:fixture@localhost/history"
 process.env.FOUNDER_HISTORY_SECRET = "test-encryption-key-".repeat(4)
 process.env.FOUNDER_HISTORY_DIRECTORY = join(temporary, "emergency-copy")
-let database = await PGlite.create(join(temporary, "postgres")), offline = false
+let database = await PGlite.create(join(temporary, "postgres")), offline = false, failNextConnection = false
 const poolOptions = []
 class Pool {
   constructor(options) { poolOptions.push(options) }
   on() {}
-  async connect() { return { query: (...args) => this.query(...args), release() {} } }
+  async connect() {
+    if (failNextConnection) { failNextConnection = false; throw Object.assign(new Error("cold connection reset"), { code: "ECONNRESET" }) }
+    return { query: (...args) => this.query(...args), release() {} }
+  }
   async query(sql, params) {
     if (offline) throw new Error("synthetic database outage")
     if (sql.includes("pg_advisory_xact_lock")) return { rows: [], rowCount: 1 }
@@ -54,6 +57,7 @@ test("external URLs require verified TLS; pool and deadlines are bounded", () =>
   assert.equal(new URL(config.connectionString).searchParams.has("uselibpqcompat"), false)
   assert.equal(config.max, 3)
   assert.equal(config.statement_timeout, 5000)
+  assert.equal(config.connectionTimeoutMillis, 10000)
   assert.throws(() => pg.historyPoolConfig("https://example.test"), /INVALID_HISTORY/)
 })
 
@@ -137,4 +141,45 @@ test("wrong encryption key fails closed rather than yielding empty data", async 
   await assert.rejects(log.readFounderMessageLog(entry.userId))
   await assert.rejects(store.readPrivateJsonVersioned("private/test/account.json"))
   process.env.FOUNDER_HISTORY_SECRET = correct
+})
+
+test("a transient cold-start connection gets one bounded retry without losing a turn", async () => {
+  await pg.closeHistoryDatabase()
+  failNextConnection = true
+  assert.equal(await log.appendFounderMessage({ ...entry, id: "cold-start-turn" }), true)
+  assert.equal((await log.readFounderMessageLog(entry.userId)).find(e => e.id === "cold-start-turn").assistantText, entry.assistantText)
+})
+
+test("streamed final answer travels through production audit + SQL + owner API", async () => {
+  let viewer = { id: "owner", email: "owner@example.test", emailVerified: true }
+  const oldOwner = process.env.MALIK_OWNER_EMAIL
+  process.env.MALIK_OWNER_EMAIL = viewer.email
+  const apiLoad = workTestLoader({ ...stubs,
+    "@/lib/auth/server": { getOptionalWorkOSAuth: async () => ({ user: viewer }) },
+    "@/lib/server/request-entitlement": { resolveRequestEntitlement: async () => ({ authenticated: true, userId: entry.userId }) },
+  })
+  try {
+    const audit = apiLoad("lib/server/founder-request-audit.ts")
+    const wire = 'event: content\ndata: {"content":"Draft","contentMode":"delta"}\n\nevent: done\ndata: {"ok":true,"finalContent":"Final SQL answer","model":"fixture-model"}\n\n'
+    const response = await audit.withFounderRequestAudit(async () => new Response(wire, { headers: { "content-type": "text/event-stream" } }))(
+      new Request("http://localhost/api/stream", { method: "POST", body: JSON.stringify({ prompt: "SQL audit question", userId: "forged-identity" }) }))
+    assert.equal(await response.text(), wire)
+    const api = apiLoad("app/api/founder/messages/route.ts")
+    const request = new Request(`http://localhost/api/founder/messages?email=${encodeURIComponent(entry.userId)}`)
+    const payload = await (await api.GET(request)).json()
+    assert.equal(payload.storage, "encrypted-postgres")
+    const saved = payload.entries.find(e => e.userText === "SQL audit question")
+    assert.equal(saved.assistantText, "Final SQL answer")
+    assert.equal(saved.model, "fixture-model")
+    assert.deepEqual(await log.readFounderMessageLog("forged-identity"), [])
+    viewer = { id: "not-owner", email: "another@example.test", emailVerified: true }
+    assert.equal((await api.GET(request)).status, 403)
+    viewer = { id: "owner", email: "owner@example.test", emailVerified: true }
+    offline = true
+    assert.equal((await api.GET(request)).status, 503, "database outage cannot masquerade as an empty history")
+  } finally {
+    offline = false
+    if (oldOwner === undefined) delete process.env.MALIK_OWNER_EMAIL
+    else process.env.MALIK_OWNER_EMAIL = oldOwner
+  }
 })

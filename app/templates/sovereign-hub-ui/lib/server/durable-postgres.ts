@@ -27,7 +27,7 @@ export function historyPoolConfig(value: string): PoolConfig {
   }
   return {
     connectionString: url.toString(), max: 3, idleTimeoutMillis: 10_000,
-    connectionTimeoutMillis: 5_000, statement_timeout: 5_000,
+    connectionTimeoutMillis: 10_000, statement_timeout: 5_000,
     query_timeout: 6_000, application_name: "malik-private-history", allowExitOnIdle: true,
   }
 }
@@ -48,7 +48,16 @@ function database() {
 async function ready() {
   const db = database()
   db.schema ??= (async () => {
-    const client = await db.pool.connect()
+    const client = await db.pool.connect().catch(async (error: unknown) => {
+      // A free serverless database may be waking from sleep. Retry only a
+      // connection failure, once; never rerun arbitrary/ambiguous SQL writes.
+      const code = String((error as { code?: string })?.code || "")
+      const message = error instanceof Error ? error.message : ""
+      if (["ECONNRESET", "ETIMEDOUT", "ECONNREFUSED", "57P03", "08006"].includes(code) || /connection.*(?:timeout|terminated)|timeout.*connect/i.test(message)) {
+        return db.pool.connect()
+      }
+      throw error
+    })
     try {
       await client.query("BEGIN")
       // Serialize additive initialization across workers/instances, not just this process.
@@ -66,7 +75,7 @@ async function ready() {
     } catch (error) {
       await client.query("ROLLBACK").catch(() => {})
       const code = String((error as { code?: string })?.code || "UNKNOWN").replace(/[^A-Z0-9_]/gi, "").slice(0, 40)
-      throw new Error(`HISTORY_DATABASE_SCHEMA_FAILED_${code}`)
+      throw new Error(`HISTORY_DATABASE_SCHEMA_FAILED_${code}`, { cause: error })
     } finally { client.release() }
   })().catch(error => { db.schema = undefined; throw error })
   await db.schema

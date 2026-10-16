@@ -28,11 +28,15 @@ Rotating/deleting it without migrating ciphertext makes old records unreadable.
 ## Verification
 
 - `verify-founder-history.mjs`: 15/15 baseline storage/audit/API checks.
-- `verify-history-postgres.mjs`: 11/11, actual SQL and encryption on temporary
+- `verify-history-postgres.mjs`: 13 scenarios, actual SQL and encryption on temporary
   PGlite disk; pg transport and advisory locks are test boundaries.
+- Production SSE audit → SQL → owner API is checked together, including
+  authoritative final text, server-side identity, denied access, and outage 503.
 - `verify-history-postgres-live.mjs`: real pg/TLS, encrypted write/read,
   concurrent CAS, health roundtrip, and a separate fresh Node process reading
   the saved records. Uses only generated synthetic canaries, then removes them.
+- A sleeping serverless database receives one bounded connection retry; SQL
+  statements with ambiguous commit state are not blindly replayed.
 - Streaming audit contract, account merge/CAS regression, S3 client regression.
 
 The live test receives its connection through stdin with terminal echo disabled;
@@ -54,7 +58,15 @@ An independent encrypted backup is still needed for disaster recovery.
 
 The older free Render Postgres instance has an expiry date; do not mistake it
 for indefinite storage. A separate Neon Free project was created for this
-feature; no paid plan or manual Render deploy was requested.
+feature; no paid plan was enabled. The user subsequently authorized one manual
+deploy because the existing service has automatic deploys disabled.
+
+Final local checks: production build PASS (Next 16.2.7, 84 static pages),
+TypeScript PASS, 28 storage/audit/SQL scenarios PASS, live PostgreSQL 4/4 PASS,
+desktop/mobile browser flows 2/2 PASS. Targeted lint: 0 errors, 2 existing React
+effect warnings. The build used the existing `MALIK_BUILD_NO_CACHE=1` option
+after the generated QA webpack cache filled the local disk. No source or
+conversation data was removed to resolve that build-space issue.
 
 Scope is account chat snapshots and authenticated request/reply audit, not all
 binary media. Existing limits still apply: 256,000 characters per audited side
