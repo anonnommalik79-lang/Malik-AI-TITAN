@@ -135,7 +135,8 @@ function LanguageBar({
 
   return (
     <div className="flex min-w-0 items-center gap-1.5">
-      <div className="flex min-w-0 items-center gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      {/* On a phone the chips scroll sideways; the fade shows there is more instead of a chip cut in half. */}
+      <div className="flex min-w-0 items-center gap-1.5 overflow-x-auto pr-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden max-sm:[mask-image:linear-gradient(90deg,#000_80%,transparent)]">
         {codes.map((code) => (
           <button
             key={code}
