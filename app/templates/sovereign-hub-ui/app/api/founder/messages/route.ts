@@ -1,6 +1,6 @@
 import { getOptionalWorkOSAuth } from "@/lib/auth/server"
-import { isVerifiedOwner } from "@/lib/auth/admin-policy"
-import { founderMessageStorageMode, readFounderMessageLog, type FounderMessageEntry } from "@/lib/server/founder-message-log"
+import { canReadFounderHistory } from "@/lib/server/founder-history-access"
+import { founderMessageStorageMode, founderMessageStorageWarning, readFounderMessageLog, type FounderMessageEntry } from "@/lib/server/founder-message-log"
 
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
@@ -11,8 +11,8 @@ function unique(values: string[]) {
 
 export async function GET(request: Request) {
   const { user } = await getOptionalWorkOSAuth()
-  if (!isVerifiedOwner(user)) {
-    return Response.json({ ok: false, error: "FOUNDER_ONLY" }, { status: 403 })
+  if (!canReadFounderHistory(user)) {
+    return Response.json({ ok: false, error: "FOUNDER_VERIFIED_ACCOUNT_REQUIRED" }, { status: 403, headers: { "Cache-Control": "private, no-store" } })
   }
 
   const url = new URL(request.url)
@@ -29,9 +29,11 @@ export async function GET(request: Request) {
   ])
 
   const all: FounderMessageEntry[] = []
-  for (const candidate of candidates) {
-    const entries = await readFounderMessageLog(candidate)
-    all.push(...entries)
+  try {
+    const lists = await Promise.all(candidates.map(candidate => readFounderMessageLog(candidate)))
+    all.push(...lists.flat())
+  } catch {
+    return Response.json({ ok: false, error: "HISTORY_STORAGE_READ_FAILED", message: "Не удалось прочитать журнал. Это не означает, что сообщений нет." }, { status: 503, headers: { "Cache-Control": "private, no-store" } })
   }
 
   const seen = new Set<string>()
@@ -49,6 +51,7 @@ export async function GET(request: Request) {
     entries,
     count: entries.length,
     storage: founderMessageStorageMode(),
+    storageWarning: founderMessageStorageWarning(),
   }, {
     headers: { "Cache-Control": "private, no-store, max-age=0" },
   })

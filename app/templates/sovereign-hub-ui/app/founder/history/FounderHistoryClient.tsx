@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
 type User = { id: string; email: string; name: string; createdAt?: string | null; lastSignInAt?: string | null }
 type Entry = {
@@ -9,10 +9,12 @@ type Entry = {
   source: "chat" | "voice"; status?: "pending" | "success" | "failed" | "interrupted";
   errorCode?: string; errorMessage?: string; httpStatus?: number; durationMs?: number;
   provider?: string; model?: string;
+  textTruncated?: boolean;
 }
 type Overview = { ok: boolean; recentUsers?: User[]; warning?: string | null; error?: string }
 type Activity = { ok: boolean; items?: Entry[]; total?: number; today?: number; yesterday?: number; storage?: string; storageWarning?: string | null; warning?: string | null; error?: string }
 type Filter = "all" | "success" | "failed" | "interrupted" | "pending"
+const EMPTY_ENTRIES: Entry[] = []
 const labels: Record<Filter, string> = { all: "Все запросы", success: "Ответил", failed: "Ошибка", interrupted: "Прервано", pending: "В обработке" }
 const style: Record<Exclude<Filter, "all">, string> = {
   success: "border-zinc-600 text-white", failed: "border-red-900 text-red-300",
@@ -32,21 +34,35 @@ export default function FounderHistoryClient() {
   const [filter, setFilter] = useState<Filter>("all")
   const [selectedEmail, setSelectedEmail] = useState("")
   const [expanded, setExpanded] = useState<string | null>(null)
-  const refresh = useCallback(async () => {
-    setLoading(true); setError("")
+  const inFlight = useRef<AbortController | null>(null)
+  const refresh = useCallback(async (silent = false) => {
+    if (silent && inFlight.current) return
+    inFlight.current?.abort()
+    const controller = new AbortController()
+    inFlight.current = controller
+    if (!silent) setLoading(true)
+    setError("")
     try {
       const [a, b] = await Promise.all([
-        fetch("/api/founder/overview", { credentials: "same-origin", cache: "no-store" }),
-        fetch("/api/founder/activity", { credentials: "same-origin", cache: "no-store" }),
+        fetch("/api/founder/overview", { credentials: "same-origin", cache: "no-store", signal: controller.signal }),
+        fetch("/api/founder/activity", { credentials: "same-origin", cache: "no-store", signal: controller.signal }),
       ])
       const users = await a.json() as Overview, logs = await b.json() as Activity
+      if (controller.signal.aborted) return
+      if (a.status === 403 || b.status === 403) { setOverview(null); setActivity(null) }
       if (!a.ok || !b.ok || !users.ok || !logs.ok) throw new Error(logs.error || users.error || "Нет доступа или сервер временно недоступен")
       setOverview(users); setActivity(logs)
-    } catch (e) { setError(e instanceof Error ? e.message : "Не удалось загрузить данные") }
-    finally { setLoading(false) }
+    } catch (e) { if (!controller.signal.aborted) setError(e instanceof Error ? e.message : "Не удалось загрузить данные") }
+    finally { if (inFlight.current === controller) { inFlight.current = null; setLoading(false) } }
   }, [])
-  useEffect(() => { void refresh() }, [refresh])
-  const users = overview?.recentUsers || [], entries = activity?.items || []
+  useEffect(() => {
+    void refresh()
+    const poll = window.setInterval(() => { if (document.visibilityState === "visible") void refresh(true) }, 30_000)
+    const onAuth = () => { setOverview(null); setActivity(null); void refresh() }
+    window.addEventListener("malik-auth-updated", onAuth)
+    return () => { window.clearInterval(poll); inFlight.current?.abort(); window.removeEventListener("malik-auth-updated", onAuth) }
+  }, [refresh])
+  const users = overview?.recentUsers || [], entries = activity?.items || EMPTY_ENTRIES
   const filtered = useMemo(() => entries.filter(row => {
     if (selectedEmail && row.userEmail.toLowerCase() !== selectedEmail.toLowerCase() && row.userId !== selectedEmail) return false
     if (filter !== "all" && (row.status || "success") !== filter) return false
@@ -73,11 +89,11 @@ export default function FounderHistoryClient() {
           </div>
         </header>
         {error ? <div role="alert" className="mb-5 border border-red-900 p-4 text-sm text-red-300">{error}</div> : null}
-        {activity?.storage !== "encrypted-object-storage" ? (
+        {activity?.storageWarning ? (
           <div role="status" className="mb-5 border border-amber-900 bg-[#15110a] p-4 text-sm text-amber-200">
-            Постоянная база пока НЕ подключена: текущий журнал находится в памяти Render и может исчезнуть после перезапуска. Настрой FOUNDER_HISTORY_BUCKET, ENDPOINT, ACCESS_KEY_ID, SECRET_ACCESS_KEY и SECRET.
+            {activity.storageWarning}
           </div>
-        ) : <div className="mb-5 border border-zinc-800 p-3 text-xs text-zinc-400">Хранилище настроено: encrypted-object-storage. Для гарантии сохранности проверь тестовую запись после перезапуска сервиса.</div>}
+        ) : activity ? <div className="mb-5 border border-zinc-800 p-3 text-xs text-zinc-400">Хранилище настроено: {activity.storage}. Автообновление каждые 30 секунд. <a href="/api/founder/storage-health" className="underline">Проверить запись и чтение</a>.</div> : null}
         {activity?.warning || overview?.warning ? <p role="alert" className="mb-5 text-sm text-amber-300">{activity?.warning || overview?.warning}</p> : null}
         <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-5">
           {([["Пользователей", users.length], ["Всего запросов", entries.length], ["Ответил", counts.success], ["Ошибка", counts.failed], ["Прервано", counts.interrupted]] as const).map(([label, value]) => (
@@ -125,6 +141,7 @@ export default function FounderHistoryClient() {
                   {isOpen ? <div className="space-y-4 border-t border-zinc-800 bg-black p-4 text-sm">
                     <div><p className="mb-2 text-xs uppercase tracking-wider text-zinc-500">Сообщение пользователя</p><p className="whitespace-pre-wrap break-words text-zinc-200">{row.userText}</p></div>
                     <div><p className="mb-2 text-xs uppercase tracking-wider text-zinc-500">Ответ Malik AI</p><p className="whitespace-pre-wrap break-words text-zinc-300">{row.assistantText || (status === "pending" ? "Ответ ещё не завершён" : "Ответ не был сохранён")}</p></div>
+                    {row.textTruncated ? <p className="text-xs text-amber-300">Длинный текст сокращён в журнале до 256 000 символов; это не полная копия сообщения.</p> : null}
                     {row.errorCode || row.errorMessage ? <div className="border border-red-900 p-3 text-red-300"><strong>{row.errorCode || "ERROR"}</strong><p className="mt-1 break-words">{row.errorMessage}</p></div> : null}
                     {row.provider || row.model ? <p className="text-xs text-zinc-500">{[row.provider, row.model].filter(Boolean).join(" · ")}</p> : null}
                   </div> : null}

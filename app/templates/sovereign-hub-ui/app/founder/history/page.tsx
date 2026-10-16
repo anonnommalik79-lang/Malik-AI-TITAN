@@ -1,6 +1,6 @@
 import type { Metadata } from "next"
 import { getOptionalWorkOSAuth } from "@/lib/auth/server"
-import { isVerifiedOwner } from "@/lib/auth/admin-policy"
+import { canReadFounderHistory } from "@/lib/server/founder-history-access"
 import FounderHistoryClient from "./FounderHistoryClient"
 
 export const dynamic = "force-dynamic"
@@ -8,7 +8,7 @@ export const metadata: Metadata = { title: "Malik AI — Founder History", robot
 
 export default async function FounderHistoryPage() {
   const { user } = await getOptionalWorkOSAuth()
-  if (!isVerifiedOwner(user)) return (
+  if (!canReadFounderHistory(user)) return (
     <main className="min-h-screen bg-black px-5 py-20 text-white">
       <div className="mx-auto max-w-lg">
         <p className="mb-4 text-xs tracking-widest text-zinc-500">MALIK AI / PRIVATE</p>

@@ -17,7 +17,7 @@ new Function("require", "module", "exports", transpile("lib/server/founder-reque
   if (name === "server-only") return {}
   if (name === "node:crypto") return { randomUUID }
   if (name.endsWith("request-entitlement")) return { resolveRequestEntitlement: async () => ({ authenticated, userId: authenticated ? "account-a" : "guest" }) }
-  if (name.endsWith("founder-message-log")) return { appendFounderMessage: async value => { writes.push(value) } }
+  if (name.endsWith("founder-message-log")) return { MAX_FOUNDER_TEXT_CHARS: 256_000, appendFounderMessage: async value => { writes.push(value) } }
   if (name.endsWith("chat-stream-contract")) return contractModule.exports
   throw new Error(`Unexpected dependency ${name}`)
 }, auditModule, auditModule.exports)
@@ -61,12 +61,13 @@ await run("audit parsing cannot interrupt the user's original response", event("
   assert.equal(result.errorCode, "AUDIT_STREAM_PARSE")
   assert.equal(result.assistantText, "First")
 })
-const largeAnswer = "x".repeat(180_000)
+const largeAnswer = "x".repeat(300_000)
 const largeWire = event("content", { content: largeAnswer, contentMode: "delta" }) + event("done", { ok: true })
 let cursor = 0
 await run("split large frames are bounded without silently dropping audit content", largeWire, result => {
   assert.equal(result.status, "success")
-  assert.equal(result.assistantText, "x".repeat(16_000))
+  assert.equal(result.assistantText, "x".repeat(256_000))
+  assert.equal(result.textTruncated, true)
 }, { body: new ReadableStream({ pull(controller) {
   if (cursor < largeWire.length) { controller.enqueue(new TextEncoder().encode(largeWire.slice(cursor, cursor + 80_000))); cursor += 80_000 }
   else controller.close()
@@ -74,6 +75,10 @@ await run("split large frames are bounded without silently dropping audit conten
 await run("secret redaction remains active", event("content", { content: "password=private123 sk-proj-abcdefghijklmno", contentMode: "delta" }) + event("done", { ok: true }), result => {
   assert.doesNotMatch(result.assistantText, /private123|abcdefghijklmno/)
   assert.match(result.assistantText, /REDACTED/)
+})
+await run("authoritative finalContent replaces an earlier draft", event("content", { content: "Unverified draft", contentMode: "delta" }) + event("done", { ok: true, content: "Discarded stale snapshot", finalContent: "Verified answer", selectedModelId: "selected-model" }), result => {
+  assert.equal(result.assistantText, "Verified answer")
+  assert.equal(result.model, "selected-model")
 })
 authenticated = false
 await run("unauthenticated traffic is never logged against an account", event("done", { content: "Guest answer" }), () => assert.equal(writes.length, 0))

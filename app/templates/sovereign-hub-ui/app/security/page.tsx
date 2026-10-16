@@ -43,8 +43,9 @@ export default function SecurityPage() {
       </PublicSection>
 
       <PublicSection title="Privacy & terms">
-        <p>Legal pages are not published yet. Contact hello@malik.ai for data handling questions before launch outreach.</p>
-        <p className="text-xs text-slate-500">Placeholder until formal privacy policy and terms of service are added.</p>
+        <p>Для поддержки и диагностики Malik AI сохраняет текст запросов авторизованных пользователей и ответы ассистента, время, выбранную модель и статус ошибок. Эти записи может просматривать только подтверждённый аккаунт владельца сервиса; другие пользователи доступа не имеют.</p>
+        <p>Журнал шифруется на сервере. Известные форматы ключей и паролей маскируются автоматически, но это не гарантирует распознавания всех секретов: не отправляйте пароли, API-ключи и конфиденциальные данные в чат. Скрытые рассуждения моделей и исходные аудиозаписи в этот журнал не добавляются.</p>
+        <p>Временное серверное хранилище не гарантирует сохранность после перезапуска или развёртывания. Для вопросов о данных и запросов на удаление: hello@malik.ai. Это описание обработки данных, а не замена полной политики конфиденциальности и условий сервиса.</p>
       </PublicSection>
 
       <p className="text-xs text-slate-500">{PROFESSIONAL_DISCLAIMER}</p>

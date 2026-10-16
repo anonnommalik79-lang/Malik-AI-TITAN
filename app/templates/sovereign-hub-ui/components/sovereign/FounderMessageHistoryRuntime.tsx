@@ -1,10 +1,9 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 import { CheckCircle2, MessageSquare, RefreshCw, Search, ShieldCheck, UserRound, X } from "lucide-react"
 import { getStoredAuthSnapshot } from "@/lib/auth/client-session"
-import { MALIK_OWNER_EMAIL } from "@/lib/auth/admin-policy"
 
 type FounderUser = {
   id: string
@@ -24,6 +23,10 @@ type FounderMessageEntry = {
   createdAt: string
   provider?: string
   model?: string
+  status?: "pending" | "success" | "failed" | "interrupted"
+  errorCode?: string
+  errorMessage?: string
+  textTruncated?: boolean
 }
 
 type OverviewPayload = {
@@ -37,12 +40,15 @@ type MessagesPayload = {
   entries?: FounderMessageEntry[]
   count?: number
   storage?: string
+  storageWarning?: string | null
   error?: string
 }
 
 function isFounderSnapshot() {
   const snapshot = getStoredAuthSnapshot()
-  return Boolean(snapshot?.isAdmin === true && snapshot?.email?.trim().toLowerCase() === MALIK_OWNER_EMAIL)
+  // A UI hint only; every content endpoint verifies the real server session.
+  // Do not hardcode an email here: the server supports an owner-email override.
+  return snapshot?.isAdmin === true
 }
 
 function when(value?: string | null) {
@@ -70,12 +76,17 @@ export function FounderMessageHistoryRuntime() {
   const [loadingMessages, setLoadingMessages] = useState(false)
   const [error, setError] = useState("")
   const [storage, setStorage] = useState("")
+  const [storageWarning, setStorageWarning] = useState("")
+  const messageRequest = useRef<AbortController | null>(null)
 
   useEffect(() => {
     const update = () => {
       const next = isFounderSnapshot()
       setFounder(next)
-      if (!next) setOpen(false)
+      if (!next) {
+        messageRequest.current?.abort()
+        setOpen(false); setUsers([]); setEntries([]); setSelected(null)
+      }
     }
     update()
     window.addEventListener("malik-auth-updated", update)
@@ -134,23 +145,28 @@ export function FounderMessageHistoryRuntime() {
     }
   }, [founder])
 
-  const loadMessages = useCallback(async (user: FounderUser) => {
+  const loadMessages = useCallback(async (user: FounderUser, silent = false) => {
+    if (silent && messageRequest.current) return
+    messageRequest.current?.abort()
+    const controller = new AbortController()
+    messageRequest.current = controller
     setSelected(user)
-    setLoadingMessages(true)
-    setEntries([])
-    setStorage("")
+    if (!silent) { setLoadingMessages(true); setEntries([]); setStorage(""); setStorageWarning("") }
     setError("")
     try {
       const params = new URLSearchParams({ id: user.id || "", email: user.email || "" })
-      const response = await fetch(`/api/founder/messages?${params.toString()}`, { cache: "no-store" })
+      const response = await fetch(`/api/founder/messages?${params.toString()}`, { credentials: "same-origin", cache: "no-store", signal: controller.signal })
       const data = await response.json().catch(() => ({})) as MessagesPayload
+      if (controller.signal.aborted) return
+      if (response.status === 403) setEntries([])
       if (!response.ok || !data.ok) throw new Error(data.error || `Messages API ${response.status}`)
       setEntries(Array.isArray(data.entries) ? data.entries : [])
       setStorage(String(data.storage || ""))
+      setStorageWarning(String(data.storageWarning || ""))
     } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : "Не удалось загрузить историю")
+      if (!controller.signal.aborted) setError(requestError instanceof Error ? requestError.message : "Не удалось загрузить историю")
     } finally {
-      setLoadingMessages(false)
+      if (messageRequest.current === controller) { messageRequest.current = null; setLoadingMessages(false) }
     }
   }, [])
 
@@ -158,6 +174,14 @@ export function FounderMessageHistoryRuntime() {
     if (!open || !founder) return
     void loadUsers()
   }, [open, founder, loadUsers])
+
+  useEffect(() => {
+    if (!open || !founder || !selected) return
+    const poll = window.setInterval(() => { if (document.visibilityState === "visible") void loadMessages(selected, true) }, 15_000)
+    return () => window.clearInterval(poll)
+  }, [open, founder, selected, loadMessages])
+
+  useEffect(() => () => { messageRequest.current?.abort() }, [])
 
   useEffect(() => {
     if (!open) return
@@ -198,7 +222,7 @@ export function FounderMessageHistoryRuntime() {
           <p>Запрос пользователя и ответ Malik AI. Доступ только owner-аккаунту.</p>
         </div>
         <div className="malik-founder-messages-actions">
-          <button type="button" onClick={() => void loadUsers()} disabled={loadingUsers} title="Обновить"><RefreshCw className={loadingUsers ? "is-spinning" : ""} /></button>
+          <button type="button" onClick={() => { void loadUsers(); if (selected) void loadMessages(selected) }} disabled={loadingUsers || loadingMessages} title="Обновить"><RefreshCw className={loadingUsers || loadingMessages ? "is-spinning" : ""} /></button>
           <button type="button" onClick={() => setOpen(false)} title="Закрыть"><X /></button>
         </div>
       </header>
@@ -255,6 +279,7 @@ export function FounderMessageHistoryRuntime() {
                       <div className="malik-founder-message-meta">
                         <span className={entry.source === "voice" ? "is-voice" : ""}>{entry.source === "voice" ? "VOICE" : "CHAT"}</span>
                         <time>{when(entry.createdAt)}</time>
+                        <span>{entry.status === "pending" ? "В обработке" : entry.status === "failed" ? "Ошибка" : entry.status === "interrupted" ? "Прервано" : "Ответил"}</span>
                         {(entry.model || entry.provider) ? <small>{[entry.provider, entry.model].filter(Boolean).join(" · ")}</small> : null}
                       </div>
                       <div className="malik-founder-message-line is-user">
@@ -263,7 +288,7 @@ export function FounderMessageHistoryRuntime() {
                       </div>
                       <div className="malik-founder-message-line is-assistant">
                         <b>Malik AI</b>
-                        <p>{entry.assistantText || "—"}</p>
+                        <p>{entry.assistantText || (entry.status === "pending" ? "Ответ ещё не завершён" : "Ответ не сохранён")}{entry.errorCode || entry.errorMessage ? `\n${entry.errorCode || ""} ${entry.errorMessage || ""}` : ""}{entry.textTruncated ? "\nДлинный текст сокращён в журнале до 256 000 символов." : ""}</p>
                       </div>
                     </article>
                   ))}
@@ -278,7 +303,7 @@ export function FounderMessageHistoryRuntime() {
 
               <footer className="malik-founder-messages-foot">
                 <ShieldCheck />
-                <span>{storage === "encrypted-object-storage" ? "История хранится зашифрованно в object storage." : "Сейчас история хранится только в текущем server runtime; для долговечности нужен настроенный storage."}</span>
+                <span>{storageWarning || (storage === "encrypted-object-storage" ? "История хранится зашифрованно в object storage." : "Состояние хранилища ещё не проверено.")}</span>
               </footer>
             </>
           ) : (

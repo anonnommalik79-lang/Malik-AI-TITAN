@@ -1,6 +1,9 @@
 import "server-only"
 
 import { createCipheriv, createDecipheriv, createHash, randomBytes, randomUUID } from "node:crypto"
+import { mkdir, readFile, readdir, rename, stat, unlink, writeFile } from "node:fs/promises"
+import { tmpdir } from "node:os"
+import { isAbsolute, join, parse, resolve, sep } from "node:path"
 import { DeleteObjectCommand, GetObjectCommand, ListObjectsV2Command, PutObjectCommand, S3Client } from "@aws-sdk/client-s3"
 
 export type FounderMessageSource = "chat" | "voice"
@@ -18,10 +21,12 @@ export type FounderMessageEntry = {
   errorMessage?: string
   httpStatus?: number
   durationMs?: number
+  textTruncated?: boolean
 }
 
 type Envelope = { v: 1; alg: "aes-256-gcm"; iv: string; tag: string; data: string }
-const MAX_TEXT_CHARS = 16_000
+export const MAX_FOUNDER_TEXT_CHARS = 256_000
+const MAX_ENVELOPE_BYTES = MAX_FOUNDER_TEXT_CHARS * 16
 const AAD = Buffer.from("malik-founder-message-log-v1", "utf8")
 const first = (...values: Array<string | undefined>) => values.map(v => String(v || "").trim()).find(Boolean) || ""
 const normalize = (value: string) => String(value || "").trim().toLowerCase()
@@ -29,20 +34,65 @@ const ownerHash = (value: string) => createHash("sha256").update(normalize(value
 const legacyKey = (value: string) => `private/founder/message-history/${ownerHash(value)}.enc.json`
 const entryPrefix = (value: string) => `private/founder/request-audit/v2/${ownerHash(value)}/`
 const entryKey = (value: string, id: string) => `${entryPrefix(value)}${id}.enc.json`
-const cleanText = (value: unknown) => String(value ?? "").replace(/\u0000/g, "").trim().slice(0, MAX_TEXT_CHARS)
+const cleanText = (value: unknown) => String(value ?? "").split(String.fromCharCode(0)).join("").trim().slice(0, MAX_FOUNDER_TEXT_CHARS)
+const encryptionSecret = () => first(process.env.FOUNDER_HISTORY_SECRET, process.env.WORKOS_COOKIE_PASSWORD)
 
 function config() {
-  const bucket = first(process.env.FOUNDER_HISTORY_BUCKET, process.env.MEDIA_STORAGE_BUCKET, process.env.R2_BUCKET, process.env.CLOUDFLARE_R2_BUCKET, process.env.S3_BUCKET, process.env.STORAGE_BUCKET)
-  const accessKeyId = first(process.env.FOUNDER_HISTORY_ACCESS_KEY_ID, process.env.MEDIA_STORAGE_ACCESS_KEY_ID, process.env.AWS_ACCESS_KEY_ID)
-  const secretAccessKey = first(process.env.FOUNDER_HISTORY_SECRET_ACCESS_KEY, process.env.MEDIA_STORAGE_SECRET_ACCESS_KEY, process.env.AWS_SECRET_ACCESS_KEY)
-  const encryptionSecret = first(process.env.FOUNDER_HISTORY_SECRET, process.env.WORKOS_COOKIE_PASSWORD)
-  if (!bucket || !accessKeyId || !secretAccessKey || !encryptionSecret) return null
+  const bucket = first(process.env.FOUNDER_HISTORY_BUCKET, process.env.PRIVATE_STATE_BUCKET, process.env.MEDIA_STORAGE_BUCKET, process.env.R2_BUCKET, process.env.CLOUDFLARE_R2_BUCKET, process.env.S3_BUCKET, process.env.STORAGE_BUCKET)
+  const accessKeyId = first(process.env.FOUNDER_HISTORY_ACCESS_KEY_ID, process.env.PRIVATE_STATE_ACCESS_KEY_ID, process.env.MEDIA_STORAGE_ACCESS_KEY_ID, process.env.AWS_ACCESS_KEY_ID)
+  const secretAccessKey = first(process.env.FOUNDER_HISTORY_SECRET_ACCESS_KEY, process.env.PRIVATE_STATE_SECRET_ACCESS_KEY, process.env.MEDIA_STORAGE_SECRET_ACCESS_KEY, process.env.AWS_SECRET_ACCESS_KEY)
+  const secret = encryptionSecret()
+  if (!bucket || !accessKeyId || !secretAccessKey || secret.length < 32) return null
   return {
-    bucket, accessKeyId, secretAccessKey, encryptionSecret,
-    sessionToken: first(process.env.FOUNDER_HISTORY_SESSION_TOKEN, process.env.MEDIA_STORAGE_SESSION_TOKEN, process.env.AWS_SESSION_TOKEN) || undefined,
-    region: first(process.env.FOUNDER_HISTORY_REGION, process.env.MEDIA_STORAGE_REGION, process.env.AWS_REGION) || "auto",
-    endpoint: first(process.env.FOUNDER_HISTORY_ENDPOINT, process.env.MEDIA_STORAGE_ENDPOINT) || undefined,
+    bucket, accessKeyId, secretAccessKey, encryptionSecret: secret,
+    sessionToken: first(process.env.FOUNDER_HISTORY_SESSION_TOKEN, process.env.PRIVATE_STATE_SESSION_TOKEN, process.env.MEDIA_STORAGE_SESSION_TOKEN, process.env.AWS_SESSION_TOKEN) || undefined,
+    region: first(process.env.FOUNDER_HISTORY_REGION, process.env.PRIVATE_STATE_REGION, process.env.MEDIA_STORAGE_REGION, process.env.AWS_REGION) || "auto",
+    endpoint: first(process.env.FOUNDER_HISTORY_ENDPOINT, process.env.PRIVATE_STATE_ENDPOINT, process.env.MEDIA_STORAGE_ENDPOINT) || undefined,
   }
+}
+
+function diskConfig() {
+  const secret = encryptionSecret()
+  if (secret.length < 32) return null
+  const directory = first(process.env.FOUNDER_HISTORY_DIRECTORY)
+  if (directory && !isAbsolute(directory)) throw new Error("FOUNDER_HISTORY_DIRECTORY_MUST_BE_ABSOLUTE")
+  if (directory) {
+    const target = resolve(directory), publicRoot = resolve(process.cwd(), "public")
+    if (target === parse(target).root || target === publicRoot || target.startsWith(publicRoot + sep)) throw new Error("FOUNDER_HISTORY_DIRECTORY_MUST_BE_PRIVATE")
+  }
+  // Never store plaintext or write inside public/. A temporary directory is
+  // explicitly reported as ephemeral; it is not a substitute for S3/R2/disk.
+  return { directory: directory || join(tmpdir(), "malik-founder-history-v1"), secret, explicit: Boolean(directory) }
+}
+
+async function readDisk(userId: string): Promise<FounderMessageEntry[]> {
+  const cfg = diskConfig()
+  if (!cfg) return []
+  const directory = join(cfg.directory, ownerHash(userId))
+  let names: string[]
+  try { names = await readdir(directory) }
+  catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return []; throw error }
+  const entries: FounderMessageEntry[] = []
+  for (const name of names.filter(name => /^[a-zA-Z0-9-]+\.enc\.json$/.test(name))) {
+    const path = join(directory, name)
+    if ((await stat(path)).size > MAX_ENVELOPE_BYTES) throw new Error("FOUNDER_HISTORY_RECORD_TOO_LARGE")
+    entries.push(...decrypt(await readFile(path, "utf8"), cfg.secret))
+  }
+  return entries
+}
+
+async function writeDisk(userId: string, entry: FounderMessageEntry) {
+  const cfg = diskConfig()
+  if (!cfg) return false
+  const directory = join(cfg.directory, ownerHash(userId))
+  await mkdir(directory, { recursive: true, mode: 0o700 })
+  const target = join(directory, `${entry.id}.enc.json`)
+  const temporary = join(directory, `${entry.id}-${randomUUID()}.tmp`)
+  try {
+    await writeFile(temporary, encrypt([entry], cfg.secret), { mode: 0o600, flag: "wx" })
+    await rename(temporary, target)
+  } finally { await unlink(temporary).catch(() => {}) }
+  return true
 }
 function client(cfg: NonNullable<ReturnType<typeof config>>) {
   return new S3Client({
@@ -67,6 +117,7 @@ function cleanEntry(value: unknown): FounderMessageEntry | null {
     errorMessage: cleanText(e.errorMessage).slice(0, 800) || undefined,
     httpStatus: Number.isFinite(e.httpStatus) ? Number(e.httpStatus) : undefined,
     durationMs: Number.isFinite(e.durationMs) ? Number(e.durationMs) : undefined,
+    textTruncated: e.textTruncated === true || String(e.userText ?? "").length > MAX_FOUNDER_TEXT_CHARS || String(e.assistantText ?? "").length > MAX_FOUNDER_TEXT_CHARS || undefined,
   }
 }
 function encrypt(entries: FounderMessageEntry[], secret: string) {
@@ -88,9 +139,19 @@ function decrypt(raw: string, secret: string): FounderMessageEntry[] {
 }
 async function bodyText(body: any): Promise<string> {
   if (!body) return ""
-  if (typeof body.transformToString === "function") return body.transformToString("utf-8")
+  if (typeof body.transformToString === "function") {
+    const text = await body.transformToString("utf-8")
+    if (Buffer.byteLength(text) > MAX_ENVELOPE_BYTES) throw new Error("FOUNDER_HISTORY_RECORD_TOO_LARGE")
+    return text
+  }
   const parts: Buffer[] = []
-  for await (const part of body) parts.push(Buffer.isBuffer(part) ? part : Buffer.from(part))
+  let bytes = 0
+  for await (const part of body) {
+    const buffer = Buffer.isBuffer(part) ? part : Buffer.from(part)
+    bytes += buffer.length
+    if (bytes > MAX_ENVELOPE_BYTES) throw new Error("FOUNDER_HISTORY_RECORD_TOO_LARGE")
+    parts.push(buffer)
+  }
   return Buffer.concat(parts).toString("utf8")
 }
 async function readCloud(userId: string): Promise<FounderMessageEntry[] | null> {
@@ -103,18 +164,18 @@ async function readCloud(userId: string): Promise<FounderMessageEntry[] | null> 
     // New records are one object per request, so simultaneous users/instances do
     // not overwrite one another. Read the old per-user object for compatibility.
     try {
-      const legacy = await s3.send(new GetObjectCommand({ Bucket: cfg.bucket, Key: legacyKey(userId) }))
+      const legacy = await s3.send(new GetObjectCommand({ Bucket: cfg.bucket, Key: legacyKey(userId) }), { abortSignal: AbortSignal.timeout(5_000) })
       found.push(...decrypt(await bodyText(legacy.Body), cfg.encryptionSecret))
     } catch (error: any) {
       if (!["NoSuchKey", "NotFound", "404"].includes(String(error?.name || error?.$metadata?.httpStatusCode))) throw error
     }
     do {
-      const page = await s3.send(new ListObjectsV2Command({ Bucket: cfg.bucket, Prefix: entryPrefix(userId), ContinuationToken: continuationToken, MaxKeys: 1000 }))
+      const page = await s3.send(new ListObjectsV2Command({ Bucket: cfg.bucket, Prefix: entryPrefix(userId), ContinuationToken: continuationToken, MaxKeys: 1000 }), { abortSignal: AbortSignal.timeout(5_000) })
       // Bound concurrent reads without dropping old history.
       const keys = (page.Contents || []).map(o => o.Key).filter((k): k is string => Boolean(k))
       for (let i = 0; i < keys.length; i += 12) {
         const wave = await Promise.all(keys.slice(i, i + 12).map(async key => {
-          const item = await s3.send(new GetObjectCommand({ Bucket: cfg.bucket, Key: key }))
+          const item = await s3.send(new GetObjectCommand({ Bucket: cfg.bucket, Key: key }), { abortSignal: AbortSignal.timeout(5_000) })
           return decrypt(await bodyText(item.Body), cfg.encryptionSecret)
         }))
         wave.forEach(list => found.push(...list))
@@ -125,7 +186,7 @@ async function readCloud(userId: string): Promise<FounderMessageEntry[] | null> 
     return found
   } catch (error) {
     console.error("[FOUNDER AUDIT] Cloud read failed", error instanceof Error ? error.message : "unknown")
-    return null
+    throw new Error("FOUNDER_HISTORY_READ_FAILED", { cause: error })
   }
 }
 async function writeCloud(userId: string, entry: FounderMessageEntry) {
@@ -136,18 +197,20 @@ async function writeCloud(userId: string, entry: FounderMessageEntry) {
     Bucket: cfg.bucket, Key: entryKey(userId, entry.id), Body: Buffer.from(encrypt([entry], cfg.encryptionSecret), "utf8"),
     ContentType: "application/json", CacheControl: "private, no-store",
     Metadata: { kind: "founder-request-audit", version: "2", owner: ownerHash(userId) },
-  }))
+  }), { abortSignal: AbortSignal.timeout(5_000) })
   return true
 }
 export async function readFounderMessageLog(userId: string) {
   const id = normalize(userId)
   if (!id || id === "guest") return []
-  const cloud = await readCloud(id)
+  // Connecting cloud storage later must not hide records still on this host.
+  // This is a read merge, not a claim that ephemeral records were migrated.
+  const cloud = config() ? (await Promise.all([readCloud(id), readDisk(id)])).flatMap(list => list || []) : await readDisk(id)
   if (!cloud) return []
   const merged = new Map<string, FounderMessageEntry>()
   for (const item of cloud) {
     const previous = merged.get(item.id)
-    if (previous?.status !== "pending" && item.status === "pending") continue
+    if (previous && previous.status !== "pending" && item.status === "pending") continue
     merged.set(item.id, item)
   }
   return [...merged.values()].sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt))
@@ -155,39 +218,57 @@ export async function readFounderMessageLog(userId: string) {
 export async function appendFounderMessage(input: {
   id?: string; userId: string; source: FounderMessageSource; userText: string; assistantText: string;
   provider?: string; model?: string; createdAt?: string; status?: FounderMessageStatus;
-  errorCode?: string; errorMessage?: string; httpStatus?: number; durationMs?: number
+  errorCode?: string; errorMessage?: string; httpStatus?: number; durationMs?: number; textTruncated?: boolean
 }) {
   const userId = normalize(input.userId)
   if (!userId || userId === "guest") return false
   const entry = cleanEntry({ ...input, id: input.id || randomUUID(), createdAt: input.createdAt || new Date().toISOString() })
   if (!entry) return false
-  if (!config()) {
-    console.error("[FOUNDER AUDIT] Durable storage is not configured; refusing runtime-memory fallback")
-    return false
-  }
   try {
-    return await writeCloud(userId, entry)
+    return config() ? await writeCloud(userId, entry) : await writeDisk(userId, entry)
   } catch (error) {
     console.error("[FOUNDER AUDIT] Durable write failed", error instanceof Error ? error.message : "unknown")
     return false
   }
 }
 export function founderMessageStorageMode() {
-  return config() ? "encrypted-object-storage" : "runtime-memory"
+  if (config()) return "encrypted-object-storage"
+  const disk = diskConfig()
+  return disk ? disk.explicit ? "encrypted-directory" : "encrypted-runtime-filesystem" : "unavailable"
+}
+
+export function founderMessageStorageWarning() {
+  const mode = founderMessageStorageMode()
+  if (mode === "encrypted-object-storage") return null
+  if (mode === "encrypted-directory") return "История зашифрована в заданной серверной папке. Убедитесь, что это постоянный диск: сама настройка пути не гарантирует сохранность после redeploy."
+  if (mode === "unavailable") return "Журнал не сохраняется: нужен FOUNDER_HISTORY_SECRET (не менее 32 символов) или WORKOS_COOKIE_PASSWORD."
+  return "История зашифрована на временном диске этого сервера. После redeploy/замены экземпляра она может исчезнуть и не разделяется между экземплярами. Для полной истории подключите приватное S3/R2 или постоянный диск."
 }
 
 /** Owner-only diagnostic endpoint calls this on demand, not on every request. */
 export async function founderMessageStorageCheck(): Promise<{ durable: boolean; reason: string }> {
   const cfg = config()
-  if (!cfg) return { durable: false, reason: "NOT_CONFIGURED" }
+  if (!cfg) {
+    const disk = diskConfig()
+    if (!disk) return { durable: false, reason: "NOT_CONFIGURED" }
+    const id = `health-${randomUUID()}`
+    const sample: FounderMessageEntry = { id, source: "chat", userText: "storage health check", assistantText: "read-back verified", createdAt: new Date().toISOString(), status: "success" }
+    try {
+      await writeDisk(id, sample)
+      const entries = await readDisk(id)
+      if (entries[0]?.assistantText !== sample.assistantText) return { durable: false, reason: "READ_BACK_MISMATCH" }
+      return { durable: false, reason: disk.explicit ? "DIRECTORY_WRITE_READ_OK_VERIFY_MOUNT" : "EPHEMERAL_WRITE_READ_OK" }
+    } catch { return { durable: false, reason: "STORAGE_CHECK_FAILED" } }
+    finally { await unlink(join(disk.directory, ownerHash(id), `${id}.enc.json`)).catch(() => {}) }
+  }
   const s3 = client(cfg), key = `private/founder/health/${randomUUID()}.enc.json`
   const sample: FounderMessageEntry = {
     id: randomUUID(), source: "chat", userText: "audit storage health check",
     assistantText: "read-back verified", createdAt: new Date().toISOString(), status: "success",
   }
   try {
-    await s3.send(new PutObjectCommand({ Bucket: cfg.bucket, Key: key, Body: encrypt([sample], cfg.encryptionSecret), ContentType: "application/json", CacheControl: "private, no-store" }))
-    const got = await s3.send(new GetObjectCommand({ Bucket: cfg.bucket, Key: key }))
+    await s3.send(new PutObjectCommand({ Bucket: cfg.bucket, Key: key, Body: encrypt([sample], cfg.encryptionSecret), ContentType: "application/json", CacheControl: "private, no-store" }), { abortSignal: AbortSignal.timeout(5_000) })
+    const got = await s3.send(new GetObjectCommand({ Bucket: cfg.bucket, Key: key }), { abortSignal: AbortSignal.timeout(5_000) })
     const entries = decrypt(await bodyText(got.Body), cfg.encryptionSecret)
     return entries.length === 1 && entries[0].id === sample.id && entries[0].assistantText === sample.assistantText
       ? { durable: true, reason: "WRITE_READ_DECRYPT_OK" }
@@ -196,7 +277,7 @@ export async function founderMessageStorageCheck(): Promise<{ durable: boolean; 
     console.error("[FOUNDER AUDIT] storage health failed", error instanceof Error ? error.message : "unknown")
     return { durable: false, reason: "STORAGE_CHECK_FAILED" }
   } finally {
-    try { await s3.send(new DeleteObjectCommand({ Bucket: cfg.bucket, Key: key })) }
+    try { await s3.send(new DeleteObjectCommand({ Bucket: cfg.bucket, Key: key }), { abortSignal: AbortSignal.timeout(5_000) }) }
     catch { console.warn("[FOUNDER AUDIT] health canary cleanup failed") }
   }
 }

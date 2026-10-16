@@ -1,7 +1,7 @@
 import { getOptionalWorkOSAuth } from "@/lib/auth/server"
-import { isVerifiedOwner } from "@/lib/auth/admin-policy"
+import { canReadFounderHistory } from "@/lib/server/founder-history-access"
 import { fetchWithTimeout } from "@/lib/server/request-safety"
-import { founderMessageStorageMode, readFounderMessageLog, type FounderMessageEntry } from "@/lib/server/founder-message-log"
+import { founderMessageStorageMode, founderMessageStorageWarning, readFounderMessageLog, type FounderMessageEntry } from "@/lib/server/founder-message-log"
 
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
@@ -95,7 +95,7 @@ async function readAllSpellings(user: WorkOSUser): Promise<FounderMessageEntry[]
     String(user.id || "").trim().toLowerCase(),
   ].filter(Boolean))]
 
-  const lists = await Promise.all(keys.map((key) => readFounderMessageLog(key).catch(() => [] as FounderMessageEntry[])))
+  const lists = await Promise.all(keys.map((key) => readFounderMessageLog(key)))
   const seen = new Set<string>()
   return lists.flat().filter((entry) => {
     const key = `${entry.id}:${entry.createdAt}:${entry.source}`
@@ -107,8 +107,8 @@ async function readAllSpellings(user: WorkOSUser): Promise<FounderMessageEntry[]
 
 export async function GET(request: Request) {
   const { user } = await getOptionalWorkOSAuth()
-  if (!isVerifiedOwner(user)) {
-    return Response.json({ ok: false, error: "FOUNDER_ONLY" }, { status: 403 })
+  if (!canReadFounderHistory(user)) {
+    return Response.json({ ok: false, error: "FOUNDER_VERIFIED_ACCOUNT_REQUIRED" }, { status: 403, headers: { "Cache-Control": "private, no-store" } })
   }
 
   const url = new URL(request.url)
@@ -123,7 +123,7 @@ export async function GET(request: Request) {
   }
 
   const rows: ActivityRow[] = []
-  for (let index = 0; index < accounts.length; index += WAVE) {
+  try { for (let index = 0; index < accounts.length; index += WAVE) {
     const wave = accounts.slice(index, index + WAVE)
     const results = await Promise.all(wave.map(async (account) => {
       const entries = await readAllSpellings(account)
@@ -136,10 +136,12 @@ export async function GET(request: Request) {
       }))
     }))
     for (const list of results) rows.push(...list)
+  } } catch {
+    return Response.json({ ok: false, error: "HISTORY_STORAGE_READ_FAILED", message: "Хранилище журнала временно недоступно; история не считается пустой." }, { status: 503, headers: { "Cache-Control": "private, no-store" } })
   }
 
   const filtered = search
-    ? rows.filter((row) => `${row.userName} ${row.userEmail} ${row.userText}`.toLowerCase().includes(search))
+    ? rows.filter((row) => `${row.userName} ${row.userEmail} ${row.userText} ${row.assistantText}`.toLowerCase().includes(search))
     : rows
 
   // Founder asked for the complete timeline. Do not cut the response to the
@@ -159,7 +161,7 @@ export async function GET(request: Request) {
     yesterday: rows.filter((row) => isAlmatyDay(dateMs(row.createdAt), 1, now)).length,
     accountsScanned: accounts.length,
     storage: founderMessageStorageMode(),
-    storageWarning: founderMessageStorageMode() === "runtime-memory" ? "История хранится только в RAM и исчезнет после перезапуска Render. Настройте FOUNDER_HISTORY_BUCKET и S3/R2 credentials." : null,
+    storageWarning: founderMessageStorageWarning(),
     statusCounts: {
       success: items.filter(row => row.status === "success").length,
       failed: items.filter(row => row.status === "failed").length,

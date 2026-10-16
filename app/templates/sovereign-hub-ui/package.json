@@ -39,6 +39,7 @@
     "test:chat-stream-integrity": "node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs scripts/verify-chat-stream-integrity.mjs",
     "test:memory-isolation": "node scripts/verify-memory-account-isolation.mjs",
     "test:chat-audit-contract": "node scripts/verify-chat-audit-contract.mjs",
+    "test:founder-history": "node --test scripts/verify-founder-history.mjs",
     "test:request-motion": "node scripts/verify-request-motion-parity.mjs",
     "test:request-motion-keeper": "node scripts/verify-request-motion-keeper.mjs",
     "test:request-motion-live": "node scripts/verify-request-motion-live.mjs",
