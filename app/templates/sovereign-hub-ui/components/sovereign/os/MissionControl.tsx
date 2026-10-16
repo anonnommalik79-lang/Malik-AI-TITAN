@@ -60,7 +60,8 @@ function TasksTab() {
   }, [])
   useEffect(() => {
     void load()
-    const timer = window.setInterval(load, 8_000)
+    // A background tab does not need its task list refreshed.
+    const timer = window.setInterval(() => { if (document.visibilityState === "visible") void load() }, 8_000)
     return () => window.clearInterval(timer)
   }, [load])
   if (open) {

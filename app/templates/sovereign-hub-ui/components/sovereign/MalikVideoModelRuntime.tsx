@@ -60,7 +60,10 @@ const MODELS = [
 ] as const
 
 const MOBILE_PAGE_SIZE = 5
-const VIDEO_GATE_POLL_MS = 5_000
+// The daily video gate changes a few times a day at most. It is checked only
+// while a video studio is on screen, once a minute, and on focus — never as a
+// 5-second poll from every open tab (at 100k tabs that alone is 20k req/s).
+const VIDEO_GATE_POLL_MS = 60_000
 
 type VideoGateState = {
   limited: boolean
@@ -438,11 +441,13 @@ export function MalikVideoModelRuntime() {
       installMobileCategoryPagers()
     }
 
-    const refreshGate = async () => {
+    let lastGateAt = 0
+    const studioMounted = () => Boolean(document.querySelector('.mv[data-view="video-generation"], .mv2[data-view="video-generation-v2"]'))
+    const refreshGate = async (force = false) => {
       if (disposed || refreshing) return
-      const legacyStudio = document.querySelector<HTMLElement>('.mv[data-view="video-generation"]')
-      const currentStudio = document.querySelector<HTMLElement>('.mv2[data-view="video-generation-v2"]')
-      if (!legacyStudio && !currentStudio && document.visibilityState === "hidden") return
+      if (!studioMounted() || document.visibilityState === "hidden") return
+      if (!force && Date.now() - lastGateAt < VIDEO_GATE_POLL_MS) return
+      lastGateAt = Date.now()
       refreshing = true
       try {
         const response = await fetch("/api/generate/video", { cache: "no-store", credentials: "same-origin" })
@@ -475,23 +480,34 @@ export function MalikVideoModelRuntime() {
     }
 
     const onResize = () => installMobileCategoryPagers()
-    const onFocus = () => void refreshGate()
+    const onFocus = () => void refreshGate(true)
     const onVisibility = () => {
       if (document.visibilityState === "visible") void refreshGate()
     }
 
     install()
-    void refreshGate()
+    void refreshGate(true)
     const timer = window.setInterval(() => void refreshGate(), VIDEO_GATE_POLL_MS)
     window.addEventListener("resize", onResize, { passive: true })
     window.addEventListener("focus", onFocus)
     document.addEventListener("visibilitychange", onVisibility)
-    const observer = new MutationObserver(install)
+    // Streaming chat changes the DOM on every token: one install per frame is
+    // enough, and opening the studio triggers its first gate check.
+    let frame = 0
+    const observer = new MutationObserver(() => {
+      if (frame) return
+      frame = window.requestAnimationFrame(() => {
+        frame = 0
+        install()
+        if (!lastGateAt) void refreshGate(true)
+      })
+    })
     observer.observe(document.documentElement, { childList: true, subtree: true })
 
     return () => {
       disposed = true
       window.clearInterval(timer)
+      if (frame) window.cancelAnimationFrame(frame)
       window.removeEventListener("resize", onResize)
       window.removeEventListener("focus", onFocus)
       document.removeEventListener("visibilitychange", onVisibility)

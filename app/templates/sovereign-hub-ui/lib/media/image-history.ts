@@ -1,5 +1,7 @@
 "use client"
 
+import { hasSignedInProfile } from "@/lib/auth/founder-access-client"
+
 export type MalikImageHistoryItem = {
   id: string
   src: string
@@ -158,6 +160,8 @@ function write(items: MalikImageHistoryItem[]) {
 export async function syncMalikImageHistoryFromAccount() {
   const local = readMalikImageHistory()
   if (typeof window === "undefined") return local
+  // A visitor has no account library: the request would only return 401.
+  if (!hasSignedInProfile()) return local
 
   try {
     const response = await fetch("/api/media/library?limit=200", {

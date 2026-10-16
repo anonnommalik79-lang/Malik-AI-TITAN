@@ -39,6 +39,7 @@ import {
   Video,
 } from "lucide-react"
 import { buildFallbackAvatar, getStoredAuthSnapshot, signOutMalik } from "@/lib/auth/client-session"
+import { founderAccess } from "@/lib/auth/founder-access-client"
 import { prefillPrompt } from "@/lib/malik-context"
 import { openOs } from "./os/os-client"
 import type { AIPlan } from "@/lib/ai/types"
@@ -247,12 +248,8 @@ function SidebarInner({
   useEffect(() => {
     let alive = true
     const checkFounderAccess = async () => {
-      try {
-        const response = await fetch("/api/founder/access", { credentials: "same-origin", cache: "no-store" })
-        if (alive) setFounderAllowed(response.ok)
-      } catch {
-        if (alive) setFounderAllowed(false)
-      }
+      const ok = await founderAccess()
+      if (alive) setFounderAllowed(ok)
     }
     void checkFounderAccess()
     window.addEventListener("malik-auth-updated", checkFounderAccess)

@@ -1,16 +1,15 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { founderAccess } from "@/lib/auth/founder-access-client"
 
 export function FounderShortcut() {
   const [allowed, setAllowed] = useState(false)
   useEffect(() => {
     let alive = true
     const check = async () => {
-      try {
-        const response = await fetch("/api/founder/access", { credentials: "same-origin", cache: "no-store" })
-        if (alive) setAllowed(response.ok)
-      } catch { if (alive) setAllowed(false) }
+      const ok = await founderAccess()
+      if (alive) setAllowed(ok)
     }
     void check()
     window.addEventListener("malik-auth-updated", check)

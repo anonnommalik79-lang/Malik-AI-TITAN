@@ -600,7 +600,8 @@ export function AccountChatPersistence({ accountId, children }: { accountId: str
     const savedAtKey = `${ACCOUNT_REMOTE_SAVED_AT_PREFIX}${accountKey}`
     let disposed = false
     let remoteReady = false
-    let remoteConfigured = true
+    // A visitor has no cloud history: never ask the server (it answers 401).
+    let remoteConfigured = accountKey !== "guest"
     let pendingRaw = ""
     let timer = 0
     let writeRevision = 0
@@ -751,7 +752,7 @@ export function AccountChatPersistence({ accountId, children }: { accountId: str
         }
       }
     }
-    void hydrateCloud()
+    if (remoteConfigured) void hydrateCloud()
 
     return () => {
       disposed = true
