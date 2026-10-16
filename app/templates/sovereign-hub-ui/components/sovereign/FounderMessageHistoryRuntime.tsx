@@ -303,7 +303,7 @@ export function FounderMessageHistoryRuntime() {
 
               <footer className="malik-founder-messages-foot">
                 <ShieldCheck />
-                <span>{storageWarning || (storage === "encrypted-object-storage" ? "История хранится зашифрованно в object storage." : "Состояние хранилища ещё не проверено.")}</span>
+                <span>{storageWarning || (storage === "encrypted-postgres" ? "История хранится зашифрованно в PostgreSQL." : storage === "encrypted-object-storage" ? "История хранится зашифрованно в object storage." : "Состояние хранилища ещё не проверено.")}</span>
               </footer>
             </>
           ) : (

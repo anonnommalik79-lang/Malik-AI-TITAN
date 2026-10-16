@@ -5,6 +5,7 @@ import { mkdir, readFile, readdir, rename, stat, unlink, writeFile } from "node:
 import { tmpdir } from "node:os"
 import { isAbsolute, join, parse, resolve, sep } from "node:path"
 import { DeleteObjectCommand, GetObjectCommand, ListObjectsV2Command, PutObjectCommand, S3Client } from "@aws-sdk/client-s3"
+import { durablePostgresConfigured, readPostgresAudit, writePostgresAudit, deletePostgresAuditCanary } from "./durable-postgres"
 
 export type FounderMessageSource = "chat" | "voice"
 export type FounderMessageStatus = "pending" | "success" | "failed" | "interrupted"
@@ -205,12 +206,17 @@ export async function readFounderMessageLog(userId: string) {
   if (!id || id === "guest") return []
   // Connecting cloud storage later must not hide records still on this host.
   // This is a read merge, not a claim that ephemeral records were migrated.
-  const cloud = config() ? (await Promise.all([readCloud(id), readDisk(id)])).flatMap(list => list || []) : await readDisk(id)
+  const cloud = (await Promise.all([
+    config() ? readCloud(id) : [],
+    readDisk(id),
+    durablePostgresConfigured() ? readPostgresAudit(ownerHash(id)).then(rows => rows.flatMap(raw => decrypt(raw, encryptionSecret()))) : [],
+  ])).flatMap(list => list || [])
   if (!cloud) return []
   const merged = new Map<string, FounderMessageEntry>()
   for (const item of cloud) {
     const previous = merged.get(item.id)
     if (previous && previous.status !== "pending" && item.status === "pending") continue
+    // PostgreSQL is read last and authoritative over stale local/cloud copies.
     merged.set(item.id, item)
   }
   return [...merged.values()].sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt))
@@ -225,6 +231,16 @@ export async function appendFounderMessage(input: {
   const entry = cleanEntry({ ...input, id: input.id || randomUUID(), createdAt: input.createdAt || new Date().toISOString() })
   if (!entry) return false
   try {
+    if (durablePostgresConfigured()) {
+      try {
+        await writePostgresAudit(ownerHash(userId), entry.id, entry.createdAt, entry.status || "success", encrypt([entry], encryptionSecret()))
+        return true
+      } catch {
+        // Best-effort encrypted emergency copy, NOT a durable acknowledgement.
+        await writeDisk(userId, entry).catch(() => {})
+        throw new Error("HISTORY_DATABASE_WRITE_UNCONFIRMED")
+      }
+    }
     return config() ? await writeCloud(userId, entry) : await writeDisk(userId, entry)
   } catch (error) {
     console.error("[FOUNDER AUDIT] Durable write failed", error instanceof Error ? error.message : "unknown")
@@ -232,6 +248,7 @@ export async function appendFounderMessage(input: {
   }
 }
 export function founderMessageStorageMode() {
+  if (durablePostgresConfigured()) return "encrypted-postgres"
   if (config()) return "encrypted-object-storage"
   const disk = diskConfig()
   return disk ? disk.explicit ? "encrypted-directory" : "encrypted-runtime-filesystem" : "unavailable"
@@ -239,14 +256,25 @@ export function founderMessageStorageMode() {
 
 export function founderMessageStorageWarning() {
   const mode = founderMessageStorageMode()
-  if (mode === "encrypted-object-storage") return null
+  if (mode === "encrypted-object-storage" || mode === "encrypted-postgres") return null
   if (mode === "encrypted-directory") return "История зашифрована в заданной серверной папке. Убедитесь, что это постоянный диск: сама настройка пути не гарантирует сохранность после redeploy."
   if (mode === "unavailable") return "Журнал не сохраняется: нужен FOUNDER_HISTORY_SECRET (не менее 32 символов) или WORKOS_COOKIE_PASSWORD."
-  return "История зашифрована на временном диске этого сервера. После redeploy/замены экземпляра она может исчезнуть и не разделяется между экземплярами. Для полной истории подключите приватное S3/R2 или постоянный диск."
+  return "История зашифрована на временном диске этого сервера. После redeploy/замены экземпляра она может исчезнуть и не разделяется между экземплярами. Для полной истории подключите PostgreSQL, приватное S3/R2 или постоянный диск."
 }
 
 /** Owner-only diagnostic endpoint calls this on demand, not on every request. */
 export async function founderMessageStorageCheck(): Promise<{ durable: boolean; reason: string }> {
+  if (durablePostgresConfigured()) {
+    const id = `health-${randomUUID()}`, owner = ownerHash(id)
+    const sample: FounderMessageEntry = { id, source: "chat", userText: "database health check", assistantText: "read-back verified", createdAt: new Date().toISOString(), status: "success" }
+    try {
+      await writePostgresAudit(owner, id, sample.createdAt, "success", encrypt([sample], encryptionSecret()))
+      const entries = (await readPostgresAudit(owner)).flatMap(raw => decrypt(raw, encryptionSecret()))
+      return entries.length === 1 && entries[0].id === id && entries[0].assistantText === sample.assistantText
+        ? { durable: true, reason: "POSTGRES_WRITE_READ_DECRYPT_OK" } : { durable: false, reason: "READ_BACK_MISMATCH" }
+    } catch { return { durable: false, reason: "DATABASE_CHECK_FAILED" } }
+    finally { await deletePostgresAuditCanary(owner, id).catch(() => {}) }
+  }
   const cfg = config()
   if (!cfg) {
     const disk = diskConfig()

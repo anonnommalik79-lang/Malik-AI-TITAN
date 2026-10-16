@@ -9,7 +9,7 @@ import { workTestLoader } from "./work-test-loader.mjs"
 
 const savedEnv = { ...process.env }
 const temporary = await mkdtemp(join(tmpdir(), "malik-founder-test-"))
-const sensitiveEnv = /^(FOUNDER_HISTORY_|PRIVATE_STATE_|MEDIA_STORAGE_|AWS_|R2_|CLOUDFLARE_R2_|S3_BUCKET$|STORAGE_BUCKET$|WORKOS_COOKIE_PASSWORD$|WORKOS_API_KEY$|MALIK_OWNER_)/
+const sensitiveEnv = /^(FOUNDER_HISTORY_|FOUNDER_DATABASE_URL$|DATABASE_URL$|PRIVATE_STATE_|MEDIA_STORAGE_|AWS_|R2_|CLOUDFLARE_R2_|S3_BUCKET$|STORAGE_BUCKET$|WORKOS_COOKIE_PASSWORD$|WORKOS_API_KEY$|MALIK_OWNER_)/
 for (const key of Object.keys(process.env)) if (sensitiveEnv.test(key)) delete process.env[key]
 process.env.MALIK_OWNER_EMAIL = "owner@example.test"
 let viewer = null

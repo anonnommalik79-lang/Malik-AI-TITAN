@@ -2,6 +2,7 @@ import "server-only"
 
 import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3"
 import { sharedPrivateS3Client } from "./shared-private-s3-client"
+import { durablePostgresConfigured, readPostgresPrivateJson, writePostgresPrivateJson, deletePostgresPrivateJson } from "./durable-postgres"
 
 const MAX_PRIVATE_JSON_BYTES = 8 * 1024 * 1024
 
@@ -84,10 +85,18 @@ async function bodyToBuffer(body: any) {
 }
 
 export function privateJsonStoreConfigured() {
-  return Boolean(config())
+  return durablePostgresConfigured() || Boolean(config())
 }
 
 export async function readPrivateJson<T>(keyValue: string, options?: { throwOnReadError?: boolean }): Promise<T | null> {
+  if (durablePostgresConfigured()) {
+    try { return (await readPrivateJsonVersioned<T>(keyValue)).value }
+    catch (error) {
+      if (options?.throwOnReadError) throw error
+      console.warn("[MALIK_PRIVATE_STATE] database read failed")
+      return null
+    }
+  }
   const target = storage()
   if (!target) return null
   const key = normalizeKey(keyValue)
@@ -117,6 +126,11 @@ export async function readPrivateJson<T>(keyValue: string, options?: { throwOnRe
 }
 
 export async function writePrivateJson(keyValue: string, value: unknown) {
+  if (durablePostgresConfigured()) {
+    const key = normalizeKey(keyValue)
+    try { return (await writePostgresPrivateJson(key, value)).stored }
+    catch { console.warn("[MALIK_PRIVATE_STATE] database write unconfirmed"); return false }
+  }
   const target = storage()
   if (!target) return false
   const key = normalizeKey(keyValue)
@@ -140,6 +154,11 @@ export async function writePrivateJson(keyValue: string, value: unknown) {
 }
 
 export async function deletePrivateJson(keyValue: string) {
+  if (durablePostgresConfigured()) {
+    const key = normalizeKey(keyValue)
+    try { return await deletePostgresPrivateJson(key) }
+    catch { console.warn("[MALIK_PRIVATE_STATE] database deletion unconfirmed"); return false }
+  }
   const target = storage()
   if (!target) return false
   const key = normalizeKey(keyValue)
@@ -159,6 +178,13 @@ export async function deletePrivateJson(keyValue: string) {
 
 /** Retrieve content and object revision in the same R2 operation. */
 export async function readPrivateJsonVersioned<T>(keyValue: string): Promise<{value: T|null; etag: string|null}> {
+  const postgres = durablePostgresConfigured()
+  if (postgres) {
+    const current = await readPostgresPrivateJson<T>(normalizeKey(keyValue))
+    if (current.etag || !config()) return current
+    // Preserve an existing S3 history when first connecting PostgreSQL. The next
+    // conditional insert migrates it without treating S3's ETag as a SQL revision.
+  }
   const target = storage()
   if (!target) throw new Error("PRIVATE_STATE_NOT_CONFIGURED")
   const key = normalizeKey(keyValue)
@@ -173,7 +199,7 @@ export async function readPrivateJsonVersioned<T>(keyValue: string): Promise<{va
     if (!etag) throw new Error("PRIVATE_STATE_NO_ETAG")
     const buffer = await bodyToBuffer(result.Body)
     if (!buffer.length || buffer.length > MAX_PRIVATE_JSON_BYTES) throw new Error("INVALID_PRIVATE_STATE")
-    return { value: JSON.parse(buffer.toString("utf8")) as T, etag }
+    return { value: JSON.parse(buffer.toString("utf8")) as T, etag: postgres ? null : etag }
   } catch (error: any) {
     const code = String(error?.name || error?.Code || error?.code || "")
     if (code === "NoSuchKey" || code === "NotFound" || Number(error?.$metadata?.httpStatusCode) === 404) {
@@ -189,6 +215,11 @@ export async function readPrivateJsonVersioned<T>(keyValue: string): Promise<{va
 export async function writePrivateJsonConditional(
   keyValue: string, value: unknown, previousEtag: string|null
 ): Promise<{stored:boolean; conflict:boolean}> {
+  if (durablePostgresConfigured()) {
+    const key = normalizeKey(keyValue)
+    try { return await writePostgresPrivateJson(key, value, previousEtag) }
+    catch { console.warn("[MALIK_PRIVATE_STATE] database conditional write unconfirmed"); return { stored: false, conflict: false } }
+  }
   const target=storage()
   if (!target) return {stored:false,conflict:false}
   const key=normalizeKey(keyValue)

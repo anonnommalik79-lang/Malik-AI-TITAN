@@ -13,7 +13,7 @@ const require = createRequire(import.meta.url)
 const playwright = require(process.env.MALIK_QA_PLAYWRIGHT_PATH || "playwright")
 const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "malik-founder-browser-"))
 const savedEnv = { ...process.env }
-for (const key of Object.keys(process.env)) if (/^(FOUNDER_HISTORY_|PRIVATE_STATE_|MEDIA_STORAGE_|AWS_|R2_|CLOUDFLARE_R2_|S3_BUCKET$|STORAGE_BUCKET$)/.test(key)) delete process.env[key]
+for (const key of Object.keys(process.env)) if (/^(FOUNDER_HISTORY_|FOUNDER_DATABASE_URL$|DATABASE_URL$|PRIVATE_STATE_|MEDIA_STORAGE_|AWS_|R2_|CLOUDFLARE_R2_|S3_BUCKET$|STORAGE_BUCKET$)/.test(key)) delete process.env[key]
 Object.assign(process.env, { WORKOS_COOKIE_PASSWORD: "offline-founder-browser-".repeat(3), WORKOS_API_KEY: "fixture", MALIK_OWNER_EMAIL: "owner@example.test" })
 const users = [{ id: "customer-a", email: "alpha@example.test", name: "Alpha" }, { id: "customer-b", email: "beta@example.test", name: "Beta" }]
 const load = workTestLoader({

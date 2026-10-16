@@ -40,6 +40,7 @@
     "test:memory-isolation": "node scripts/verify-memory-account-isolation.mjs",
     "test:chat-audit-contract": "node scripts/verify-chat-audit-contract.mjs",
     "test:founder-history": "node --test scripts/verify-founder-history.mjs",
+    "test:history-postgres": "node --test scripts/verify-history-postgres.mjs",
     "test:request-motion": "node scripts/verify-request-motion-parity.mjs",
     "test:request-motion-keeper": "node scripts/verify-request-motion-keeper.mjs",
     "test:request-motion-live": "node scripts/verify-request-motion-live.mjs",
@@ -216,6 +217,7 @@
     "next": "^16.2.7",
     "next-themes": "^0.4.6",
     "postcss": "^8.5.14",
+    "pg": "^8.23.1",
     "pptxgenjs": "^4.0.1",
     "react": "^19",
     "react-day-picker": "9.13.2",
@@ -233,6 +235,8 @@
     "zod": "^3.24.1"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "0.5.10",
+    "@types/pg": "^8.23.1",
     "@eslint/js": "^10.0.1",
     "eslint": "^10.4.1",
     "eslint-plugin-react-hooks": "^7.1.1",

@@ -67,7 +67,7 @@ export function withFounderRequestAudit(handler: Endpoint, source: FounderMessag
       errorCode?: string; errorMessage?: string; httpStatus?: number
     }) => {
       try {
-        await appendFounderMessage({
+        const stored = await appendFounderMessage({
           id, userId, source, userText, createdAt, status: input.status,
           assistantText: redact(input.assistantText), provider: redact(input.provider).slice(0, 100),
           model: redact(input.model).slice(0, 160), errorCode: redact(input.errorCode).slice(0, 120),
@@ -75,6 +75,7 @@ export function withFounderRequestAudit(handler: Endpoint, source: FounderMessag
           durationMs: Date.now() - start,
           textTruncated: textTruncated || String(input.assistantText || "").length > MAX_TEXT,
         })
+        if (!stored) console.error("[FOUNDER AUDIT] persistence unconfirmed", id, input.status)
       } catch (error) {
         console.error("[FOUNDER AUDIT] write error", error instanceof Error ? error.message : "unknown")
       }

@@ -17,7 +17,7 @@ new Function("require", "module", "exports", transpile("lib/server/founder-reque
   if (name === "server-only") return {}
   if (name === "node:crypto") return { randomUUID }
   if (name.endsWith("request-entitlement")) return { resolveRequestEntitlement: async () => ({ authenticated, userId: authenticated ? "account-a" : "guest" }) }
-  if (name.endsWith("founder-message-log")) return { MAX_FOUNDER_TEXT_CHARS: 256_000, appendFounderMessage: async value => { writes.push(value) } }
+  if (name.endsWith("founder-message-log")) return { MAX_FOUNDER_TEXT_CHARS: 256_000, appendFounderMessage: async value => { writes.push(value); return true } }
   if (name.endsWith("chat-stream-contract")) return contractModule.exports
   throw new Error(`Unexpected dependency ${name}`)
 }, auditModule, auditModule.exports)
