@@ -355,6 +355,43 @@ function openAiDirect(input: {
   }))
 }
 
+/**
+ * Optional DSH Our Free Model OpenAI-compatible forward gateway.
+ * Disabled by default: hosting a keyless desktop plugin does not confer
+ * permission to resell/share an upstream's trial or free quota.
+ * Enable only after verifying public-app usage is permitted by the upstream.
+ * A remote gateway must use HTTPS; development allows local HTTP only.
+ */
+function dshGatewayLanes(): MaxLane[] {
+  if (env("MALIK_DSH_GATEWAY_ENABLED").toLowerCase() !== "true") return []
+  const address = env("MALIK_DSH_GATEWAY_BASE_URL")
+  const key = env("MALIK_DSH_GATEWAY_API_KEY")
+  const model = env("MALIK_DSH_GATEWAY_MODEL")
+  if (!address || !key || !model) return []
+
+  let endpoint: URL
+  try { endpoint = new URL(address) } catch { return [] }
+  const host = endpoint.hostname.replace(/^\\[|\\]$/g, "").toLowerCase()
+  const localDevelopment = process.env.NODE_ENV !== "production"
+    && endpoint.protocol === "http:"
+    && ["localhost", "127.0.0.1", "::1"].includes(host)
+  if (endpoint.protocol !== "https:" && !localDevelopment) return []
+  if (endpoint.username || endpoint.password || endpoint.search || endpoint.hash) return []
+
+  const base = endpoint.toString().replace(/\\/+$/, "")
+  const chatUrl = base.endsWith("/chat/completions") ? base
+    : base.endsWith("/v1") ? `${base}/chat/completions`
+    : `${base}/v1/chat/completions`
+  return openAiDirect({
+    provider: "dsh-free-gateway",
+    keys: [key],
+    url: chatUrl,
+    model,
+    label: `DSH · ${model}`,
+    outputCap: 12_000,
+  })
+}
+
 /** Explicit selection only: do not drain Ling's free quota in MAX auto-racing. */
 function lingDirectLanes(): MaxLane[] {
   return openAiDirect({
@@ -370,6 +407,7 @@ function lingDirectLanes(): MaxLane[] {
 
 async function directLanes(codeMode: boolean): Promise<MaxLane[]> {
   const lanes: MaxLane[] = []
+  lanes.push(...dshGatewayLanes())
 
   const openAiModel = env(codeMode ? "OPENAI_CODE_MODEL" : "OPENAI_MODEL") || env("OPENAI_MODEL") || "gpt-4.1-mini"
   const reasoningOpenAi = /^(?:gpt-5|o\d)/i.test(openAiModel)
