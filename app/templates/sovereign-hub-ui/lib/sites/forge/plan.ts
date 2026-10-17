@@ -117,7 +117,7 @@ const NAMES_EN: Record<string, string[]> = {
 export function nameFromPrompt(prompt: string) {
   const quoted = prompt.match(/[«"“„']([^»"”'\n]{2,40})[»"”']/u)?.[1]
   if (quoted && !/^(?:сайт|website|site)$/iu.test(quoted.trim())) return quoted.trim()
-  const named = prompt.match(/(?:под названием|с названием|назван\p{L}*|называется|called|named|атауы)\s+([\p{L}\p{N}][\p{L}\p{N}&' .-]{1,30})/iu)?.[1]
+  const named = prompt.match(/(?:под названием|с названием|назван\p{L}*|называется|called|named|атауы)\s+([\p{L}\p{N}][\p{L}\p{N}&' -]{1,60})/iu)?.[1]
   return named ? named.trim().replace(/[.,!?]+$/, "") : ""
 }
 
