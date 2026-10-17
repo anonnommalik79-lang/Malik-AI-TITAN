@@ -39,6 +39,8 @@ check("Markdown image rows render as galleries alongside existing code and table
   assert.match(markdown, /!parseImageLine\(lines\[index\]\)/)
   assert.match(markdown, /<MalikVisualGallery key=\{key\}/)
   assert.match(chat, /allowImages=\{false\}/)
+  // Model-written image URLs stay off; verified reference photos are on.
+  assert.match(chat, /allowImages=\{false\} referencePhotos/)
   assert.match(markdown, /<CodeBlock language=\{block\.language\}/)
 })
 check("Chat anchors references inside completed answers and keeps history lazy", () => {

@@ -378,6 +378,19 @@ try {
   const rejected = await route.GET(new Request("https://malik.test/api/chat/reference-images?q=" + encodeURIComponent("Покажи горы Алматы без фото")))
   assert.deepEqual(await rejected.json(), { images: [] })
   assert.equal(requests, 1, "irrelevant request must never hit the catalogue")
+  // A caller that leaves early does not empty the shared lookup for the others.
+  let releaseSlow
+  const slowGate = new Promise((resolve) => { releaseSlow = resolve })
+  globalThis.fetch = async () => { requests++; await slowGate; return Response.json({ query: { pages: [media(2)] } }) }
+  const leaving = new AbortController()
+  const slowUrl = "https://malik.test/api/chat/reference-images?q=" + encodeURIComponent("Покажи горы Алматы") + "&topic=" + encodeURIComponent("Almaty mountains")
+  const early = route.GET(new Request(slowUrl, { signal: leaving.signal }))
+  const staying = route.GET(new Request(slowUrl))
+  await new Promise((resolve) => setTimeout(resolve, 5))
+  leaving.abort()
+  releaseSlow()
+  await early
+  assert.equal((await (await staying).json()).images.length, 1, "the staying caller still gets the photo")
   const businessSlots = policy.planAnswerVisualSlots("Бизнес под ключ с помощью ИИ", [
     { key: "p0", kind: "paragraph", text: "Работа делится на несколько этапов." },
     { key: "i0", kind: "item", text: "**Анализ рынка и продуктовая матрица**: стратегия." },

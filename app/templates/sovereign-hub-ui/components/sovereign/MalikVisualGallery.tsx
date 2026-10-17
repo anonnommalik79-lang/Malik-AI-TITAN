@@ -113,8 +113,16 @@ function warmReferenceHosts() {
   }
 }
 
+/** The site a photograph comes from, for its small source chip. */
+function sourceHost(url: string): string {
+  try { return new URL(url).hostname.replace(/^www\./u, "") } catch { return "" }
+}
+
+/** Numbered place in an editorial gallery: 01 is wide, then pairs side by side. */
+export type EditorialPlace = { number: number; wide: boolean; left: boolean }
+
 /** Direct browser catalogue requests: no image proxy, no generation credits. */
-export function MalikReferenceImages({ question, previousQuestion = "", hasAttachment = false, isLatest = false, planOverride, row = false, compact = false, hero = false, cover = false, lineup = false, children }: { question: string; previousQuestion?: string; hasAttachment?: boolean; isLatest?: boolean; planOverride?: ReferenceVisualPlan; row?: boolean; compact?: boolean; hero?: boolean; cover?: boolean; lineup?: boolean; children?: ReactNode }) {
+export function MalikReferenceImages({ question, previousQuestion = "", hasAttachment = false, isLatest = false, planOverride, row = false, compact = false, hero = false, cover = false, lineup = false, editorial, heading, children }: { question: string; previousQuestion?: string; hasAttachment?: boolean; isLatest?: boolean; planOverride?: ReferenceVisualPlan; row?: boolean; compact?: boolean; hero?: boolean; cover?: boolean; lineup?: boolean; editorial?: EditorialPlace; heading?: ReactNode; children?: ReactNode }) {
   const sources = useContext(ReferencePhotoSources)
   const candidate = useMemo(() => planOverride || planReferenceVisuals(question, previousQuestion, hasAttachment), [planOverride, question, previousQuestion, hasAttachment])
   // The answer grows while streaming. Keep subscriptions stable for identical queries.
@@ -180,6 +188,38 @@ export function MalikReferenceImages({ question, previousQuestion = "", hasAttac
       </MalikReferenceImages>)}
     </section>
   </div>
+  // One numbered subject of a gallery answer (see EditorialPlace). The
+  // caption and description always stay; only a photo that cannot be found
+  // or loaded is left out, so the text never depends on the picture.
+  if (editorial) {
+    const image = images?.[0]
+    const href = image ? safeSourceUrl(image.sourceUrl) || image.url : ""
+    const host = sourceHost(href)
+    const source = image ? <a href={href} target="_blank" rel="noopener noreferrer" className="malik-editorial__source"
+      title={[image.credit, image.license, host].filter(Boolean).join(" · ")} aria-label={"Источник фото: " + (image.credit || host || plan.topic)}>
+      {host ? <img src={`https://www.google.com/s2/favicons?domain_url=${encodeURIComponent("https://" + host)}&sz=32`} alt="" aria-hidden="true" width={14} height={14} loading="lazy" decoding="async" referrerPolicy="no-referrer" /> : null}
+      <span>{image.credit || host || "Источник фото"}</span>
+    </a> : null
+    const first = isLatest && editorial.number === 1 ? { loading: "eager" as const, fetchPriority: "high" as const } : { loading: "lazy" as const }
+    return (
+      // A div, not <article>: global mobile shell rules stretch every article to 100%.
+      <div ref={container} role="group" aria-label={plan.topic} className={"malik-editorial " + (editorial.wide ? "is-wide" : editorial.left ? "is-half is-left" : "is-half is-right")}
+        data-malik-reference-topic={plan.topic} data-malik-editorial={editorial.number}>
+        {image ? <button type="button" className="malik-editorial__media" data-malik-fit={image.role === "logo" || plan.kind === "tutorial" ? "contain" : "cover"}
+          onClick={() => setSelected(image)} aria-label={"Увеличить: " + plan.topic}>
+          <img key={image.url} src={image.url} alt={plan.topic} {...first} decoding="async" referrerPolicy="no-referrer" className="malik-ref-img"
+            data-loaded={shown(image.url) ? "" : undefined} onLoad={() => setLoadedUrl(image.url)} onError={() => failed(image.url)} />
+        </button> : images === null && active ? <div className="malik-editorial__media is-pending" role="status" aria-label={"Загрузка изображения: " + plan.topic} /> : null}
+        <div className="malik-editorial__head">
+          <div className="malik-editorial__title"><span className="malik-editorial__num">{String(editorial.number).padStart(2, "0")}</span><span className="malik-editorial__slash" aria-hidden="true">/</span>{heading}</div>
+          {editorial.wide ? source : null}
+        </div>
+        {children ? <div className="malik-editorial__body">{children}</div> : null}
+        {!editorial.wide && source ? <div className="malik-editorial__chips">{source}</div> : null}
+        {selected ? <ReferenceLightbox image={selected} images={images || []} onSelect={setSelected} onClose={() => setSelected(null)} /> : null}
+      </div>
+    )
+  }
   // A comparison lineup keeps every contender in place: with no photo the
   // card still names it and says what it is, so the row never loses a member.
   if (compact) return <div ref={container} className="min-w-0" hidden={!lineup && images !== null && !images.length} data-malik-reference-topic={plan.topic}>

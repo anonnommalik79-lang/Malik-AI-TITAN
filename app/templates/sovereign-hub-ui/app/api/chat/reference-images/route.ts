@@ -8,6 +8,9 @@ import { cleanReferenceLabel, isSafeVisualUrl, lookupReferenceImages, readRefere
 import { findProviderReferenceImages } from "@/lib/media/provider-reference-photos"
 
 const cache = new Map<string, { expires: number; promise: Promise<MalikVisualImage[]> }>()
+/** Distinct lookups running at once on this instance (each holds sockets and timers). */
+const MAX_IN_FLIGHT = 24
+let inFlight = 0
 
 async function unsplash(topic: string, signal: AbortSignal): Promise<MalikVisualImage[]> {
   const key = process.env.UNSPLASH_ACCESS_KEY?.trim()
@@ -56,12 +59,18 @@ export async function GET(request: Request) {
   const key = [plan.kind || "reference", plan.visualDevice?.join(",") || "", plan.visualTerms?.join(",") || "", skipOfficial ? "retry" : "", plan.entity ? "entity" : "", plan.person ? "person" : "", plan.logo ? "logo" : "", ...plan.queries].join("|").toLowerCase() + "|" + JSON.stringify([...excludedUrls].sort())
   let entry = cache.get(key)
   if (!entry || entry.expires <= Date.now()) {
+    // A burst of different lookups is bounded: past the limit the browser
+    // keeps its own catalogue result and this fallback answers at once.
+    if (inFlight >= MAX_IN_FLIGHT) return NextResponse.json({ images: [] }, { headers: { "Cache-Control": "no-store", "Retry-After": "2" } })
     // Eviction bounds RAM. Concurrent identical lookups share one promise.
     for (const [oldKey, value] of cache) if (value.expires <= Date.now()) cache.delete(oldKey)
     while (cache.size >= 60) cache.delete(cache.keys().next().value!)
+    inFlight += 1
     const promise = (async () => {
       const started = Date.now()
-      const signal = AbortSignal.any([request.signal, AbortSignal.timeout(7500)])
+      // One lookup serves every identical request, so it must not end when the
+      // first caller leaves (that cached an empty result for everyone else).
+      const signal = AbortSignal.timeout(7500)
       // Prefer trusted official/Commons images. Only after 450ms, hedge with a
       // sequential server-only provider fallback; abort the loser to save quota.
       let images = await new Promise<MalikVisualImage[]>((resolve) => {
@@ -99,7 +108,7 @@ export async function GET(request: Request) {
       // Timings/counts only: never log the user's prompt, identity or keys.
       if (!images.length || Date.now() - started > 1500) console.info("[reference-images]", { durationMs: Date.now() - started, count: images.length, timedOut: signal.aborted })
       return images
-    })()
+    })().finally(() => { inFlight -= 1 })
     entry = { expires: Date.now() + 600000, promise }
     cache.set(key, entry)
   }

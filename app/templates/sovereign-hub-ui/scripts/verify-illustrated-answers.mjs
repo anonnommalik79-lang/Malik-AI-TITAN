@@ -38,6 +38,8 @@ function bundle(file) {
 // Interactive Visual Engine blocks are covered by test:visual-engine; this
 // layout test keeps them out of its hand-made bundle (Zod, Recharts).
 modules["components/sovereign/visual-engine/MalikVisualBlock.tsx"] = "module.exports={MalikVisualEngineBlock:function(){return null},MalikVisualPending:function(){return null}}"
+// The oil report has its own suite (test:oil-report) and pulls Zod contracts.
+modules["components/sovereign/MalikOilReport.tsx"] = "module.exports={MalikOilReport:function(){return null}}"
 const markdown = bundle(path.join(project, "components/sovereign/MalikMarkdown.tsx"))
 const globalPath = path.join(project, "app/globals.css")
 const globals = (await require("postcss")([require("@tailwindcss/postcss")({ base: project })])
@@ -117,7 +119,7 @@ for (const engine of (process.env.MALIK_QA_ENGINES || "chromium").split(",")) {
       assert.equal(await page.locator(".malik-answer-flow__nodes > li").count(), 6)
       assert.equal(await page.locator(".malik-md-table tbody tr").count(), 4)
       assert.equal(await page.locator("[data-malik-reference-topic]").count(), 0, "No duplicate/decorative photo searches beside structured blocks")
-      assert.equal(catalogues.length, 0, "Exact logos and source pictures need no catalogue API")
+      assert.equal(catalogues.length, 0, "Exact logos and source pictures need no catalogue API: " + catalogues.join(" "))
       assert(!await page.locator("#qa-answer").innerText().then(value => /Ищу фото|malik-cards|malik-visual/.test(value)))
       const geometry = await page.evaluate(() => ({
         overflow: document.documentElement.scrollWidth > innerWidth + 1,
