@@ -3,6 +3,7 @@ import { analysisFrame, asksAnalysis } from "@/lib/ai/analysis-shape"
 import { needsCurrentEvidence } from "./current-evidence"
 import { truthNeedsLiveEvidence } from "./truth-engine"
 import { classifyFreshness, NO_WEB } from "./freshness-intent"
+import { websiteIntent } from "@/lib/website/engine/intent"
 export type WebSearchOptions = {
   research?: boolean
   disableResearch?: boolean
@@ -14,6 +15,10 @@ export function shouldUseWeb(prompt: string, options: WebSearchOptions = {}): bo
   const text = prompt.toLowerCase().replace(/ё/g, "е").replace(/\s+/g, " ").trim()
   if (!text || options.disableResearch || options.research === false) return false
   if (NO_WEB.test(text)) return false
+  // A build brief may contain «современный», «2026» or ask for photos/video.
+  // Those are project requirements, not a news-research answer. Any factual
+  // content research belongs to a separate project stage.
+  if (websiteIntent(prompt)) return false
   if (/(?:не\s+(?:ищи|гугли|загугливай)|без\s+(?:поиска|интернета|гугла)|do not (?:search|browse)|don't (?:search|browse)|without (?:web|search|internet))/i.test(text)) return false
 
   // An explicit search request always wins.

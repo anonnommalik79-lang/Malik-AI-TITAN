@@ -74,7 +74,7 @@ export function stripCommonRoot(files: ProjectFile[]) {
 }
 
 /** Validates and limits a file set; reports every file left out and why. */
-export function normalizeProjectFiles(input: Array<{ path: string; content: string }>) {
+export function normalizeProjectFiles(input: Array<{ path: string; content: string }>, options: { stripRoot?: boolean } = {}) {
   const files: ProjectFile[] = []
   const rejected: FileRejection[] = []
   const seen = new Set<string>()
@@ -95,7 +95,9 @@ export function normalizeProjectFiles(input: Array<{ path: string; content: stri
     total += content.length
     files.push({ path, content })
   }
-  return { files: stripCommonRoot(files), rejected, totalChars: total }
+  // Folder uploads may contain a wrapping directory. Generated/managed files
+  // are already workspace-relative: stripping their common `app/` is data loss.
+  return { files: options.stripRoot === false ? files : stripCommonRoot(files), rejected, totalChars: total }
 }
 
 export type TreeNode = { name: string; path: string; type: "dir" | "file"; children?: TreeNode[] }

@@ -82,7 +82,11 @@ function staticPreview(files: Map<string, string>, entry: string, runtimeBase: s
     return js === undefined ? match : `<script${before}${after}>${escapeScript(js)}</script>`
   })
   const reporter = `<script>window.__MALIK_PREVIEW__=${JSON.stringify({ token }).replace(/</g, "\\u003c")};(function(){var t=window.__MALIK_PREVIEW__.token,n=0;function p(k,m){if(n++>40)return;try{parent.postMessage({type:k==="error"?"malik-preview-error":"malik-work-preview",kind:k,token:t,message:String(m).slice(0,600)},"*")}catch(e){}}window.addEventListener("error",function(e){if(e&&e.target&&e.target!==window&&(e.target.src||e.target.href)){p("error","Не загрузился ресурс: "+(e.target.src||e.target.href));return}p("error",(e.message||"Error")+(e.lineno?" (строка "+e.lineno+")":""))},true);window.addEventListener("unhandledrejection",function(e){var r=e&&e.reason;p("error","Unhandled promise rejection: "+(r&&r.message||r))});document.addEventListener("securitypolicyviolation",function(e){if(String(e.violatedDirective).indexOf("connect-src")===0)p("error","Сетевой запрос заблокирован в превью: "+e.blockedURI)});window.addEventListener("load",function(){p("ready","rendered")})})();</script>`
-  const top = head(runtimeBase, "html") + reporter
+  // Local documents stay inside the sandbox and request a new source preview
+  // from the parent. Never navigate into Malik's authenticated application.
+  const pages = [...files.keys()].filter(path => /\.html?$/i.test(path))
+  const navigation = `<script>(function(){var pages=${JSON.stringify(pages).replace(/</g, "\\u003c")},entry=${JSON.stringify(entry)},token=${JSON.stringify(token)};document.addEventListener("click",function(e){var a=e.target&&e.target.closest&&e.target.closest("a[href]");if(!a)return;var h=a.getAttribute("href");if(!h||h.charAt(0)==="#"||/^(?:[a-z]+:|\\/\\/)/i.test(h))return;var u;try{u=new URL(h,"https://preview.local/"+entry)}catch(_){return}if(u.origin!=="https://preview.local")return;var p=u.pathname.slice(1);if(pages.indexOf(p)<0&&pages.indexOf(p.replace(/\\/$/,"")+"/index.html")>=0)p=p.replace(/\\/$/,"")+"/index.html";e.preventDefault();if(pages.indexOf(p)>=0)parent.postMessage({type:"malik-work-preview",kind:"static-route",token:token,message:"/"+p},"*");else parent.postMessage({type:"malik-preview-error",kind:"error",token:token,message:"Local page not found: "+p},"*")})})();</script>`
+  const top = head(runtimeBase, "html") + reporter + navigation
   if (/<head[^>]*>/i.test(html)) return html.replace(/<head[^>]*>/i, (match) => `${match}${top}`)
   if (/<html[^>]*>/i.test(html)) return html.replace(/<html[^>]*>/i, (match) => `${match}<head>${top}</head>`)
   return `<!doctype html><html><head>${top}</head><body>${html}</body></html>`
@@ -143,11 +147,13 @@ export function buildProjectPreview(input: ProjectFile[], options: { runtimeBase
   const limitations: string[] = []
 
   if (stack === "static-html" || (stack !== "next-app" && ![...files.keys()].some((path) => /^(?:src\/)?(?:main|index)\.(?:tsx|jsx|ts|js)$/.test(path)) && [...files.keys()].some((path) => /(?:^|\/)index\.html?$/.test(path)))) {
-    const entry = ["index.html", "public/index.html", "src/index.html"].find((path) => files.has(path)) || [...files.keys()].find((path) => /(?:^|\/)index\.html?$/.test(path)) as string
+    const defaultEntry = ["index.html", "public/index.html", "src/index.html"].find((path) => files.has(path)) || [...files.keys()].find((path) => /(?:^|\/)index\.html?$/.test(path)) as string
+    const requested = String(options.route || "/").replace(/^\//, "").split(/[?#]/)[0]
+    const entry = requested && /\.html?$/i.test(requested) && files.has(requested) ? requested : defaultEntry
     if (/<script[^>]+type=["']module["'][^>]*src=["'][^"']+\.(?:tsx?|jsx)["']/i.test(files.get(entry) || "") && stack !== "static-html") return none("NEEDS_BUNDLER")
     const html = staticPreview(files, entry, options.runtimeBase, options.token)
     limitations.push("Внешние сетевые запросы (fetch/XHR) из превью заблокированы.")
-    return { ok: true, mode: "html", html, entry, routes: [entry], modules: 1, limitations, reason: null }
+    return { ok: true, mode: "html", html, entry, routes: [...files.keys()].filter(path => /\.html?$/i.test(path)), modules: 1, limitations, reason: null }
   }
   if (stack === "next-pages") return none("NEXT_PAGES_ROUTER_UNSUPPORTED")
   if (stack === "python" || stack === "node" || stack === "unknown") return none(stack === "unknown" ? "NO_ENTRY" : "SERVER_ONLY_PROJECT")

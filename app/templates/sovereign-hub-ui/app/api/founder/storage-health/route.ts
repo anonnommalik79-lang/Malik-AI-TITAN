@@ -5,7 +5,7 @@ import { founderMessageStorageCheck, founderMessageStorageMode } from "@/lib/ser
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
-export async function GET(request?: Request) {
+export async function GET(request: Request) {
   const { user } = await getOptionalWorkOSAuth()
   if (!await verifyFounderHistoryViewer(user)) return founderHistoryAccessDenied(user, request)
   const result = await founderMessageStorageCheck()

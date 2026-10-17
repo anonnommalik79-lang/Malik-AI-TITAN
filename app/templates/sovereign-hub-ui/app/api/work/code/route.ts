@@ -6,6 +6,7 @@ import { analyzeProject } from "@/lib/work/code/diagnostics"
 import { buildProjectPreview } from "@/lib/work/code/preview"
 import { readProjectZip, ZipReadError } from "@/lib/work/code/zip-read"
 import { projectStatus } from "@/lib/work/code/status"
+import { guestRedirectOrigin } from "@/lib/auth/guest-origin"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -92,7 +93,7 @@ export async function POST(request: Request) {
   if (action === "preview") {
     const analysis = analyzeProject(files)
     const token = randomUUID()
-    const origin = new URL(request.url).origin
+    const origin = process.env.NODE_ENV === "production" || process.env.RENDER === "true" ? guestRedirectOrigin(request) : new URL(request.url).origin
     const preview = buildProjectPreview(files, { runtimeBase: origin, token, route: typeof body.route === "string" ? body.route.slice(0, 200) : "/" })
     return json({ ok: true, preview: { ...preview, token }, analysis, status: projectStatus({ analysis, preview }) })
   }

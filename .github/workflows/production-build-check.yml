@@ -58,6 +58,9 @@ jobs:
       - name: Verify Markdown rendering
         run: npm run test:answer-format
 
+      - name: Verify checkpointed website projects (fixtures, no deployment)
+        run: npm run test:website-engine
+
       - name: Verify presentation layouts
         run: npm run test:presentations
 

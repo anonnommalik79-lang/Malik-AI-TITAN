@@ -101,7 +101,7 @@ function TreeView({ nodes, active, onOpen, problems, depth = 0 }: { nodes: TreeN
   )
 }
 
-export function WorkCodeStudio({ initialFiles, title: initialTitle, onFixWithAi, onSaved, embedded = false }: { initialFiles?: ProjectFile[]; title?: string; onFixWithAi?: (errors: string[]) => void; onSaved?: (artifactId: string) => void; embedded?: boolean }) {
+export function WorkCodeStudio({ initialFiles, title: initialTitle, onFixWithAi, onSaved, embedded = false, previewOnly = false }: { initialFiles?: ProjectFile[]; title?: string; onFixWithAi?: (errors: string[]) => void; onSaved?: (artifactId: string) => void; embedded?: boolean; previewOnly?: boolean }) {
   const [language] = useState(studioLanguage)
   const t = useCallback((key: StudioWord, values?: Record<string, string | number>) => studioWord(language, key, values), [language])
   const [files, setFiles] = useState<ProjectFile[]>(initialFiles || [])
@@ -150,6 +150,15 @@ export function WorkCodeStudio({ initialFiles, title: initialTitle, onFixWithAi,
       const data = event.data as { type?: string; kind?: string; token?: string; message?: string; route?: string }
       if (data?.token !== preview.token) return
       if (data.kind === "ready") { window.clearTimeout(timer.current); setRuntime((current) => ({ ready: true, errors: current?.errors || [] })) }
+      else if (data.kind === "static-route" && data.message && preview.mode === "html") {
+        const path = data.message.replace(/^\//, "")
+        if (!preview.routes.includes(path)) return
+        setRuntime(null)
+        void postCode<{ preview: Preview }>({ action: "preview", files, route: data.message }).then(result => {
+          if (result.ok) { setPreview(result.data.preview); setRoute(data.message!); setFrameKey(value => value + 1) }
+          else setError(result.message)
+        })
+      }
       else if (data.kind === "route" && data.message) setRoute(data.message)
       else if (data.type === "malik-preview-error" && data.message) setRuntime((current) => {
         const errors = current?.errors || []
@@ -158,7 +167,7 @@ export function WorkCodeStudio({ initialFiles, title: initialTitle, onFixWithAi,
     }
     window.addEventListener("message", onMessage)
     return () => window.removeEventListener("message", onMessage)
-  }, [preview])
+  }, [preview, files])
 
   // A preview that never answers is a failure, not an endless spinner.
   useEffect(() => {
@@ -269,7 +278,7 @@ export function WorkCodeStudio({ initialFiles, title: initialTitle, onFixWithAi,
           <strong>{title || initialTitle || t("title")}</strong>
           <span>{files.length} {t("files")}{analysis ? ` · ${t("stack")}: ${analysis.stack}` : ""}</span>
         </div>
-        <span className={`wcs-status is-${status.status}`} data-wcs-status={status.status} title={status.reasons.join(" ")}>{STATUS_ICON[status.status]}{t(`status.${status.status}` as StudioWord)}</span>
+        <span className={`wcs-status is-${status.status}`} data-wcs-status={status.status} title={status.reasons.join(" ")}>{STATUS_ICON[status.status]}{previewOnly && status.status === "COMPLETED_VERIFIED" ? "Проверено только браузерное превью" : t(`status.${status.status}` as StudioWord)}</span>
       </header>
       <div className="wcs-toolbar" role="toolbar">
         <div className="wcs-tabs" role="tablist">

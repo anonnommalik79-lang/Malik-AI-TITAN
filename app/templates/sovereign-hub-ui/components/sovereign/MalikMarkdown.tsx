@@ -33,6 +33,7 @@ import { parseAnswerQuiz, type AnswerQuiz } from "@/lib/ai/answer-quiz"
 import { diffLines } from "@/lib/os/diff"
 import { MalikAnswerQuiz } from "./MalikAnswerQuiz"
 import { MalikOilReport } from "./MalikOilReport"
+import { WebsiteProjectCard } from "./work-code/WebsiteProjectCard"
 import { isForgeSiteHtml, SitePublishButton, SitePublishStrip, useSitePublish } from "./SitePublish"
 export type { MalikCitation } from "@/lib/ai/citation-names"
 
@@ -860,7 +861,7 @@ function downloadTextArtifact(filename: string, content: string) {
 }
 
 function codeFilesFrom(blocks: Block[]): ProjectZipFile[] {
-  return blocks.flatMap((block) => block.kind === "code"
+  return blocks.flatMap((block) => block.kind === "code" && block.language !== "malik-project"
     ? [{ name: block.filename, content: block.lines.join("\n") }]
     : [])
 }
@@ -1539,6 +1540,13 @@ export function MalikMarkdown({ text, className, allowImages = true, autoPreview
         }
 
         if (block.kind === "code") {
+          if (block.language === "malik-project") {
+            try {
+              const id = JSON.parse(block.lines.join("\n")).id
+              if (typeof id === "string" && /^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i.test(id)) return <WebsiteProjectCard key={key} id={id} active={Boolean(visualContext?.isLatest)} shared={shared} />
+            } catch { /* An incomplete streamed fence is not executable. */ }
+            return <p key={key} className="malik-md-p" role="status">Открываю сохранённый проект…</p>
+          }
           const changes = codeChanges.get(position)
           return <Fragment key={key}>
             <CodeBlock language={block.language} filename={block.filename} code={block.lines.join("\n")} previewFiles={codeFiles} autoPreview={autoPreview && block.filename === primaryPreviewFilename} />
