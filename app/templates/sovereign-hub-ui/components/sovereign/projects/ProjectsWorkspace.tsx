@@ -22,7 +22,8 @@ import {
   X,
 } from "lucide-react"
 import { MalikModelSelector } from "../MalikModelSelector"
-import { getMalikModel, type MalikModelId } from "@/lib/ai/malik-models"
+import { getMalikModel, hasMalikProAccess, type MalikModelId } from "@/lib/ai/malik-models"
+import { PlusUpgradePrompt } from "../PlusUpgradePrompt"
 import type { AIPlan } from "@/lib/ai/types"
 
 const cn = (...classes: Array<string | false | null | undefined>) => classes.filter(Boolean).join(" ")
@@ -77,7 +78,7 @@ type ProjectsWorkspaceProps = {
   onDeleteProject: (id: string) => void
   onTogglePin: (id: string) => void
   onSendPrompt: (prompt: string) => void
-  renderProjectChat: () => ReactNode
+  renderProjectChat: (requirePro: () => boolean) => ReactNode
 }
 
 const COLOR_STYLES: Record<MalikProjectColor, { icon: string; dot: string }> = {
@@ -218,12 +219,14 @@ function ProjectFormModal({
   onSubmit: (draft: MalikProjectDraft) => void
 }) {
   const [draft, setDraft] = useState(initial)
+  const [upgradeOpen, setUpgradeOpen] = useState(false)
 
   useEffect(() => setDraft(initial), [initial])
 
   const submit = () => {
     const cleanTitle = draft.title.trim().slice(0, 80)
     if (!cleanTitle) return
+    if (!hasMalikProAccess(plan)) { setUpgradeOpen(true); return }
     onSubmit({
       ...draft,
       title: cleanTitle,
@@ -335,6 +338,7 @@ function ProjectFormModal({
           </button>
         </footer>
       </section>
+      {upgradeOpen && <PlusUpgradePrompt feature="Создание проекта" onClose={() => setUpgradeOpen(false)} onUpgrade={() => { setUpgradeOpen(false); onOpenBilling() }} />}
     </div>
   )
 }
@@ -841,42 +845,54 @@ function ProjectDetail({
 }
 
 export function ProjectsWorkspace(props: ProjectsWorkspaceProps) {
-  const activeProject = props.activeProjectId ? props.projects.find((project) => project.id === props.activeProjectId) : null
-
-  if (activeProject) {
-    return (
-      <ProjectDetail
-        project={activeProject}
-        threads={props.threads}
-        activeThreadId={props.activeThreadId}
-        selectedModelId={props.selectedModelId}
-        plan={props.plan}
-        onSelectModel={props.onSelectModel}
-        onOpenBilling={props.onOpenBilling}
-        onCloseProject={props.onCloseProject}
-        onUpdateProject={props.onUpdateProject}
-        onCreateThread={props.onCreateThread}
-        onOpenThread={props.onOpenThread}
-        onDeleteThread={props.onDeleteThread}
-        onSendPrompt={props.onSendPrompt}
-        renderProjectChat={props.renderProjectChat}
-      />
-    )
+  const [upgradeOpen, setUpgradeOpen] = useState(false)
+  const activeProject = props.activeProjectId ? props.projects.find((item) => item.id === props.activeProjectId) : null
+  const requirePro = () => {
+    if (hasMalikProAccess(props.plan)) return true
+    setUpgradeOpen(true)
+    return false
   }
+  const paid = (callback: () => void) => { if (requirePro()) callback() }
 
   return (
-    <ProjectsIndex
-      projects={props.projects}
-      threads={props.threads}
-      selectedModelId={props.selectedModelId}
-      plan={props.plan}
-      onOpenBilling={props.onOpenBilling}
-      onCreateProject={props.onCreateProject}
-      onOpenProject={props.onOpenProject}
-      onUpdateProject={props.onUpdateProject}
-      onDeleteProject={props.onDeleteProject}
-      onTogglePin={props.onTogglePin}
-    />
+    <>
+      {activeProject ? (
+        <ProjectDetail
+          project={activeProject}
+          threads={props.threads}
+          activeThreadId={props.activeThreadId}
+          selectedModelId={props.selectedModelId}
+          plan={props.plan}
+          onSelectModel={props.onSelectModel}
+          onOpenBilling={props.onOpenBilling}
+          onCloseProject={props.onCloseProject}
+          onUpdateProject={(id, patch) => paid(() => props.onUpdateProject(id, patch))}
+          onCreateThread={(id) => paid(() => props.onCreateThread(id))}
+          onOpenThread={props.onOpenThread}
+          onDeleteThread={(id) => paid(() => props.onDeleteThread(id))}
+          onSendPrompt={(prompt) => paid(() => props.onSendPrompt(prompt))}
+          renderProjectChat={() => props.renderProjectChat(requirePro)}
+        />
+      ) : (
+        <ProjectsIndex
+          projects={props.projects}
+          threads={props.threads}
+          selectedModelId={props.selectedModelId}
+          plan={props.plan}
+          onOpenBilling={props.onOpenBilling}
+          onCreateProject={(draft) => paid(() => props.onCreateProject(draft))}
+          onOpenProject={props.onOpenProject}
+          onUpdateProject={(id, patch) => paid(() => props.onUpdateProject(id, patch))}
+          onDeleteProject={(id) => paid(() => props.onDeleteProject(id))}
+          onTogglePin={(id) => paid(() => props.onTogglePin(id))}
+        />
+      )}
+      {upgradeOpen && !hasMalikProAccess(props.plan) && <PlusUpgradePrompt
+        feature="Проекты Malik AI"
+        onClose={() => setUpgradeOpen(false)}
+        onUpgrade={() => { setUpgradeOpen(false); props.onOpenBilling() }}
+      />}
+    </>
   )
 }
 
