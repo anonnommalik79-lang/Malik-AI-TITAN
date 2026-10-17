@@ -28,6 +28,8 @@ jobs:
           cache-dependency-path: app/templates/sovereign-hub-ui/package-lock.json
       - name: Install app dependencies
         run: npm ci --legacy-peer-deps
+      - name: Install browser test driver
+        run: npm install --no-save --legacy-peer-deps playwright@1.58.0
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
       - name: Verify saved project checkpoints, preview and stage recovery
