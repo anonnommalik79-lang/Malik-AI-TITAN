@@ -23,12 +23,17 @@ export function WebsiteProjectCard({ id, active = false, shared = false }: { id:
   const [files, setFiles] = useState<ProjectFile[] | null>(null)
   const [error, setError] = useState("")
   const [busy, setBusy] = useState(false)
-  const [automatic, setAutomatic] = useState(active)
+  const [automatic, setAutomatic] = useState(active && !shared)
+  const [networkRetryAt, setNetworkRetryAt] = useState(0)
+  const recoveries = useRef(0)
   const [instruction, setInstruction] = useState("")
   const [revision, setRevision] = useState("")
   const [iterations, setIterations] = useState(0)
   const request = useRef<AbortController | null>(null)
   const endpoint = `/api/website/projects/${encodeURIComponent(id)}`
+  // A streamed project fence may mount before the parent marks the final
+  // assistant answer as latest. useState(active) alone never sees that update.
+  useEffect(() => { if (active && !shared) setAutomatic(true) }, [active, shared])
   const get = useCallback(async (suffix = "", controller?: AbortController) => {
     const response = await fetch(endpoint + suffix, { credentials: "same-origin", cache: "no-store", signal: controller?.signal })
     const data = await response.json()
@@ -56,17 +61,32 @@ export function WebsiteProjectCard({ id, active = false, shared = false }: { id:
         throw new Error(data.error || data.code || `HTTP ${response.status}`)
       }
       setJob(data.job)
+      recoveries.current = 0
+      setNetworkRetryAt(0)
       if (["edit", "restore"].includes(action)) { setFiles(null); setInstruction(""); setIterations(0); setAutomatic(true) }
-    } catch (e) { if (!controller.signal.aborted) setError(e instanceof Error ? e.message : "Нет подтверждения операции"); setAutomatic(false) }
+    } catch (e) {
+      if (action === "step" && recoveries.current < 3) {
+        // A lost response does not mean the server stage failed. Refresh its
+        // persisted lease/checkpoint before a bounded retry; never start a
+        // competing project or discard generated files.
+        try { const latest = await get(); setJob(latest.job) } catch { /* retry only while allowed */ }
+        recoveries.current += 1
+        setNetworkRetryAt(Date.now() + 750 * 2 ** recoveries.current)
+        setError("Нет подтверждения текущего шага. Проверю сохранённый этап и повторю попытку.")
+      } else if (!controller.signal.aborted) {
+        setError(e instanceof Error ? e.message : "Нет подтверждения операции")
+        setAutomatic(false)
+      }
+    }
     finally { clearTimeout(timeout); if (request.current === controller) { request.current = null; setBusy(false) } }
   }, [endpoint, get, shared])
   useEffect(() => {
     if (!job || shared || busy || !automatic || ["completed", "failed", "paused", "cancelled"].includes(job.state)) return
     if (iterations >= 100) return
-    const delay = Math.min(30_000, Math.max(300, (job.retryAt || 0) - Date.now()))
+    const delay = Math.min(30_000, Math.max(300, (job.retryAt || 0) - Date.now(), networkRetryAt - Date.now()))
     const timer = setTimeout(() => { setIterations(value => value + 1); void action("step") }, delay)
     return () => clearTimeout(timer)
-  }, [action, automatic, busy, iterations, job, shared])
+  }, [action, automatic, busy, iterations, job, networkRetryAt, shared])
   useEffect(() => {
     if (!job || files || !job.fileList.length || !["paused", "preview_ready", "completed", "failed"].includes(job.state) || shared) return
     const controller = new AbortController()
@@ -86,7 +106,7 @@ export function WebsiteProjectCard({ id, active = false, shared = false }: { id:
     {error ? <p className="malik-md-p" role="alert">{error}</p> : null}
     {job ? <>
       <details className="malik-md-details" open={!files || undefined}>
-        <summary className="malik-md-details-summary">Ход работы · {job.cursor}/{job.totalFiles} файлов</summary>
+        <summary className="malik-md-details-summary">{job.totalFiles ? `Ход работы · ${job.cursor}/${job.totalFiles} файлов` : "Ход работы · формирую план и список файлов"}</summary>
         <ol className="malik-md-ol" aria-live="polite">{job.events.slice(-10).map(e => <li key={e.seq}>{e.message}</li>)}</ol>
         {Object.entries(job.checks).map(([name, check]) => <p className="malik-md-p" key={name}>{checks[name] || name}: {statuses[check.status] || check.status}{check.details.length ? ` — ${check.details.join("; ")}` : ""}</p>)}
       </details>
