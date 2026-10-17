@@ -371,14 +371,14 @@ function dshGatewayLanes(): MaxLane[] {
 
   let endpoint: URL
   try { endpoint = new URL(address) } catch { return [] }
-  const host = endpoint.hostname.replace(/^\\[|\\]$/g, "").toLowerCase()
+  const host = endpoint.hostname.toLowerCase().replaceAll("[", "").replaceAll("]", "")
   const localDevelopment = process.env.NODE_ENV !== "production"
     && endpoint.protocol === "http:"
     && ["localhost", "127.0.0.1", "::1"].includes(host)
   if (endpoint.protocol !== "https:" && !localDevelopment) return []
   if (endpoint.username || endpoint.password || endpoint.search || endpoint.hash) return []
 
-  const base = endpoint.toString().replace(/\\/+$/, "")
+  const base = endpoint.toString().replace(new RegExp("/+$"), "")
   const chatUrl = base.endsWith("/chat/completions") ? base
     : base.endsWith("/v1") ? `${base}/chat/completions`
     : `${base}/v1/chat/completions`
