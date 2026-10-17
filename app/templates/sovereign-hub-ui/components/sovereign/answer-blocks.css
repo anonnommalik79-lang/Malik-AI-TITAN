@@ -263,3 +263,41 @@
 #malik-root .malik-answer-quiz__option input[type="radio"] { color: #e5e5e5 !important; background: #000 !important; border-color: #737373 !important; accent-color: #fff; }
 #malik-root .malik-answer-quiz__header { background: transparent !important; }
 #malik-root .malik-md .malik-md-heatmap td.is-heat { padding: 12px 10px; text-align: center; }
+
+/* Editorial photo gallery (several photographed subjects): an eyebrow, a big
+   title and lead, a wide rounded 01, then pairs of tall photos, numbered,
+   each with its source. Black and white like the rest of the chat. */
+.malik-editorial-eyebrow { margin: 2px 0 10px; font-size: 11px; line-height: 16px; font-weight: 600; letter-spacing: .16em; text-transform: uppercase; color: rgba(255,255,255,.55); }
+#malik-root .malik-md .malik-md-h.malik-editorial-title, .malik-md .malik-md-h.malik-editorial-title { margin: 0 0 12px; font-size: clamp(30px, 7vw, 46px); line-height: 1.05; font-weight: 800; letter-spacing: -.03em; color: #fff; }
+#malik-root .malik-md .malik-md-p.malik-editorial-lede, .malik-md .malik-md-p.malik-editorial-lede { margin: 0 0 22px; font-size: 17px; line-height: 1.5; color: rgba(255,255,255,.7); }
+.malik-editorial { display: block; width: 100%; max-width: 720px; min-width: 0; margin: 0 0 30px; vertical-align: top; }
+.malik-editorial.is-half { display: inline-block; width: calc(50% - 7px); }
+.malik-editorial.is-left { margin-right: 14px; }
+.malik-md.is-editorial .malik-editorial.is-half { max-width: 353px; }
+.malik-editorial__media { display: block; width: 100%; aspect-ratio: 16 / 10; padding: 0; overflow: hidden; border: 0; border-radius: 24px; background: #0a0a0a; cursor: zoom-in; animation: malik-answer-block-in .32s ease-out both; }
+.malik-editorial.is-half .malik-editorial__media { aspect-ratio: 3 / 4; border-radius: 22px; }
+.malik-editorial__media img { display: block; width: 100%; height: 100%; object-fit: cover; object-position: center; }
+.malik-editorial__media[data-malik-fit="contain"] { background: #fff; }
+.malik-editorial__media[data-malik-fit="contain"] img { object-fit: contain; padding: 8%; }
+.malik-editorial__media.is-pending { border: 1px solid rgba(255,255,255,.07); background: #050505; cursor: default; animation: none; }
+.malik-editorial__media:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+.malik-editorial__head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; min-width: 0; margin-top: 12px; }
+.malik-editorial__title { display: flex; align-items: baseline; gap: 6px; min-width: 0; color: #fff; }
+.malik-editorial__num { font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; color: #fff; }
+.malik-editorial__slash { font-size: 15px; color: rgba(255,255,255,.4); }
+#malik-root .malik-md .malik-editorial__title .malik-md-h, .malik-md .malik-editorial__title .malik-md-h { margin: 0; font-size: 15px; line-height: 1.35; font-weight: 700; letter-spacing: 0; color: #fff; overflow-wrap: anywhere; }
+.malik-editorial__title .malik-md-link, #malik-root .malik-md .malik-editorial__title .malik-md-link { color: inherit; text-decoration: none; }
+.malik-editorial__title .malik-md-link:hover { text-decoration: underline; text-underline-offset: 3px; }
+.malik-editorial__source { display: inline-flex; flex-shrink: 0; align-items: center; gap: 6px; max-width: 48%; min-width: 0; font-size: 12px; line-height: 16px; color: rgba(255,255,255,.55); text-decoration: none; }
+.malik-editorial__source:hover { color: #fff; }
+.malik-editorial__source img { width: 14px; height: 14px; flex-shrink: 0; border-radius: 4px; background: #fff; }
+.malik-editorial__source span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#malik-root .malik-md .malik-editorial__body .malik-md-p, .malik-md .malik-editorial__body .malik-md-p { margin: 6px 0 0; font-size: 14.5px; line-height: 1.55; color: rgba(255,255,255,.72); }
+.malik-editorial__chips { display: flex; margin-top: 10px; min-width: 0; }
+.malik-editorial__chips .malik-editorial__source { max-width: 100%; padding: 5px 10px 5px 6px; border-radius: 999px; background: rgba(255,255,255,.08); color: rgba(255,255,255,.78); }
+@media (max-width: 420px) {
+  .malik-editorial.is-half { width: calc(50% - 5px); }
+  .malik-editorial.is-left { margin-right: 10px; }
+  .malik-editorial.is-half .malik-editorial__media { border-radius: 18px; }
+  #malik-root .malik-md .malik-editorial.is-half .malik-editorial__body .malik-md-p, .malik-md .malik-editorial.is-half .malik-editorial__body .malik-md-p { font-size: 13.5px; }
+}

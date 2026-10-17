@@ -100,3 +100,29 @@ assert.equal(count(comparison, 'data-malik-reference-topic="Шымбулак"'),
 const suppressed = renderToStaticMarkup(React.createElement(MalikMarkdown, { text: "### Эверест\n\nОписание вершины.\n\n" + photo("Эверест", "Mount Everest"), allowImages: false, visualContext: { question: "Расскажи про Эверест", isLatest: true } }))
 assert(!suppressed.includes("data-malik-reference-topic="))
 console.log("PASS top hero before prose, comparison lineup before descriptions, deduplication and allowImages opt-out")
+
+// The chat keeps model-written image URLs off (allowImages=false) but turns
+// verified reference photos on: that split is what brings photos back.
+const places = [["Медеу", "Medeu", "Высокогорный каток."], ["Шымбулак", "Shymbulak", "Горнолыжный курорт."], ["Кок-Тобе", "Kok Tobe", "Гора с видом на город."], ["Чарынский каньон", "Charyn Canyon", "Каньон в трёх часах езды."]]
+const galleryText = ["## Алматы за выходные", "Четыре места, которые стоит увидеть.", ...places.flatMap(([name, query, description]) => ["### " + name, description, photo(name, query)])].join("\n\n")
+const chatProps = { text: galleryText, allowImages: false, referencePhotos: true, visualContext: { question: "Покажи красивые места Алматы", isLatest: true } }
+const gallery = renderToStaticMarkup(React.createElement(MalikMarkdown, chatProps))
+assert.equal(count(gallery, "data-malik-reference-topic="), 4, "every place gets its photo in the chat")
+assert.deepEqual([...gallery.matchAll(/data-malik-editorial="(\d)"/g)].map((match) => match[1]), ["1", "2", "3", "4"], "numbered 01-04 in answer order")
+assert.match(gallery, /class="malik-editorial is-wide"[^>]*data-malik-editorial="1"/, "01 is the wide first photo")
+assert.match(gallery, /class="malik-editorial is-half is-left"[^>]*data-malik-editorial="2"/)
+assert.match(gallery, /class="malik-editorial is-half is-right"[^>]*data-malik-editorial="3"/)
+assert.match(gallery, /class="malik-editorial is-wide"[^>]*data-malik-editorial="4"/)
+assert.match(gallery, /malik-editorial-eyebrow">Фотогалерея · 4 объекта/)
+assert.match(gallery, /malik-editorial-title[^>]*>Алматы за выходные/)
+assert.match(gallery, /malik-editorial-lede">Четыре места/)
+for (const [, , description] of places) assert.equal(count(gallery, description), 1, "each caption is shown once, under its own photo")
+assert(gallery.indexOf("Медеу") < gallery.indexOf("Шымбулак") && gallery.indexOf("Кок-Тобе") < gallery.indexOf("Чарынский"))
+const textOnly = renderToStaticMarkup(React.createElement(MalikMarkdown, { ...chatProps, visualContext: { question: "Только текст: места Алматы", isLatest: true } }))
+assert(!textOnly.includes("data-malik-reference-topic="), "«только текст» turns photos off")
+const noRefs = renderToStaticMarkup(React.createElement(MalikMarkdown, { ...chatProps, referencePhotos: false }))
+assert(!noRefs.includes("data-malik-reference-topic=") && !noRefs.includes("malik-editorial"))
+// Long sections stay full width; only short captions pair up.
+const long = renderToStaticMarkup(React.createElement(MalikMarkdown, { ...chatProps, text: places.flatMap(([name, query, description]) => ["### " + name, (description + " ").repeat(40), photo(name, query)]).join("\n\n") }))
+assert(!long.includes("is-half"), "long sections are never squeezed into half a column")
+console.log("PASS chat reference photos on with model image URLs off, editorial gallery 01 wide / 02+03 pair / 04 wide, title, lead, opt-outs")
