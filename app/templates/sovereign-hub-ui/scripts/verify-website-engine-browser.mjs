@@ -69,7 +69,7 @@ const server = http.createServer(async (req, res) => {
       res.writeHead(response.status, Object.fromEntries(response.headers)); res.end(Buffer.from(await response.arrayBuffer())); return
     }
     const id = url.searchParams.get("id")
-    const boot = `${reactQaRuntime(modules)}require('react-dom/client').createRoot(document.getElementById('root')).render(React.createElement(require(${JSON.stringify(card)}).WebsiteProjectCard,{id:${JSON.stringify(id)},active:true}));`.replace(/<\/script/giu, "<\\/script")
+    const boot = `${reactQaRuntime(modules)}const cardRoot=require('react-dom/client').createRoot(document.getElementById('root'));const showCard=active=>cardRoot.render(React.createElement(require(${JSON.stringify(card)}).WebsiteProjectCard,{id:${JSON.stringify(id)},active}));showCard(${!url.searchParams.has('deferred')});window.__activateProject=()=>showCard(true);`.replace(/<\/script/giu, "<\\/script")
     res.setHeader("content-type", "text/html;charset=utf-8")
     res.end(`<!doctype html><html lang="en"><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>${css}body{margin:0;padding:16px;background:#000;color:#fff;font:14px system-ui}.malik-md-codeblock{max-width:1100px;margin:auto;min-width:0;overflow:hidden}.malik-md-codebar{display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px;padding:12px;border:1px solid #333}.malik-md-p{overflow-wrap:anywhere}button,a{color:inherit}button,textarea,select{max-width:100%}ol{padding-inline-start:25px}</style></head><body><div id="root"></div><script>${boot}</script></body></html>`)
   } catch (error) { console.error(error.message); res.writeHead(500); res.end("QA fixture error") }
@@ -85,7 +85,25 @@ try {
     assert.equal((await websiteStore.read(owner.userId, id)).state, "queued")
     const page = await browser.newPage({ viewport: { width, height: 900 }, acceptDownloads: true })
     const errors = []; page.on("pageerror", error => errors.push(error.message))
-    await page.goto(`${base}/?id=${id}`)
+    // A project block can be mounted while the answer is still streaming:
+    // it must start when the parent later marks it as the active answer.
+    if (theme === "Automotive") {
+      let failedOnce = false
+      await page.route("**/api/website/projects/*", route => {
+        if (route.request().method() === "POST" && !failedOnce) {
+          failedOnce = true
+          return route.abort("failed")
+        }
+        return route.continue()
+      })
+    }
+    await page.goto(`${base}/?id=${id}${theme === "Cosmic" ? "&deferred=1" : ""}`)
+    if (theme === "Cosmic") {
+      await page.locator("[data-malik-website-project]").waitFor()
+      await page.waitForTimeout(650)
+      assert.equal((await websiteStore.read(owner.userId, id)).state, "queued", "inactive streaming card must not generate files prematurely")
+      await page.evaluate(() => window.__activateProject())
+    }
     try { await page.locator(".wcs iframe").waitFor({ timeout: 45_000 }) }
     catch (error) {
       console.error("Browser fixture diagnostic:", JSON.stringify({ body: (await page.locator("body").innerText()).slice(0, 2200), errors, job: await websiteStore.read(owner.userId, id) }))

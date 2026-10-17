@@ -102,6 +102,9 @@ new Function("require", "module", "exports", "React", js.replace(/require\("reac
     if (name === "@/lib/os/diff") return loadPure("lib/os/diff.ts")
     if (name === "./MalikAnswerQuiz") return loadPure("components/sovereign/MalikAnswerQuiz.tsx")
     if (name === "./MalikOilReport") return loadPure("components/sovereign/MalikOilReport.tsx")
+    // WebsiteProjectCard has a dedicated browser suite; this renderer fixture only
+    // checks placement/identity and must never start a real authenticated job.
+    if (name === "./work-code/WebsiteProjectCard") return { WebsiteProjectCard: ({ id, active, shared }) => React.createElement("section", { "data-test-project-card": id, "data-active": String(Boolean(active)), "data-shared": String(Boolean(shared)) }) }
     if (name === "./MalikAnswerChecklist") return loadPure("components/sovereign/MalikAnswerChecklist.tsx")
     // Site publishing has its own suite (test:site-forge); here a code block only needs to render.
     if (name === "./SitePublish") return { isForgeSiteHtml: (code) => String(code).includes('id="malik-site"'), SitePublishButton: () => null, SitePublishStrip: () => null, useSitePublish: () => ({ state: { status: "idle" }, publish() {}, unpublish() {}, reset() {} }) }

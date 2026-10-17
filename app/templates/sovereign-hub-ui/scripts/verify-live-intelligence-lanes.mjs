@@ -24,6 +24,7 @@ const deps = {
   // Site creation and local data analysis have dedicated real-handler suites.
   // These lane fixtures contain neither a site request nor an analysable table.
   runSiteForgeTurn: async () => null,
+  websiteChatTurn: async () => null,
   compactForgeHistory: messages => messages,
   analyzeChatData: () => null,
   computedEvidenceInstruction: load("lib/analysis/chat.ts").computedEvidenceInstruction,
