@@ -70,7 +70,7 @@ export async function forgeSite(input: { prompt: string; model?: ForgeModel; fin
   plan = withSampleContacts(plan, input.editInstruction ? `${prompt}\n${input.editInstruction}` : prompt)
 
   input.onStage?.("photos")
-  const photos = await resolvePhotos(plan, blueprint, { finder: input.finder })
+  const photos = await resolvePhotos(plan, blueprint, { finder: input.finder, brief: prompt })
 
   input.onStage?.("render")
   const rendered = renderSite(plan, photos)

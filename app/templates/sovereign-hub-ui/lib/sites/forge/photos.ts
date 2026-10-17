@@ -36,22 +36,36 @@ export function matchScore(query: string, photo: CuratedPhoto) {
 
 type Slot = { key: string; query: string; width: number; height?: number; priority: number }
 
-function slotsFor(plan: ForgePlan, blueprint: Blueprint): Slot[] {
+function slotsFor(plan: ForgePlan, blueprint: Blueprint, brief = ""): Slot[] {
+  // Never use ordinary hotel/coastal stock imagery for a clearly specified
+  // extraterrestrial resort. Find genuinely relevant lunar editorial media;
+  // any resort interiors remain concept imagery, not photos taken on the Moon.
+  const lunar = /\b(?:lunar|moon|moonbase)\b|лунн|луна|айдағы|ай бет/iu.test(brief)
+  const scene = lunar ? {
+    hero: "NASA Apollo Moon lunar surface panorama horizon photograph",
+    about: "NASA Moon lunar landscape craters Earthrise photograph",
+    booking: "futuristic luxury space hotel interior architectural rendering",
+  } : blueprint.photos
+  const lunarGallery = ["Moon Earthrise Apollo NASA", "lunar surface Apollo moon rocks",
+    "space habitat interior concept art", "Moon crater scientific photograph",
+    "astronaut on Moon NASA", "lunar horizon panoramic NASA photograph"]
   const slots: Slot[] = [
-    { key: "hero", query: blueprint.photos.hero, width: 2000, priority: 0 },
-    { key: "about", query: blueprint.photos.about, width: 1200, height: 1500, priority: 1 },
-    ...plan.gallery.map((shot, index) => ({ key: `gallery:${index}`, query: shot.photo, width: 1000, priority: 2 + index })),
+    { key: "hero", query: scene.hero, width: 2000, priority: 0 },
+    { key: "about", query: scene.about, width: 1200, height: 1500, priority: 1 },
+    ...plan.gallery.map((shot, index) => ({ key: `gallery:${index}`,
+      query: lunar && !/\b(?:lunar|moon|apollo|earthrise|astronaut|space|habitat)\b/i.test(shot.photo) ? lunarGallery[index % lunarGallery.length] : shot.photo,
+      width: 1000, priority: 2 + index })),
     ...plan.catalog.items.map((item, index) => ({ key: `item:${item.id}`, query: item.photo || item.name, width: 800, height: 600, priority: 10 + index })),
     { key: "booking", query: blueprint.photos.booking, width: 1200, height: 900, priority: 40 },
   ]
   return slots
 }
 
-export async function resolvePhotos(plan: ForgePlan, blueprint: Blueprint, options: { finder?: PhotoFinder; budgetMs?: number; maxSearches?: number } = {}): Promise<PhotoMap> {
+export async function resolvePhotos(plan: ForgePlan, blueprint: Blueprint, options: { finder?: PhotoFinder; budgetMs?: number; maxSearches?: number; brief?: string } = {}): Promise<PhotoMap> {
   const result: PhotoMap = {}
   const used = new Set<string>()
   const pool = CURATED_PHOTOS.filter((photo) => blueprint.curated.includes(photo.topic))
-  const slots = slotsFor(plan, blueprint)
+  const slots = slotsFor(plan, blueprint, options.brief)
   const curated = (photo: CuratedPhoto, slot: Slot): SitePhoto => {
     const sameTopic = pool.filter((item) => item.topic === photo.topic && item.id !== photo.id && !used.has(item.id)).slice(0, 2)
     return { url: curatedPhotoUrl(photo.id, slot.width, slot.height), alt: photo.alt, alts: sameTopic.map((item) => curatedPhotoUrl(item.id, slot.width, slot.height)) }

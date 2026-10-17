@@ -42,8 +42,9 @@ import { runPetroleumModelReview } from "@/lib/server/petroleum-model-review"
 import { routePetroleum } from "@/lib/work/petroleum/router"
 import { analyzeChatData, computedEvidenceInstruction } from "@/lib/analysis/chat"
 import { runSiteForgeTurn } from "@/lib/sites/forge/chat-turn"
-import { websiteChatTurn, websiteEngineAvailable } from "@/lib/website/engine/chat"
-import { websiteIntent, lastWebsiteJob } from "@/lib/website/engine/intent"
+import { websiteIntent } from "@/lib/website/engine/intent"
+import { siteForgeTurn } from "@/lib/sites/forge/chat"
+import { pickBlueprint } from "@/lib/sites/forge/blueprints"
 import { compactForgeHistory } from "@/lib/sites/forge/chat"
 import { buildOilGasSkillInstruction } from "@/lib/ai/oil-gas-skill"
 import { resolveWorkspaceMode, workModeInstruction } from "@/lib/ai/work-mode"
@@ -426,17 +427,10 @@ async function runSelectedAnswer(
   const localAnswer=(content:string)=>({content,provider:"malik-document-export",model:"local-export",selectedModelId:selection?.modelId||DEFAULT_MALIK_MODEL_ID,usedWeb:false,sources:[],attempts:[]})
   if(intent.action==="stop")return localAnswer("Новые действия не запускаю. Активную генерацию можно остановить кнопкой «Стоп»; отмена другой задачи этим сообщением не подтверждена.")
   if(intent.clarification==="missing-attachment")return localAnswer("Указанного вложения нет среди доступных файлов этого сообщения. Прикрепите нужное изображение — его содержимое не было угадано или отредактировано.")
-  // Project requests leave the long answer stream immediately with a durable
-  // project handle. Website creation cannot fall through to the news gate.
-  if (!hasMalikAttachments(body?.attachments) && !routePetroleum(originalPrompt, body?.selectedSkillId).domain) {
-    const project = await websiteChatTurn({ prompt: originalPrompt, messages: body?.history || body?.messages, owner,
-      modelId: selection?.modelId || DEFAULT_MALIK_MODEL_ID, requestId: body?.requestId })
-    if (project) {
-      activity?.status("Проект сохранён; дальнейшие этапы отображаются в карточке проекта.", "code")
-      originalOnToken?.(project)
-      return { ...localAnswer(project), provider: "malik-website-engine", model: selection?.modelId || DEFAULT_MALIK_MODEL_ID }
-    }
-  }
+  // Site creation runs a real generator before reporting success. Never
+  // short-circuit to a queued project handle with zero generated files.
+  // The Forge handles matching service/hospitality sites below; multi-file
+  // software briefs enter the verified project builder in POST routing.
   let source:Awaited<ReturnType<typeof conversationSource>>=null
   if(intent.source?.artifactId||intent.action==="export"){
     try{source=await conversationSource(intent,owner)}catch(error){return localAnswer(deliveryProblem(intent,error instanceof Error?error.message:"SOURCE_NOT_AVAILABLE"))}
@@ -1161,8 +1155,22 @@ async function handlePOST(request: Request) {
     const selection = await resolveStrictMalikSelection(request, body)
     if (routePetroleum(coderPrompt(body), body?.selectedSkillId).engine === "petroleum") { body.isProjectRequest = false; body.forceCanvas = false; body.responseMode = "chat"; body.isCodeRequest = false }
     const entitlement = selection?.entitlement ?? await resolveRequestEntitlement(request)
-    if (websiteEngineAvailable(entitlement) && !hasMalikAttachments(body?.attachments) && websiteIntent(coderPrompt(body), Boolean(lastWebsiteJob(body?.history || body?.messages)))) {
-      body = { ...body, isProjectRequest: false, forceCanvas: false, responseMode: "chat" }
+    // Route ordinary sites through the existing model+media Forge so the
+    // first response contains actual HTML and an inline preview, not a
+    // "planning 0/0 files" status card. Structured web apps/code projects
+    // instead run the checked source builder and return a real ZIP.
+    if (!hasMalikAttachments(body?.attachments) && !routePetroleum(coderPrompt(body), body?.selectedSkillId).domain) {
+      const prompt = coderPrompt(body)
+      const siteIntent = websiteIntent(prompt)
+      if (siteIntent) {
+        const turn = siteForgeTurn(prompt, { messages: body?.history || body?.messages, attachments: body?.attachments })
+        const blueprint = pickBlueprint(prompt).id
+        if (turn && (turn.kind === "edit" || (blueprint !== "generic" && blueprint !== "studio"))) {
+          body = { ...body, isProjectRequest: false, forceCanvas: false, responseMode: "chat" }
+        } else if (siteIntent === "create") {
+          body = { ...body, isProjectRequest: true, forceCanvas: false, responseMode: "chat" }
+        }
+      }
     }
     const ownerMode = entitlement.plan === "owner"
     const textQuota = getDailyTextTokenQuota(entitlement.userId, entitlement.plan)
