@@ -37,7 +37,7 @@ const load = workTestLoader({
     if (job.originalPrompt.includes("PAUSE_TEST") && prompt.startsWith("Return JSON only:")) { delayedModelJob = job.id; await new Promise(resolve => setTimeout(resolve, 3500)) }
     const theme = /hypercar|авто/i.test(job.originalPrompt) ? "Automotive" : /hotel|отел/i.test(job.originalPrompt) ? "Hotel" : "Cosmic"
     const files = sources(theme)
-    if (prompt.startsWith("Return JSON only:")) return JSON.stringify({ direction: theme.toLowerCase(), audience: "test audience", composition: "brief specific", typography: "editorial", palette: ["#08080a", "#fafafa"], spacing: "fluid", motion: "reduced motion", accessibility: ["keyboard"], performance: ["bounded"], stack: "static", sections: ["hero", "gallery"], interactions: ["navigation", "demo form"], files: files.map(file => ({ path: file.path, purpose: file.path })), mediaQueries: [] })
+    if (prompt.startsWith("Return JSON only:")) return JSON.stringify({ direction: theme.toLowerCase(), audience: "test audience", composition: "brief specific", typography: "editorial", palette: ["#08080a", "#fafafa"], spacing: "fluid", motion: "reduced motion", accessibility: ["keyboard"], performance: ["bounded"], stack: "static", sections: ["hero", "gallery"], interactions: ["navigation", "demo form"], files: files.map(file => ({ path: file.path, purpose: file.path })), mediaQueries: /фото.*видео/iu.test(job.originalPrompt) ? [{ slot: "hero-image", kind: "image", query: "cosmic nebula" }, { slot: "hero-video", kind: "video", query: "cosmic nebula" }] : [] })
     const file = files.find(file => prompt.startsWith(`Write ONE complete source file: ${file.path}.`))
     if (!file) throw new Error("Unexpected fixture model request")
     return JSON.stringify(file)
@@ -48,6 +48,7 @@ const load = workTestLoader({
 const { websiteStore } = load("lib/website/engine/store.ts")
 const { websiteChatTurn } = load("lib/website/engine/chat.ts")
 const { websiteProjectsRequest } = load("lib/website/engine/http.ts")
+const { withMediaPolicy } = load("lib/website/engine/resources.ts")
 const code = load("app/api/work/code/route.ts")
 const { modules, bundle } = reactQaBundle()
 modules["next/dynamic"] = `exports.default=function(loader){var Component=require('react').lazy(function(){return loader().then(function(result){return {default:result.default||result}})});return function(props){var React=require('react');return React.createElement(React.Suspense,{fallback:React.createElement('p',null,'Loading source viewer…')},React.createElement(Component,props))}}`
@@ -116,6 +117,49 @@ try {
     await page.reload(); await page.locator(".wcs iframe").waitFor(); await frame.getByRole("heading", { name: theme, exact: true }).waitFor()
     console.log(`PASS ${theme} ${width}px: real card/API/checkpoint/iframe/interaction/multi-page navigation/ZIP/reload; model/auth/storage fixtures, no sandbox build.`)
     await page.close()
+  }
+  for (const reduced of [false, true]) {
+    const mediaPage = await browser.newPage({ viewport: { width: 390, height: 844 }, reducedMotion: reduced ? "reduce" : "no-preference" })
+    const errors = []; mediaPage.on("pageerror", error => errors.push(error.message))
+    // Real DOM/controller/IntersectionObserver/lifecycle, explicit media-method
+    // fixture. This verifies policy, not MP4 decoding or visual model quality.
+    await mediaPage.evaluate(() => {
+      const playing = new WeakMap(); window.policyPlays = []; window.policyPauses = []
+      Object.defineProperty(HTMLMediaElement.prototype, "paused", { configurable: true, get() { return !playing.get(this) } })
+      HTMLMediaElement.prototype.play = function() { playing.set(this, true); window.policyPlays.push(this.id); return Promise.resolve() }
+      HTMLMediaElement.prototype.pause = function() { playing.set(this, false); window.policyPauses.push(this.id) }
+      const connection = new EventTarget(); connection.saveData = false
+      Object.defineProperty(navigator, "connection", { configurable: true, value: connection })
+    })
+    const source = withMediaPolicy([{ path: "index.html", content: '<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"></head><body><video id="hero" width="320" height="180" autoplay muted playsinline preload="metadata"></video><video id="detail" preload="metadata"></video><img alt="Original SVG" src="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%221%22 height=%221%22/%3E"><img alt="Original detail" src="data:image/svg+xml,%3Csvg/%3E"></body></html>' }])[0].content
+    await mediaPage.setContent(source)
+    await mediaPage.waitForFunction(() => window.__malikMediaPolicyV1 === true)
+    assert.equal(await mediaPage.locator("#hero").getAttribute("preload"), "none")
+    assert.equal(await mediaPage.locator("#detail").getAttribute("autoplay"), null)
+    assert.equal(await mediaPage.locator("img").nth(1).getAttribute("loading"), "lazy")
+    if (!reduced) {
+      await mediaPage.waitForFunction(() => window.policyPlays.includes("hero"))
+      await mediaPage.evaluate(() => { navigator.connection.saveData = true; navigator.connection.dispatchEvent(new Event("change")) })
+      assert.equal(await mediaPage.evaluate(() => document.getElementById("hero").paused), true, "data-saving disables automatic playback")
+      await mediaPage.evaluate(() => { navigator.connection.saveData = false; navigator.connection.dispatchEvent(new Event("change")) })
+      assert.equal(await mediaPage.evaluate(() => document.getElementById("hero").paused), false)
+    }
+    else {
+      await mediaPage.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))))
+      assert.deepEqual(await mediaPage.evaluate(() => window.policyPlays), [])
+      await mediaPage.evaluate(() => { const video = document.getElementById("hero"); video.dispatchEvent(new PointerEvent("pointerdown")); video.play() })
+      assert.equal(await mediaPage.evaluate(() => document.getElementById("hero").paused), false, "reduced motion still allows deliberate user playback")
+    }
+    await mediaPage.evaluate(() => { Object.defineProperty(document, "hidden", { configurable: true, get: () => true }); document.dispatchEvent(new Event("visibilitychange")) })
+    assert.equal(await mediaPage.evaluate(() => document.getElementById("hero").paused), true)
+    await mediaPage.evaluate(() => { window.dispatchEvent(new Event("pagehide")); const video = document.createElement("video"); video.id = "later"; video.autoplay = true; video.preload = "auto"; document.body.append(video) })
+    await mediaPage.evaluate(() => new Promise(resolve => requestAnimationFrame(resolve)))
+    assert.equal(await mediaPage.locator("#later").getAttribute("preload"), "auto", "pagehide disconnects mutation processing")
+    await mediaPage.evaluate(() => window.dispatchEvent(new Event("pageshow")))
+    assert.equal(await mediaPage.locator("#later").getAttribute("preload"), "none", "back-forward restore reinstalls the policy")
+    assert.deepEqual(errors, [])
+    console.log(`PASS actual static media policy at 390px, reduced-motion=${reduced}: lazy/preload, data-saving, visibility pause, manual play, teardown and resume; media methods/connection preference are fixtures.`)
+    await mediaPage.close()
   }
   const answer = await websiteChatTurn({ prompt: "Build a cosmic website PAUSE_TEST", owner, modelId: "malik-max" })
   const id = JSON.parse(answer.match(/```malik-project\s+([\s\S]*?)```/)[1]).id

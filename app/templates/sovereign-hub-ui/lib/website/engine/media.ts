@@ -2,108 +2,172 @@ import "server-only"
 import type { Asset, Design } from "./types"
 
 const NASA_TERMS = "https://www.nasa.gov/nasa-brand-center/images-and-media/"
-const HOSTS = new Set(["api.pexels.com", "images.pexels.com", "videos.pexels.com", "www.pexels.com", "pexels.com", "images-api.nasa.gov", "images-assets.nasa.gov", "images.nasa.gov", "api.unsplash.com", "images.unsplash.com", "unsplash.com"])
+const HOSTS = new Set(["api.pexels.com", "images.pexels.com", "videos.pexels.com", "www.pexels.com", "pexels.com", "images-api.nasa.gov", "images-assets.nasa.gov", "images.nasa.gov", "api.unsplash.com", "images.unsplash.com", "unsplash.com", "commons.wikimedia.org", "upload.wikimedia.org", "thumb.wikimedia.org"])
+export const MEDIA_LIMITS = { metadataBytes: 4_000_000, responseBytes: 1_000_000, requests: 64, imageBytes: 8_000_000, videoBytes: 40_000_000, concurrency: 2, durationMs: 14_000 } as const
 export function assetUrl(raw: unknown) {
   if (typeof raw !== "string" || raw.length > 2048) return null
   try { const url = new URL(raw); return url.protocol === "https:" && !url.username && !url.password && !url.port && HOSTS.has(url.hostname) ? url : null } catch { return null }
 }
 type Fetcher = typeof fetch
-async function json(url: string, headers: Record<string, string>, signal: AbortSignal, fetcher: Fetcher) {
+type Slot = Design["mediaQueries"][number]
+type Candidate = Omit<Asset, "verifiedAt" | "mime" | "bytes"> & { tracking?: { url: string; headers: Record<string, string> } }
+type Budget = { bytes: number; requests: number }
+const plain = (value: unknown, max = 180) => String(value || "").replace(/<[^>]*>/g, " ").replace(/&(?:#\d+|\w+);/g, " ").replace(/\s+/g, " ").trim().slice(0, max)
+function request(budget: Budget) {
+  if (++budget.requests > MEDIA_LIMITS.requests) throw new Error("MEDIA_REQUEST_LIMIT")
+}
+async function json(url: string, headers: Record<string, string>, signal: AbortSignal, fetcher: Fetcher, budget: Budget) {
   if (!assetUrl(url)) throw new Error("UNSAFE_ASSET_URL")
+  request(budget)
   const response = await fetcher(url, { headers, signal, redirect: "error", cache: "no-store" })
-  if (!response.ok) throw new Error("MEDIA_PROVIDER_UNAVAILABLE")
-  const size = Number(response.headers.get("content-length") || 0)
-  if (size > 1_000_000) throw new Error("MEDIA_RESPONSE_LIMIT")
+  if (!response.ok || Number(response.headers.get("content-length") || 0) > MEDIA_LIMITS.responseBytes) {
+    await response.body?.cancel(); throw new Error("MEDIA_PROVIDER_UNAVAILABLE_OR_LIMIT")
+  }
   const reader = response.body?.getReader()
   if (!reader) throw new Error("EMPTY_MEDIA_RESPONSE")
   const chunks: Uint8Array[] = []; let total = 0
   try {
     for (;;) {
       const item = await reader.read(); if (item.done) break
-      total += item.value.byteLength
-      if (total > 1_000_000) { await reader.cancel(); throw new Error("MEDIA_RESPONSE_LIMIT") }
+      total += item.value.byteLength; budget.bytes += item.value.byteLength
+      if (total > MEDIA_LIMITS.responseBytes || budget.bytes > MEDIA_LIMITS.metadataBytes) { await reader.cancel(); throw new Error("MEDIA_RESPONSE_LIMIT") }
       chunks.push(item.value)
     }
   } finally { reader.releaseLock() }
   return JSON.parse(Buffer.concat(chunks).toString("utf8"))
 }
-async function verify(url: string, kind: Asset["kind"], signal: AbortSignal, fetcher: Fetcher) {
+async function verify(url: string, kind: Asset["kind"], signal: AbortSignal, fetcher: Fetcher, budget: Budget) {
   if (!assetUrl(url)) return null
   try {
-    const response = await fetcher(url, { method: "HEAD", redirect: "error", signal, cache: "no-store" })
-    const mime = response.headers.get("content-type")?.split(";")[0] || ""
+    request(budget)
+    const response = await fetcher(url, { method: "HEAD", redirect: "error", signal: AbortSignal.any([signal, AbortSignal.timeout(4000)]), cache: "no-store" })
+    const mime = response.headers.get("content-type")?.split(";")[0].trim().toLowerCase() || ""
     const bytes = Number(response.headers.get("content-length") || 0)
-    return response.ok && mime.startsWith(`${kind}/`) && (!bytes || bytes <= (kind === "video" ? 40_000_000 : 8_000_000)) ? mime : null
+    // No GET media fallback: an unknown length stays unknown, not proven small.
+    const allowed = kind === "video" ? /^(?:video\/mp4|video\/webm|video\/ogg)$/ : /^image\/(?:jpeg|png|webp|avif|gif)$/
+    return response.ok && allowed.test(mime) && Number.isFinite(bytes) && bytes >= 0 && bytes <= (kind === "video" ? MEDIA_LIMITS.videoBytes : MEDIA_LIMITS.imageBytes) ? { mime, bytes: bytes || undefined } : null
   } catch { return null }
 }
-/** Bounded metadata only. Never download large media into Render memory, never
- * follow an arbitrary URL from a model or search result. No secret-key cache. */
+
+async function pexels(slot: Slot, signal: AbortSignal, fetcher: Fetcher, budget: Budget): Promise<Candidate[]> {
+  const key = process.env.PEXELS_API_KEY
+  if (!key) return []
+  const endpoint = slot.kind === "video" ? "https://api.pexels.com/v1/videos/search" : "https://api.pexels.com/v1/search"
+  const result = await json(`${endpoint}?query=${encodeURIComponent(slot.query)}&per_page=3&orientation=landscape`, { Authorization: key }, signal, fetcher, budget)
+  if (slot.kind === "image") return (result.photos || []).slice(0, 3).flatMap((photo: { src?: { large2x?: string; large?: string }; url: string; photographer?: string; width: number; height: number }) => {
+    const url = photo.src?.large2x || photo.src?.large
+    return assetUrl(url) && assetUrl(photo.url) ? [{ slot: slot.slot, kind: "image" as const, url: url!, source: "pexels" as const, sourcePage: photo.url, credit: `Photo by ${plain(photo.photographer) || "Pexels contributor"} on Pexels`, license: "https://www.pexels.com/license/", width: photo.width, height: photo.height }] : []
+  })
+  return (result.videos || []).slice(0, 3).flatMap((video: { video_files?: Array<{ file_type: string; width: number; height: number; link: string }>; url: string; image?: string; user?: { name?: string } }) => {
+    const file = video.video_files?.filter(f => f.file_type === "video/mp4" && f.width >= 640 && f.width <= 1920 && assetUrl(f.link)).sort((a, b) => Math.abs(a.width - 1280) - Math.abs(b.width - 1280))[0]
+    return file && assetUrl(video.url) ? [{ slot: slot.slot, kind: "video" as const, url: file.link, poster: assetUrl(video.image)?.href, source: "pexels" as const, sourcePage: video.url, credit: `Video by ${plain(video.user?.name) || "Pexels contributor"} on Pexels`, license: "https://www.pexels.com/license/", width: file.width, height: file.height }] : []
+  })
+}
+async function nasa(slot: Slot, design: Design, signal: AbortSignal, fetcher: Fetcher, budget: Budget): Promise<Candidate[]> {
+  if (!/space|cosmic|black hole|galaxy|nebula|planet|astronom/iu.test(slot.query) || design.direction !== "cinematic") return []
+  const result = await json(`https://images-api.nasa.gov/search?q=${encodeURIComponent(slot.query)}&media_type=${slot.kind}&page_size=3`, {}, signal, fetcher, budget)
+  const candidates: Candidate[] = []
+  for (const item of (result.collection?.items || []).slice(0, 3)) {
+    const data = item.data?.[0]
+    if (!data?.center || data.photographer || data.secondary_creator || /copyright|©|getty|shutterstock|astronaut|portrait|employee|logo/iu.test(`${data.description} ${data.title}`)) continue
+    if (slot.kind === "image") {
+      const link = item.links?.filter((link: { href?: string; render?: string; width?: number; size?: number }) => link.render === "image" && assetUrl(link.href) && (!link.size || link.size <= MEDIA_LIMITS.imageBytes) && (!link.width || link.width <= 1920)).sort((a: { width?: number }, b: { width?: number }) => (b.width || 0) - (a.width || 0))[0]
+      if (link) {
+        candidates.push({ slot: slot.slot, kind: "image", url: link.href, source: "nasa", sourcePage: `https://images.nasa.gov/details/${encodeURIComponent(String(data.nasa_id || ""))}`, credit: `NASA / ${plain(data.center, 80)} — editorial image/visualization; no endorsement`, license: NASA_TERMS, width: link.width, height: link.height, description: plain(data.description, 500) })
+        if (candidates.length >= 2) break
+        continue
+      }
+    }
+    try {
+      let url = item.links?.find((link: { rel: string }) => link.rel === "preview")?.href
+      const poster = assetUrl(url)?.href
+      if (assetUrl(item.href)) {
+        const collection = await json(item.href, {}, signal, fetcher, budget)
+        // Only NASA's exact official CDN can be upgraded from legacy HTTP metadata.
+        const variants = Array.isArray(collection) ? collection.filter((url): url is string => typeof url === "string").map(url => url.replace(/^http:\/\/images-assets\.nasa\.gov\//, "https://images-assets.nasa.gov/")) : []
+        url = slot.kind === "video"
+          ? variants.find(url => /~mobile\.mp4$/i.test(url) && assetUrl(url)) || variants.find(url => /~preview\.mp4$/i.test(url) && assetUrl(url))
+          : variants.find(url => /~large\.(?:jpg|png)$/i.test(url) && assetUrl(url)) || variants.find(url => /~medium\.(?:jpg|png)$/i.test(url) && assetUrl(url)) || url
+      }
+      if (assetUrl(url)) candidates.push({ slot: slot.slot, kind: slot.kind, url, ...(slot.kind === "video" ? { poster } : {}), source: "nasa", sourcePage: `https://images.nasa.gov/details/${encodeURIComponent(String(data.nasa_id || ""))}`, credit: `NASA / ${plain(data.center, 80)} — editorial use; no endorsement`, license: NASA_TERMS, description: plain(data.description, 500) })
+      if (candidates.length >= 2) break
+    } catch { if (signal.aborted) break /* Preserve earlier candidates when a later collection fails. */ }
+  }
+  return candidates
+}
+async function unsplash(slot: Slot, signal: AbortSignal, fetcher: Fetcher, budget: Budget): Promise<Candidate[]> {
+  if (slot.kind !== "image" || !process.env.UNSPLASH_ACCESS_KEY) return []
+  const headers = { Authorization: `Client-ID ${process.env.UNSPLASH_ACCESS_KEY}`, "Accept-Version": "v1" }
+  const result = await json(`https://api.unsplash.com/search/photos?query=${encodeURIComponent(slot.query)}&per_page=3&orientation=landscape`, headers, signal, fetcher, budget)
+  return (result.results || []).slice(0, 3).flatMap((photo: { urls?: { regular?: string }; links?: { html?: string; download_location?: string }; user?: { links?: { html?: string }; name?: string }; width: number; height: number }) => {
+    if (!assetUrl(photo.urls?.regular) || !assetUrl(photo.links?.html) || !assetUrl(photo.links?.download_location) || !assetUrl(photo.user?.links?.html)) return []
+    const page = new URL(photo.links!.html!), creator = new URL(photo.user!.links!.html!)
+    for (const url of [page, creator]) { url.searchParams.set("utm_source", "malik_ai"); url.searchParams.set("utm_medium", "referral") }
+    return [{ slot: slot.slot, kind: "image" as const, url: photo.urls!.regular!, source: "unsplash" as const, sourcePage: page.href, creatorUrl: creator.href, credit: `Photo by ${plain(photo.user?.name) || "Unsplash contributor"} on Unsplash`, license: "https://unsplash.com/license", width: photo.width, height: photo.height, tracking: { url: photo.links!.download_location!, headers } }]
+  })
+}
+export function commonsLicense(raw: unknown) {
+  if (typeof raw !== "string") return null
+  try {
+    const url = new URL(raw.replace(/^http:\/\/creativecommons\.org\//, "https://creativecommons.org/"))
+    if (url.protocol !== "https:" || url.hostname !== "creativecommons.org" || url.port || url.username || url.password || url.search || url.hash) return null
+    url.pathname = url.pathname.replace(/\/deed\.[a-z_-]+\/?$/i, "/")
+    return /^\/(?:licenses\/(?:by|by-sa)\/(?:[1-4]\.0|2\.5)|publicdomain\/(?:zero|mark)\/1\.0)\/?$/.test(url.pathname) ? url.href : null
+  } catch { return null }
+}
+async function commons(slot: Slot, signal: AbortSignal, fetcher: Fetcher, budget: Budget): Promise<Candidate[]> {
+  const url = new URL("https://commons.wikimedia.org/w/api.php")
+  const params = { action: "query", format: "json", formatversion: "2", generator: "search", gsrsearch: `${slot.query} filetype:${slot.kind === "image" ? "bitmap" : "video"}`, gsrnamespace: "6", gsrlimit: "3", prop: "imageinfo", iiprop: "url|size|mime|extmetadata", iiurlwidth: "1600", iiextmetadatafilter: "Artist|LicenseShortName|LicenseUrl|Restrictions" }
+  for (const [name, value] of Object.entries(params)) url.searchParams.set(name, value)
+  const result = await json(url.href, { "User-Agent": "MalikAI-WebsiteEngine/1.1 (https://malikaiworld.world; attributed media discovery)" }, signal, fetcher, budget)
+  return (result.query?.pages || []).slice(0, 3).flatMap((page: { imageinfo?: Array<{ mime: string; size: number; width: number; height: number; thumbwidth?: number; thumbheight?: number; url: string; thumburl?: string; descriptionurl: string; extmetadata?: Record<string, { value?: string }> }> }) => {
+    const info = page.imageinfo?.[0], meta = info?.extmetadata
+    const license = commonsLicense(meta?.LicenseUrl?.value), artist = plain(meta?.Artist?.value)
+    if (!info || !license || !artist || plain(meta?.Restrictions?.value) || !assetUrl(info.descriptionurl) || !info.mime?.startsWith(`${slot.kind}/`)) return []
+    const media = slot.kind === "image" ? info.thumburl || info.url : info.url
+    if (!assetUrl(media) || slot.kind === "video" && (!info.size || info.size > MEDIA_LIMITS.videoBytes) || slot.kind === "image" && info.width < 640) return []
+    return [{ slot: slot.slot, kind: slot.kind, url: media, source: "commons" as const, sourcePage: info.descriptionurl, credit: `${artist} / Wikimedia Commons — ${plain(meta?.LicenseShortName?.value, 60)}`, license, width: info.thumbwidth || info.width, height: info.thumbheight || info.height }]
+  })
+}
+
+/** Sequential providers, two bounded slots, no media GET/download/transcode on
+ * Render. A broken first result never suppresses the next candidate/provider.
+ * Per-project deduplication has no cross-user/global media cache. */
 export async function discoverAssets(design: Design, signal?: AbortSignal, fetcher: Fetcher = fetch): Promise<{ assets: Asset[]; missing: string[] }> {
-  const budget = AbortSignal.any([AbortSignal.timeout(14_000), ...(signal ? [signal] : [])])
-  const slots = design.mediaQueries.slice(0, 16)
-  const assets: Asset[] = []; const missing: string[] = []
-  let cursor = 0
+  const deadline = AbortSignal.any([AbortSignal.timeout(MEDIA_LIMITS.durationMs), ...(signal ? [signal] : [])])
+  const slots = [...new Map(design.mediaQueries.slice(0, 16).map(slot => [slot.slot, slot])).values()]
+  const assets: Asset[] = [], missing: string[] = [], used = new Set<string>()
+  const budget: Budget = { bytes: 0, requests: 0 }; let cursor = 0
   const run = async () => {
-    while (cursor < slots.length && !budget.aborted) {
+    while (cursor < slots.length && !deadline.aborted) {
       const slot = slots[cursor++]
-      let found: Omit<Asset, "verifiedAt" | "mime"> | undefined
-      try {
-        if (process.env.PEXELS_API_KEY) {
-          const endpoint = slot.kind === "video" ? "https://api.pexels.com/v1/videos/search" : "https://api.pexels.com/v1/search"
-          const result = await json(`${endpoint}?query=${encodeURIComponent(slot.query)}&per_page=3&orientation=landscape`, { Authorization: process.env.PEXELS_API_KEY }, budget, fetcher)
-          if (slot.kind === "image") {
-            const photo = result.photos?.[0]
-            if (photo && assetUrl(photo.src?.large) && assetUrl(photo.url)) found = { slot: slot.slot, kind: "image", url: photo.src.large, source: "pexels", sourcePage: photo.url, credit: `Photo by ${String(photo.photographer || "Pexels contributor").slice(0, 120)} on Pexels`, license: "https://www.pexels.com/license/", width: photo.width, height: photo.height }
-          } else {
-            const video = result.videos?.[0]
-            const file = video?.video_files?.filter((f: { file_type: string; width: number; link: string }) => f.file_type === "video/mp4" && f.width <= 1920 && assetUrl(f.link)).sort((a: { width: number }, b: { width: number }) => Math.abs(a.width - 1280) - Math.abs(b.width - 1280))[0]
-            if (file && assetUrl(video.url)) found = { slot: slot.slot, kind: "video", url: file.link, poster: assetUrl(video.image)?.href, source: "pexels", sourcePage: video.url, credit: `Video by ${String(video.user?.name || "Pexels contributor").slice(0, 120)} on Pexels`, license: "https://www.pexels.com/license/", width: file.width, height: file.height }
+      let selected: Asset | undefined
+      for (const [providerIndex, provider] of [pexels, (s: Slot, a: AbortSignal, f: Fetcher, b: Budget) => nasa(s, design, a, f, b), unsplash, commons].entries()) {
+        if (deadline.aborted || budget.bytes >= MEDIA_LIMITS.metadataBytes || budget.requests >= MEDIA_LIMITS.requests) break
+        try {
+          const providerSignal = AbortSignal.any([deadline, AbortSignal.timeout(providerIndex === 1 ? 7000 : 3500)])
+          for (const candidate of await provider(slot, providerSignal, fetcher, budget)) {
+            const identity = `${candidate.source}:${candidate.sourcePage}`
+            if (used.has(identity)) continue
+            const checked = await verify(candidate.url, candidate.kind, deadline, fetcher, budget)
+            if (!checked || used.has(identity)) continue
+            used.add(identity)
+            try {
+              if (candidate.tracking) await json(candidate.tracking.url, candidate.tracking.headers, providerSignal, fetcher, budget)
+              let poster = candidate.poster
+              if (poster && !await verify(poster, "image", deadline, fetcher, budget)) poster = undefined
+              const publicCandidate = { ...candidate }; delete publicCandidate.tracking
+              selected = { ...publicCandidate, ...(candidate.kind === "video" ? { poster } : {}), ...checked, verifiedAt: new Date().toISOString() }
+              break
+            } catch { used.delete(identity) }
           }
-        }
-      } catch { /* One provider fails; try the next permitted provider. */ }
-      // NASA is restricted to factual/editorial space subjects. Third-party
-      // copyright and identifiable people are not automatically licensed.
-      if (!found && /space|cosmic|black hole|galaxy|nebula|planet|astronom/iu.test(slot.query) && design.direction === "cinematic") try {
-        const result = await json(`https://images-api.nasa.gov/search?q=${encodeURIComponent(slot.query)}&media_type=${slot.kind}&page_size=3`, {}, budget, fetcher)
-        const item = result.collection?.items?.find((item: { data?: Array<{ center?: string; photographer?: string; secondary_creator?: string; description?: string; title?: string }> }) => {
-          const data = item.data?.[0]
-          return data?.center && !data.photographer && !data.secondary_creator && !/copyright|©|getty|shutterstock|astronaut|portrait|employee|logo/iu.test(`${data.description} ${data.title}`)
-        })
-        const data = item?.data?.[0]
-        if (item && data) {
-          let url = item.links?.find((link: { rel: string }) => link.rel === "preview")?.href
-          const poster = assetUrl(url)?.href
-          if (assetUrl(item.href)) {
-            const collection = await json(item.href, {}, budget, fetcher)
-            // NASA's live collections still return http:// asset strings.
-            // Upgrade only its exact official CDN host, then verify HTTPS;
-            // never weaken the global SSRF/transport allowlist.
-            const variants = Array.isArray(collection) ? collection.filter((url): url is string => typeof url === "string").map(url => url.replace(/^http:\/\/images-assets\.nasa\.gov\//, "https://images-assets.nasa.gov/")) : []
-            url = slot.kind === "video"
-              ? variants.find(url => /~mobile\.mp4$/i.test(url) && assetUrl(url)) || variants.find(url => /~preview\.mp4$/i.test(url) && assetUrl(url)) || null
-              : variants.find(url => /~large\.(?:jpg|png)$/i.test(url) && assetUrl(url)) || variants.find(url => /~medium\.(?:jpg|png)$/i.test(url) && assetUrl(url)) || url
-          }
-          if (assetUrl(url)) found = { slot: slot.slot, kind: slot.kind, url, ...(slot.kind === "video" ? { poster } : {}), source: "nasa", sourcePage: `https://images.nasa.gov/details/${encodeURIComponent(String(data.nasa_id || ""))}`, credit: `NASA / ${String(data.center).slice(0, 80)} — editorial use; no endorsement`, license: NASA_TERMS }
-        }
-      } catch { /* Missing NASA asset is not a successful media slot. */ }
-      if (!found && slot.kind === "image" && process.env.UNSPLASH_ACCESS_KEY) try {
-        const headers = { Authorization: `Client-ID ${process.env.UNSPLASH_ACCESS_KEY}`, "Accept-Version": "v1" }
-        const result = await json(`https://api.unsplash.com/search/photos?query=${encodeURIComponent(slot.query)}&per_page=1&orientation=landscape`, headers, budget, fetcher)
-        const photo = result.results?.[0]
-        if (assetUrl(photo?.urls?.regular) && assetUrl(photo?.links?.html) && assetUrl(photo?.links?.download_location) && assetUrl(photo?.user?.links?.html)) {
-          // Selecting an image for a generated project counts as a download.
-          await json(photo.links.download_location, headers, budget, fetcher)
-          const page = new URL(photo.links.html), creator = new URL(photo.user.links.html)
-          for (const url of [page, creator]) { url.searchParams.set("utm_source", "malik_ai"); url.searchParams.set("utm_medium", "referral") }
-          found = { slot: slot.slot, kind: "image", url: photo.urls.regular, source: "unsplash", sourcePage: page.href, creatorUrl: creator.href, credit: `Photo by ${String(photo.user?.name || "Unsplash contributor").slice(0, 120)} on Unsplash`, license: "https://unsplash.com/license", width: photo.width, height: photo.height }
-        }
-      } catch { /* A failed tracking call must not silently bypass API terms. */ }
-      const mime = found && await verify(found.url, found.kind, budget, fetcher)
-      if (found && mime) assets.push({ ...found, mime, verifiedAt: new Date().toISOString() })
-      else missing.push(slot.slot)
+        } catch { /* Next permitted provider; never fabricate a missing slot. */ }
+        if (selected) break
+      }
+      if (selected) assets.push(selected); else missing.push(slot.slot)
     }
   }
-  await Promise.all([run(), run()])
-  for (const slot of slots) if (!assets.some(a => a.slot === slot.slot) && !missing.includes(slot.slot)) missing.push(slot.slot)
+  await Promise.all(Array.from({ length: MEDIA_LIMITS.concurrency }, run))
+  for (const slot of slots) if (!assets.some(asset => asset.slot === slot.slot) && !missing.includes(slot.slot)) missing.push(slot.slot)
   return { assets, missing }
 }

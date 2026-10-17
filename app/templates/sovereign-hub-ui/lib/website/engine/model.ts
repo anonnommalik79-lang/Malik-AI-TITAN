@@ -7,10 +7,12 @@ import { computeService, retryCompute } from "@/lib/malik-compute/runtime"
 import { estimateCompute } from "@/lib/malik-compute/service"
 import { randomUUID } from "node:crypto"
 import type { WebsiteJob } from "./types"
+import { MODEL_PROMPT_LIMIT, websiteModelPolicy } from "./context"
 
 /** The same selected model/catalog, entitlement and usage controls as chat.
  * Structured-source requests do not enter freshness/news routing. */
 export async function websiteModel(job: WebsiteJob, system: string, prompt: string, signal: AbortSignal) {
+  if (prompt.length > MODEL_PROMPT_LIMIT) throw new Error("WEBSITE_MODEL_CONTEXT_LIMIT")
   const access = await checkUsageLimit({ userId: job.actor, plan: job.plan, task: "code" })
   if (!access.ok) throw new Error("WEBSITE_MODEL_USAGE_LIMIT")
   const quota = getDailyTextTokenQuota(job.actor, job.plan)
@@ -21,7 +23,7 @@ export async function websiteModel(job: WebsiteJob, system: string, prompt: stri
   const reservation = job.plan === "owner" ? null : await retryCompute(() => computeService.reserveCompute(job.actor, estimateCompute("agent"), "agent", randomUUID()))
   let generated = false
   try {
-    const answer = await runStrictMalikModel({ modelId, prompt, systemPrompt: system, maxTokens: budget, temperature: 0.35, reasoningEffort: "low", allowCatalog: hasMalikProAccess(job.plan), signal })
+    const answer = await runStrictMalikModel({ modelId, prompt, systemPrompt: system, maxTokens: budget, ...websiteModelPolicy(prompt), allowCatalog: hasMalikProAccess(job.plan), signal })
     if (!answer?.content?.trim() || answer.incomplete) throw new Error("INCOMPLETE_MODEL_SOURCE")
     recordGeneratedTextTokens(job.actor, job.plan, answer.content)
     await recordChatUsage(job.actor, job.plan, "code", Math.ceil(answer.content.length / 3))

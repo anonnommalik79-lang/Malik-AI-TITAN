@@ -1,5 +1,6 @@
 import type { AIPlan } from "@/lib/ai/types"
 import type { ProjectFile } from "@/lib/work/code/files"
+import type { CreativeBrief } from "./creative"
 
 export const ENGINE_VERSION = "malik-website-engine/1"
 export const STAGES = ["queued", "planning", "designing", "assets", "coding", "installing", "building", "testing", "preview_ready", "completed"] as const
@@ -15,9 +16,9 @@ export type Design = {
 }
 export type Asset = {
   slot: string; kind: "image" | "video"; url: string; poster?: string
-  source: "pexels" | "nasa" | "unsplash"; sourcePage: string; credit: string; license: string
+  source: "pexels" | "nasa" | "unsplash" | "commons"; sourcePage: string; credit: string; license: string
   creatorUrl?: string
-  verifiedAt: string; mime: string; width?: number; height?: number; srcSet?: string
+  verifiedAt: string; mime: string; width?: number; height?: number; srcSet?: string; bytes?: number; description?: string
 }
 export type Event = { seq: number; at: string; stage: JobState; message: string }
 export type Revision = { id: string; at: string; summary: string }
@@ -28,13 +29,13 @@ export type WebsiteJob = {
   lease?: { token: string; until: number }; retryAt?: number; error?: string
   createdAt: string; updatedAt: string; revision: number
   authorizationExpiresAt: number
-  files: ProjectFile[]; revisions: Revision[]; events: Event[]; design?: Design; assets: Asset[]
-  checks: { static: Check; dependencies: Check; build: Check; browser: Check; media: Check }
+  files: ProjectFile[]; revisions: Revision[]; events: Event[]; design?: Design; creative?: CreativeBrief; assets: Asset[]
+  checks: { static: Check; dependencies: Check; build: Check; browser: Check; media: Check; experience?: Check }
   execution?: { id: string; status: "queued" | "running" | "completed" | "failed"; previewUrl?: string; polls?: number }
 }
 export const blankChecks = (): WebsiteJob["checks"] => ({
   static: { status: "not_run", details: [] }, dependencies: { status: "not_run", details: [] },
-  build: { status: "not_run", details: [] }, browser: { status: "not_run", details: [] }, media: { status: "not_run", details: [] },
+  build: { status: "not_run", details: [] }, browser: { status: "not_run", details: [] }, media: { status: "not_run", details: [] }, experience: { status: "not_run", details: [] },
 })
 export const terminal = (state: JobState) => state === "completed" || state === "failed" || state === "cancelled"
 export function event(job: WebsiteJob, message: string) {

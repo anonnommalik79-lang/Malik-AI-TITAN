@@ -13,7 +13,7 @@ export function withAssetCredits(files: ProjectFile[], assets: Asset[]): Project
     if (/\.html?$/.test(file.path)) {
       const at = file.content.toLowerCase().lastIndexOf("</body>")
       if (at < 0) return file
-      const footer = `<footer data-malik-asset-credits="v1" aria-label="Media credits" style="font:inherit;font-size:.75rem;padding:1rem;display:flex;flex-wrap:wrap;gap:.75rem">${unique.map(asset => `<a href="${escape(asset.sourcePage)}" target="_blank" rel="noopener noreferrer" style="color:inherit">${escape(asset.credit)}</a>${asset.creatorUrl ? `<a href="${escape(asset.creatorUrl)}" target="_blank" rel="noopener noreferrer" style="color:inherit">Photographer profile</a>` : ""}`).join("")}</footer>`
+      const footer = `<footer data-malik-asset-credits="v1" aria-label="Media credits" style="font:inherit;font-size:.75rem;padding:1rem;display:flex;flex-wrap:wrap;gap:.75rem">${unique.map(asset => `<a href="${escape(asset.sourcePage)}" target="_blank" rel="noopener noreferrer" style="color:inherit">${escape(asset.credit)}</a><a href="${escape(asset.license)}" target="_blank" rel="noopener noreferrer" style="color:inherit">License / usage terms</a>${asset.creatorUrl ? `<a href="${escape(asset.creatorUrl)}" target="_blank" rel="noopener noreferrer" style="color:inherit">Photographer profile</a>` : ""}`).join("")}</footer>`
       const existing = /<footer data-malik-asset-credits="v1"[\s\S]*?<\/footer>/
       return { ...file, content: existing.test(file.content) ? file.content.replace(existing, () => footer) : file.content.slice(0, at) + footer + file.content.slice(at) }
     }
@@ -28,7 +28,7 @@ export function withAssetCredits(files: ProjectFile[], assets: Asset[]): Project
     }
     visit(source)
     if (at < 0) return file
-    const footer = `<footer data-malik-asset-credits="v1" aria-label="Media credits" style={{fontSize:".75rem",padding:"1rem",display:"flex",flexWrap:"wrap",gap:".75rem"}}>${unique.map(asset => `<a href={${JSON.stringify(asset.sourcePage)}} target="_blank" rel="noopener noreferrer" style={{color:"inherit"}}>{${JSON.stringify(asset.credit)}}</a>${asset.creatorUrl ? `<a href={${JSON.stringify(asset.creatorUrl)}} target="_blank" rel="noopener noreferrer" style={{color:"inherit"}}>Photographer profile</a>` : ""}`).join("")}</footer>`
+    const footer = `<footer data-malik-asset-credits="v1" aria-label="Media credits" style={{fontSize:".75rem",padding:"1rem",display:"flex",flexWrap:"wrap",gap:".75rem"}}>${unique.map(asset => `<a href={${JSON.stringify(asset.sourcePage)}} target="_blank" rel="noopener noreferrer" style={{color:"inherit"}}>{${JSON.stringify(asset.credit)}}</a><a href={${JSON.stringify(asset.license)}} target="_blank" rel="noopener noreferrer" style={{color:"inherit"}}>License / usage terms</a>${asset.creatorUrl ? `<a href={${JSON.stringify(asset.creatorUrl)}} target="_blank" rel="noopener noreferrer" style={{color:"inherit"}}>Photographer profile</a>` : ""}`).join("")}</footer>`
     return { ...file, content: existing ? file.content.slice(0, existing.start) + footer + file.content.slice(existing.end) : file.content.slice(0, at) + footer + file.content.slice(at) }
   })
 }

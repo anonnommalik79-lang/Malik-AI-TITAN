@@ -387,4 +387,24 @@ test("Render internal Request.url accepts only canonical/exact configured origin
 test("generated source cannot replace the server's verification/attribution receipts", () => {
   for (const path of ["MALIK-VERIFICATION.md", "malik-assets.md"]) assert.throws(() => projectFiles([{ path, content: "fake PASS" }]), /RESERVED_RECEIPT_PATH/)
 })
+test("creative direction survives a normal edit instead of rerolling the entire visual identity", async () => {
+  let job = await drive(await create())
+  const creative = structuredClone(job.creative)
+  assert.equal(creative.version, 1)
+  job = await store.control("owner-fixture", job.id, "edit", "Измени только стили")
+  assert.deepEqual(job.creative, creative)
+})
+test("real experience repair fixes a dead action and cannot erase missing-media evidence", async () => {
+  let job = await create()
+  const bad = html.replace('href="gallery.html"', 'href="#"')
+  job = await store.update(job.owner, job.id, current => { current.state = current.checkpoint = "installing"; current.files = fixtureFiles.map(file => file.path === "index.html" ? { ...file, content: bad } : file); current.design = { ...design, mediaQueries: [{ slot: "photo", kind: "image", query: "space" }] } })
+  const repairModel = async (_job, _system, prompt) => {
+    assert.match(prompt, /DEAD_PRIMARY_LINK/)
+    return JSON.stringify({ files: [{ path: "index.html", content: bad.replace('href="#"', 'href="#result"') }] })
+  }
+  job = await stepProject(job.owner, job.id, { store, deps: { ...deps, model: repairModel } })
+  assert.equal(job.repairAttempts, 1); assert.equal(job.checks.media.status, "fail")
+  job = await stepProject(job.owner, job.id, { store, deps })
+  assert.equal(job.checks.experience.status, "pass"); assert.equal(job.checks.media.status, "fail")
+})
 console.log("Website Engine tests: source/queue/compiler/API are real; auth/storage/model/media/executor transports are labelled fixtures. No production sandbox or live model is claimed.")

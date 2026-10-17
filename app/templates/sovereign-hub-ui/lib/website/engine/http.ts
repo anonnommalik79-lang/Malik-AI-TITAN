@@ -18,7 +18,7 @@ export function publicJob(job: WebsiteJob, files = false) {
     id: job.id, version: job.version, title: job.title, state: job.state, checkpoint: job.checkpoint, workspaceRoot: job.workspaceRoot,
     cursor: job.cursor, totalFiles: job.design?.files.length || 0, revision: job.revision,
     events: job.events, checks: job.checks, error: job.error, retryAt: Math.max(job.retryAt || 0, job.lease?.until || 0) || undefined,
-    design: job.design, assets: job.assets, revisions: job.revisions,
+    design: job.design, creative: job.creative, assets: job.assets, revisions: job.revisions,
     fileList: job.files.map(file => ({ path: file.path, chars: file.content.length })),
     ...(files ? { files: job.files } : {}),
     execution: job.execution, createdAt: job.createdAt, updatedAt: job.updatedAt,
