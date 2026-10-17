@@ -263,8 +263,8 @@ test("static multi-page preview selects the requested source document", async ()
   const data = await response.json()
   assert.equal(data.preview.entry, "gallery.html"); assert.equal(data.preview.routes.length, 2)
 })
-test("the actual chat SSE routes dated website briefs before the news gate", async () => {
-  let modelCalls = 0, researchCalls = 0
+test("a lunar resort website builds real HTML through Forge before the chat answer completes", async () => {
+  let modelCalls = 0, researchCalls = 0, forgeCalls = 0
   class FixtureModelError extends Error {}
   const streamLoad = workTestLoader({
     "@/lib/auth/server": { getOptionalWorkOSAuth: async () => ({ user: { id: "fixture", email: "owner-fixture", emailVerified: true } }) },
@@ -274,7 +274,7 @@ test("the actual chat SSE routes dated website briefs before the news gate", asy
     "@/lib/server/request-entitlement": { resolveRequestEntitlement: async () => currentActor },
     "@/lib/server/malik-model-router": {
       resolveStrictMalikSelection: async () => ({ modelId: "malik-max", entitlement: currentActor }),
-      runStrictMalikModel: async () => { modelCalls++; throw new Error("Unexpected model call in queued-turn response") },
+      runStrictMalikModel: async () => { modelCalls++; throw new Error("Unexpected model call in the fixture") },
       MalikModelRouteError: FixtureModelError, malikModelErrorPayload: e => ({ error: e.message }),
     },
     "@/lib/malik-god-router": {
@@ -282,16 +282,29 @@ test("the actual chat SSE routes dated website briefs before the news gate", asy
       malikGodAnswer: async () => { modelCalls++; throw new Error("Wrong route") },
       gatherSourcesForPrompt: async () => { researchCalls++; throw new Error("Wrong research route") }, sourceContext: () => "",
     },
+    "@/lib/sites/forge/chat-turn": {
+      runSiteForgeTurn: async () => {
+        forgeCalls++
+        return {
+          content: "**LUNA SERENITAS website ready**\\n\\n`\\`\\`html filename=index.html\\n<!doctype html><html><head><title>LUNA SERENITAS</title></head><body><h1>Moon resort</h1></body></html>\\n`\\`\\`",
+          result: { pages: ["home"], quality: { ok: true, score: 99, issues: [] }, planner: { used: true }, photoStats: { filled: 1 } },
+          mode: "new",
+        }
+      },
+    },
     "@/lib/limits/rate-limit": { checkUsageLimit: async () => ({ ok: true }), recordChatUsage: async () => {} },
     "@/lib/server/daily-text-token-quota": { getDailyTextTokenQuota: () => ({ unlimited: true }) },
     "@/lib/server/malik-owner-context": { malikIdentityAnswer: () => null, withVerifiedOwnerChatContext: body => body },
     "@/lib/server/multimodal-router": { estimateMultimodalTokens: () => 0, hasMalikAttachments: () => false, routeMalikAttachments: async () => null },
   })
   const { POST } = streamLoad("app/api/stream/route-impl.ts")
-  const response = await POST(new Request("http://fixture.test/api/stream", { method: "POST", headers: { "content-type": "application/json", accept: "text/event-stream" }, body: JSON.stringify({ stream: true, originalQuestion: "Создай современный сайт 2026 с фото, видео и 3D", workspaceMode: "chat", isProjectRequest: true, forceCanvas: true }) }))
+  const response = await POST(new Request("http://fixture.test/api/stream", { method: "POST", headers: { "content-type": "application/json", accept: "text/event-stream" }, body: JSON.stringify({ stream: true, originalQuestion: "Build a luxury lunar resort website called LUNA SERENITAS with photos and a live preview", workspaceMode: "work", isProjectRequest: true, forceCanvas: true }) }))
   const wire = await response.text()
   assert.equal(response.status, 200)
-  assert.match(wire, /malik-project/); assert.equal(modelCalls, 0); assert.equal(researchCalls, 0)
+  assert.match(wire, /LUNA SERENITAS website ready/)
+  assert.match(wire, /<!doctype html>/)
+  assert.doesNotMatch(wire, /malik-project|Проект сохранён/)
+  assert.equal(forgeCalls, 1); assert.equal(modelCalls, 0); assert.equal(researchCalls, 0)
   assert.equal((wire.match(/^event: done$/gm) || []).length, 1)
 })
 test("a reused idempotency key cannot silently replace a different brief", async () => {
