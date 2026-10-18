@@ -16,9 +16,8 @@ export function websiteIntent(prompt: string, hasProject = false): "create" | "e
   const target = site.exec(opening), media = /(?:фотографи|фото|картинк|изображени|видео|анимаци|\b(?:image|photo|video|animation|icon)\b)/iu.exec(opening)
   if (target && media && media.index < target.index && /(?:для|на|for|on)\s+(?:[\p{L}]+\s+){0,3}$/iu.test(opening.slice(media.index, target.index))) return null
   if (create.test(opening) && site.test(opening)) return "create"
-  return null
   if (edit.test(opening) && (hasProject || site.test(opening))) return "edit"
-
+  return null
 }
 
 export function lastWebsiteJob(messages: unknown): string | null {
