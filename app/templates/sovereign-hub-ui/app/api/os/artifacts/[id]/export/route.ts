@@ -8,6 +8,7 @@ import { exportDocument, documentFilename } from "@/lib/work/documents/export"
 import { artifactFormats, DOCUMENT_FORMATS } from "@/lib/work/documents/formats"
 import { documentResponse } from "@/lib/work/documents/http"
 import { buildZip } from "@/lib/work/documents/zip"
+import { documentAssets } from "@/lib/work/documents/assets"
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 const querySchema = z.object({ id: z.string().regex(/^[a-zA-Z0-9_-]{3,100}$/), format: z.enum(DOCUMENT_FORMATS) })
@@ -39,7 +40,7 @@ export async function GET(request: Request, context: { params: Promise<{ id: str
       deck.slides = deck.slides.map((slide) => ({ ...slide, subtitle: ["subtitle" in slide ? slide.subtitle : "", "без изображений"].filter(Boolean).join(" · ") }))
       return documentResponse({ bytes: await buildPptx(deck), mime: "application/vnd.openxmlformats-officedocument.presentationml.presentation", filename: documentFilename(`${artifact.title} без изображений`, "pptx") })
     }
-    return documentResponse(await exportDocument({ format, title: artifact.title, markdown: content, csv: artifact.kind === "dataset" ? content : undefined,allowFormulas:artifact.metadata?.safeFormulas===true }))
+    return documentResponse(await exportDocument({ format, title: artifact.title, markdown: content, csv: artifact.kind === "dataset" ? content : undefined,allowFormulas:artifact.metadata?.safeFormulas===true,charts:format==="xlsx"&&artifact.metadata?.charts===true,assets:documentAssets(artifact.metadata?.documentAssets) }))
   } catch {
     return Response.json({ error: "Не удалось экспортировать результат. Проверьте содержимое и повторите." }, { status: 422, headers })
   }

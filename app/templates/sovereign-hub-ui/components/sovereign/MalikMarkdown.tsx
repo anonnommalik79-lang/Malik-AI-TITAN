@@ -1289,7 +1289,7 @@ export function MalikMarkdown({ text, className, allowImages = true, referencePh
     const seen = new Set<string>()
     blocks.forEach((block, position) => {
       if (block.kind !== "photos") return
-      const grounded = groundedAnswerPhotoPlans(block.subjects, question, text, hasAttachment).filter((plan) => {
+      const grounded = groundedAnswerPhotoPlans(block.subjects, question, text, hasAttachment, previousQuestion).filter((plan) => {
         const name = plan.topic.toLowerCase()
         if (seen.has(name) || seen.size >= 12) return false
         seen.add(name)
@@ -1298,7 +1298,7 @@ export function MalikMarkdown({ text, className, allowImages = true, referencePh
       if (grounded.length) plans.set(position, grounded)
     })
     return plans
-  }, [blocks, fallbackVisualSlots, question, text, hasAttachment, photosOn])
+  }, [blocks, fallbackVisualSlots, question, previousQuestion, text, hasAttachment, photosOn])
   const hintedAnchors = useMemo(() => {
     const slots = new Map<string, AnswerVisualSlot>()
     const consumed = new Set<number>()
@@ -1558,7 +1558,7 @@ export function MalikMarkdown({ text, className, allowImages = true, referencePh
           </section>
         }
         if (block.kind === "cards") {
-          if (block.block) return <MalikAnswerCards key={key} block={block.block} sources={citations} autoPhotos={allowsAnswerPhotoHints(question, hasAttachment)} />
+          if (block.block) return <MalikAnswerCards key={key} block={block.block} sources={citations} question={question} previousQuestion={previousQuestion} hasAttachment={hasAttachment} autoPhotos={allowsAnswerPhotoHints(question, hasAttachment, previousQuestion)} />
           return streaming ? <p key={key} className="malik-md-p" role="status">Собираю карточки…</p> : null
         }
         if (block.kind === "visual" && (block.engine || block.pendingEngine)) {

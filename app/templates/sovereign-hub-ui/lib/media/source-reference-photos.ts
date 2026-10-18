@@ -1,6 +1,6 @@
 import { citationName, subjectCitationUrl, type MalikCitation } from "@/lib/ai/citation-names"
 import { isAbstractPhotoSubject, referenceSearchTopic, type ReferenceVisualPlan } from "@/lib/ai/reference-visual-policy"
-import { isPublicReferenceUrl, referenceTitleScore, type MalikVisualImage } from "./reference-catalog"
+import { isPublicReferenceUrl, referenceTitleScore, referenceContextMatches, type MalikVisualImage } from "./reference-catalog"
 
 // A matching article title does not make the site's default OG cover a photo
 // of that subject. Reject shared root assets and let the image search continue.
@@ -17,6 +17,7 @@ export function sourceReferencePhoto(plan: ReferenceVisualPlan, sources: readonl
   const names = [...new Set([plan.topic, referenceSearchTopic(plan.topic)])]
   for (const source of (sources || []).slice(0, 40)) {
     if (!source.image || /(?:\b(?:vs|versus|comparison|compare|top\s+\d+)\b|сравнени[ея]|сравниваем)/iu.test(source.title || "")) continue
+    if (!referenceContextMatches(plan, (source.title || "") + " " + source.image)) continue
     if (!names.some((name) => {
       const url = subjectCitationUrl(name, [source])
       if (!url) return false

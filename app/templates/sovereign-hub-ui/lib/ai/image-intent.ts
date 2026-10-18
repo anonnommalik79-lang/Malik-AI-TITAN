@@ -1,3 +1,5 @@
+import { actionableRequest, primaryNonMediaArtifact } from "./artifact-intent"
+
 const IMAGE_COMMAND_PATTERN = /^\s*\/(?:image|img|photo|foto|фото|картинка)(?![\p{L}\p{N}_])/iu
 const VIDEO_COMMAND_PATTERN = /^\s*\/(?:video|veo|видео)(?![\p{L}\p{N}_])/iu
 
@@ -35,7 +37,7 @@ function firstMatch(value: string, pattern: RegExp) {
 
 /** Discussion, quoted examples and negative consent must not spend media quota. */
 export function isTextOnlyMediaDiscussion(input: string): boolean {
-  const text = input.replace(/```[\s\S]*?(?:```|$)|`[^`\n]*`|"[^"\n]*"|«[^»]*»|“[^”]*”/gu, " ").trim()
+  const text = actionableRequest(input)
   if (/(?:без\s+(?:генерации|создания)\s+(?:фото|изображени|видео)|не\s+(?:генерируй|создавай|рисуй|сгенерируй)|do\s+not\s+(?:generate|create|draw)|don't\s+(?:generate|create|draw)|text\s+only|только\s+текст|суретсіз)/iu.test(text)) return true
   if (/(?:не\s+(?:надо|нужно|хочу)\s+(?:созд|сген|генер|рис)|без\s+(?:фото|изображений|видео)|no\s+(?:images?|photos?|videos?))/iu.test(text)) return true
   // Asking which tools can generate media is not permission to run one.
@@ -52,7 +54,8 @@ export function isExplicitVideoGenerationRequest(input: string): boolean {
   const text = String(input || "").trim()
   if (!text || isTextOnlyMediaDiscussion(text) || EXPLANATION_START_PATTERN.test(text)) return false
   if (VIDEO_COMMAND_PATTERN.test(text)) return true
-  const actionable = text.replace(/`[^`\n]*`|"[^"\n]*"|«[^»]*»|“[^”]*”/gu, " ")
+  if (primaryNonMediaArtifact(text)) return false
+  const actionable = actionableRequest(text)
   const create = firstRequestedVerb(actionable) || firstRequestedVerb(actionable, /сними|смонтируй|оживи|анимируй|animate|produce/iu)
   const video = firstMatch(actionable, /видео|ролик|анимаци[\p{L}]*|(?<!\p{L})(?:video|clip|trailer|reel|animation)(?!\p{L})/iu)
   if (!create || !video) return false
@@ -108,6 +111,7 @@ export function isReferenceImageRequest(input: string): boolean {
 export function isExplicitImageEditRequest(input: string, hasImage = false): boolean {
   const text = String(input || "").replace(IMAGE_COMMAND_PATTERN, "").trim()
   if (!text || VIDEO_COMMAND_PATTERN.test(text) || EXPLANATION_START_PATTERN.test(text) || isTextOnlyMediaDiscussion(input)) return false
+  if (primaryNonMediaArtifact(input)) return false
   if (!hasImage && isReferenceImageRequest(input)) return false
 
   // A text-to-image request may legitimately contain edit-like words such as
@@ -145,17 +149,22 @@ export function isExplicitImageGenerationRequest(input: string): boolean {
   if (VIDEO_COMMAND_PATTERN.test(text)) return false
   if (isTextOnlyMediaDiscussion(text)) return false
   if (IMAGE_COMMAND_PATTERN.test(text)) return true
+  if (primaryNonMediaArtifact(text)) return false
 
   if (EXPLANATION_START_PATTERN.test(text) || EXPLANATION_BEFORE_CREATE_PATTERN.test(text)) {
     return false
   }
 
-  const actionable = text.replace(/`[^`\n]*`|"[^"\n]*"|«[^»]*»|“[^”]*”/gu, " ")
+  const actionable = actionableRequest(text)
   const verb = firstRequestedVerb(actionable)
   const noun = firstMatch(actionable, IMAGE_NOUN_PATTERN) || firstMatch(actionable, /(?<!\p{L})(?:аву|аватар|логотип|logo)(?!\p{L})/iu)
+  if(verb&&!noun&&/(?:нарис|изобраз|\bdraw\b|\brender\b|сал)/iu.test(verb.text)){
+    const object=actionable.slice(verb.index+verb.text.length).trim()
+    return Boolean(object)&&!NON_IMAGE_OBJECT_PATTERN.test(object)&&!/(?:график|диаграмм|таблиц|схем|план|вывод|conclusions?|plans?|charts?|graphs?|tables?)/iu.test(object)
+  }
   if (!verb || !noun) return false
 
-  const nonImageObject = firstMatch(text, NON_IMAGE_OBJECT_PATTERN)
+  const nonImageObject = firstMatch(actionable, NON_IMAGE_OBJECT_PATTERN)
   if (nonImageObject) {
     // "создай код для генерации фото" / "сделай пост про фото" must stay chat.
     if (nonImageObject.index > verb.index && nonImageObject.index < noun.index) return false

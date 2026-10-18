@@ -1,4 +1,4 @@
-import { normalizeBackgroundTurnId, readBackgroundChatTurn } from "@/lib/server/background-chat-turns"
+import { normalizeBackgroundTurnId, readBackgroundChatTurn, failBackgroundChatTurn } from "@/lib/server/background-chat-turns"
 import { resolveRequestEntitlement } from "@/lib/server/request-entitlement"
 import { z } from "zod"
 import { takeRequestFrequency } from "@/lib/server/request-frequency"
@@ -21,8 +21,11 @@ export async function GET(request: Request, context: RouteContext) {
   }
 
   const entitlement = await resolveRequestEntitlement(request)
+  if (!entitlement.authenticated) return Response.json({ ok: false, error: "SIGN_IN_REQUIRED" }, { status: 401, headers: { "cache-control": "private, no-store" } })
   if (!takeRequestFrequency("background-read", entitlement.userId, 120)) return Response.json({ ok: false, error: "Слишком много запросов. Попробуйте через минуту." }, { status: 429, headers: { "cache-control": "private, no-store", "retry-after": "60" } })
-  const turn = await readBackgroundChatTurn(turnId)
+  let turn
+  try { turn = await readBackgroundChatTurn(turnId) }
+  catch { return Response.json({ ok: false, error: "BACKGROUND_STORAGE_UNAVAILABLE" }, { status: 503, headers: { "cache-control": "private, no-store", "retry-after": "5" } }) }
   // Fail closed: historical records without an owner must never be exposed
   // to whoever knows or obtains their UUID, even before their TTL expires.
   if (!turn || !turn.ownerId || !entitlement.authenticated || turn.ownerId !== entitlement.userId) {
@@ -45,6 +48,7 @@ export async function GET(request: Request, context: RouteContext) {
       execution: turn.execution,
       completedAt: turn.completedAt,
       expiresAt: turn.expiresAt,
+      durability: turn.durability,
     },
   }, {
     headers: { "cache-control": "private, no-store" },
@@ -63,12 +67,19 @@ export async function DELETE(request: Request, context: RouteContext) {
     return Response.json({ ok: false, error: "INVALID_BACKGROUND_TURN_ID" }, { status: 400, headers: { "cache-control": "no-store" } })
   }
   const entitlement = await resolveRequestEntitlement(request)
+  if (!entitlement.authenticated) return Response.json({ ok: false, error: "SIGN_IN_REQUIRED" }, { status: 401, headers: { "cache-control": "private, no-store" } })
   if (!takeRequestFrequency("background-stop", entitlement.userId, 60)) {
     return Response.json({ ok: false, error: "Слишком много запросов. Попробуйте через минуту." }, { status: 429, headers: { "cache-control": "private, no-store", "retry-after": "60" } })
   }
+  let current
+  try { current = await readBackgroundChatTurn(turnId) }
+  catch { return Response.json({ ok: false, error: "BACKGROUND_STORAGE_UNAVAILABLE" }, { status: 503, headers: { "cache-control": "private, no-store" } }) }
+  if (!current?.ownerId || current.ownerId !== entitlement.userId) return Response.json({ ok: false, error: "BACKGROUND_TURN_NOT_FOUND" }, { status: 404, headers: { "cache-control": "private, no-store" } })
   const result = stopRunningTurn(turnId, entitlement.userId)
   if (result === "forbidden") {
     return Response.json({ ok: false, error: "BACKGROUND_TURN_NOT_FOUND" }, { status: 404, headers: { "cache-control": "private, no-store" } })
   }
-  return Response.json({ ok: true, stopped: result === "stopped" }, { headers: { "cache-control": "private, no-store" } })
+  try { await failBackgroundChatTurn(turnId, "Остановлено пользователем.") }
+  catch { return Response.json({ ok: false, error: "BACKGROUND_STORAGE_UNAVAILABLE", stopped: result === "stopped" }, { status: 503, headers: { "cache-control": "private, no-store" } }) }
+  return Response.json({ ok: true, stopped: current.status === "pending" }, { headers: { "cache-control": "private, no-store" } })
 }

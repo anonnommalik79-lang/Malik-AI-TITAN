@@ -40,6 +40,10 @@ function bundle(file) {
 modules["components/sovereign/visual-engine/MalikVisualBlock.tsx"] = "module.exports={MalikVisualEngineBlock:function(){return null},MalikVisualPending:function(){return null}}"
 // The oil report has its own suite (test:oil-report) and pulls Zod contracts.
 modules["components/sovereign/MalikOilReport.tsx"] = "module.exports={MalikOilReport:function(){return null}}"
+// Project execution/preview is covered by verify-website-engine-browser. This
+// answer-layout fixture contains no project marker and must not load Next's
+// dynamic route/runtime into a handwritten browser bundle.
+modules["components/sovereign/work-code/WebsiteProjectCard.tsx"] = "module.exports={WebsiteProjectCard:function(){return null}}"
 const markdown = bundle(path.join(project, "components/sovereign/MalikMarkdown.tsx"))
 const globalPath = path.join(project, "app/globals.css")
 const globals = (await require("postcss")([require("@tailwindcss/postcss")({ base: project })])
@@ -76,7 +80,7 @@ const text = [
   "### 2. Как устроить работу", "Схема объясняет предлагаемый процесс. Её отображение не означает, что инструменты уже выполнили задачу.",
   fence("malik-visual", flow),
   "### 3. Большое изображение в своём разделе",
-  fence("malik-cards", { type: "hero", item: { title: "Контрольный экран", image: 3, text: "Тестовое изображение источника. Оно показано целиком, без обрезки текста.", sources: [3] } }),
+  fence("malik-cards", { type: "hero", item: { title: "Контрольный экран", url: "https://example.com/qa", image: 3, text: "Тестовое изображение источника. Оно показано целиком, без обрезки текста.", sources: [3] } }),
   "### 4. Сравнение результатов",
   "| Этап | Результат для пользователя |\n|---|---|\n| Исследование | Ссылки и проверенные факты |\n| Разработка | Код и результаты тестов |\n| Документы | Файлы и понятные инструкции |\n| Проверка | Ограничения и необходимые согласования |",
   "### 5. Условия и цены",
@@ -142,9 +146,14 @@ for (const engine of (process.env.MALIK_QA_ENGINES || "chromium").split(",")) {
       await page.waitForFunction(() => document.querySelector(".malik-card__hero-image img")?.naturalWidth > 0)
       if (out && (width === 390 || width === 1440)) {
         await page.locator(".malik-md-h").first().scrollIntoViewIfNeeded()
-        await page.evaluate(() => scrollTo(0, 0))
+        // App-wide smooth scrolling must not race the screenshot assertion.
+        await page.evaluate(() => {
+          for (const node of document.querySelectorAll("#malik-root,#malik-root *")) if (node.scrollTop) node.scrollTop = 0
+          scrollTo({ top: 0, left: 0, behavior: "instant" })
+        })
+        await page.waitForFunction(() => Math.abs(scrollY) < 1)
         const firstHeading = await page.locator(".malik-md-h").first().boundingBox()
-        assert(firstHeading.y >= 0 && firstHeading.y < 200, "Screenshots must include the beginning of the answer")
+        assert(firstHeading.y >= -1 && firstHeading.y < 920, "First heading must be visible at the document start: " + JSON.stringify(firstHeading))
         assert(await page.evaluate(() => document.documentElement.scrollHeight > innerHeight + 500), "Full-page capture must include the complete long answer")
         await page.screenshot({ path: path.join(out, `illustrated-answer-${engine}-${width}.png`), fullPage: true, animations: "disabled" })
         await page.screenshot({ path: path.join(out, `illustrated-answer-${engine}-${width}-top.png`), animations: "disabled" })

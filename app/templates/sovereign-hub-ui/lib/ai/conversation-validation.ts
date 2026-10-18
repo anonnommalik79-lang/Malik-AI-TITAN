@@ -2,6 +2,7 @@ import type {ConversationIntent} from "./conversation-intent"
 
 export type ConversationIssue="invalid-json"|"unchanged-repair"
 export function conversationRepairInstruction(issue:unknown){
+ if(typeof issue==="string"&&/^(?:XLSX_|PPTX_|FORMULA_|SPREADSHEET_|NATIVE_|DOCUMENT_EXPORT_FAILED)[A-Z_]*$/.test(issue))return `NATIVE OUTPUT VALIDATION FAILED (${issue}). Rewrite the complete document for the exact original request. Obey the execution contract's format, forecast horizon, slide count, formulas and charts. Keep assumptions explicit; do not invent source data. For XLSX provide Markdown tables with local numeric formulas and a category column followed by numeric/formula series; for PPTX use exactly the requested number of short heading sections and a two-column numeric table for a native chart. Do not claim a file exists or tools ran. This is the only repair attempt.`
  if(issue==="invalid-json")return "OUTPUT VALIDATION FAILED: the last draft was not valid JSON. Answer the exact latest user request as one syntactically valid JSON value only. No fences, prose or trailing commas. Do not claim any external action."
  if(issue==="unchanged-repair")return "OUTPUT VALIDATION FAILED: the draft repeated the rejected prior answer unchanged. Apply the user's requested correction to the supplied source. Preserve unrelated facts; if the error cannot be established, explain exactly what evidence is missing instead of claiming it was fixed."
  return ""

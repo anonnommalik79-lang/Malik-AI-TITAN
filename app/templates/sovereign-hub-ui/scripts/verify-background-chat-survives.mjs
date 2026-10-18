@@ -149,7 +149,7 @@ await persistStreamResult("snapshot", eventResponse(
 ))
 assert.equal(calls.at(-1)?.result?.content, "Answer with evidence", "cumulative snapshots must not duplicate text in history")
 check("interrupted and failed SSE streams are never saved as completed answers", () => {
-  assert.match(store, /content: String\(partialContent \|\| ""\)/)
+  assert.match(store, /content: String\(partialContent \|\| current.content \|\| ""\)/)
   assert.match(status, /turn\.status === "complete" \|\| turn\.status === "failed"/)
   assert.match(account, /Ответ прервался и может быть неполным/)
 })

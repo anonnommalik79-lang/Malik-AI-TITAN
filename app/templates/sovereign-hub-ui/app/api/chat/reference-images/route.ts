@@ -4,8 +4,9 @@ export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
 import { planReferenceVisuals } from "@/lib/ai/reference-visual-policy"
-import { cleanReferenceLabel, isSafeVisualUrl, lookupReferenceImages, readReferenceJson, referenceTopicMatches, sanitizeReferenceImages, type MalikVisualImage } from "@/lib/media/reference-catalog"
+import { cleanReferenceLabel, isSafeVisualUrl, lookupReferenceImages, readReferenceJson, referenceTopicMatches, referenceContextMatches, sanitizeReferenceImages, type MalikVisualImage } from "@/lib/media/reference-catalog"
 import { findProviderReferenceImages } from "@/lib/media/provider-reference-photos"
+import { resolveVisualContext } from "@/lib/ai/visual-context"
 
 const cache = new Map<string, { expires: number; promise: Promise<MalikVisualImage[]> }>()
 /** Distinct lookups running at once on this instance (each holds sockets and timers). */
@@ -47,6 +48,9 @@ export async function GET(request: Request) {
   const plan = planReferenceVisuals(raw)
   if (!plan) return NextResponse.json({ images: [] })
   const params = new URL(request.url).searchParams
+  const context = params.get("context") || ""
+  if (context.length > 500 || /[\r\n<>]|https?:|www\./iu.test(context)) return NextResponse.json({ images: [] }, { status: 400 })
+  if (context) plan.context = resolveVisualContext(context)
   plan.person = plan.person || params.get("person") === "1"
   plan.entity = plan.entity || plan.person || params.get("entity") === "1"
   plan.logo = params.get("logo") === "1" && !plan.person
@@ -56,7 +60,7 @@ export async function GET(request: Request) {
   const skipOfficial = params.get("skipOfficial") === "1"
   const excludedUrls = params.getAll("exclude")
   if (excludedUrls.length > 3 || excludedUrls.some((url) => !isSafeVisualUrl(url))) return NextResponse.json({ images: [] }, { status: 400 })
-  const key = [plan.kind || "reference", plan.visualDevice?.join(",") || "", plan.visualTerms?.join(",") || "", skipOfficial ? "retry" : "", plan.entity ? "entity" : "", plan.person ? "person" : "", plan.logo ? "logo" : "", ...plan.queries].join("|").toLowerCase() + "|" + JSON.stringify([...excludedUrls].sort())
+  const key = [plan.kind || "reference", plan.visualDevice?.join(",") || "", plan.visualTerms?.join(",") || "", skipOfficial ? "retry" : "", plan.entity ? "entity" : "", plan.person ? "person" : "", plan.logo ? "logo" : "", ...plan.queries].join("|").toLowerCase() + "|" + JSON.stringify([plan.context, ...excludedUrls.sort()])
   let entry = cache.get(key)
   if (!entry || entry.expires <= Date.now()) {
     // A burst of different lookups is bounded: past the limit the browser
@@ -103,7 +107,7 @@ export async function GET(request: Request) {
           .catch(() => { finish([]); provider() })
       })
       if (!images.length && plan.kind !== "tutorial" && !plan.entity && !plan.logo && !signal.aborted) {
-        try { images = sanitizeReferenceImages(await unsplash(plan.queries[0], signal)).filter((image) => !excludedUrls.includes(image.url) && plan.queries.some((query) => referenceTopicMatches(query, image.alt))) } catch { /* Optional provider. */ }
+        try { images = sanitizeReferenceImages(await unsplash(plan.queries[0], signal)).filter((image) => !excludedUrls.includes(image.url) && referenceContextMatches(plan, image.alt) && plan.queries.some((query) => referenceTopicMatches(query, image.alt))) } catch { /* Optional provider. */ }
       }
       // Timings/counts only: never log the user's prompt, identity or keys.
       if (!images.length || Date.now() - started > 1500) console.info("[reference-images]", { durationMs: Date.now() - started, count: images.length, timedOut: signal.aborted })

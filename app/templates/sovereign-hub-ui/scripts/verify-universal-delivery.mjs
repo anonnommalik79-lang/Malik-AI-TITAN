@@ -90,7 +90,7 @@ test('editing an owned document gives the model its source, retains old version 
 test('XLSX real OOXML contains opt-in formulas, numbers and two distinct sheets',async()=>{
  const markdown='# Прогноз\n\n## Revenue\n| Month | USD | Total |\n|---|---|---|\n| 1 | 60 | =SUM(B2:B3) |\n| 2 | 60 | =ROUND(B2*10%,2) |\n\n## Costs\n| Item | USD |\n|---|---|\n| Service | 20 |'
  const file=await exportDocument({format:'xlsx',title:'Формулы',markdown,allowFormulas:true}),pkg=readPackage(file.bytes)
- assert.match(pkg['xl/worksheets/sheet1.xml'].toString(),/<f>SUM\(B2:B3\)<\/f>/);assert.match(pkg['xl/worksheets/sheet1.xml'].toString(),/<v>60<\/v>/);assert.ok(pkg['xl/worksheets/sheet2.xml']);assert.doesNotMatch(pkg['xl/worksheets/sheet1.xml'].toString(),/<f>[^<]*<\/f><v>/)
+ assert.match(pkg['xl/worksheets/sheet1.xml'].toString(),/<f>SUM\(B2:B3\)<\/f><v>120<\/v>/);assert.match(pkg['xl/worksheets/sheet1.xml'].toString(),/<v>60<\/v>/);assert.ok(pkg['xl/worksheets/sheet2.xml']);assert.match(pkg['xl/worksheets/sheet1.xml'].toString(),/<f>ROUND\(B2\*10%,2\)<\/f><v>6<\/v>/)
 })
 test('untrusted/default spreadsheets keep formula-looking strings inert',()=>{const pkg=readPackage(buildXlsx([{name:'safe',header:['value'],rows:[['=HYPERLINK(1)']]}]));assert.doesNotMatch(pkg['xl/worksheets/sheet1.xml'].toString(),/<f>/);assert.match(pkg['xl/worksheets/sheet1.xml'].toString(),/HYPERLINK/)})
 test('CSV prevents whitespace-prefixed and negative-expression formula injection, preserving real negatives',()=>{

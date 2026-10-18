@@ -2,6 +2,7 @@ import type { ReferenceVisualPlan } from "@/lib/ai/reference-visual-policy"
 import { officialIPhonePhoto } from "./official-product-photos"
 import { verifiedPortrait } from "./verified-portraits"
 import { referenceBrandAsset } from "./reference-brand-assets"
+import { resolveVisualContext, visualContextMatches } from "../ai/visual-context"
 
 export type MalikVisualImage = { url: string; alt: string; sourceUrl?: string; credit?: string; license?: string; role?: "logo" }
 export const REFERENCE_METADATA_LIMIT = 48 * 1024
@@ -169,7 +170,7 @@ async function firstHedged<T>(items: string[], hedgeMs: number, signal: AbortSig
 }
 
 function titleWords(text: string): string[] {
-  return text.normalize("NFKD").toLowerCase().replace(/\p{M}/gu, "").replace(/^file:/u, "").split(/[^\p{L}\p{N}]+/u).filter((word) => (word.length > 1 || /^\d+$/u.test(word)) && !["the", "of", "in", "and"].includes(word))
+  return text.normalize("NFKD").toLowerCase().replace(/\p{M}/gu, "").replace(/^file:/u, "").split(/[^\p{L}\p{N}]+/u).filter((word) => (word.length > 1 || /^[\divxlcdm]$/u.test(word) || /^\d+$/u.test(word)) && !["the", "of", "in", "and"].includes(word))
 }
 
 function unrelatedNamesake(query: string, title: string): boolean {
@@ -209,6 +210,11 @@ export function referenceTopicMatches(query: string, metadata: string): boolean 
   const actual = titleWords(metadata.replace(/<[^>]*>/gu, " ").slice(0, 4096))
   return Boolean(wanted.length && wanted.every((word) => actual.includes(word)
     || (word.length > 4 && actual.some((term) => term === word.replace(/s$/u, "") || term.replace(/s$/u, "") === word))))
+}
+
+/** Used by every catalogue/provider, including server and browser fallbacks. */
+export function referenceContextMatches(plan: ReferenceVisualPlan, metadata: string): boolean {
+  return visualContextMatches(plan.context || resolveVisualContext(plan.topic), metadata)
 }
 
 type LookupOptions = { excludedUrls?: string[]; skipOfficial?: boolean; fast?: boolean }
@@ -290,7 +296,8 @@ async function lookupArticleImages(plan: ReferenceVisualPlan, signal: AbortSigna
       const pages = (data?.query?.pages || []).sort((a, b) => plan.entity
         ? referenceTitleScore(topic, b.title || "") - referenceTitleScore(topic, a.title || "") || (a.index || 0) - (b.index || 0)
         : (a.index || 0) - (b.index || 0))
-      const relevant = pages.filter((page) => !Object.hasOwn(page.pageprops || {}, "disambiguation") && (plan.entity
+      const exactArticle = pages.some(page => referenceTitleScore(canonical, page.title || "") === 1)
+      const relevant = pages.filter((page) => referenceContextMatches(plan, page.title || "") && (!exactArticle || referenceTitleScore(canonical, page.title || "") === 1) && !Object.hasOwn(page.pageprops || {}, "disambiguation") && (plan.entity
         ? (referenceTitleScore(canonical, page.title || "") >= 0.65 && !unrelatedNamesake(topic, page.title || "")) : referenceTopicMatches(topic, page.title || "")))
       const images = sanitizeReferenceImages(relevant.flatMap((page) => {
         if (!page.thumbnail?.source || !page.fullurl) return []
@@ -367,7 +374,7 @@ async function lookupLogoImages(plan: ReferenceVisualPlan, signal: AbortSignal, 
 export async function lookupReferenceImages(plan: ReferenceVisualPlan, signal?: AbortSignal, options: LookupOptions = {}): Promise<MalikVisualImage[]> {
   if (signal?.aborted) return []
   const brand = referenceBrandAsset(plan.topic) || plan.queries.map(referenceBrandAsset).find(Boolean)
-  if (brand && !options.skipOfficial && plan.kind !== "tutorial" && !plan.person) {
+  if (brand && !options.skipOfficial && plan.kind !== "tutorial" && !plan.person && referenceContextMatches(plan, brand.alt)) {
     const url = referenceThumbnailVariants(brand.url).find((candidate) => !wasExcluded(candidate, options))
     if (url) return sanitizeReferenceImages([{ ...brand, url }])
   }
@@ -398,14 +405,14 @@ export async function lookupReferenceImages(plan: ReferenceVisualPlan, signal?: 
   }
   if (signal?.aborted) return []
   const portrait = verifiedPortrait(plan.topic) || plan.queries.map(verifiedPortrait).find(Boolean)
-  if (portrait && !options.skipOfficial && !unrelatedNamesake("Elon Musk", plan.topic)) {
+  if (portrait && !options.skipOfficial && !unrelatedNamesake("Elon Musk", plan.topic) && referenceContextMatches(plan, portrait.alt)) {
     const url = [portrait.url, portrait.fallbackUrl].find((candidate) => !wasExcluded(candidate, options))
     if (url) return sanitizeReferenceImages([{ ...portrait, url }])
   }
   const official = officialScreen(plan)
   if (official.length && !options.skipOfficial && !options.excludedUrls?.includes(official[0].url)) return sanitizeReferenceImages(official)
   const product = officialIPhonePhoto(plan.topic) || plan.queries.map(officialIPhonePhoto).find(Boolean)
-  if (product && !options.skipOfficial && !options.excludedUrls?.includes(product.url)) return sanitizeReferenceImages([{ url: product.url, alt: product.title, sourceUrl: "https://support.apple.com/en-us/108044", credit: "Apple Support" }])
+  if (product && !options.skipOfficial && !options.excludedUrls?.includes(product.url) && referenceContextMatches(plan, product.title)) return sanitizeReferenceImages([{ url: product.url, alt: product.title, sourceUrl: "https://support.apple.com/en-us/108044", credit: "Apple Support" }])
   const totalSignal = AbortSignal.any([...(signal ? [signal] : []), AbortSignal.timeout(20000)])
   if (plan.entity) {
     const article = await lookupArticleImages(plan, totalSignal, options)
@@ -433,6 +440,7 @@ export async function lookupReferenceImages(plan: ReferenceVisualPlan, signal?: 
         // For interface tutorials, reject random product photos and screenshots
         // of unrelated settings (even if Commons ranked them highly).
         const fileTitle = String(page.title || "").toLocaleLowerCase()
+        if (!referenceContextMatches(plan, fileTitle + " " + (media?.extmetadata?.ImageDescription?.value || ""))) return []
         if (plan.entity && (unrelatedNamesake(topic, fileTitle) || referenceTitleScore(topic, fileTitle) === 0)) return []
         if (!plan.entity && plan.kind !== "tutorial" && !referenceTopicMatches(topic, fileTitle + " " + (media?.extmetadata?.ImageDescription?.value || ""))) return []
         if (plan.kind === "tutorial" && (!plan.visualDevice?.some((term) => fileTitle.includes(term))

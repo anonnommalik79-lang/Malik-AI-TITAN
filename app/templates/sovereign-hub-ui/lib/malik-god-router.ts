@@ -4,6 +4,8 @@ import { instantReply } from "@/lib/ai/instant-replies"
 import { answerCardsToText } from "@/lib/ai/answer-cards"
 import { userContextBlocks } from "@/lib/ai/client-context"
 import {conversationIntentInstruction,resolveConversationIntent} from "@/lib/ai/conversation-intent"
+import { domainPlanInstruction, resolveDomainPlan } from "@/lib/ai/domain-intelligence"
+import { refineDomainPlan } from "@/lib/server/domain-planner"
 import {conversationRepairInstruction} from "@/lib/ai/conversation-validation"
 import { computedEvidenceInstruction } from "@/lib/analysis/chat"
 import { conversationFocus, conversationFocusInstruction, type ConversationFocus } from "@/lib/ai/conversation-focus"
@@ -1024,7 +1026,8 @@ export async function malikGodAnswer(
   // Attachment extraction may augment `prompt` with untrusted document text.
   // Preferences must still come from the original public user question.
   const universalIntent=resolveConversationIntent({prompt:requestPrompt,messages:body?.history||body?.messages,attachments:body?.attachments})
-  const universalContract=[conversationIntentInstruction(universalIntent),conversationRepairInstruction(body?.metadata?.conversationRepair)].filter(Boolean).join("\n\n")
+  let domainPlan = resolveDomainPlan({ prompt: requestPrompt, messages: body?.history || body?.messages, attachments: body?.attachments, intent: universalIntent })
+  let universalContract=[conversationIntentInstruction(universalIntent),domainPlanInstruction(domainPlan),conversationRepairInstruction(body?.metadata?.conversationRepair)].filter(Boolean).join("\n\n")
   const requestFreshness = classifyFreshness(requestPrompt)
   const activeSuperpowers = detectMalikSuperpowers(
     requestPrompt,
@@ -1082,6 +1085,18 @@ export async function malikGodAnswer(
   if (selection) {
     const history = Array.isArray(body?.history) ? body.history : Array.isArray(body?.messages) ? body.messages : []
     const attachments = Array.isArray(body?.attachments) ? body.attachments : []
+    // Only mixed/underspecified tasks need semantic classification. This one
+    // bounded call may select read-only evidence, never private tools/writes.
+    // It shares the selected model and fits inside the existing token quota.
+    const outputAllowance = Number(body?.maxTokens)
+    let domainPlanningBudget = 0
+    if (domainPlan.semantic.needed && (!Number.isFinite(outputAllowance) || outputAllowance >= 1400)) {
+      domainPlanningBudget = 320
+      const step = activity?.start("Уточняю цель и связанные области", "model", selection.modelId)
+      domainPlan = await refineDomainPlan(domainPlan, input => runStrictMalikModel({ modelId: selection.modelId, prompt: input.prompt, taskPrompt: requestPrompt, systemPrompt: input.systemPrompt, maxTokens: 320, temperature: 0, reasoningEffort: "low", allowCatalog: selection.allowCatalog === true, signal: input.signal }), { signal })
+      activity?.finish(step, { accepted: domainPlan.semantic.used, domains: domainPlan.domains, maxPlanningTokens: 320 }, domainPlan.semantic.used ? "completed" : "failed", domainPlan.semantic.used ? undefined : "Using bounded local task plan")
+      universalContract=[conversationIntentInstruction(universalIntent),domainPlanInstruction(domainPlan),conversationRepairInstruction(body?.metadata?.conversationRepair)].filter(Boolean).join("\n\n")
+    }
     const brain = analyzeMalikBrainV1({
       prompt,
       attachments,
@@ -1098,8 +1113,8 @@ export async function malikGodAnswer(
     }))
     // A follow-up («а третий?») is searched and shaped together with the
     // question it continues, never as a bare fragment.
-    const focus = conversationFocus(preparedEvidence?.prompt || prompt, history)
-    const usedWeb = shouldUseWeb(focus.searchText, body) || powerForcesWeb && body?.research !== false && !body?.disableResearch && !NO_WEB.test(focus.searchText)
+    const focus = domainPlan.context.followUp ? conversationFocus(preparedEvidence?.prompt || prompt, history) : { followUp: false, anchor: "", searchText: requestPrompt, shapeText: requestPrompt }
+    const usedWeb = domainPlan.evidence.web !== "off" && (shouldUseWeb(focus.searchText, body, domainPlan) || powerForcesWeb && body?.research !== false && !body?.disableResearch && !NO_WEB.test(focus.searchText))
     const [webSources, connected, science, eiaEvidence] = await Promise.all([
       usedWeb ? preparedEvidence ? Promise.resolve(preparedEvidence.sources) : gatherSources(focus.searchText, emitResearch, activity, signal, freshnessMode(body?.responseDepth || body?.metadata?.responseDepth)) : Promise.resolve([] as SourceItem[]),
       serverConnected
@@ -1154,7 +1169,7 @@ export async function malikGodAnswer(
       ].join("\n\n") : "", computedEvidenceInstruction(body?.metadata), systemPrompt(usedEvidence, prompt, brainInstruction, attachments, body?.metadata, Boolean(connected.context), sources.length > 0, focus), mathEngineInstruction(math), plannedMathInstruction(plannedMath), accuracyInstruction(focus.searchText), workModeInstruction(prompt, resolveWorkspaceMode(body?.workspaceMode)), userContextBlocks(body), universalContract].filter(Boolean).join("\n\n"),
       history,
       attachments,
-      maxTokens: answerBudget(body, prompt, Math.max(brain.outputTokenTarget, powerOutputTokens)),
+      maxTokens: Math.max(1, answerBudget(body, prompt, Math.max(brain.outputTokenTarget, powerOutputTokens)) - domainPlanningBudget),
       temperature: typeof body?.temperature === "number" ? body.temperature : brain.temperature,
       reasoningEffort: brain.depth === "instant" ? "low" : brain.depth === "balanced" ? "medium" : "high",
       allowCatalog: selection.allowCatalog === true,
@@ -1186,8 +1201,8 @@ export async function malikGodAnswer(
     }
   }
 
-  const legacyFocus = conversationFocus(preparedEvidence?.prompt || prompt, Array.isArray(body?.history) ? body.history : Array.isArray(body?.messages) ? body.messages : [])
-  const usedWeb = shouldUseWeb(legacyFocus.searchText, body) || powerForcesWeb && body?.research !== false && !body?.disableResearch && !NO_WEB.test(legacyFocus.searchText)
+  const legacyFocus = domainPlan.context.followUp ? conversationFocus(preparedEvidence?.prompt || prompt, Array.isArray(body?.history) ? body.history : Array.isArray(body?.messages) ? body.messages : []) : { followUp: false, anchor: "", searchText: requestPrompt, shapeText: requestPrompt }
+  const usedWeb = domainPlan.evidence.web !== "off" && (shouldUseWeb(legacyFocus.searchText, body, domainPlan) || powerForcesWeb && body?.research !== false && !body?.disableResearch && !NO_WEB.test(legacyFocus.searchText))
   const requestedMaxTokens = Number(body?.maxTokens)
   const maxTokens = Number.isFinite(requestedMaxTokens) && requestedMaxTokens > 0
     ? Math.floor(requestedMaxTokens)

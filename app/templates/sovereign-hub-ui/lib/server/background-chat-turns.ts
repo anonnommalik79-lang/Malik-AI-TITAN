@@ -5,6 +5,7 @@ import { GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3"
 import { sharedPrivateS3Client } from "./shared-private-s3-client"
 import { normalizeExecutionTrace, type ExecutionTrace } from "@/lib/ai/chat-execution"
 import { MAX_CHAT_RESULT_CHARS } from "@/lib/ai/chat-stream-contract"
+import { privateJsonStoreConfigured, readPrivateJsonVersioned, writePrivateJsonConditional } from "./private-json-store"
 
 export type BackgroundChatTurn = {
   turnId: string
@@ -20,6 +21,9 @@ export type BackgroundChatTurn = {
   expiresAt: string
   execution?: ExecutionTrace
   responseMetadata?: Record<string, unknown>
+  updatedAt?: string
+  leaseExpiresAt?: string
+  durability?: "private-durable" | "runtime-memory"
 }
 
 type StoredEnvelope = {
@@ -40,6 +44,24 @@ const MAX_RESULT_CHARS = MAX_CHAT_RESULT_CHARS
 // in process RAM. Durable R2/S3 is required for history beyond this cache.
 const MAX_FINISHED_CACHE_BYTES = 32 * 1024 * 1024
 const MAX_FINISHED_CACHE_TURNS = 128
+const MAX_ACTIVE_TURNS = 16
+const LEASE_MS = 90_000
+
+export class BackgroundStorageError extends Error {
+  constructor() { super("BACKGROUND_STORAGE_UNAVAILABLE"); this.name = "BackgroundStorageError" }
+}
+
+function privateSecret() {
+  return first(process.env.BACKGROUND_CHAT_SECRET, process.env.WORKOS_COOKIE_PASSWORD, process.env.FOUNDER_HISTORY_SECRET)
+}
+
+function durableStore() {
+  // Reuse the same encrypted private state backend as history and projects.
+  // Do not silently fall back to RAM when a configured database is down.
+  if (!privateJsonStoreConfigured()) return false
+  if (privateSecret().length < 32) throw new BackgroundStorageError()
+  return true
+}
 
 function finishedCacheBytes(turn: BackgroundChatTurn) {
   // V8 strings may consume up to two bytes per code unit; include a small
@@ -201,18 +223,40 @@ async function readCloud(turnId: string) {
       Key: objectKey(turnId),
     }), { abortSignal: AbortSignal.timeout(2500) })
     return decryptTurn(await bodyToString(result.Body), storage.cfg.encryptionSecret)
-  } catch {
-    return null
+  } catch (error: any) {
+    if (["NoSuchKey", "NotFound"].includes(String(error?.name)) || error?.$metadata?.httpStatusCode === 404) return null
+    throw new BackgroundStorageError()
   }
 }
 
 async function save(turn: BackgroundChatTurn) {
+  if (durableStore()) {
+    // CAS prevents a late failure/checkpoint from replacing a completed result,
+    // and makes cancellation visible to another process without duplicate work.
+    let stored = false
+    for (let attempt = 0; attempt < 3; attempt++) {
+      let row
+      try { row = await readPrivateJsonVersioned<StoredEnvelope>(objectKey(turn.turnId)) }
+      catch { throw new BackgroundStorageError() }
+      const existing = row.value ? decryptTurn(JSON.stringify(row.value), privateSecret()) : null
+      if (row.value && !existing) throw new BackgroundStorageError()
+      if (existing && existing.ownerId !== turn.ownerId) throw new BackgroundStorageError()
+      if (existing && existing.status !== "pending") return cacheTurn(existing)
+      const result = await writePrivateJsonConditional(objectKey(turn.turnId), encryptTurn(turn, privateSecret()), row.etag)
+      if (result.stored) { stored = true; break }
+      if (!result.conflict) throw new BackgroundStorageError()
+    }
+    if (!stored) throw new BackgroundStorageError()
+  } else if (storageConfig() && !await writeCloud(turn)) throw new BackgroundStorageError()
+  return cacheTurn(turn)
+}
+
+function cacheTurn(turn: BackgroundChatTurn) {
   const memory = memoryStore()
   // Refresh recency on final writes; never evict the response being saved.
   memory.delete(turn.turnId)
   memory.set(turn.turnId, turn)
   pruneFinishedTurnCache(memory, turn.turnId)
-  await writeCloud(turn)
   return turn
 }
 
@@ -228,9 +272,20 @@ export async function startBackgroundChatTurn(turnId: string, ownerId: string) {
     status: "pending",
     createdAt: new Date(now).toISOString(),
     expiresAt: new Date(now + TTL_MS).toISOString(),
+    updatedAt: new Date(now).toISOString(),
+    leaseExpiresAt: new Date(now + LEASE_MS).toISOString(),
+    durability: durableStore() || storageConfig() ? "private-durable" : "runtime-memory",
   }
   // Claim synchronously before the first cloud write, including concurrent POSTs.
   if (memoryStore().has(normalized)) return null
+  if ([...memoryStore().values()].filter(turn => turn.status === "pending").length >= MAX_ACTIVE_TURNS) throw new Error("BACKGROUND_CAPACITY_EXCEEDED")
+  if (durableStore()) {
+    const claim = await writePrivateJsonConditional(objectKey(normalized), encryptTurn(turn, privateSecret()), null)
+    if (claim.conflict) return null
+    if (!claim.stored) throw new BackgroundStorageError()
+    return cacheTurn(turn)
+  }
+  memoryStore().set(normalized, turn)
   return save(turn)
 }
 
@@ -245,8 +300,11 @@ export async function completeBackgroundChatTurn(turnId: string, input: {
   if (!normalized) return null
   const current = await readBackgroundChatTurn(normalized)
   if (!current) return null
+  if (current.status !== "pending") return current
+  if (input.content.length > MAX_RESULT_CHARS) throw new Error("BACKGROUND_RESULT_TOO_LARGE")
   const now = Date.now()
   return save({
+    ...current,
     turnId: normalized,
     ownerId: current.ownerId,
     status: "complete",
@@ -266,13 +324,15 @@ export async function failBackgroundChatTurn(turnId: string, error: unknown, exe
   if (!normalized) return null
   const current = await readBackgroundChatTurn(normalized)
   if (!current) return null
+  if (current.status !== "pending") return current
   const now = Date.now()
   return save({
+    ...current,
     turnId: normalized,
     ownerId: current.ownerId,
     status: "failed",
     // Preserve a truncated stream for the user without ever marking it complete.
-    content: String(partialContent || "").slice(0, MAX_RESULT_CHARS) || undefined,
+    content: String(partialContent || current.content || "").slice(0, MAX_RESULT_CHARS) || undefined,
     error: (error instanceof Error ? error.message : String(error || "Background chat failed")).slice(0, 4000),
     execution: normalizeExecutionTrace(execution, true),
     createdAt: current?.createdAt || new Date(now).toISOString(),
@@ -285,7 +345,16 @@ export async function readBackgroundChatTurn(turnId: string) {
   const normalized = normalizeBackgroundTurnId(turnId)
   if (!normalized) return null
   const memory = memoryStore().get(normalized)
-  const turn = memory || await readCloud(normalized)
+  let turn = memory
+  // Pending state must see a remote cancellation; terminal cache is immutable.
+  if ((!memory || memory.status === "pending") && durableStore()) {
+    let row
+    try { row = await readPrivateJsonVersioned<StoredEnvelope>(objectKey(normalized)) }
+    catch { throw new BackgroundStorageError() }
+    const saved = row.value ? decryptTurn(JSON.stringify(row.value), privateSecret()) : null
+    if (row.value && !saved) throw new BackgroundStorageError()
+    turn = saved || memory || await readCloud(normalized) || undefined
+  } else if (!memory) turn = await readCloud(normalized) || undefined
   if (!turn) return null
   if (!Number.isFinite(Date.parse(turn.expiresAt)) || Date.parse(turn.expiresAt) <= Date.now()) {
     memoryStore().delete(normalized)
@@ -298,5 +367,15 @@ export async function readBackgroundChatTurn(turnId: string) {
     // expiration sweeps. Enforce the byte/count cap on reads as well as writes.
     pruneFinishedTurnCache(cache, normalized)
   }
+  if (turn.status === "pending" && turn.leaseExpiresAt && Date.parse(turn.leaseExpiresAt) < Date.now()) {
+    return save({ ...turn, status: "failed", completedAt: new Date().toISOString(), error: "Исполнение прервано. Сохранён частичный результат; повторный запуск автоматически не выполнялся." })
+  }
   return turn
+}
+
+/** Throttled by the stream consumer, not by every token. Progress is not success. */
+export async function checkpointBackgroundChatTurn(turnId: string, input: { content?: string; execution?: ExecutionTrace }) {
+  const current = await readBackgroundChatTurn(turnId)
+  if (!current || current.status !== "pending") return current
+  return save({ ...current, content: input.content === undefined ? current.content : input.content.slice(0, MAX_RESULT_CHARS), execution: input.execution ? normalizeExecutionTrace(input.execution) : current.execution, updatedAt: new Date().toISOString(), leaseExpiresAt: new Date(Date.now() + LEASE_MS).toISOString() })
 }

@@ -54,10 +54,11 @@ export function pollingChatResponse(admission: Response, options: PollOptions): 
               headers: { Accept: "application/json" }, signal: activeRequest.signal,
             })
             if (cancelled) break
-            if ([401, 403, 404, 429].includes(saved.status)) {
-              send("error", { message: saved.status === 429 ? "Доступный лимит запросов исчерпан." : "Не удалось открыть сохранённый ответ. Проверьте доступ к аккаунту." })
+            if ([401, 403, 404].includes(saved.status)) {
+              send("error", { message: saved.status === 404 ? "Сохранённый запрос не найден или недоступен этому аккаунту. Новый запрос автоматически не запускался." : "Сессия истекла или доступ запрещён. Войдите снова, чтобы открыть сохранённый ответ." })
               break
             }
+            if (saved.status === 429) { await pause(Math.min(60_000, Math.max(0, deadline - Date.now()))); continue }
             if (!saved.ok) throw new Error(`HTTP ${saved.status}`)
             const payload = await saved.json() as { turn?: Record<string, unknown> }
             if (cancelled) break

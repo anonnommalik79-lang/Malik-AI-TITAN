@@ -3,6 +3,8 @@ import { isExplicitImageEditRequest, isExplicitImageGenerationRequest, isReferen
 import { isContextDependent } from "./conversation-focus"
 import { APPLE_IPHONE_PHOTOS, namedIPhoneSubjects, normalizeIPhoneSubject } from "../media/official-product-photos"
 import { canonicalPortraitTopic } from "../media/verified-portraits"
+import { resolveDomainPlan } from "./domain-intelligence"
+import { resolveVisualContext, type VisualContext } from "./visual-context"
 
 export type ReferenceVisualPlan = {
   topic: string
@@ -21,6 +23,8 @@ export type ReferenceVisualPlan = {
   logo?: boolean
   /** A short line under the photo in a comparison lineup. */
   caption?: string
+  /** Original task constraints survive per-heading/per-subject lookups. */
+  context?: VisualContext
 }
 
 const NO_VISUAL = /(?:без\s+(?:фото|картинок|изображений)|не\s+(?:показывай|добавляй|нужны)\s+(?:фото|картинки|изображения)|только\s+текст|no\s+(?:photos?|images?|pictures?)|text\s+only|суретсіз)/iu
@@ -134,9 +138,13 @@ const NON_VISUAL = /^(?:привет|салам|сәлем|спасибо|рах
 const STRUCTURED_TASK = /(?:чек[ -]?лист|checklist|таблиц|spreadsheet|\btable\b|дв[еу]\s+колонк|two\s+columns|\b(?:python|javascript|typescript|sql)\b|\bкод\b|\bcode\b)/iu
 
 /** A model may name concrete objects in comparisons, but must respect text-only requests. */
-export function allowsAnswerPhotoHints(question: string, hasAttachment = false): boolean {
+export function allowsAnswerPhotoHints(question: string, hasAttachment = false, previousQuestion = ""): boolean {
   if (routePetroleum(question).engine === "petroleum") return false
   const text = question.trim()
+  const domain = resolveDomainPlan({ prompt: question, messages: previousQuestion ? [{ role: "user", content: previousQuestion }, { role: "assistant", content: "" }] : [] })
+  if (domain.context.followUp && domain.visuals.mode === "off") return false
+  if (domain.delivery !== "text" || domain.presentation.tables === "off" || ["translate", "summarize", "modify", "calculate", "converse"].includes(domain.goal)) return false
+  if (domain.domains.includes("science") && !domain.visuals.roles.includes("photo") && !isReferenceImageRequest(question)) return false
   return Boolean(text && text.length <= 80_000 && !hasAttachment && !NO_VISUAL.test(text) && !NON_VISUAL.test(text)
     && !TEXT_TASK.test(text) && !/^\//u.test(text) && !isExplicitImageGenerationRequest(text)
     && !isExplicitImageEditRequest(text, false) && !planTutorialVisuals(text)
@@ -157,6 +165,10 @@ function conversationalPersonSubject(input: string): string | null {
 export function planReferenceVisuals(question: string, previousQuestion = "", hasAttachment = false, previousAnswer = ""): ReferenceVisualPlan | null {
   const raw = String(question || "").trim()
   if (!raw || raw.length > 80_000 || hasAttachment || NO_VISUAL.test(raw)) return null
+  const domain = resolveDomainPlan({ prompt: raw, messages: previousQuestion ? [{ role: "user", content: previousQuestion }, { role: "assistant", content: previousAnswer }] : [] })
+  if (domain.delivery !== "text" || domain.presentation.tables === "off" || ["translate", "summarize", "modify", "calculate", "converse"].includes(domain.goal)
+    || domain.context.followUp && domain.visuals.mode === "off" && NO_VISUAL.test(domain.context.anchor)) return null
+  const context = resolveVisualContext(domain.context.subject)
   // Long briefs often include reference data after the actual question.
   // Never feed thousands of pasted characters into a photo lookup query.
   const text = raw.length > 2500
@@ -179,7 +191,8 @@ export function planReferenceVisuals(question: string, previousQuestion = "", ha
   } else if (isExplicitImageEditRequest(text, false)) return null
   if (!explicit) {
     const educational = planEducationalVisuals(text)
-    if (educational) return educational
+    if (educational) return { ...educational, context }
+    if (domain.domains.includes("science") && !domain.visuals.roles.includes("photo")) return null
     // Questions about places, people, objects and concepts get references by default.
     const places = /^(?:что\s+посмотреть\s+в|куда\s+сходить\s+в|достопримечательности|what\s+to\s+see\s+in|places\s+to\s+visit\s+in)\s+(.+)$/iu.exec(text)
     subject = places ? places[1] : (conversationalPerson || text)
@@ -199,7 +212,7 @@ export function planReferenceVisuals(question: string, previousQuestion = "", ha
   const subjects = listed.length ? listed : allIPhones ? Object.keys(APPLE_IPHONE_PHOTOS).reverse() : undefined
   const person = Boolean(conversationalPerson) || /^(?:кто(?:\s+(?:такой|такая|такое|это))?|who(?:\s+is)?|кім)(?:\s|$)/iu.test(subject)
     || /(?:назарбаев|портрет|portrait|биографи)/iu.test(subject)
-  return { topic, queries, explicit, subjects, person, entity: person || /(?:iphone|айфон)/iu.test(subject), layout: person || /референс|вдохнов|бренд|постер|reference|inspiration|poster|brand/iu.test(text) ? "portrait" : "landscape" }
+  return { topic, queries, explicit, subjects, person, context, entity: person || /(?:iphone|айфон)/iu.test(subject), layout: person || /референс|вдохнов|бренд|постер|reference|inspiration|poster|brand/iu.test(text) ? "portrait" : "landscape" }
 }
 
 export type AnswerVisualSegment = { key: string; text: string; kind: "heading" | "item" | "paragraph" }
@@ -277,7 +290,7 @@ export function planAnswerVisualSlots(question: string, segments: AnswerVisualSe
   if (useful.length) return useful.map((segment) => {
     const label = visualSegmentLabel(segment.text)
     const topic = referenceTopic(label)
-    return { key: segment.key, row: true, plan: { topic, queries: [...new Set([referenceSearchTopic(topic), topic])], explicit: false, layout: "landscape", kind: "reference" } }
+    return { key: segment.key, row: true, plan: { topic, queries: [...new Set([referenceSearchTopic(topic), topic])], explicit: false, layout: "landscape", kind: "reference", context: base.context } }
   })
   const anchor = segments.find((segment) => segment.kind === "paragraph") || segments[0]
   if (isAbstractPhotoSubject(base.topic) || !base.explicit && /бизнес\s+под\s+ключ|возможност|capabilit/iu.test(base.topic)) return []

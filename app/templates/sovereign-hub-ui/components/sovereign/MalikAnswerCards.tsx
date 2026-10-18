@@ -1,17 +1,19 @@
 "use client"
 
-import { useEffect, useState, type ReactNode } from "react"
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react"
 import { ArrowUpRight, ExternalLink } from "lucide-react"
 import type { AnswerCard, AnswerCardsBlock, CardLink } from "@/lib/ai/answer-cards"
 import { citationName, hostOf, safeHttps, subjectCitationUrl, trustedLink, type MalikCitation } from "@/lib/ai/citation-names"
-import { isAbstractPhotoSubject, referenceSearchTopic, visualSegmentLabel } from "@/lib/ai/reference-visual-policy"
-import { subscribeReferenceImages } from "@/lib/media/client-reference-cache"
+import { allowsAnswerPhotoHints, isAbstractPhotoSubject, referenceSearchTopic, visualSegmentLabel } from "@/lib/ai/reference-visual-policy"
+import { resolveVisualContext, type VisualContext } from "@/lib/ai/visual-context"
+import { referenceCacheKey, subscribeReferenceImages } from "@/lib/media/client-reference-cache"
 import { referenceBrandAsset } from "@/lib/media/reference-brand-assets"
-import { referenceThumbnailVariants } from "@/lib/media/reference-catalog"
+import { referenceContextMatches, referenceThumbnailVariants } from "@/lib/media/reference-catalog"
 import { isGenericPageCover, sourceReferencePhoto } from "@/lib/media/source-reference-photos"
 import "./answer-cards.css"
 
 type Sources = readonly MalikCitation[] | null | undefined
+const CardVisualContext = createContext<{ context?: VisualContext; allow: boolean }>({ allow: true })
 
 /** «Astana Hub +2»: the first source opens, the rest are counted. */
 function SourceChip({ numbers, sources }: { numbers?: number[]; sources: Sources }) {
@@ -48,38 +50,42 @@ function Button({ link, sources, primary }: { link: CardLink; sources: Sources; 
 
 /** The page's own picture (from a cited source) or a looked-up reference photo. */
 function useCardImage(image: AnswerCard["image"], sources: Sources, title: string, hero: boolean, imageRole?: AnswerCard["imageRole"], autoPhotos = false, failed: readonly string[] = [], cardUrl?: string): { url: string; label: string; sourceUrl?: string; logo?: boolean } | null {
+  const scope = useContext(CardVisualContext)
+  const context = scope.context
   const fromSource = typeof image === "number" ? sources?.[image - 1] : undefined
   const subject = visualSegmentLabel(title)
   const sourceMatches = !isAbstractPhotoSubject(subject) && Boolean(fromSource && subjectCitationUrl(subject, [fromSource]))
   const directlyLinkedPage = Boolean(typeof image === "number" && fromSource?.image && cardUrl && safeHttps(fromSource.url) === safeHttps(cardUrl))
-  const pagePhoto = (autoPhotos || typeof image === "number") && imageRole !== "logo"
-    ? sourceReferencePhoto({ topic: subject, queries: [referenceSearchTopic(subject)], explicit: true, layout: "landscape" }, (fromSource ? [fromSource] : sources || []).filter((source) => !failed.includes(source.image || "")))
+  const pagePhoto = scope.allow && (autoPhotos || typeof image === "number") && imageRole !== "logo"
+    ? sourceReferencePhoto({ topic: subject, queries: [referenceSearchTopic(subject)], explicit: true, layout: "landscape", context }, (fromSource ? [fromSource] : sources || []).filter((source) => !failed.includes(source.image || "")))
       || (directlyLinkedPage && fromSource && !failed.includes(fromSource.image || "")
-        ? sourceReferencePhoto({ topic: fromSource.title || subject, queries: [referenceSearchTopic(fromSource.title || subject)], explicit: true, layout: "landscape" }, [fromSource]) : null)
+        ? sourceReferencePhoto({ topic: fromSource.title || subject, queries: [referenceSearchTopic(fromSource.title || subject)], explicit: true, layout: "landscape", context }, [fromSource]) : null)
     : null
   const sourceImage = pagePhoto ? { url: pagePhoto.url, label: pagePhoto.credit || "Источник фото", sourceUrl: pagePhoto.sourceUrl }
     // Explicit image index on the exact cited card URL is verified first-party
     // metadata. Generic OG filenames may not pass a subject-name search filter.
-    : directlyLinkedPage && fromSource?.image && safeHttps(fromSource.image) && !isGenericPageCover(new URL(fromSource.image).pathname) && !failed.includes(fromSource.image) && imageRole !== "logo"
+    : scope.allow && directlyLinkedPage && fromSource?.image && safeHttps(fromSource.image) && !isGenericPageCover(new URL(fromSource.image).pathname) && !failed.includes(fromSource.image) && imageRole !== "logo" && referenceContextMatches({ topic: subject, queries: [], explicit: true, layout: "landscape", context }, (fromSource.title || "") + " " + fromSource.image)
       ? { url: fromSource.image, label: fromSource.domain || hostOf(fromSource.url), sourceUrl: fromSource.url }
     : imageRole === "logo" && sourceMatches && fromSource?.image && /^https:\/\//i.test(fromSource.image) && !failed.includes(fromSource.image) ? { url: fromSource.image, label: fromSource.domain || hostOf(fromSource.url), sourceUrl: fromSource.url } : null
   // A model may omit image metadata or cite a page without an OG picture.
   // Retrieve the exact named subject instead of leaving a permanent initial.
-  const lookup = typeof image === "string" && image.trim().length >= 2 && !isAbstractPhotoSubject(image) ? image.trim()
+  const lookup = !scope.allow ? "" : typeof image === "string" && image.trim().length >= 2 && !isAbstractPhotoSubject(image) ? image.trim()
     : autoPhotos && !sourceImage && !isAbstractPhotoSubject(title) ? visualSegmentLabel(title) : ""
   // The card title identifies the brand even when the model forgets image/imageRole,
   // or mistakenly supplies a generic initial. Always prefer our shipped official mark.
-  const brand = referenceBrandAsset(title) || (!hero ? referenceBrandAsset(lookup) : null)
+  const brandCandidate = referenceBrandAsset(title) || (!hero ? referenceBrandAsset(lookup) : null)
+  const brand = brandCandidate && referenceContextMatches({ topic: subject, queries: [], explicit: true, layout: "landscape", context }, brandCandidate.alt) ? brandCandidate : null
   const hasBrand = Boolean(brand), sourceUrl = sourceImage?.url
-  const lookupKey = (imageRole === "logo" ? "logo:" : "photo:") + lookup
+  const lookupKey = referenceCacheKey({ topic: lookup, queries: [lookup], explicit: true, layout: "landscape", logo: imageRole === "logo", context })
   const [found, setFound] = useState<{ key: string; url: string; label: string; sourceUrl?: string; logo?: boolean } | null>(null)
   useEffect(() => {
     if (!lookup || hasBrand || sourceUrl) return
     return subscribeReferenceImages(
-      { topic: lookup, queries: [...new Set([referenceSearchTopic(lookup), lookup])], explicit: true, entity: true, logo: imageRole === "logo", kind: "reference", layout: "landscape" },
+      { topic: lookup, queries: [...new Set([referenceSearchTopic(lookup), lookup])], explicit: true, entity: true, logo: imageRole === "logo", kind: "reference", layout: "landscape", context },
       (images) => { if (images[0]) setFound({ key: lookupKey, url: images[0].url, label: images[0].credit || "Wikimedia", sourceUrl: images[0].sourceUrl, logo: images[0].role === "logo" }) },
     )
-  }, [lookup, lookupKey, hasBrand, sourceUrl, imageRole])
+  }, [lookup, lookupKey, hasBrand, sourceUrl, imageRole, context])
+  if (!scope.allow) return null
   if (brand) return { url: brand.url, label: brand.credit, sourceUrl: brand.sourceUrl, logo: true }
   if (sourceImage) return { ...sourceImage, logo: imageRole === "logo" }
   return found && found.key === lookupKey ? { url: found.url, label: found.label, sourceUrl: found.sourceUrl, logo: found.logo } : null
@@ -178,7 +184,7 @@ function Section({ title, label, children, className }: { title?: string; label:
  * reference catalogue, and a picture that fails to load gives way to a quiet
  * initial instead of a broken image.
  */
-export function MalikAnswerCards({ block, sources, autoPhotos = false }: { block: AnswerCardsBlock; sources?: readonly MalikCitation[] | null; autoPhotos?: boolean }) {
+function CardContent({ block, sources, autoPhotos = false }: { block: AnswerCardsBlock; sources?: readonly MalikCitation[] | null; autoPhotos?: boolean }) {
   if (block.type === "pricing") {
     return <Section title={block.title} label="Тарифы" className="malik-cards is-options is-pricing">{block.items.map((card, index) => <PricingCard key={`${card.title}-${index}`} card={card} sources={sources} />)}</Section>
   }
@@ -215,4 +221,10 @@ export function MalikAnswerCards({ block, sources, autoPhotos = false }: { block
   return <div className="malik-card-actions" role="group" aria-label="Действия">{buttons.map(({ item, href }, index) => (
     <a key={index} className={item.primary ? "malik-card-button is-primary is-inline" : "malik-card-button is-inline"} href={href} target="_blank" rel="noreferrer noopener"><ExternalLink aria-hidden="true" />{item.label}</a>
   ))}</div>
+}
+
+/** Context-only provider: adds no DOM wrapper or layout/styles. */
+export function MalikAnswerCards(props: { block: AnswerCardsBlock; sources?: readonly MalikCitation[] | null; autoPhotos?: boolean; question?: string; hasAttachment?: boolean; previousQuestion?: string }) {
+  const scope = useMemo(() => ({ context: props.question ? resolveVisualContext(props.question, props.previousQuestion) : undefined, allow: props.question ? allowsAnswerPhotoHints(props.question, props.hasAttachment, props.previousQuestion) : true }), [props.question, props.hasAttachment, props.previousQuestion])
+  return <CardVisualContext.Provider value={scope}><CardContent {...props} /></CardVisualContext.Provider>
 }

@@ -1,5 +1,5 @@
 import type { ReferenceVisualPlan } from "@/lib/ai/reference-visual-policy"
-import { cleanReferenceLabel, isPublicReferenceUrl, readReferenceJson, referencePhotoQuality, referenceTopicMatches, sanitizeReferenceImages, type MalikVisualImage } from "./reference-catalog"
+import { cleanReferenceLabel, isPublicReferenceUrl, readReferenceJson, referencePhotoQuality, referenceTopicMatches, referenceContextMatches, sanitizeReferenceImages, type MalikVisualImage } from "./reference-catalog"
 import { referencePhotoTarget, referencePhotoTicket } from "./reference-photo-ticket"
 
 type Provider = "brave" | "serper" | "tavily" | "serpapi" | "pixabay" | "openverse"
@@ -53,7 +53,7 @@ function photoIdentity(value: string): string {
 function normalize(plan: ReferenceVisualPlan, provider: Provider, candidates: Photo[], excluded: ReadonlySet<string>): MalikVisualImage[] {
   const usable = candidates.map((item) => ({ ...item, image: [item.image, ...(item.alternates || [])].find((url) => url && isPublicReferenceUrl(url) && !excluded.has(photoIdentity(url))) }))
   const images = usable.filter((item) => !item.unsafe && item.image && isPublicReferenceUrl(item.image)
-    && !excluded.has(photoIdentity(item.image)) && Boolean(item.title) && plan.queries.some((q) => referenceTopicMatches(q, item.title || ""))
+    && !excluded.has(photoIdentity(item.image)) && Boolean(item.title) && referenceContextMatches(plan, item.title || "") && plan.queries.some((q) => referenceTopicMatches(q, item.title || ""))
     && !(item.width && item.height && Math.max(item.width, item.height) < 320))
     .sort((a, b) => referencePhotoQuality(plan.queries[0], b.title || "", b) - referencePhotoQuality(plan.queries[0], a.title || "", a))
     .flatMap((item) => {

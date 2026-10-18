@@ -406,6 +406,14 @@ export async function getArtifact(ownerId: string, artifactId: string): Promise<
   return stored
 }
 
+/** Delivery verification must bypass the optimistic process cache: the generic
+ * OS write queue can log an unavailable backend while leaving cached content. */
+export async function readStoredArtifact(ownerId: string, artifactId: string): Promise<Artifact | null> {
+  if (!isOsId(artifactId)) return null
+  const stored = await (await backend()).read<Artifact>(key(ownerId, "artifacts", artifactId))
+  return stored?.ownerId === ownerKey(ownerId) ? stored : null
+}
+
 export async function getArtifacts(ownerId: string, ids: string[]) {
   const found = await Promise.all(ids.map((id) => getArtifact(ownerId, id)))
   return found.filter((artifact): artifact is Artifact => Boolean(artifact))

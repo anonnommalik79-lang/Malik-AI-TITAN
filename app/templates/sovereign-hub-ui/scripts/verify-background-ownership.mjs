@@ -26,7 +26,7 @@ function load(file) {
   return mod.exports
 }
 // No cloud writes or model calls: exercise the actual store and GET with session stubs.
-for (const key of ["BACKGROUND_CHAT_BUCKET", "MEDIA_STORAGE_BUCKET", "R2_BUCKET", "CLOUDFLARE_R2_BUCKET", "S3_BUCKET", "STORAGE_BUCKET"]) delete process.env[key]
+for (const key of ["BACKGROUND_CHAT_BUCKET", "MEDIA_STORAGE_BUCKET", "R2_BUCKET", "CLOUDFLARE_R2_BUCKET", "S3_BUCKET", "STORAGE_BUCKET", "PRIVATE_STATE_BUCKET", "FOUNDER_DATABASE_URL", "PRIVATE_STATE_DATABASE_URL", "DATABASE_URL"]) delete process.env[key]
 const store = load("lib/server/background-chat-turns.ts")
 const route = load("app/api/stream/background/[turnId]/route.ts")
 const get = (turnId) => route.GET(new Request(`https://test.invalid/api/stream/background/${turnId}`), { params: Promise.resolve({ turnId }) })
@@ -50,9 +50,9 @@ await check("other authenticated account gets 404", async () => {
   entitlement = { ...entitlement, userId: "owner-b" }
   assert.equal((await get(id)).status, 404)
 })
-await check("guest gets 404 even with same identity string", async () => {
+await check("guest gets 401 before any record lookup, even with same identity string", async () => {
   entitlement = { ...entitlement, authenticated: false, userId: "owner-a" }
-  assert.equal((await get(id)).status, 404)
+  assert.equal((await get(id)).status, 401)
 })
 await check("caller-chosen ID cannot overwrite owner", async () => {
   assert.equal(await store.startBackgroundChatTurn(id, "owner-b"), null)
@@ -79,11 +79,12 @@ await check("legacy unowned history is private even when a valid UUID is known",
   entitlement = { ...entitlement, authenticated: true, userId: "owner-a" }
   assert.equal((await get(legacy)).status, 404, "a signed-in account cannot claim a legacy unowned record")
   entitlement = { ...entitlement, authenticated: false }
-  assert.equal((await get(legacy)).status, 404, "a guest cannot read an unowned record")
+  assert.equal((await get(legacy)).status, 401, "a guest cannot read an unowned record")
   globalThis.__malikBackgroundChatTurnsV1.get(legacy).expiresAt = new Date(0).toISOString()
-  assert.equal((await get(legacy)).status, 404, "expired records are denied as well")
+  assert.equal((await get(legacy)).status, 401, "expired records are denied as well")
 })
 await check("invalid expiration is never public", async () => {
+  entitlement = { ...entitlement, authenticated: true }
   const invalid = randomUUID()
   globalThis.__malikBackgroundChatTurnsV1.set(invalid, { turnId: invalid, status: "complete", content: "private", expiresAt: "broken" })
   assert.equal((await get(invalid)).status, 404)
@@ -123,7 +124,7 @@ await check("cloud recovery reads obey the same memory limits as completed write
   load("lib/server/shared-private-s3-client.ts").sharedPrivateS3Client = () => ({ send: async (command) => {
     if (command.constructor.name === "PutObjectCommand") { objects.set(command.input.Key, String(command.input.Body)); return {} }
     const text = objects.get(command.input.Key)
-    if (!text) throw new Error("NoSuchKey")
+    if (!text) throw Object.assign(new Error("NoSuchKey"), { name: "NoSuchKey" })
     return { Body: { transformToString: async () => text } }
   } })
   Object.assign(process.env, { BACKGROUND_CHAT_BUCKET: "test", BACKGROUND_CHAT_ACCESS_KEY_ID: "test", BACKGROUND_CHAT_SECRET_ACCESS_KEY: "test", BACKGROUND_CHAT_SECRET: "test-encryption" })

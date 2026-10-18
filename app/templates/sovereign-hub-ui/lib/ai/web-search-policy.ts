@@ -4,21 +4,27 @@ import { needsCurrentEvidence } from "./current-evidence"
 import { truthNeedsLiveEvidence } from "./truth-engine"
 import { classifyFreshness, NO_WEB } from "./freshness-intent"
 import { websiteIntent } from "@/lib/website/engine/intent"
+import { resolveDomainPlan, type DomainPlan } from "./domain-intelligence"
 export type WebSearchOptions = {
   research?: boolean
   disableResearch?: boolean
   forceResearch?: boolean
+  history?: unknown
+  messages?: unknown
 }
 
 /** Pure intent check: no classifier request, keys, or token consumption. */
-export function shouldUseWeb(prompt: string, options: WebSearchOptions = {}): boolean {
+export function shouldUseWeb(prompt: string, options: WebSearchOptions = {}, serverPlan?: DomainPlan): boolean {
   const text = prompt.toLowerCase().replace(/ё/g, "е").replace(/\s+/g, " ").trim()
   if (!text || options.disableResearch || options.research === false) return false
-  if (NO_WEB.test(text)) return false
+  if (NO_WEB.test(text) && !serverPlan) return false
+  const plan = serverPlan || resolveDomainPlan({ prompt, messages: options.history || options.messages })
+  if (plan.evidence.web === "off") return false
   // A build brief may contain «современный», «2026» or ask for photos/video.
   // Those are project requirements, not a news-research answer. Any factual
   // content research belongs to a separate project stage.
   if (websiteIntent(prompt)) return false
+  if (plan.evidence.web === "required") return true
   if (/(?:не\s+(?:ищи|гугли|загугливай)|без\s+(?:поиска|интернета|гугла)|do not (?:search|browse)|don't (?:search|browse)|without (?:web|search|internet))/i.test(text)) return false
 
   // An explicit search request always wins.

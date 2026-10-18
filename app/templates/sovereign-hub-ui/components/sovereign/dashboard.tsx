@@ -22,6 +22,7 @@ import { chatCompletionError, mergeChatStreamText } from "@/lib/ai/chat-stream-c
 import { mergeStreamingAssistantCheckpoints, restoreInterruptedAssistant } from "@/lib/ai/stream-checkpoint"
 import { fixWrongKeyboardLayout } from "@/lib/ai/keyboard-layout"
 import { explicitlyRequestsPackagedProject } from "@/lib/chat-code-routing"
+import { primaryNonMediaArtifact } from "@/lib/ai/artifact-intent"
 import { isChatArtifactCreationRequest } from "@/lib/ai/chat-artifact-skills"
 import { briefNeedsDeep, briefOutputFloor } from "@/lib/ai/brief-quality"
 import { loadResponseDepth } from "@/lib/ai/response-depth"
@@ -728,6 +729,7 @@ function detectInlineMediaGenerationRequest(
 ): "image" | "video" | null {
   const command = parseMediaCommand(prompt)
   if (command) return command.kind
+  if (primaryNonMediaArtifact(prompt)) return null
   if (isTextOnlyMediaDiscussion(prompt)) return null
   // Looking up existing photos stays chat even if the sentence says "добавь описание".
   if (isReferenceImageRequest(prompt) && !attachments.some((item) => item.kind === "image" || item.mime?.startsWith("image/"))) return null

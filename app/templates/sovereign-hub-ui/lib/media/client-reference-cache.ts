@@ -1,10 +1,10 @@
 import type { ReferenceVisualPlan } from "@/lib/ai/reference-visual-policy"
-import { lookupReferenceImages, readReferenceJson, sanitizeReferenceImages, type MalikVisualImage } from "./reference-catalog"
+import { lookupReferenceImages, readReferenceJson, referenceContextMatches, sanitizeReferenceImages, type MalikVisualImage } from "./reference-catalog"
 
 type CacheEntry = { images: MalikVisualImage[]; expires: number }
 type Listener = (images: MalikVisualImage[]) => void
 type Job = { controller: AbortController; listeners: Set<Listener> }
-const STORAGE_KEY = "malik-reference-catalog-v11"
+const STORAGE_KEY = "malik-reference-catalog-v12"
 export const REFERENCE_LOOKUP_BUDGET_MS = 8000
 const MAX_ENTRIES = 60
 const cache = new Map<string, CacheEntry>()
@@ -35,7 +35,9 @@ function acquireLookup(signal: AbortSignal): Promise<(() => void) | null> {
 }
 
 export function referenceCacheKey(plan: ReferenceVisualPlan): string {
-  return [plan.kind || "reference", plan.entity ? "entity" : "", plan.person ? "person" : "", plan.logo ? "logo" : "", plan.visualDevice?.join(",") || "", plan.visualTerms?.join(",") || "", ...plan.queries].join("|").toLocaleLowerCase().slice(0, 240)
+  let contextHash = 2166136261
+  for (const char of JSON.stringify(plan.context || null)) contextHash = Math.imul(contextHash ^ char.charCodeAt(0), 16777619) >>> 0
+  return [plan.kind || "reference", plan.entity ? "entity" : "", plan.person ? "person" : "", plan.logo ? "logo" : "", plan.visualDevice?.join(",") || "", plan.visualTerms?.join(",") || "", ...plan.queries].join("|").toLocaleLowerCase().slice(0, 220) + "|ctx:" + contextHash.toString(16)
 }
 
 function hydrateCache() {
@@ -116,6 +118,7 @@ async function lookupWithFallback(plan: ReferenceVisualPlan, signal: AbortSignal
       clearTimeout(timer)
       const params = new URLSearchParams({ q: (plan.kind === "tutorial" ? "Как настроить " : "Покажи фото ") + plan.topic, entity: plan.entity ? "1" : "0", person: plan.person ? "1" : "0" })
       if (plan.queries[0]) params.set("topic", plan.queries[0])
+      if (plan.context?.subject) params.set("context", plan.context.subject.slice(0, 500))
       if (plan.logo) params.set("logo", "1")
       if (excludedUrls.length) params.set("skipOfficial", "1")
       for (const url of excludedUrls.slice(0, 3)) params.append("exclude", url)
@@ -123,7 +126,7 @@ async function lookupWithFallback(plan: ReferenceVisualPlan, signal: AbortSignal
       try {
         const response = await fetch("/api/chat/reference-images?" + params, { headers: { Accept: "application/json" }, signal: budget })
         const data = await readReferenceJson(response) as { images?: unknown } | null
-        images = sanitizeReferenceImages(data?.images).filter((image) => !excludedUrls.includes(image.url))
+        images = sanitizeReferenceImages(data?.images).filter((image) => !excludedUrls.includes(image.url) && referenceContextMatches(plan, image.alt))
       } catch { /* The direct catalogue may still succeed. */ }
       fallbackDone = true
       deliver(images)

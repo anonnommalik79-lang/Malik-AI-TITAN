@@ -1,6 +1,7 @@
 import { briefNeedsDeep } from "./brief-quality"
 import { answerRevises } from "./answer-completion"
 import { chatCompletionError, MAX_CHAT_SSE_FRAME_CHARS, mergeChatStreamText, parseChatSseFrame } from "./chat-stream-contract"
+import { resolveConversationIntent } from "./conversation-intent"
 
 /** Recover a saved turn before repeating a read-only question. Never replay actions. */
 type RecoveryOptions = {
@@ -58,6 +59,9 @@ export function canRetryChat(body: unknown): boolean {
   if (Array.isArray(request.attachments) && request.attachments.length) return false
   if (request.actionPlan || request.toolCalls || request.superflow || request.isToolRequest) return false
   const prompt = String(request.originalQuestion || request.question || request.prompt || "")
+  // A generated file/image/site is a charged side effect too. Recover its
+  // stable turn; never replay the provider because a connection was lost.
+  if (resolveConversationIntent({ prompt }).target !== "text") return false
   return Boolean(prompt.trim()) && !/^\s*\//u.test(prompt)
     && !/(?:отправь|опубликуй|удали|купи|оплати|забронируй|разверни|deploy|publish|delete|purchase|book\s|send\s)/iu.test(prompt)
 }
@@ -260,11 +264,12 @@ export async function fetchRecoverableChat(input: RequestInfo | URL, init: Reque
                 const saved = await within(fetcher(`/api/stream/background/${encodeURIComponent(turnId)}`, { cache: "no-store", signal }), budget, signal)
                 // Permissions and rate limits are terminal: no hot polling, and
                 // never a replay that would bypass them.
-                if ([401, 403, 404, 429].includes(saved.status)) {
-                  finalError = saved.status === 429 ? "Доступный лимит запросов исчерпан." : "Не удалось открыть сохранённый ответ. Проверьте доступ к аккаунту."
+                if ([401, 403, 404].includes(saved.status)) {
+                  finalError = saved.status === 404 ? "Сохранённый запрос не найден или недоступен этому аккаунту. Новый запрос автоматически не запускался." : "Сессия истекла или доступ запрещён. Войдите снова, чтобы открыть сохранённый ответ."
                   turnSettled = true
                   break
                 }
+                if (saved.status === 429) { await wait(Math.min(60_000, Math.max(1, deadline - Date.now())), signal); continue }
                 const payload = saved.ok ? await within(saved.json(), budget, signal) : null
                 const turn = payload?.turn
                 if (turn?.status === "complete" && turn.content) {

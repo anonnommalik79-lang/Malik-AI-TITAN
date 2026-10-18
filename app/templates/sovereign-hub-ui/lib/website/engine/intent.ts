@@ -4,6 +4,9 @@ export function websiteIntent(prompt: string, hasProject = false): "create" | "e
   if (!text || text.length > 28_000) return null
   const opening = text.split(/\r?\n/).filter(line => !/^\s*>/.test(line)).join(" ").slice(0, 2200)
   if (/^(?:как|почему|что такое|объясни|расскажи|how|why|what is|explain)(?!\p{L})/iu.test(opening)) return null
+  // The requested object is an explanation/plan, not the website mentioned
+  // inside it. Keep creation WITH plans/images distinct from a plan FOR a site.
+  if (/^(?:напиши|сделай|подготовь|write|create|make)\s+(?:мне\s+)?(?:обзор|описание|статью|инструкцию|план|анализ|рассказ|стих|промпт|review|description|article|instructions|plan|analysis|story|poem|prompt)(?!\p{L})/iu.test(opening)) return null
   if (/(?:не\s+(?:создавай|делай|строй|генерируй)|do not (?:create|build|generate)|don't (?:create|build))/iu.test(opening)) return null
   const site = /(?:сайт\p{L}*|лендинг\p{L}*|веб[- ]?приложени\p{L}*|веб[- ]?интерфейс\p{L}*|интерфейс|React[- ]?проект\p{L}*|website|\bsite\b|web\s*app|landing\s*page|homepage|сайтты)/iu
   const create = /(?:создай|создайте|сгенерируй|сгенерируйте|сделай|сделайте|собери|построй|разработай|сверстай|жаса|құр|\b(?:create|build|make|implement|design)\b)/iu

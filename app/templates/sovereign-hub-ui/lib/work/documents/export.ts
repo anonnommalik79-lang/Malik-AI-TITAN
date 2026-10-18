@@ -6,14 +6,16 @@ import { buildPdf } from "./pdf"
 import { buildCsv, buildXlsx } from "./xlsx"
 import { buildZip, xmlEscape } from "./zip"
 import { DOCUMENT_FORMATS, type DocumentFormat } from "./formats"
+import type {DocumentAsset} from "./assets"
 
 export function documentFilename(title: string, format: string) {
   const name = title.normalize("NFC").replace(/[<>:"/\\|?*\p{Cc}]/gu, " ").replace(/\s+/g, " ").trim().slice(0, 100).replace(/[. ]+$/, "") || "Документ"
   return `${name}.${format}`
 }
 export function documentDisposition(filename: string) { return `attachment; filename="document.${filename.split(".").pop()}"; filename*=UTF-8''${encodeURIComponent(filename).replace(/['()*]/g, (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`)}` }
-export async function exportDocument(input: { format: DocumentFormat; title: string; markdown: string; csv?: string; allowFormulas?:boolean }): Promise<{ bytes: Uint8Array; mime: string; filename: string }> {
+export async function exportDocument(input: { format: DocumentFormat; title: string; markdown: string; csv?: string; allowFormulas?:boolean; charts?:boolean; assets?:DocumentAsset[] }): Promise<{ bytes: Uint8Array; mime: string; filename: string }> {
   if (!DOCUMENT_FORMATS.includes(input.format)) throw new Error("Этот формат не поддерживается.")
+  if(input.assets&&(!Array.isArray(input.assets)||input.assets.length>2||input.assets.some(a=>!Number.isInteger(a.slideIndex)||a.slideIndex<0||a.slideIndex>29||typeof a.dataUrl!=="string"||a.dataUrl.length>1_400_000||!/^data:image\/jpeg;base64,[A-Za-z0-9+/]+=*$/.test(a.dataUrl))))throw new Error("INVALID_DOCUMENT_ASSETS")
   const markdown = answerCardsToText(input.markdown)
   if (input.format === "pdf" && markdown.includes("Malik Oil AI") && /[\u0600-\u06ff]/.test(markdown)) throw new Error("ARABIC_PDF_NOT_VALIDATED_USE_DOCX_HTML")
   const model = documentModel(markdown, input.title)
@@ -25,10 +27,10 @@ export async function exportDocument(input: { format: DocumentFormat; title: str
   switch (input.format) {
     case "docx": bytes = buildDocx(model); mime = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"; break
     case "pdf": bytes = await buildPdf(model); mime = "application/pdf"; break
-    case "pptx": {const {markdownPptx}=await import("./pptx");bytes=await markdownPptx(markdown,input.title);mime="application/vnd.openxmlformats-officedocument.presentationml.presentation";break}
+    case "pptx": {const {markdownPptx}=await import("./pptx");bytes=await markdownPptx(markdown,input.title,input.assets);mime="application/vnd.openxmlformats-officedocument.presentationml.presentation";break}
     case "xlsx":
       if (!tables.length) throw new Error("В документе нет таблиц")
-      bytes = buildXlsx(tables.map((table) => ({ name: table.title, header: table.header, rows: table.rows })), { title: input.title,allowFormulas:input.allowFormulas }); mime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"; break
+      bytes = buildXlsx(tables.map((table) => ({ name: table.title, header: table.header, rows: table.rows })), { title: input.title,allowFormulas:input.allowFormulas,charts:input.charts }); mime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"; break
     case "csv":
       if (!tables.length) throw new Error("В документе нет таблиц")
       bytes = encode(buildCsv(tables[0].header, tables[0].rows)); mime = "text/csv; charset=utf-8"; break

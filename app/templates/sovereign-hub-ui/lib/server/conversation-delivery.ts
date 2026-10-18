@@ -1,11 +1,14 @@
 import {createHash} from "node:crypto"
 import {exportDocument} from "@/lib/work/documents/export"
 import {DOCUMENT_FORMATS,type DocumentFormat} from "@/lib/work/documents/formats"
-import {createProject,getArtifact,putArtifact,storeIsDurable} from "@/lib/os/store"
+import {createProject,getArtifact,putArtifact,readStoredArtifact,storeIsDurable} from "@/lib/os/store"
 import type {Artifact} from "@/lib/os/types"
 import type {ConversationIntent} from "@/lib/ai/conversation-intent"
 import type {RequestEntitlement} from "@/lib/server/request-entitlement"
 import type {ExecutionReporter} from "@/lib/ai/chat-execution"
+import { executionContract } from "@/lib/ai/execution-contract"
+import { verifyNativeArtifact } from "@/lib/work/documents/verify-native"
+import { documentAssets, type DocumentAsset } from "@/lib/work/documents/assets"
 
 /** Only server session ownership authorizes an artifact read, never its ID in
  * messages, a model's text, client metadata or an email in the request. */
@@ -30,7 +33,7 @@ export function deliveryProblem(intent:ConversationIntent,code:string){
  return en?"The requested file could not be validated. No download is claimed. The source text is kept; choose another format or correct its structure.":"Запрошенный файл не прошёл создание или проверку. Ссылку на несуществующий файл не выдаю. Исходный текст сохранён: выберите другой формат или исправьте структуру."
 }
 
-export async function deliverConversationDocument(input:{owner?:RequestEntitlement;intent:ConversationIntent;markdown:string;previous?:Artifact;signal?:AbortSignal;activity?:ExecutionReporter}){
+export async function deliverConversationDocument(input:{owner?:RequestEntitlement;intent:ConversationIntent;markdown:string;previous?:Artifact;signal?:AbortSignal;activity?:ExecutionReporter;assets?:DocumentAsset[]}){
  const {owner,intent,markdown,previous,signal,activity}=input
  signal?.throwIfAborted()
  if(!owner?.authenticated)return{ok:false as const,content:deliveryProblem(intent,"SIGN_IN_REQUIRED")}
@@ -39,11 +42,15 @@ export async function deliverConversationDocument(input:{owner?:RequestEntitleme
  if(!markdown.trim()||markdown.length>400_000||Buffer.byteLength(markdown)>400*1024)return{ok:false as const,content:deliveryProblem(intent,markdown?"SOURCE_TOO_LARGE":"MISSING_SOURCE")}
  const title=(markdown.match(/^#{1,2}\s+(.+)$/m)?.[1]||previous?.title||"Malik AI document").replace(/[\r\n]/g," ").slice(0,100)
  const step=activity?.start(`Создаю ${format.toUpperCase()}`,"file","document.export",{format})
+ const contract=executionContract(intent)
  try{
-  const file=await exportDocument({format:format as DocumentFormat,title,markdown,allowFormulas:intent.requirements.formulas})
+  const assets=documentAssets(input.assets??previous?.metadata?.documentAssets)
+  if(format==="pptx"&&/(?:с\s+(?:фото|изображени)|with\s+(?:photos?|images?)|сгенерируй\s+изображени)/iu.test(intent.original)&&!assets.length)throw new Error("PPTX_REQUIRED_IMAGE_MISSING")
+  const file=await exportDocument({format:format as DocumentFormat,title,markdown,allowFormulas:intent.requirements.formulas,charts:contract.constraints.charts&&format==="xlsx",assets})
   signal?.throwIfAborted()
   const signature=Buffer.from(file.bytes.subarray(0,8)).toString("latin1")
   if(file.bytes.length<1||format==="pdf"&&!signature.startsWith("%PDF-")||["docx","xlsx","pptx","zip"].includes(format)&&!signature.startsWith("PK"))throw new Error("EXPORT_VERIFICATION_FAILED")
+  const verification=verifyNativeArtifact(file.bytes,format,contract)
   const durable=await storeIsDurable()
   const project=previous?{id:previous.projectId}:await createProject(owner.userId,{title,goal:"Chat document delivery"})
   signal?.throwIfAborted()
@@ -52,15 +59,19 @@ export async function deliverConversationDocument(input:{owner?:RequestEntitleme
   const hash=createHash("sha256").update(markdown).digest("hex")
   const artifact=await putArtifact(owner.userId,{projectId:project.id,kind:"document",title,sourceTool:"document.write",content:markdown,mime:"text/markdown",version:(previous?.version||0)+1,
    links:previous?[{relation:intent.action==="export"?"derived-from":"revision-of",artifactId:previous.id}]:[],
-   metadata:{role:"chat-document",requestedFormat:format,safeFormulas:intent.requirements.formulas===true,exportProbe:{sourceSha256:hash,bytes:file.bytes.length,mime:file.mime,filename:file.filename},testsExecuted:false,storage:durable?"private-durable":"runtime-memory"},
+   metadata:{role:"chat-document",requestedFormat:format,safeFormulas:intent.requirements.formulas===true,charts:contract.constraints.charts&&format==="xlsx",executionContract:contract,documentAssets:assets,exportProbe:{sourceSha256:hash,bytes:file.bytes.length,mime:file.mime,filename:file.filename,verification},testsExecuted:false,storage:durable?"private-durable":"runtime-memory"},
   })
+  const saved=await readStoredArtifact(owner.userId,artifact.id)
+  const probe=saved?.metadata?.exportProbe
+  if(saved?.content!==markdown||!probe||typeof probe!=="object"||!("sourceSha256" in probe)||probe.sourceSha256!==hash)throw new Error("ARTIFACT_READBACK_FAILED")
   signal?.throwIfAborted()
   activity?.finish(step,{format,bytes:file.bytes.length,sha256:hash,artifactId:artifact.id,durable},"completed")
   const href=`/api/os/artifacts/${artifact.id}/export?format=${format}`
   const note=durable?"":"\n\n"+(language(intent)==="en"?"Stored in server memory only; unavailable after a restart. Download it now.":"Сохранено только в памяти сервера. После перезапуска ссылка может перестать работать — скачайте файл сейчас.")
-  return{ok:true as const,artifact,content:`[${file.filename.replace(/[[\]\r\n]/g," ")}](${href})\n\n${language(intent)==="en"?"Export validated; download is rendered from the saved source. Source SHA-256:":"Экспорт проверен; скачивание формируется из сохранённого исходника. SHA-256 текста:"} \`${hash}\``+note}
- }catch{
+  return{ok:true as const,artifact,verification,content:`[${file.filename.replace(/[[\]\r\n]/g," ")}](${href})\n\n${language(intent)==="en"?"Export validated; download is rendered from the saved source. Source SHA-256:":"Экспорт проверен; скачивание формируется из сохранённого исходника. SHA-256 текста:"} \`${hash}\``+note}
+ }catch(error){
   signal?.throwIfAborted();activity?.finish(step,undefined,"failed","DOCUMENT_EXPORT_FAILED")
-  return{ok:false as const,content:deliveryProblem(intent,"EXPORT_FAILED")}
+  const issue=error instanceof Error&&/^[A-Z_]{3,80}$/.test(error.message)?error.message:"DOCUMENT_EXPORT_FAILED"
+  return{ok:false as const,issue,content:deliveryProblem(intent,"EXPORT_FAILED")}
  }
 }

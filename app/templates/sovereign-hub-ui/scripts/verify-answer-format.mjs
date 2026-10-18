@@ -731,5 +731,15 @@ check("a malik-oil-report fence becomes the oil report, recalculated; never raw 
   assert(render(fence.slice(0, 200), { visualContext: { question: "нефть", streaming: true } }).includes("Malik Oil AI…"))
   assert(render("```malik-oil-report\n{\"kind\":\"x\"}\n```").includes("повреждён"))
 })
+check("cards cannot bypass text-only preferences or original historical era", () => {
+  const block = "```malik-cards\n" + JSON.stringify({ version: 1, type: "hero", item: { title: "Roman artifact", image: 1, url: "https://example.org/roman-artifact", text: "Описание сохраняется", sources: [1] } }) + "\n```"
+  const citations = [{ title: "Roman artifact 2nd century", url: "https://example.org/roman-artifact", image: "https://example.org/artifact.jpg" }]
+  const plain = render(block, { citations, visualContext: { question: "Расскажи историю Рима, только текст" } })
+  assert(!plain.includes('<img')); assert(plain.includes("Описание сохраняется"))
+  const wrong = render(block, { citations: [{ ...citations[0], title: "Roman artifact 18th century" }], visualContext: { question: "Расскажи историю Рима II века" } })
+  assert(!wrong.includes('<img'))
+  const correct = render(block, { citations, visualContext: { question: "Расскажи историю Рима II века" } })
+  assert(correct.includes('src="https://example.org/artifact.jpg"'))
+})
 console.log(failures ? `\n${failures} failing\n` : "\nall answer format checks passed\n")
 process.exit(failures ? 1 : 0)

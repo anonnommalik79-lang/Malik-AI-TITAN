@@ -1,5 +1,7 @@
 import { buildZip, xmlEscape } from "./zip"
 import {safeSpreadsheetFormula} from "./safe-formula"
+import { sheetFormulaValues } from "./formula-values"
+import { workbookChart } from "./xlsx-chart"
 
 /**
  * XLSX writer: a real SpreadsheetML workbook, one sheet per table. Numbers
@@ -53,7 +55,7 @@ export function sheetName(value: string, used: Set<string>) {
 const MAX_ROWS = 50_000
 const MAX_COLUMNS = 200
 
-function sheetXml(sheet: Sheet,allowFormulas=false) {
+function sheetXml(sheet: Sheet,allowFormulas=false, value?: (ref: string) => number) {
   const columns = Math.min(MAX_COLUMNS, Math.max(sheet.header.length, ...sheet.rows.map((row) => row.length), 1))
   const rows = [sheet.header, ...sheet.rows.slice(0, MAX_ROWS)]
   const widths = new Array(columns).fill(8)
@@ -65,7 +67,8 @@ function sheetXml(sheet: Sheet,allowFormulas=false) {
       widths[column] = Math.min(60, Math.max(widths[column], [...raw].length + 2))
       if (!raw) continue
       if (rowIndex === 0) { cells.push(`<c r="${ref}" t="inlineStr" s="1"><is><t xml:space="preserve">${xmlEscape(raw)}</t></is></c>`); continue }
-      if(allowFormulas&&/^\s*=/.test(raw)){cells.push(`<c r="${ref}"><f>${xmlEscape(safeSpreadsheetFormula(raw))}</f></c>`);continue}
+      if(raw.length>32_000)throw new Error("SPREADSHEET_CELL_TOO_LARGE")
+      if(allowFormulas&&/^\s*=/.test(raw)){cells.push(`<c r="${ref}"><f>${xmlEscape(safeSpreadsheetFormula(raw))}</f>${value?`<v>${value(ref)}</v>`:""}</c>`);continue}
       const cell = parseCell(raw)
       if (cell.kind === "number") cells.push(`<c r="${ref}"${cell.percent ? ' s="2"' : ""}><v>${cell.value}</v></c>`)
       else cells.push(`<c r="${ref}" t="inlineStr"><is><t xml:space="preserve">${xmlEscape(cell.value.slice(0, 32_000))}</t></is></c>`)
@@ -77,10 +80,21 @@ function sheetXml(sheet: Sheet,allowFormulas=false) {
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><dimension ref="A1:${lastRef}"/><sheetViews><sheetView workbookViewId="0"${sheet.header.some(value => /[\u0600-\u06ff]/.test(value)) ? ' rightToLeft="1"' : ""}><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews><sheetFormatPr defaultRowHeight="15"/><cols>${cols}</cols><sheetData>${xmlRows}</sheetData><autoFilter ref="A1:${lastRef}"/></worksheet>`
 }
 
-export function buildXlsx(sheets: Sheet[], options: { title?: string; createdAt?: Date; allowFormulas?:boolean } = {}): Uint8Array {
+export function buildXlsx(sheets: Sheet[], options: { title?: string; createdAt?: Date; allowFormulas?:boolean; charts?:boolean } = {}): Uint8Array {
   if (!sheets.length) throw new Error("no sheets")
+  if(sheets.length>50||sheets.some(s=>s.rows.length>MAX_ROWS||s.header.length>MAX_COLUMNS||s.rows.some(r=>r.length>MAX_COLUMNS)))throw new Error("SPREADSHEET_SIZE_LIMIT")
   const used = new Set<string>()
   const named = sheets.slice(0, 50).map((sheet) => ({ ...sheet, name: sheetName(sheet.name, used) }))
+  const compiled = named.map((sheet, i) => {
+    const number = (raw: string) => { const cell = parseCell(raw); return cell.kind === "number" ? cell.value : null }
+    const value = options.allowFormulas ? sheetFormulaValues([sheet.header,...sheet.rows],number) : undefined
+    const chart = options.charts && i < 5 ? workbookChart(sheet,i+1,(r,c)=>{
+      const raw=sheet.rows[r-1]?.[c]||""
+      return value&&/^\s*=/.test(raw)?value(`${columnName(c)}${r+1}`):number(raw)
+    }) : null
+    return { xml:sheetXml(sheet,options.allowFormulas,value).replace("</worksheet>",`${chart?.drawing||""}</worksheet>`),chart }
+  })
+  if(options.charts&&!compiled.some(s=>s.chart))throw new Error("SPREADSHEET_CHART_DATA_REQUIRED")
   const created = (options.createdAt || new Date()).toISOString().replace(/\.\d{3}Z$/, "Z")
   const files = [
     { name: "[Content_Types].xml", data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>${named.map((_, index) => `<Override PartName="/xl/worksheets/sheet${index + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join("")}<Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/><Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/></Types>` },
@@ -90,8 +104,10 @@ export function buildXlsx(sheets: Sheet[], options: { title?: string; createdAt?
     { name: "xl/workbook.xml", data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><bookViews><workbookView/></bookViews><sheets>${named.map((sheet, index) => `<sheet name="${xmlEscape(sheet.name)}" sheetId="${index + 1}" r:id="rId${index + 1}"/>`).join("")}</sheets>${options.allowFormulas?'<calcPr calcMode="auto" fullCalcOnLoad="1" forceFullCalc="1"/>':""}</workbook>` },
     { name: "xl/_rels/workbook.xml.rels", data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${named.map((_, index) => `<Relationship Id="rId${index + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${index + 1}.xml"/>`).join("")}<Relationship Id="rId${named.length + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>` },
     { name: "xl/styles.xml", data: '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="2"><font><sz val="11"/><name val="Arial"/></font><font><b/><sz val="11"/><name val="Arial"/></font></fonts><fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FFF2F2F2"/><bgColor indexed="64"/></patternFill></fill></fills><borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border><border><left/><right/><top/><bottom style="thin"><color rgb="FFA6A6A6"/></bottom><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="3"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1"/><xf numFmtId="10" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>' },
-    ...named.map((sheet, index) => ({ name: `xl/worksheets/sheet${index + 1}.xml`, data: sheetXml(sheet,options.allowFormulas) })),
+    ...compiled.map((sheet, index) => ({ name: `xl/worksheets/sheet${index + 1}.xml`, data: sheet.xml })),
+    ...compiled.flatMap(sheet=>sheet.chart?.files||[]),
   ]
+  files[0].data=String(files[0].data).replace("</Types>",compiled.map(s=>s.chart?.overrides||"").join("")+"</Types>")
   return buildZip(files)
 }
 

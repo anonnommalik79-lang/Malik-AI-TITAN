@@ -6,11 +6,12 @@ import { normalizeExecutionTrace, upsertExecutionStep, type ExecutionTrace } fro
 import { chatCompletionError, MAX_CHAT_RESULT_CHARS, MAX_CHAT_SSE_FRAME_CHARS, mergeChatStreamText, parseChatSseFrame } from "@/lib/ai/chat-stream-contract"
 import {
   completeBackgroundChatTurn,
+  checkpointBackgroundChatTurn,
   failBackgroundChatTurn,
   normalizeBackgroundTurnId,
   startBackgroundChatTurn,
 } from "@/lib/server/background-chat-turns"
-import { registerRunningTurn, releaseRunningTurn } from "@/lib/server/turn-cancellation"
+import { registerRunningTurn, releaseRunningTurn, stopRunningTurn } from "@/lib/server/turn-cancellation"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -52,6 +53,7 @@ function parseSseFrame(frame: string, state: { content: string; error: string; d
       factAudit: payload.factAudit ?? null,
       incomplete: payload.incomplete && typeof payload.incomplete === "object" ? payload.incomplete : null,
       selectedModelId: typeof payload.selectedModelId === "string" ? payload.selectedModelId : undefined,
+      artifactDelivery: payload.artifactDelivery && typeof payload.artifactDelivery === "object" ? payload.artifactDelivery : undefined,
     }
   }
 }
@@ -84,6 +86,7 @@ async function persistStreamResult(turnId: string, response: Response, stop?: Ab
     reader = response.body.getReader()
     const decoder = new TextDecoder()
     let buffer = ""
+    let checkpointAt = Date.now()
 
     while (true) {
       const { value, done } = await reader.read()
@@ -98,6 +101,10 @@ async function persistStreamResult(turnId: string, response: Response, stop?: Ab
         boundary = buffer.search(/\r?\n\r?\n/)
       }
       if (buffer.length > MAX_CHAT_SSE_FRAME_CHARS) throw new Error("Background stream frame exceeds the safe size limit")
+      if (!state.done && Date.now() - checkpointAt >= 15_000) {
+        checkpointAt = Date.now()
+        await checkpointBackgroundChatTurn(turnId, { content: state.content, execution: state.execution })
+      }
       if (done) break
     }
     if (buffer.trim()) parseSseFrame(buffer, state)
@@ -155,19 +162,32 @@ export async function POST(request: Request) {
       status: 401, headers: { "cache-control": "private, no-store" },
     })
   }
-  const started = await startBackgroundChatTurn(turnId, entitlement.userId)
+  let started
+  try { started = await startBackgroundChatTurn(turnId, entitlement.userId) }
+  catch {
+    return Response.json({ ok: false, error: "BACKGROUND_STORAGE_UNAVAILABLE", message: "Не удалось надёжно сохранить задачу. Повторите позже; генерация ещё не запущена." }, { status: 503, headers: { "cache-control": "private, no-store", "retry-after": "5" } })
+  }
   if (!started) return Response.json({ ok: false, error: "Этот запрос уже существует. Начните новый." }, { status: 409, headers: { "cache-control": "private, no-store" } })
 
   // Closing the tab must not stop the answer, but the owner's Stop must:
   // the model call listens to the request's own signal and to this one.
   const stop = registerRunningTurn(turnId, entitlement.userId)
-  const release = () => releaseRunningTurn(turnId)
+  let renewing = false
+  const heartbeat = setInterval(() => {
+    if (renewing) return
+    renewing = true
+    void checkpointBackgroundChatTurn(turnId, {}).then(turn => {
+      if (turn?.status === "failed") stopRunningTurn(turnId, entitlement.userId)
+    }).catch(() => { console.warn("[MALIK_BACKGROUND] checkpoint temporarily unavailable") }).finally(() => { renewing = false })
+  }, 20_000)
+  const release = () => { clearInterval(heartbeat); releaseRunningTurn(turnId) }
   let response: Response
   try {
     const headers = new Headers(request.headers)
     if (asynchronous) headers.set("accept", "text/event-stream")
-    const signal = typeof AbortSignal.any === "function" ? AbortSignal.any([request.signal, stop]) : stop
-    request = new Request(request, { headers, signal })
+    // A transport disconnect is not a user cancellation. The account-private
+    // DELETE endpoint owns cancellation, while the persistence branch drains.
+    request = new Request(request, { headers, signal: stop })
     response = await streamPOST(request)
   } catch (error) {
     release()

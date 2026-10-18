@@ -1,5 +1,6 @@
 import {classifyFreshness} from "./freshness-intent"
 import {isExplicitImageEditRequest,isExplicitImageGenerationRequest,isExplicitVideoGenerationRequest} from "./image-intent"
+import {primaryNonMediaArtifact} from "./artifact-intent"
 
 export type OutputFormat="pdf"|"docx"|"pptx"|"xlsx"|"csv"|"txt"|"md"|"html"|"json"|"zip"
 export type ConversationRequirements={language?:"ru"|"kk"|"en"|"mixed";tone?:"formal"|"conversational";audience?:"child"|"expert";length?:"brief"|"detailed";lists?:boolean;formulas?:boolean;presentation?:"table"|"json";format?:OutputFormat}
@@ -81,12 +82,21 @@ export function resolveConversationIntent(input:{prompt:string;messages?:unknown
  const formatOnly=Boolean(current.format&&text.replace(/(?:pdf|word|docx|pptx|xlsx|excel|csv|txt|markdown|md|html|json|zip|ворд|эксель|файл|документ|формат|вместо|формате|сделай|сделаи|хочу|нет|не|теперь|дай|выдай|мне|это|в|на|а|и|пожалуйста|as|a|file|make|give|me|export|no|now|then|the|please|in)/giu,"").replace(/[\s,.!?—-]/g,"").length<3)
  const source=last?{index:last.index,content:last.content,artifactId:last.content.match(/\/api\/os\/artifacts\/(art_[a-zA-Z0-9_-]{3,72})\/export\?format=/)?.[1],tooLarge:last.content.length>400_000}:undefined
  let target:ConversationIntent["target"]="text"
+ const primary=primaryNonMediaArtifact(original)
  const attachments=Array.isArray(input.attachments)?input.attachments.slice(0,32):[]
- if(isExplicitImageEditRequest(original,attachments.some(a=>a?.kind==="image"||String(a?.mime||"").startsWith("image/")))||isExplicitImageGenerationRequest(original))target="image"
- else if(isExplicitVideoGenerationRequest(original))target="video"
- else if(/сайт|website|landing/iu.test(text)&&directCreation)target="website"
- else if(/код|скрипт|component|code|python|typescript|react/iu.test(text)&&directCreation)target="code"
- else if(active.format&&(directCreation||followUp||formatOnly))target="document"
+ if(primary==="spreadsheet"||primary==="presentation"||primary==="document"){
+  if(!active.format&&primary==="presentation")active.format="pptx"
+  // A table requested in chat stays text; only an explicit native file routes
+  // to the exporter. A final XLSX/PPTX cannot be replaced by an illustration.
+  if(active.format&&(directCreation||followUp||formatOnly))target="document"
+ }
+ if(target!=="document"){
+  if(isExplicitImageEditRequest(original,attachments.some(a=>a?.kind==="image"||String(a?.mime||"").startsWith("image/")))||isExplicitImageGenerationRequest(original))target="image"
+  else if(isExplicitVideoGenerationRequest(original))target="video"
+  else if(/сайт|website|landing/iu.test(text)&&directCreation)target="website"
+  else if(/код|скрипт|component|code|python|typescript|react/iu.test(text)&&directCreation)target="code"
+  else if(active.format&&(directCreation||followUp||formatOnly))target="document"
+ }
  let clarification:ConversationIntent["clarification"]
  if(!source&&(formatOnly||REFERENCE.test(text)&&TRANSFORM.test(text)&&!attachments.length))clarification="missing-source"
  let attachmentIndex:number|undefined

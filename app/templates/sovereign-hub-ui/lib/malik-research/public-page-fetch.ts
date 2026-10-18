@@ -21,7 +21,7 @@ export async function publicAddresses(host: string, resolver = lookup, signal?: 
 }
 
 /** Resolve, validate and PIN the DNS address for each redirect; no private-network fetch or rebinding. */
-export async function fetchPublicPage(value: string, signal: AbortSignal, maxBytes = 1024 * 1024): Promise<Response> {
+export async function fetchPublicPage(value: string, signal: AbortSignal, maxBytes = 1024 * 1024, options?: { media?: "image" }): Promise<Response> {
   let target = assertPublicHttpUrl(value)
   if (target.port && !["80", "443"].includes(target.port)) throw new Error("Unsafe page port")
   for (let redirects = 0; redirects <= 3; redirects++) {
@@ -37,12 +37,13 @@ export async function fetchPublicPage(value: string, signal: AbortSignal, maxByt
           if (typeof options === "object" && options.all) callback(null, [pinned])
           else callback(null, pinned.address, pinned.family)
         },
-        headers: { "user-agent": "MALIK-AI-ResearchBot/6.0", accept: "text/html,text/plain,application/json", "accept-encoding": "identity" },
+        headers: { "user-agent": "MALIK-AI-ResearchBot/6.0", accept: options?.media === "image" ? "image/jpeg,image/png,image/webp" : "text/html,text/plain,application/json", "accept-encoding": "identity" },
       }, (incoming) => {
         const status = incoming.statusCode || 502
         const headers = new Headers()
         for (const [name, value] of Object.entries(incoming.headers)) if (value) headers.set(name, Array.isArray(value) ? value.join(", ") : value)
-        if (status >= 300 && status < 400 || /^(?:image|video|audio)\/|application\/pdf/iu.test(headers.get("content-type") || "")) {
+        const mime = headers.get("content-type") || ""
+        if (status >= 300 && status < 400 || /^(?:image|video|audio)\/|application\/pdf/iu.test(mime) && !(options?.media === "image" && /^image\/(?:jpeg|png|webp)(?:;|$)/iu.test(mime))) {
           incoming.destroy(); resolve(new Response(null, { status, headers })); return
         }
         if (Number(headers.get("content-length")) > maxBytes || headers.has("content-encoding") && headers.get("content-encoding") !== "identity") {

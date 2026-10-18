@@ -1,4 +1,5 @@
 import { allowsAnswerPhotoHints, isAbstractPhotoSubject, planReferenceVisuals, referenceSearchTopic, type ReferenceVisualPlan } from "./reference-visual-policy"
+import { resolveVisualContext } from "./visual-context"
 
 type PhotoSubject = {
   name: string
@@ -70,8 +71,8 @@ export function stripAnswerPhotoHints(text: string): string {
   return output.join("\n").trim()
 }
 
-export function groundedAnswerPhotoPlans(subjects: PhotoSubject[], question: string, answer: string, hasAttachment = false): ReferenceVisualPlan[] {
-  if (!allowsAnswerPhotoHints(question, hasAttachment)) return []
+export function groundedAnswerPhotoPlans(subjects: PhotoSubject[], question: string, answer: string, hasAttachment = false, previousQuestion = ""): ReferenceVisualPlan[] {
+  if (!allowsAnswerPhotoHints(question, hasAttachment, previousQuestion)) return []
   const normalize = (text: string) => text.normalize("NFKC").toLowerCase().replace(/[`*_]/gu, "").replace(/\s+/gu, " ")
   const visible = normalize(stripAnswerPhotoHints(answer).replace(/```[\s\S]*?(?:```|$)/gu, ""))
   const seen = new Set<string>()
@@ -96,7 +97,7 @@ export function groundedAnswerPhotoPlans(subjects: PhotoSubject[], question: str
     }
     seen.add(name)
     return [{ topic: subject.name, queries: [...new Set([referenceSearchTopic(subject.query), referenceSearchTopic(subject.name)])],
-      explicit: true, entity: subject.kind !== "topic" || personQuestion, person: subject.kind === "person" || personQuestion, kind: "reference" as const, layout: subject.layout,
+      explicit: true, entity: subject.kind !== "topic" || personQuestion, person: subject.kind === "person" || personQuestion, kind: "reference" as const, layout: subject.layout, context: resolveVisualContext(question, previousQuestion),
       ...(subject.caption ? { caption: subject.caption } : {}) }]
   })
 }
