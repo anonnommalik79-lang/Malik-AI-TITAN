@@ -1,8 +1,9 @@
 "use client"
 
-import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent } from "react"
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent } from "react"
 import { createPortal } from "react-dom"
-import { deckTheme, themeCssVariables } from "@/lib/presentations/themes"
+import { deckFontsHref, deckTheme, themeCssVariables, type DeckTheme } from "@/lib/presentations/themes"
+import { HERO_SLOT, backdropDataUrl, bulletsVariant, coverLayout, photoBoxStyle, sidePhotoLayout, statOnTiles, type PhotoSlot } from "@/lib/presentations/design"
 import type { Slide, ThemeId } from "@/lib/presentations/types"
 import { formatCounted, splitNumber } from "@/lib/presentations/count-up"
 import { DECK_ICONS } from "@/lib/presentations/icon-components"
@@ -230,10 +231,27 @@ function Credit({ text }: { text?: string }) {
   return text ? <span className="deck-credit">{text}</span> : null
 }
 
+/**
+ * How a placed photo is finished on screen — the same shadow, hard offset or
+ * line around it that the PowerPoint export bakes into the picture.
+ */
+function frameStyle(slot: PhotoSlot, theme: DeckTheme): CSSProperties {
+  const { frame } = slot
+  const style: CSSProperties = {}
+  if (frame.shadow === "soft") style.boxShadow = `0 30px 70px rgba(0, 0, 0, ${theme.dark ? 0.45 : 0.2})`
+  if (frame.shadow === "hard") style.boxShadow = `10px 10px 0 #${theme.text}`
+  if (frame.stroke) {
+    style.outline = `${frame.stroke.width}px solid #${frame.stroke.color}`
+    style.outlineOffset = frame.stroke.offset ? `${frame.stroke.offset}px` : `-${frame.stroke.width}px`
+  }
+  return style
+}
+
 /** The picture of a slide, or a quiet placeholder until one arrives. */
-function Photo({ url, credit, className = "deck-image" }: { url?: string; credit?: string; className?: string }) {
+function Photo({ url, credit, className = "deck-image", slot, theme }: { url?: string; credit?: string; className?: string; slot?: PhotoSlot; theme?: DeckTheme }) {
+  const style = slot && theme ? ({ ...photoBoxStyle(slot), ...frameStyle(slot, theme) } as CSSProperties) : undefined
   return (
-    <div className={className} data-empty={!url}>
+    <div className={className} data-empty={!url} data-placed={Boolean(slot)} style={style}>
       {url ? <img src={url} alt="" loading="eager" decoding="async" /> : <div className="deck-image-empty" />}
       <Credit text={url ? credit : undefined} />
     </div>
@@ -242,6 +260,7 @@ function Photo({ url, credit, className = "deck-image" }: { url?: string; credit
 
 function SlideBody({
   slide,
+  theme,
   index,
   total,
   editable,
@@ -252,6 +271,7 @@ function SlideBody({
   pace,
 }: {
   slide: Slide
+  theme: DeckTheme
   index: number
   total: number
   editable: boolean
@@ -271,23 +291,25 @@ function SlideBody({
   const page = slide.layout === "title" || slide.layout === "closing" || slide.layout === "hero" ? null : <div className="deck-page">{index + 1} / {total}</div>
 
   switch (slide.layout) {
-    case "title":
+    case "title": {
+      const cover = coverLayout(theme)
       return (
-        <div className="deck-title-slide" data-image={Boolean(slide.imageUrl)} style={{ position: "absolute", inset: 0 }}>
-          <div className="deck-copy">
+        <div className="deck-title-slide" data-image={Boolean(slide.imageUrl)} data-cover={theme.cover} style={{ position: "absolute", inset: 0 }}>
+          <div className="deck-copy" style={slide.imageUrl ? { right: cover.textRight } : undefined}>
             {slide.kicker || editable ? <div className="deck-kicker">{text(slide.kicker || "", "kicker", "", "Надзаголовок")}</div> : null}
             <h1 className="deck-h">{text(slide.title, "title", "", "Заголовок")}</h1>
             <div className="deck-title-rule" />
             {slide.subtitle || editable ? <p className="deck-sub" style={{ margin: "26px 0 0" }}>{text(slide.subtitle || "", "subtitle", "", "Подзаголовок")}</p> : null}
           </div>
-          {slide.imageUrl ? <Photo url={slide.imageUrl} credit={slide.imageCredit} /> : null}
+          {slide.imageUrl ? <Photo url={slide.imageUrl} credit={slide.imageCredit} slot={cover.slot} theme={theme} /> : null}
         </div>
       )
+    }
 
     case "hero":
       return (
         <div className="deck-hero" data-image={Boolean(slide.imageUrl)} style={{ position: "absolute", inset: 0 }}>
-          <Photo url={slide.imageUrl} credit={slide.imageCredit} className="deck-hero-photo" />
+          <Photo url={slide.imageUrl} credit={slide.imageCredit} className="deck-hero-photo" slot={HERO_SLOT} theme={theme} />
           <div className="deck-hero-shade" />
           <div className="deck-copy">
             {slide.kicker || editable ? <div className="deck-kicker">{text(slide.kicker || "", "kicker", "", "Надзаголовок")}</div> : null}
@@ -389,7 +411,7 @@ function SlideBody({
             <div className="deck-head"><h2 className="deck-h">{text(slide.title, "title")}</h2></div>
             {slide.intro ? <p className="deck-intro">{text(slide.intro, "intro")}</p> : null}
             <div className="deck-body">
-              <div className="deck-rows" data-count={slide.points.length}>
+              <div className="deck-rows" data-count={slide.points.length} data-variant={bulletsVariant(theme, slide, index)}>
                 {slide.points.map((point, i) => (
                   <div className="deck-row" key={i}>
                     <b>{String(i + 1).padStart(2, "0")}</b>
@@ -441,7 +463,9 @@ function SlideBody({
       const count = slide.stats.length
       const cellWidth = (1136 - 40 * (count - 1)) / count
       const longest = Math.max(...slide.stats.map((stat) => stat.value.length), 2)
-      const valueSize = Math.min(count === 1 ? 210 : 136, Math.floor(cellWidth / (longest * 0.6)))
+      // Sized by the theme's own figure width (Unbounded is far wider than
+      // Cormorant), minus the tile padding when stats sit on cards.
+      const valueSize = Math.min(count === 1 ? 210 : 136, Math.floor((cellWidth - (statOnTiles(theme) ? 62 : 0)) / (longest * theme.figureWidth)))
       return (
         <>
           <div className="deck-pad">
@@ -488,11 +512,12 @@ function SlideBody({
         </div>
       )
 
-    case "image-text":
+    case "image-text": {
+      const side = sidePhotoLayout(theme, slide.imageSide)
       return (
         <div className="deck-imgtext" data-side={slide.imageSide} style={{ position: "absolute", inset: 0 }}>
-          <Photo url={slide.imageUrl} credit={slide.imageCredit} />
-          <div className="deck-copy">
+          <Photo url={slide.imageUrl} credit={slide.imageCredit} slot={side.slot} theme={theme} />
+          <div className="deck-copy" style={{ left: side.copy.left, right: side.copy.right }}>
             <h2 className="deck-h">{text(slide.title, "title")}</h2>
             {slide.body ? <p className="deck-text">{text(slide.body, "body")}</p> : null}
             {slide.points.length ? (
@@ -508,6 +533,7 @@ function SlideBody({
           {page}
         </div>
       )
+    }
 
     case "cards":
       return (
@@ -633,6 +659,27 @@ function SlideBody({
 }
 
 let sharedSheet: CSSStyleSheet | null | undefined
+let fontsRequested = false
+
+/**
+ * The themes' typefaces, requested once for the whole page. Fonts declared by
+ * the document are available inside every slide's shadow root, and the
+ * browser downloads only the faces a visible slide actually uses.
+ */
+function ensureDeckFonts() {
+  if (fontsRequested || typeof document === "undefined") return
+  fontsRequested = true
+  if (document.querySelector("link[data-deck-fonts]")) return
+  const preconnect = document.createElement("link")
+  preconnect.rel = "preconnect"
+  preconnect.href = "https://fonts.gstatic.com"
+  preconnect.crossOrigin = "anonymous"
+  const link = document.createElement("link")
+  link.rel = "stylesheet"
+  link.href = deckFontsHref()
+  link.setAttribute("data-deck-fonts", "")
+  document.head.append(preconnect, link)
+}
 
 /** One parsed stylesheet, adopted by every slide's shadow root. */
 function deckSheet() {
@@ -654,6 +701,7 @@ function useShadowRoot() {
   useLayoutEffect(() => {
     const host = hostRef.current
     if (!host) return
+    ensureDeckFonts()
     const shadow = host.shadowRoot ?? host.attachShadow({ mode: "open" })
     const sheet = deckSheet()
     if (sheet && "adoptedStyleSheets" in shadow) {
@@ -725,21 +773,41 @@ export function SlideCanvas({
     }
   }, [root, slide, theme, build])
   const typeMs = build ? slideBuildTiming(slide, pace).type : 0
+  const look = deckTheme(theme)
+  // The background art is one SVG per theme, layout and position — the same
+  // picture the PowerPoint export rasterises into the slide background.
+  const art = useMemo(() => backdropDataUrl(look, slide.layout, index), [look, slide.layout, index])
   // --t is the headline's typing time before pace; the stylesheet applies --k.
   const style = {
-    ...themeCssVariables(deckTheme(theme)),
+    ...themeCssVariables(look),
     ...(build ? { "--t": `${Math.round(typeMs / pace)}ms`, "--k": String(pace) } : {}),
   } as CSSProperties
   return (
     <div ref={hostRef} className="deck-host" data-layout={slide.layout} data-preserve-brand-color="true">
       {root
         ? createPortal(
-            <div className="deck-slide" style={style} data-layout={slide.layout} data-density={slideDensity(slide)} data-dark={deckTheme(theme).dark} data-editable={editable && !build} data-build={build}>
-              {/* Soft shapes of light behind the content — what keeps a text
-                  slide from looking like a document. Drawn per layout in CSS. */}
-              <div className="deck-deco" aria-hidden="true"><i /><b /></div>
+            <div
+              className="deck-slide"
+              style={style}
+              data-layout={slide.layout}
+              data-density={slideDensity(slide)}
+              data-dark={look.dark}
+              data-theme={look.id}
+              data-surface={look.surfaceStyle}
+              data-photo={look.photo}
+              data-case={look.titleCase}
+              data-gradient={look.titleGradient}
+              data-tiles={statOnTiles(look)}
+              data-editable={editable && !build}
+              data-build={build}
+            >
+              {/* The theme's background art — aurora light, a neon grid, an
+                  ornament, editorial rules — what keeps a text slide from
+                  looking like a document. Drawn by design.ts. */}
+              <div className="deck-art" aria-hidden="true" style={{ backgroundImage: `url("${art}")` }} />
               <SlideBody
                 slide={slide}
+                theme={look}
                 index={index}
                 total={total}
                 editable={editable && !build}

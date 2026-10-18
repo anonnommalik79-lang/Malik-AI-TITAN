@@ -16,6 +16,7 @@ import {
   type SlideStat,
   type SlideStep,
 } from "@/lib/presentations/types"
+import { isThemeId } from "@/lib/presentations/themes"
 import { routingScope } from "@/lib/ai/prompt-shape"
 
 /**
@@ -314,9 +315,14 @@ function toColumn(value: unknown) {
   return heading && points ? { heading, points } : null
 }
 
-/** Pictures are https addresses or inline data; nothing else reaches an <img>. */
+/**
+ * Pictures are https addresses, inline data, or a static image this site
+ * serves itself (the studio's own sample photos); nothing else reaches an <img>.
+ */
 function safeImageUrl(value: unknown) {
-  return typeof value === "string" && /^(https:\/\/|data:image\/)/.test(value) && value.length <= 3_000_000 ? value : undefined
+  if (typeof value !== "string" || value.length > 3_000_000) return undefined
+  if (/^(https:\/\/|data:image\/)/.test(value)) return value
+  return /^\/(?!\/)[\w\-./%]+\.(?:png|jpe?g|webp|gif|avif)$/i.test(value) ? value : undefined
 }
 
 const ICON_ALIASES: Record<string, DeckIconName> = {
@@ -607,7 +613,10 @@ export function normalizeOutline(value: unknown, fallbackTitle: string, count: n
   const last = items[items.length - 1]
   if (last.layout !== "closing" && last.layout !== "quote" && last.layout !== "hero") items[items.length - 1] = { ...last, layout: "closing" }
 
-  return { title, items }
+  // The planner may suggest a design system for the topic; only a known
+  // theme id is kept, so a made-up name can never reach the renderer.
+  const theme = isThemeId(raw.theme) ? raw.theme : undefined
+  return theme ? { title, items, theme } : { title, items }
 }
 
 /* ------------------------------------------------------------ the request */
@@ -684,7 +693,6 @@ export function deckCost(slideCount: number) {
 }
 
 const DECK_LANGUAGES: DeckLanguage[] = ["ru", "kk", "en"]
-const THEME_KEYS = ["obsidian", "paper", "ember", "forest", "sand", "royal"] as const
 
 /**
  * A whole deck, read back from anywhere it could have been changed: a
@@ -700,7 +708,7 @@ export function normalizeDeck(value: unknown): Deck | null {
     .slice(0, 30)
   if (!slides.length) return null
 
-  const theme = (THEME_KEYS as readonly string[]).includes(String(raw.theme)) ? raw.theme as Deck["theme"] : "obsidian"
+  const theme: Deck["theme"] = isThemeId(raw.theme) ? raw.theme : "obsidian"
   const language = DECK_LANGUAGES.includes(raw.language as DeckLanguage) ? raw.language as DeckLanguage : "ru"
   const now = Date.now()
   return {

@@ -890,6 +890,183 @@ check("the model is asked for precise photo search words, and cannot set a pictu
   assert.match(modelCalls[0].systemPrompt, /encyclopedic photo/)
 })
 
+/* ========================================================= design systems */
+
+const design = load("lib/presentations/design.ts")
+
+check("thirteen design systems, each a different visual language — not one template in six colours", () => {
+  assert.equal(themes.THEME_IDS.length, 13)
+  const looks = new Set(themes.THEME_IDS.map((id) => {
+    const t = themes.DECK_THEMES[id]
+    return `${t.backdrop}|${t.surfaceStyle}|${t.cover}|${t.headingFont}`
+  }))
+  assert.equal(looks.size, 13, "no two themes share background art, surface, cover and typeface")
+  assert.ok(new Set(themes.THEME_IDS.map((id) => themes.DECK_THEMES[id].backdrop)).size >= 12)
+  for (const id of themes.THEME_IDS) {
+    const t = themes.DECK_THEMES[id]
+    assert.match(t.accent2, /^[0-9A-F]{6}$/, `${id}.accent2 is PowerPoint-safe hex`)
+    assert.ok(t.webFonts.length >= 1 && t.figureWidth > 0.4)
+    assert.ok(["Arial", "Arial Black", "Georgia", "Trebuchet MS", "Verdana", "Calibri", "Cambria", "Consolas"].includes(t.pptxHeadingFont), `${id} uses an Office font in PowerPoint`)
+  }
+  assert.match(themes.deckFontsHref(), /^https:\/\/fonts\.googleapis\.com\/css2\?family=/)
+})
+
+check("background art is one valid SVG per slide, different along the deck, with no external references", () => {
+  const seen = new Set()
+  for (const id of themes.THEME_IDS) {
+    for (const [layout, index] of [["title", 0], ["bullets", 1], ["features", 2], ["section", 5], ["closing", 9]]) {
+      const svg = design.backdropSvg(themes.DECK_THEMES[id], layout, index)
+      assert.match(svg, /^<svg xmlns="http:\/\/www\.w3\.org\/2000\/svg" width="1280" height="720"/)
+      assert.ok(svg.endsWith("</svg>"))
+      assert.doesNotMatch(svg, /NaN|undefined|Infinity|<text|<image|href="http|<filter/, `${id}/${layout} art is self-contained`)
+      seen.add(svg)
+    }
+  }
+  assert.ok(seen.size >= 13 * 4, `covers, chapters and closings get their own art (${seen.size} distinct)`)
+  assert.equal(design.backdropSvg(themes.DECK_THEMES.aurora, "bullets", 3), design.backdropSvg(themes.DECK_THEMES.aurora, "bullets", 3), "the art is deterministic")
+  assert.match(design.backdropDataUrl(themes.DECK_THEMES.steppe, "title", 0), /^data:image\/svg\+xml;base64,/)
+})
+
+check("the screen and PowerPoint place photos from the same geometry", () => {
+  const renderer = read("components/sovereign/presentations/SlideRenderer.tsx")
+  assert.match(renderer, /coverLayout\(theme\)/)
+  assert.match(renderer, /sidePhotoLayout\(theme, slide\.imageSide\)/)
+  assert.match(renderer, /backdropDataUrl\(look, slide\.layout, index\)/)
+  for (const id of themes.THEME_IDS) {
+    const { slot, textRight } = design.coverLayout(themes.DECK_THEMES[id])
+    assert.ok(slot.box.x + slot.box.w <= 1280 && slot.box.y >= 0 && slot.box.y + slot.box.h <= 720, `${id} cover photo stays on the canvas`)
+    assert.ok(1280 - textRight > 72 + 400, `${id} cover leaves the title a real column`)
+    const area = design.bakeBox(slot)
+    assert.ok(area.x >= 0 && area.y >= 0 && area.x + area.w <= 1280 && area.y + area.h <= 720)
+  }
+  const gallery = design.gallerySlots(themes.DECK_THEMES.aurora, 3, false)
+  for (let i = 1; i < gallery.length; i += 1) {
+    const left = design.bakeBox(gallery[i - 1])
+    const right = design.bakeBox(gallery[i])
+    assert.ok(left.x + left.w <= right.x + 12, "a gallery photo's baked frame never covers its neighbour")
+  }
+})
+
+check("bullets alternate between rows and tiles along the deck, never for long text", () => {
+  const slide = deck.normalizeSlide(SAMPLES.bullets)
+  const variants = new Set([0, 1, 2, 3].map((i) => design.bulletsVariant(themes.DECK_THEMES.obsidian, slide, i)))
+  assert.deepEqual([...variants].sort(), ["grid", "rows"])
+  const long = { ...slide, points: slide.points.map((p) => ({ ...p, body: "Очень подробное пояснение ".repeat(6) })) }
+  assert.equal(design.bulletsVariant(themes.DECK_THEMES.aurora, long, 1), "rows")
+})
+
+check("Auto picks a theme by topic, and the planner may suggest one that is validated", () => {
+  assert.equal(themes.pickTheme("История Абылай хана"), "steppe")
+  assert.equal(themes.pickTheme("Урок для 5 класса о планетах"), "candy")
+  assert.equal(themes.pickTheme("Итоги квартала отдела продаж"), "ocean")
+  assert.equal(themes.pickTheme("Питч-дек AI-стартапа для инвесторов"), "aurora")
+  assert.equal(themes.pickTheme("Кофейня у метро"), "sand")
+  assert.equal(themes.pickTheme("Хакатон по кибербезопасности"), "cyber")
+  assert.equal(themes.pickTheme("Неделя моды в Алматы"), "editorial")
+  assert.equal(themes.pickTheme("Питч-дек кофейни в Алматы для инвесторов"), "sand", "a city name alone does not pick the heritage style")
+  assert.equal(themes.pickTheme("Просто тема", "friendly"), "sunset")
+  const items = Array.from({ length: 6 }, (_, i) => ({ title: `Слайд ${i}`, point: "", layout: "bullets" }))
+  assert.equal(deck.normalizeOutline({ title: "x", theme: "royal", items }, "x", 6).theme, "royal")
+  assert.equal(deck.normalizeOutline({ title: "x", theme: "neon-made-up", items }, "x", 6).theme, undefined)
+  assert.match(read("lib/presentations/prompts.ts"), /"theme":"<design system id>"/)
+  assert.match(read("components/sovereign/presentations/PresentationStudio.tsx"), /pickTheme\(clean, toneValue\)/)
+})
+
+check("decks keep the studio's own sample photos but no other relative address", () => {
+  assert.equal(deck.normalizeSlide({ ...SAMPLES.hero, imageUrl: "/presentations/showcase/strategy.webp" }).imageUrl, "/presentations/showcase/strategy.webp")
+  assert.equal(deck.normalizeSlide({ ...SAMPLES.hero, imageUrl: "//evil.test/x.png" }).imageUrl, undefined)
+  assert.equal(deck.normalizeSlide({ ...SAMPLES.hero, imageUrl: "/api/secret" }).imageUrl, undefined)
+  assert.equal(deck.normalizeSlide({ ...SAMPLES.hero, imageUrl: "javascript:alert(1)" }).imageUrl, undefined)
+})
+
+/* ============================================================ pptx fidelity */
+
+check("text is fitted to its box: a long line shrinks, a short one keeps its size", () => {
+  const big = pptx.fitFontSize({ paragraphs: ["Коротко"], widthPt: 400, heightPt: 60, font: "Arial", bold: true, max: 32 })
+  assert.equal(big, 32)
+  const long = pptx.fitFontSize({ paragraphs: ["Очень длинный заголовок, который никак не помещается в одну строку на слайде ".repeat(3)], widthPt: 400, heightPt: 60, font: "Arial", bold: true, max: 32 })
+  assert.ok(long < 20, `long text shrank to ${long}`)
+  const wide = pptx.fitFontSize({ paragraphs: ["Одинаковый текст для двух шрифтов"], widthPt: 300, heightPt: 40, font: "Arial Black", max: 40 })
+  const narrow = pptx.fitFontSize({ paragraphs: ["Одинаковый текст для двух шрифтов"], widthPt: 300, heightPt: 40, font: "Calibri", max: 40 })
+  assert.ok(wide < narrow, "a wider Office font is set smaller")
+  assert.doesNotMatch(read("lib/presentations/pptx.ts"), /fit: "shrink" \}\)\s*$/m, "fitting never relies on PowerPoint's autofit alone")
+})
+
+check("with rasterised assets the file holds no SVG picture, only PNG and JPEG", async () => {
+  const JSZip = require("jszip")
+  const sharp = require("sharp")
+  const slides = Object.values(SAMPLES).map((raw) => deck.normalizeSlide(raw))
+  const theme = themes.DECK_THEMES.aurora
+  const backdrops = new Map()
+  for (const [index, slide] of slides.entries()) {
+    const jpg = await sharp(Buffer.from(design.backdropSvg(theme, slide.layout, index))).resize(320, 180).jpeg().toBuffer()
+    backdrops.set(slide.id, `data:image/jpeg;base64,${jpg.toString("base64")}`)
+  }
+  const png = await sharp(Buffer.from(pptx.iconSvg("zap", theme.accent, 64))).png().toBuffer()
+  const file = await pptx.buildPptx({ title: "Аврора", theme: "aurora", slides }, { backdrops, icon: () => `data:image/png;base64,${png.toString("base64")}` })
+  const zip = await JSZip.loadAsync(file)
+  const media = Object.keys(zip.files).filter((name) => name.startsWith("ppt/media/") && !zip.files[name].dir)
+  assert.ok(media.length >= slides.length, "every slide has its background art")
+  assert.ok(media.every((name) => /\.(png|jpe?g)$/.test(name)), `no SVG media: ${media.filter((n) => !/\.(png|jpe?g)$/.test(n)).join(", ")}`)
+  const xml = (await Promise.all(Object.keys(zip.files).filter((n) => /^ppt\/slides\/slide\d+\.xml$/.test(n)).map((n) => zip.file(n).async("string")))).join(" ")
+  assert.doesNotMatch(xml, /svgBlip/)
+  assert.match(xml, /<p:bg><p:bgPr><a:blipFill/, "the art is the slide background itself")
+})
+
+check("photo jobs cover every picture on the deck with the slot it fills", () => {
+  const slides = [
+    { ...deck.normalizeSlide(SAMPLES.title), imageUrl: "https://upload.test/a.jpg" },
+    { ...deck.normalizeSlide(SAMPLES.hero), imageUrl: "https://upload.test/b.jpg" },
+    deck.normalizeSlide({ ...SAMPLES.gallery, items: SAMPLES.gallery.items.map((item, i) => ({ ...item, image: { url: `https://upload.test/g${i}.jpg` } })) }),
+  ]
+  const jobs = pptx.deckPhotoJobs({ theme: "steppe", slides })
+  assert.equal(jobs.length, 5)
+  assert.equal(jobs[0].slot.mask.kind, "arch", "the steppe cover is an arch")
+  assert.equal(jobs[1].slot.shade, "hero", "words over a full-bleed photo get the shade")
+  assert.deepEqual(jobs.slice(2).map((job) => job.key), [0, 1, 2].map((i) => `${slides[2].id}#${i}`))
+})
+
+check("the server fallback rasterises everything and fits the response budget", async () => {
+  const JSZip = require("jszip")
+  const sharp = require("sharp")
+  const assets = load("lib/server/pptx-assets.ts")
+  const photo = await sharp({ create: { width: 1600, height: 1000, channels: 3, background: "#884422" } }).jpeg().toBuffer()
+  const slides = [
+    { ...deck.normalizeSlide(SAMPLES.title), imageUrl: "https://upload.test/a.jpg" },
+    deck.normalizeSlide(SAMPLES.features),
+    { ...deck.normalizeSlide(SAMPLES.hero), imageUrl: "https://upload.test/b.jpg" },
+  ]
+  const photos = new Map([[slides[0].id, photo], [slides[2].id, photo]])
+  const roomy = await assets.buildServerPptx({ title: "x", theme: "editorial", slides }, photos)
+  assert.equal(roomy.tier, 0)
+  const zip = await JSZip.loadAsync(roomy.file)
+  const media = Object.keys(zip.files).filter((name) => name.startsWith("ppt/media/") && !zip.files[name].dir)
+  assert.ok(media.length >= 5 && media.every((name) => /\.(png|jpe?g)$/.test(name)))
+  const tight = await assets.buildServerPptx({ title: "x", theme: "editorial", slides }, photos, 60_000)
+  assert.ok(tight.tier > 0, "a small budget gets a lighter file")
+  assert.match(read("app/api/presentations/export/route.ts"), /buildServerPptx\(deck, photos, renderResponseBudgetBytes\(\)\)/)
+})
+
+check("the studio builds the file in the browser first and keeps the server as a fallback", () => {
+  const studio = read("components/sovereign/presentations/PresentationStudio.tsx")
+  assert.match(studio, /import\("@\/lib\/presentations\/pptx-browser"\)/)
+  assert.match(studio, /fetch\("\/api\/presentations\/export"/)
+  const browser = read("lib/presentations/pptx-browser.ts")
+  assert.match(browser, /createImageBitmap|loadImage/)
+  assert.match(browser, /bakePhoto/)
+  assert.match(browser, /canvasMeasure/)
+  assert.match(read("next.config.mjs"), /IgnorePlugin\(\{ resourceRegExp: \/\^node:\(fs\|https\)\$\/, contextRegExp: \/pptxgenjs\/ \}\)/)
+  assert.match(read("app/api/presentations/export/route.ts"), /export async function GET\(request: Request\)/, "a one-photo proxy for hosts without CORS")
+})
+
+check("the style picker shows every theme as a real slide, and Auto is the default", () => {
+  const studio = read("components/sovereign/presentations/PresentationStudio.tsx")
+  assert.match(studio, /useState<ThemeChoice>\("auto"\)/)
+  assert.match(studio, /className="ps-style-gallery"/)
+  assert.match(studio, /<SlideFrame slide=\{STYLE_SAMPLE\} theme=\{id\}/)
+  assert.match(studio, /nextTheme\(value\)/)
+})
+
 /* =================================================================== pptx */
 
 check("exports a real PowerPoint file with every slide, the chart, the table and the notes", async () => {
@@ -910,7 +1087,7 @@ check("exports a real PowerPoint file with every slide, the chart, the table and
   assert.match(allText, /000000/, "the theme background made it into the file")
 })
 
-check("feature icons reach PowerPoint as real vector drawings", () => {
+check("feature icons are drawn from the same vector the screen uses", () => {
   const { createElement } = require("react")
   const icons = load("lib/presentations/icon-components.ts").DECK_ICONS
   const svg = pptx.svgMarkup(createElement(icons.rocket, { size: 96, color: "#FFFFFF", strokeWidth: 1.8 }))

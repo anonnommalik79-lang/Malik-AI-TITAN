@@ -31,8 +31,14 @@ const nextConfig = {
   outputFileTracingRoot: projectRoot,
   outputFileTracingIncludes: { "/api/work/*": ["./assets/fonts/*.ttf"], "/api/os/artifacts/*/export": ["./assets/fonts/*.ttf"] },
   // Optional local verification on disk-constrained worktrees; normal deploys keep caching.
-  webpack(config) {
+  webpack(config, { isServer, webpack }) {
     if (process.env.MALIK_BUILD_NO_CACHE === "1") config.cache = false;
+    // The presentation studio builds .pptx files in the browser. PptxGenJS
+    // only reaches for node:fs / node:https when it runs under Node, behind
+    // a runtime check, so the browser bundle must not try to include them.
+    if (!isServer) {
+      config.plugins.push(new webpack.IgnorePlugin({ resourceRegExp: /^node:(fs|https)$/, contextRegExp: /pptxgenjs/ }));
+    }
     return config;
   },
   async headers() {

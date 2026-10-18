@@ -2,21 +2,52 @@ import PptxGenJSModule from "pptxgenjs"
 import { createElement } from "react"
 import { DECK_ICONS } from "@/lib/presentations/icon-components"
 import { deckTheme, type DeckTheme } from "@/lib/presentations/themes"
+import {
+  BODY_BOTTOM,
+  BODY_TOP,
+  CANVAS_H,
+  CANVAS_W,
+  HEAD_H,
+  HEAD_TOP,
+  HERO_SLOT,
+  PAD,
+  bulletsVariant,
+  coverLayout,
+  gallerySlots,
+  sidePhotoLayout,
+  statOnTiles,
+  type Box,
+  type PhotoSlot,
+} from "@/lib/presentations/design"
 import { IMAGE_LAYOUTS, type Deck, type DeckIconName, type Slide } from "@/lib/presentations/types"
 import { headlineScale, slideDensity, type SlideDensity } from "@/lib/presentations/visual-fit"
 
 /**
  * The deck as a real PowerPoint file.
  *
- * Every slide is built from native shapes, text boxes, a table and a chart —
- * not a screenshot pasted onto a slide — so the file opens in PowerPoint,
- * Keynote and Google Slides as something that can still be edited: the text
- * is text, the chart is a chart with its data inside it, and the speaker notes
- * are in the notes pane where a presenter expects them.
+ * Every slide is built from native text boxes, shapes, a table and a chart —
+ * the text is text, the chart keeps its data, the notes are in the notes pane —
+ * on top of the theme's background art, so the file opens in PowerPoint,
+ * Keynote, Google Slides and LibreOffice looking like the deck on screen and
+ * still editable.
  *
- * The geometry mirrors the on-screen renderer (16:9, same margins, same type
- * hierarchy, same theme colours from lib/presentations/themes.ts), so what
- * was approved on screen is what gets presented.
+ * Three things used to break a downloaded deck, and each is handled here:
+ *
+ *  - Text overflowing its box. PowerPoint's "shrink on overflow" is only
+ *    applied once someone edits the text, so a file that relies on it opens
+ *    with headlines spilling over photos. Every box here gets a font size
+ *    computed to fit — measured with the browser's real font metrics when the
+ *    file is built in the browser, estimated from a metrics table otherwise.
+ *  - Vector art. PptxGenJS cannot make the PNG fallback an SVG needs when it
+ *    runs on a server, and every app but PowerPoint 365 then shows a broken
+ *    picture. Nothing here is SVG: the background art, icons and photos
+ *    arrive rasterised (see pptx-browser.ts and the export route).
+ *  - Stretched photos. A photo is cut to its box before it is placed, with
+ *    its rounded, arched or diagonal edge and its shadow baked in, so it is
+ *    never squashed into a frame of another shape.
+ *
+ * Geometry is the screen's: the 1280 × 720 canvas from design.ts, at 96 px
+ * per inch, which is exactly PowerPoint's 13.333 × 7.5 inch wide slide.
  */
 
 type PptxInstance = {
@@ -26,11 +57,11 @@ type PptxInstance = {
   company: string
   subject: string
   addSlide: () => PptxSlide
-  write: (options: { outputType: "nodebuffer" }) => Promise<unknown>
+  write: (options: { outputType: "nodebuffer" | "blob" }) => Promise<unknown>
 }
 
 type PptxSlide = {
-  background: { color: string }
+  background: { color?: string; data?: string; path?: string }
   addText: (text: unknown, options: Record<string, unknown>) => void
   addShape: (shape: string, options: Record<string, unknown>) => void
   addImage: (options: Record<string, unknown>) => void
@@ -41,97 +72,747 @@ type PptxSlide = {
 
 const PptxGenJS = ((PptxGenJSModule as unknown as { default?: unknown }).default || PptxGenJSModule) as unknown as new () => PptxInstance
 
-/* LAYOUT_WIDE is 13.333 × 7.5 inches. */
-const SLIDE_W = 13.333
-const SLIDE_H = 7.5
-const M = 0.75
-const CONTENT_W = SLIDE_W - M * 2
-const HEAD_Y = 0.62
-const HEAD_H = 1.25
-const BODY_Y = 2.15
-const BODY_H = SLIDE_H - BODY_Y - 0.75
+/* ------------------------------------------------------------------ inputs */
 
-type Ctx = { slide: PptxSlide; theme: DeckTheme; density: SlideDensity; index: number; total: number }
+/** Width of `text` set at 1 pt, in points. */
+export type TextMeasure = (text: string, font: string, bold: boolean) => number
 
-function heading(ctx: Ctx, text: string, options: Record<string, unknown> = {}) {
-  ctx.slide.addText(text, {
-    x: M, y: HEAD_Y, w: CONTENT_W, h: HEAD_H,
-    fontFace: ctx.theme.pptxHeadingFont, fontSize: 32, bold: true,
-    color: ctx.theme.text, valign: "bottom", fit: "shrink", margin: 0,
-    ...options,
+/** A picture ready to place: its data URL and the canvas box (px) it covers. */
+export type PlacedImage = { data: string; box?: Box; baked?: boolean }
+
+export type PptxAssets = {
+  /** Photos by slot key: a slide id, or "slideId#index" for a gallery photo. */
+  images?: Map<string, string | PlacedImage>
+  /** Each slide's background art, rasterised, by slide id. */
+  backdrops?: Map<string, string>
+  /** A raster (PNG) icon for a feature card. */
+  icon?: (name: DeckIconName, color: string) => string | undefined
+  /** Real text metrics; the built-in table is used without it. */
+  measure?: TextMeasure
+}
+
+/** Every photo a deck shows, with the slot it is placed in. */
+export type PhotoJob = { key: string; url: string; slideIndex: number; slot: PhotoSlot; layout: Slide["layout"] }
+
+export function deckPhotoJobs(deck: Pick<Deck, "theme" | "slides">): PhotoJob[] {
+  const theme = deckTheme(deck.theme)
+  return deck.slides.flatMap((slide, slideIndex): PhotoJob[] => {
+    if (slide.layout === "gallery") {
+      const slots = gallerySlots(theme, slide.items.length, Boolean(slide.intro))
+      return slide.items.flatMap((item, i): PhotoJob[] => (item.image?.url ? [{ key: `${slide.id}#${i}`, url: item.image.url, slideIndex, slot: slots[i], layout: slide.layout }] : []))
+    }
+    if (!IMAGE_LAYOUTS.has(slide.layout) || !slide.imageUrl) return []
+    const slot = slide.layout === "hero"
+      ? HERO_SLOT
+      : slide.layout === "title"
+        ? coverLayout(theme).slot
+        : sidePhotoLayout(theme, slide.layout === "image-text" ? slide.imageSide : "right").slot
+    return [{ key: slide.id, url: slide.imageUrl, slideIndex, slot, layout: slide.layout }]
   })
 }
 
-function body(ctx: Ctx, text: string, options: Record<string, unknown>) {
-  // Persisted per-slide optical fit applies to the editable PowerPoint too.
-  const { fontSize, ...rest } = options
-  const base = typeof fontSize === "number" ? fontSize : 16
-  const multiplier = ctx.density === "ultra" ? 0.78 : ctx.density === "dense" ? 0.86 : ctx.density === "compact" ? 0.94 : 1
-  ctx.slide.addText(text, {
-    fontFace: ctx.theme.pptxBodyFont, fontSize: Math.max(10, Math.round(base * multiplier)), color: ctx.theme.muted,
-    valign: "top", fit: "shrink", margin: 0, lineSpacingMultiple: 1.15,
-    ...rest,
+/* ------------------------------------------------------------- measuring */
+
+/** Line height of "single" spacing as a multiple of the font size, per Office font. */
+const LINE_HEIGHT: Record<string, number> = {
+  Arial: 1.15, "Arial Black": 1.41, Georgia: 1.14, "Trebuchet MS": 1.16, Verdana: 1.22,
+  Calibri: 1.22, Cambria: 1.17, Consolas: 1.17,
+}
+
+/** How much wider than Arial a font sets the same text. */
+const WIDTH_FACTOR: Record<string, number> = {
+  Arial: 1, "Arial Black": 1.24, Georgia: 1.07, "Trebuchet MS": 0.99, Verdana: 1.18,
+  Calibri: 0.9, Cambria: 0.99,
+}
+
+function charWidth(ch: string) {
+  if (ch === " ") return 0.278
+  if (/[iljI.,:;'|!]/.test(ch)) return 0.24
+  if (/[ft()[\]r\-«»"]/.test(ch)) return 0.34
+  if (/[0-9]/.test(ch)) return 0.556
+  if (/[mwMWЖжШшЩщЮюЫыМм]/.test(ch)) return ch === ch.toLowerCase() ? 0.78 : 0.9
+  if (/[A-ZА-ЯЁӘІҢҒҮҰҚӨҺ]/.test(ch)) return 0.7
+  if (/[а-яёәіңғүұқөһ]/.test(ch)) return 0.56
+  if (/[a-z]/.test(ch)) return 0.52
+  return 0.6
+}
+
+/** Text metrics without a browser: an Arial-calibrated table, scaled per font. */
+export const estimateTextWidth: TextMeasure = (text, font, bold) => {
+  if (font === "Consolas") return text.length * 0.55
+  let width = 0
+  for (const ch of text) width += charWidth(ch)
+  return width * (WIDTH_FACTOR[font] || 1.05) * (bold ? 1.07 : 1)
+}
+
+function lineCount(text: string, widthPt: number, size: number, font: string, bold: boolean, measure: TextMeasure) {
+  const limit = widthPt / size
+  const space = measure(" ", font, bold)
+  let lines = 1
+  let current = 0
+  for (const word of text.split(/\s+/).filter(Boolean)) {
+    const w = measure(word, font, bold)
+    if (current === 0) {
+      lines += Math.max(0, Math.ceil(w / limit) - 1)
+      current = w > limit ? w % limit : w
+    } else if (current + space + w <= limit) {
+      current += space + w
+    } else {
+      lines += 1 + Math.max(0, Math.ceil(w / limit) - 1)
+      current = w > limit ? w % limit : w
+    }
+  }
+  return lines
+}
+
+/** The largest size, at most `max`, at which every paragraph fits the box. */
+export function fitFontSize(input: {
+  paragraphs: string[]
+  widthPt: number
+  heightPt: number
+  font: string
+  bold?: boolean
+  max: number
+  min?: number
+  lineSpacing?: number
+  paraGapPt?: number
+  measure?: TextMeasure
+}) {
+  const measure = input.measure || estimateTextWidth
+  const min = input.min ?? 9
+  const lineHeight = (LINE_HEIGHT[input.font] || 1.18) * (input.lineSpacing || 1)
+  // A little slack: PowerPoint wraps a hair earlier than a measured line.
+  const width = input.widthPt * 0.95
+  for (let size = input.max; size >= min; size -= 0.5) {
+    const lines = input.paragraphs.reduce((sum, text) => sum + lineCount(text, width, size, input.font, Boolean(input.bold), measure), 0)
+    const height = lines * size * lineHeight + (input.paraGapPt || 0) * Math.max(0, input.paragraphs.length - 1)
+    if (height <= input.heightPt) return size
+  }
+  return min
+}
+
+/* ----------------------------------------------------------------- drawing */
+
+const I = (px: number) => Math.round((px / 96) * 10000) / 10000
+/** Screen px on the 1280 canvas to points: 1280 px = 960 pt. */
+const PT = (px: number) => px * 0.75
+
+type Ctx = {
+  slide: PptxSlide
+  theme: DeckTheme
+  density: SlideDensity
+  index: number
+  total: number
+  assets: PptxAssets
+  measure: TextMeasure
+}
+
+type TextStyle = {
+  role?: "heading" | "body" | "label"
+  /** Largest size in points. */
+  size: number
+  min?: number
+  bold?: boolean
+  italic?: boolean
+  color?: string
+  align?: "left" | "center" | "right"
+  valign?: "top" | "middle" | "bottom"
+  lineSpacing?: number
+  charSpacing?: number
+  upper?: boolean
+  /** Scale with the slide's density (body text), or not (labels, numbers). */
+  dense?: boolean
+}
+
+function fontOf(ctx: Ctx, role: TextStyle["role"]) {
+  return role === "heading" ? ctx.theme.pptxHeadingFont : ctx.theme.pptxBodyFont
+}
+
+function densityScale(ctx: Ctx) {
+  return ctx.density === "ultra" ? 0.8 : ctx.density === "dense" ? 0.88 : ctx.density === "compact" ? 0.95 : 1
+}
+
+/** A text box whose font size is computed to fit it — never left to autofit. */
+function text(ctx: Ctx, value: string, box: Box, style: TextStyle) {
+  if (!value) return
+  const font = fontOf(ctx, style.role)
+  const shown = style.upper ? value.toLocaleUpperCase() : value
+  const bold = style.bold ?? style.role === "heading"
+  const max = style.dense === false ? style.size : style.size * densityScale(ctx)
+  const lineSpacing = style.lineSpacing ?? (style.role === "heading" ? 0.95 : 1.08)
+  const size = fitFontSize({
+    paragraphs: [shown],
+    widthPt: PT(box.w),
+    heightPt: PT(box.h),
+    font,
+    bold,
+    max,
+    min: style.min ?? Math.min(max, 10),
+    lineSpacing,
+    measure: ctx.measure,
+  })
+  ctx.slide.addText(shown, {
+    x: I(box.x), y: I(box.y), w: I(box.w), h: I(box.h),
+    fontFace: font, fontSize: size, bold, italic: Boolean(style.italic),
+    color: style.color || (style.role === "heading" ? ctx.theme.text : ctx.theme.muted),
+    align: style.align || "left", valign: style.valign || "top",
+    margin: 0, lineSpacingMultiple: lineSpacing, fit: "shrink",
+    ...(style.charSpacing ? { charSpacing: style.charSpacing } : {}),
   })
 }
 
-function panel(ctx: Ctx, x: number, y: number, w: number, h: number) {
-  ctx.slide.addShape("roundRect", {
-    x, y, w, h,
-    fill: { color: ctx.theme.surface },
-    line: { color: ctx.theme.border, width: 0.75 },
-    rectRadius: 0.12,
+/**
+ * One font size for a row of siblings — every card title, every tile body —
+ * so a deck never shows three cards with three different type sizes. The
+ * size is the largest at which the longest of them still fits.
+ */
+function uniform(ctx: Ctx, values: Array<string | undefined>, box: Pick<Box, "w" | "h">, style: TextStyle): TextStyle {
+  const font = fontOf(ctx, style.role)
+  const bold = style.bold ?? style.role === "heading"
+  const max = style.dense === false ? style.size : style.size * densityScale(ctx)
+  const lineSpacing = style.lineSpacing ?? (style.role === "heading" ? 0.95 : 1.08)
+  const sizes = values.filter((value): value is string => Boolean(value)).map((value) => fitFontSize({
+    paragraphs: [style.upper ? value.toLocaleUpperCase() : value],
+    widthPt: PT(box.w),
+    heightPt: PT(box.h),
+    font,
+    bold,
+    max,
+    min: style.min ?? Math.min(max, 10),
+    lineSpacing,
+    measure: ctx.measure,
+  }))
+  const size = sizes.length ? Math.min(...sizes) : max
+  return { ...style, size, min: size, dense: false }
+}
+
+/** A bulleted list fitted as a whole. */
+function list(ctx: Ctx, items: string[], box: Box, style: Omit<TextStyle, "role"> & { gap?: number }) {
+  if (!items.length) return
+  const font = ctx.theme.pptxBodyFont
+  const indentPt = 14
+  const gap = style.gap ?? 8
+  const max = style.size * densityScale(ctx)
+  const size = fitFontSize({
+    paragraphs: items,
+    widthPt: PT(box.w) - indentPt,
+    heightPt: PT(box.h),
+    font,
+    max,
+    min: style.min ?? 10,
+    lineSpacing: 1.08,
+    paraGapPt: gap,
+    measure: ctx.measure,
+  })
+  ctx.slide.addText(items.map((item) => ({ text: item, options: { bullet: { indent: indentPt }, breakLine: true } })), {
+    x: I(box.x), y: I(box.y), w: I(box.w), h: I(box.h),
+    fontFace: font, fontSize: size, color: style.color || ctx.theme.text,
+    valign: "top", margin: 0, paraSpaceAfter: gap, lineSpacingMultiple: 1.08, fit: "shrink",
+  })
+}
+
+/** A card, a column or a tile, built the way the theme builds surfaces. */
+function surface(ctx: Ctx, box: Box, options: { radius?: number } = {}) {
+  const t = ctx.theme
+  const radius = options.radius ?? t.radius
+  const shape = radius > 0 ? "roundRect" : "rect"
+  const geometry = { x: I(box.x), y: I(box.y), w: I(box.w), h: I(box.h), ...(radius > 0 ? { rectRadius: I(Math.min(radius, Math.min(box.w, box.h) / 2)) } : {}) }
+  switch (t.surfaceStyle) {
+    case "glass":
+      ctx.slide.addShape(shape, t.dark
+        ? { ...geometry, fill: { color: "FFFFFF", transparency: 91 }, line: { color: "FFFFFF", transparency: 80, width: 0.75 } }
+        : { ...geometry, fill: { color: "FFFFFF", transparency: 34 }, line: { color: "FFFFFF", transparency: 5, width: 0.75 }, shadow: { type: "outer", blur: 18, offset: 6, angle: 90, color: "782840", opacity: 0.12 } })
+      return
+    case "outline":
+      ctx.slide.addShape(shape, { ...geometry, fill: { color: t.bg, transparency: 100 }, line: { color: t.accent, transparency: 55, width: 1.25 } })
+      return
+    case "soft":
+      ctx.slide.addShape(shape, { ...geometry, fill: { color: t.surface }, line: { color: t.surface, transparency: 100, width: 0 }, shadow: { type: "outer", blur: 16, offset: 6, angle: 90, color: t.dark ? "000000" : "102040", opacity: t.dark ? 0.45 : 0.12 } })
+      return
+    case "brutal":
+      ctx.slide.addShape(shape, { ...geometry, fill: { color: t.surface }, line: { color: t.text, width: 2.25 }, shadow: { type: "outer", blur: 0, offset: 5.25, angle: 45, color: t.text, opacity: 1 } })
+      return
+    case "line":
+      ctx.slide.addShape("line", { x: I(box.x), y: I(box.y), w: I(box.w), h: 0, line: { color: t.text, width: 1.5 } })
+      return
+    case "panel":
+    default:
+      ctx.slide.addShape(shape, { ...geometry, fill: { color: t.surface }, line: { color: t.border, width: 0.75 } })
+  }
+}
+
+/** Inner padding of a surface: a rules-only theme has no box to pad. */
+function inset(ctx: Ctx, px: number) {
+  return ctx.theme.surfaceStyle === "line" ? { x: 0, top: 18 } : { x: px, top: px }
+}
+
+function heading(ctx: Ctx, slide: Slide, value: string) {
+  text(ctx, value, { x: PAD, y: HEAD_TOP, w: CANVAS_W - PAD * 2, h: HEAD_H }, {
+    role: "heading", size: PT(52) * headlineScale(slide), min: 18, valign: "bottom", upper: ctx.theme.titleCase === "upper", dense: false,
   })
 }
 
 function pageNumber(ctx: Ctx) {
   ctx.slide.addText(`${ctx.index + 1} / ${ctx.total}`, {
-    x: SLIDE_W - M - 1.4, y: SLIDE_H - 0.55, w: 1.4, h: 0.3,
-    fontFace: ctx.theme.pptxBodyFont, fontSize: 9, color: ctx.theme.muted, align: "right", margin: 0,
+    x: I(CANVAS_W - PAD - 140), y: I(CANVAS_H - 50), w: I(140), h: I(24),
+    fontFace: ctx.theme.pptxBodyFont, fontSize: 9.5, color: ctx.theme.muted, align: "right", margin: 0,
   })
 }
 
-function image(ctx: Ctx, data: string | undefined, x: number, y: number, w: number, h: number, credit?: string) {
-  if (!data) {
-    // No picture was found: a quiet panel keeps the composition instead
-    // of leaving a hole where the image was designed to be.
-    panel(ctx, x, y, w, h)
+/** A photo in its slot: the baked picture, or the theme's quiet panel. */
+function photo(ctx: Ctx, key: string, slot: PhotoSlot, credit?: string) {
+  const raw = ctx.assets.images?.get(key)
+  const image: PlacedImage | undefined = typeof raw === "string" ? { data: raw } : raw
+  const { box } = slot
+  if (!image?.data) {
+    // No picture: a quiet panel keeps the composition instead of a hole.
+    ctx.slide.addShape(slot.mask.kind === "round" ? "roundRect" : "rect", {
+      x: I(box.x), y: I(box.y), w: I(box.w), h: I(box.h),
+      ...(slot.mask.kind === "round" ? { rectRadius: I(slot.mask.r) } : {}),
+      fill: { color: ctx.theme.surface }, line: { color: ctx.theme.border, width: 0.75 },
+    })
     return
   }
-  ctx.slide.addImage({ data, x, y, w, h, sizing: { type: "cover", w, h } })
+  const placed = image.box || box
+  ctx.slide.addImage({ data: image.data, x: I(placed.x), y: I(placed.y), w: I(placed.w), h: I(placed.h) })
   if (credit) {
     // The credit the photo's licence asks for, small in its corner.
-    const cw = Math.min(w - 0.2, Math.max(1.6, credit.length * 0.062))
+    const cw = Math.min(box.w - 20, Math.max(150, credit.length * 5.6))
     ctx.slide.addText(credit, {
-      x: x + w - cw - 0.1, y: y + h - 0.34, w: cw, h: 0.24,
-      fontFace: ctx.theme.pptxBodyFont, fontSize: 7, color: "FFFFFF", align: "right", valign: "middle",
-      fill: { color: "000000", transparency: 45 }, margin: [0, 5, 0, 5], fit: "shrink",
+      x: I(box.x + box.w - cw - 10), y: I(box.y + box.h - 30), w: I(cw), h: I(20),
+      fontFace: ctx.theme.pptxBodyFont, fontSize: 6.5, color: "FFFFFF", align: "right", valign: "middle",
+      fill: { color: "000000", transparency: 50 }, margin: [0, 4, 0, 4], fit: "shrink",
     })
   }
 }
 
-const svgData = (svg: string) => `data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`
+function icon(ctx: Ctx, name: DeckIconName, color: string, box: Box) {
+  const data = ctx.assets.icon?.(name, color)
+  if (data) ctx.slide.addImage({ data, x: I(box.x), y: I(box.y), w: I(box.w), h: I(box.h) })
+  else ctx.slide.addShape("ellipse", { x: I(box.x + box.w * 0.3), y: I(box.y + box.h * 0.3), w: I(box.w * 0.4), h: I(box.h * 0.4), fill: { color }, line: { color, width: 0 } })
+}
+
+function accentRule(ctx: Ctx, x: number, y: number, w = 72, h = 4) {
+  ctx.slide.addShape("rect", { x: I(x), y: I(y), w: I(w), h: I(h), fill: { color: ctx.theme.accent }, line: { color: ctx.theme.accent, width: 0 } })
+}
+
+/* ---------------------------------------------------------------- layouts */
+
+function drawSlide(ctx: Ctx, slide: Slide) {
+  const { theme } = ctx
+  const upper = theme.titleCase === "upper"
+  const contentW = CANVAS_W - PAD * 2
+
+  switch (slide.layout) {
+    case "title": {
+      const cover = coverLayout(theme)
+      if (slide.imageUrl) photo(ctx, slide.id, cover.slot, slide.imageCredit)
+      const w = (slide.imageUrl ? CANVAS_W - cover.textRight : CANVAS_W - PAD) - PAD
+      let y = 190
+      if (slide.kicker) {
+        text(ctx, slide.kicker, { x: PAD, y, w, h: 28 }, { role: "label", size: 12, bold: true, color: theme.accent, charSpacing: 3, upper: true, dense: false })
+        y += 44
+      }
+      const size = PT(slide.imageUrl ? (theme.id === "editorial" ? 60 : 66) : theme.id === "editorial" ? 88 : 84) * headlineScale(slide)
+      text(ctx, slide.title, { x: PAD, y, w, h: 470 - y }, { role: "heading", size, min: 22, valign: "bottom", upper, dense: false, lineSpacing: 0.92 })
+      accentRule(ctx, PAD, 492)
+      if (slide.subtitle) text(ctx, slide.subtitle, { x: PAD, y: 520, w: Math.min(w, 900), h: 130 }, { size: PT(26), min: 11 })
+      return
+    }
+
+    case "hero": {
+      photo(ctx, slide.id, HERO_SLOT, slide.imageCredit)
+      if (!ctx.assets.images?.get(slide.id)) {
+        ctx.slide.addShape("rect", { x: 0, y: 0, w: I(CANVAS_W), h: I(CANVAS_H), fill: { color: "000000", transparency: 45 }, line: { color: "000000", transparency: 100, width: 0 } })
+      }
+      const w = CANVAS_W - 88 - 360
+      if (slide.kicker) text(ctx, slide.kicker, { x: 88, y: 300, w, h: 28 }, { role: "label", size: 12, bold: true, color: "FFFFFF", charSpacing: 3, upper: true, dense: false })
+      text(ctx, slide.title, { x: 88, y: 336, w, h: 196 }, { role: "heading", size: PT(upper ? 72 : 86) * headlineScale(slide), min: 22, valign: "bottom", color: "FFFFFF", upper, dense: false, lineSpacing: 0.92 })
+      if (slide.subtitle) text(ctx, slide.subtitle, { x: 88, y: 548, w: 760, h: 92 }, { size: PT(28), min: 11, color: "EDEDED" })
+      return
+    }
+
+    case "section": {
+      text(ctx, slide.number || String(ctx.index + 1).padStart(2, "0"), { x: PAD, y: 150, w: 600, h: 150 }, { role: "heading", size: 112, bold: true, color: theme.accent, dense: false })
+      text(ctx, slide.title, { x: PAD, y: 320, w: contentW - 200, h: 170 }, { role: "heading", size: PT(upper ? 60 : 72) * headlineScale(slide), min: 20, valign: "bottom", upper, dense: false })
+      if (slide.subtitle) text(ctx, slide.subtitle, { x: PAD, y: 505, w: 880, h: 100 }, { size: PT(26), min: 11 })
+      return
+    }
+
+    case "bullets": {
+      heading(ctx, slide, slide.title)
+      let top = BODY_TOP
+      if (slide.intro) {
+        text(ctx, slide.intro, { x: PAD, y: top - 18, w: 1000, h: 52 }, { size: PT(22), min: 10 })
+        top += 44
+      }
+      if (bulletsVariant(theme, slide, ctx.index) === "grid") {
+        const count = slide.points.length
+        const columns = count === 3 ? 3 : 2
+        const rows = Math.ceil(count / columns)
+        const gap = 22
+        const tileW = (contentW - gap * (columns - 1)) / columns
+        const tileH = Math.min(320, (BODY_BOTTOM + 10 - top - gap * (rows - 1)) / rows)
+        const startY = top + Math.max(0, (BODY_BOTTOM - top - (tileH * rows + gap * (rows - 1))) / 2)
+        const tilePad = inset(ctx, 28)
+        const titleTop = rows > 1 ? 44 : 58
+        const bodyTop = titleTop + (rows > 1 ? 44 : 70)
+        const titleStyle = uniform(ctx, slide.points.map((p) => p.title), { w: tileW - tilePad.x * 2, h: bodyTop - titleTop - 6 }, { role: "heading", size: PT(27), min: 11, color: theme.text })
+        const bodyStyle = uniform(ctx, slide.points.map((p) => p.body), { w: tileW - tilePad.x * 2, h: tileH - tilePad.top - bodyTop - 14 }, { size: PT(19), min: 9 })
+        slide.points.forEach((point, i) => {
+          const x = PAD + (i % columns) * (tileW + gap)
+          const y = startY + Math.floor(i / columns) * (tileH + gap)
+          const pad = inset(ctx, 28)
+          surface(ctx, { x, y, w: tileW, h: tileH })
+          const accent = theme.id === "candy" ? theme.series[i % 3] : theme.accent
+          text(ctx, String(i + 1).padStart(2, "0"), { x: x + pad.x, y: y + pad.top - 4, w: 120, h: rows > 1 ? 40 : 52 }, { role: "heading", size: PT(rows > 1 ? 34 : 42), color: accent, dense: false })
+          text(ctx, point.title, { x: x + pad.x, y: y + pad.top + titleTop, w: tileW - pad.x * 2, h: bodyTop - titleTop - 6 }, titleStyle)
+          if (point.body) text(ctx, point.body, { x: x + pad.x, y: y + pad.top + bodyTop, w: tileW - pad.x * 2, h: tileH - pad.top - bodyTop - 14 }, bodyStyle)
+        })
+        return
+      }
+      const rowH = Math.min(118, (BODY_BOTTOM + 20 - top) / slide.points.length)
+      const rowTitle = uniform(ctx, slide.points.map((p) => p.title), { w: 400, h: rowH - 28 }, { role: "heading", size: PT(29), min: 11, color: theme.text })
+      const rowBody = uniform(ctx, slide.points.map((p) => p.body), { w: contentW - 512, h: rowH - 30 }, { size: PT(22), min: 9 })
+      slide.points.forEach((point, i) => {
+        const y = top + i * rowH
+        ctx.slide.addShape("line", { x: I(PAD), y: I(y), w: I(contentW), h: 0, line: { color: theme.border, width: 0.75 } })
+        text(ctx, String(i + 1).padStart(2, "0"), { x: PAD, y: y + 20, w: 56, h: 24 }, { role: "label", size: theme.id === "editorial" ? 20 : 11.5, bold: true, italic: theme.id === "editorial", color: theme.accent, dense: false })
+        text(ctx, point.title, { x: PAD + 84, y: y + 16, w: 400, h: rowH - 28 }, rowTitle)
+        if (point.body) text(ctx, point.body, { x: PAD + 512, y: y + 18, w: contentW - 512, h: rowH - 30 }, rowBody)
+      })
+      return
+    }
+
+    case "two-column": {
+      heading(ctx, slide, slide.title)
+      const gap = 28
+      const colW = (contentW - gap) / 2
+      const h = BODY_BOTTOM - BODY_TOP
+      ;[slide.left, slide.right].forEach((column, i) => {
+        const x = PAD + i * (colW + gap)
+        const pad = inset(ctx, 38)
+        surface(ctx, { x, y: BODY_TOP, w: colW, h })
+        text(ctx, column.heading, { x: x + pad.x, y: BODY_TOP + pad.top, w: colW - pad.x * 2, h: 44 }, { role: "heading", size: PT(31), min: 12, color: i === 0 ? theme.muted : theme.accent })
+        list(ctx, column.points, { x: x + pad.x, y: BODY_TOP + pad.top + 66, w: colW - pad.x * 2, h: h - pad.top - 66 - 30 }, { size: PT(23), min: 9 })
+      })
+      return
+    }
+
+    case "stat": {
+      heading(ctx, slide, slide.title)
+      const count = slide.stats.length
+      const gap = 40
+      const cellW = (contentW - gap * (count - 1)) / count
+      const tiles = statOnTiles(theme)
+      const top = 290
+      const longest = Math.max(...slide.stats.map((stat) => stat.value.length), 2)
+      const figure = 0.62 * (theme.pptxHeadingFont === "Arial Black" ? 1.24 : theme.pptxHeadingFont === "Verdana" ? 1.15 : 1)
+      const valueSize = Math.min(count === 1 ? 150 : 100, Math.floor(PT(cellW - (tiles ? 60 : 0)) / (longest * figure)))
+      const labelStyle = uniform(ctx, slide.stats.map((stat) => stat.label), { w: cellW - (tiles ? 60 : 0), h: 90 }, { size: PT(24), min: 10, color: theme.text })
+      slide.stats.forEach((stat, i) => {
+        const x = PAD + i * (cellW + gap)
+        const pad = tiles ? 30 : 0
+        if (tiles) surface(ctx, { x, y: top - 30, w: cellW, h: 330 })
+        else ctx.slide.addShape("line", { x: I(x), y: I(top), w: I(cellW), h: 0, line: { color: theme.accent, width: 2.25 } })
+        text(ctx, stat.value.replace(/ /g, " "), { x: x + pad, y: top + 22, w: cellW - pad * 2, h: 150 }, { role: "heading", size: valueSize, min: 24, color: theme.accent, dense: false })
+        text(ctx, stat.label, { x: x + pad, y: top + 184, w: cellW - pad * 2, h: 90 }, labelStyle)
+      })
+      if (slide.context) text(ctx, slide.context, { x: PAD, y: CANVAS_H - 70, w: contentW - 160, h: 40 }, { size: 12, min: 8 })
+      return
+    }
+
+    case "quote": {
+      // The mark is set in Georgia everywhere: its curly quote reads as a
+      // quote in every theme, where a sans face draws two slanted bars.
+      ctx.slide.addText("“", { x: I(100), y: I(70), w: I(200), h: I(180), fontFace: "Georgia", fontSize: 150, bold: true, color: theme.accent, margin: 0, valign: "top" })
+      text(ctx, slide.quote, { x: 110, y: 230, w: CANVAS_W - 220, h: 300 }, { role: "heading", size: PT(48) * headlineScale(slide), min: 14, color: theme.text, bold: false, lineSpacing: 1.1, dense: false })
+      if (slide.author) {
+        ctx.slide.addText([
+          { text: slide.author, options: { bold: true, color: theme.text, breakLine: Boolean(slide.role) } },
+          ...(slide.role ? [{ text: slide.role, options: { color: theme.muted } }] : []),
+        ], { x: I(110), y: I(560), w: I(CANVAS_W - 220), h: I(80), fontFace: theme.pptxBodyFont, fontSize: 15.5, margin: 0, valign: "top" })
+      }
+      return
+    }
+
+    case "image-text": {
+      const side = sidePhotoLayout(theme, slide.imageSide)
+      photo(ctx, slide.id, side.slot, slide.imageCredit)
+      const x = side.copy.left
+      const w = CANVAS_W - side.copy.left - side.copy.right
+      text(ctx, slide.title, { x, y: 120, w, h: 190 }, { role: "heading", size: PT(upper ? 42 : 50) * headlineScale(slide), min: 16, valign: "bottom", upper, dense: false })
+      let y = 330
+      if (slide.body) {
+        const h = slide.points.length ? 150 : 300
+        text(ctx, slide.body, { x, y, w, h }, { size: PT(22), min: 10 })
+        y += h + 16
+      }
+      if (slide.points.length) list(ctx, slide.points, { x, y, w, h: CANVAS_H - 60 - y }, { size: PT(23), min: 9 })
+      return
+    }
+
+    case "cards": {
+      heading(ctx, slide, slide.title)
+      const count = slide.cards.length
+      const gap = 24
+      const cardW = (contentW - gap * (count - 1)) / count
+      const h = BODY_BOTTOM - BODY_TOP
+      const cardPad = inset(ctx, 32)
+      const cardTitle = uniform(ctx, slide.cards.map((c) => c.title), { w: cardW - cardPad.x * 2, h: 88 }, { role: "heading", size: PT(32), min: 11, color: theme.text })
+      const cardBody = uniform(ctx, slide.cards.map((c) => c.body), { w: cardW - cardPad.x * 2, h: h - cardPad.top - 170 - 24 }, { size: PT(21), min: 9 })
+      slide.cards.forEach((card, i) => {
+        const x = PAD + i * (cardW + gap)
+        const pad = inset(ctx, 32)
+        surface(ctx, { x, y: BODY_TOP, w: cardW, h })
+        const accent = theme.id === "candy" ? theme.series[i % 3] : theme.accent
+        if (theme.surfaceStyle !== "line" && theme.surfaceStyle !== "brutal") {
+          ctx.slide.addShape("rect", { x: I(x + Math.min(theme.radius, 20)), y: I(BODY_TOP), w: I(cardW - Math.min(theme.radius, 20) * 2), h: I(4), fill: { color: accent }, line: { color: accent, width: 0 } })
+        }
+        ctx.slide.addShape("roundRect", { x: I(x + pad.x), y: I(BODY_TOP + pad.top), w: I(52), h: I(30), rectRadius: I(15), fill: { color: accent, transparency: theme.id === "candy" ? 0 : 84 }, line: { color: accent, transparency: 100, width: 0 } })
+        text(ctx, String(i + 1).padStart(2, "0"), { x: x + pad.x, y: BODY_TOP + pad.top + 5, w: 52, h: 20 }, { role: "label", size: 10.5, bold: true, color: theme.id === "candy" ? "FFFFFF" : accent, align: "center", dense: false })
+        text(ctx, card.title, { x: x + pad.x, y: BODY_TOP + pad.top + 70, w: cardW - pad.x * 2, h: 88 }, cardTitle)
+        if (card.body) text(ctx, card.body, { x: x + pad.x, y: BODY_TOP + pad.top + 170, w: cardW - pad.x * 2, h: h - pad.top - 170 - 24 }, cardBody)
+      })
+      return
+    }
+
+    case "timeline": {
+      heading(ctx, slide, slide.title)
+      const count = slide.steps.length
+      const gap = 24
+      const stepW = (contentW - gap * (count - 1)) / count
+      const lineY = 330
+      ctx.slide.addShape("line", { x: I(PAD), y: I(lineY), w: I(contentW), h: 0, line: { color: theme.border, width: 1.5 } })
+      const stepTitle = uniform(ctx, slide.steps.map((s) => s.title), { w: stepW - 8, h: 70 }, { role: "heading", size: PT(28), min: 11, color: theme.text })
+      const stepBody = uniform(ctx, slide.steps.map((s) => s.body), { w: stepW - 12, h: BODY_BOTTOM - lineY - 100 }, { size: PT(20), min: 9 })
+      slide.steps.forEach((step, i) => {
+        const x = PAD + i * (stepW + gap)
+        ctx.slide.addShape("ellipse", { x: I(x), y: I(lineY - 9), w: I(18), h: I(18), fill: { color: theme.accent }, line: { color: theme.bg, width: 3 } })
+        text(ctx, step.label, { x, y: lineY - 52, w: stepW, h: 26 }, { role: "label", size: 11.5, bold: true, color: theme.accent, dense: false })
+        text(ctx, step.title, { x, y: lineY + 34, w: stepW - 8, h: 70 }, stepTitle)
+        if (step.body) text(ctx, step.body, { x, y: lineY + 112, w: stepW - 12, h: BODY_BOTTOM - lineY - 100 }, stepBody)
+      })
+      return
+    }
+
+    case "comparison": {
+      heading(ctx, slide, slide.title)
+      const fontSize = Math.max(10, Math.min(17, 17 - Math.max(0, slide.rows.length - 3) * 1.2) * densityScale(ctx))
+      const cell = (value: string, options: Record<string, unknown> = {}) => ({
+        text: value,
+        options: { fontFace: theme.pptxBodyFont, fontSize, color: theme.text, valign: "middle", margin: [4, 8, 4, 8], ...options },
+      })
+      const rows = [
+        [cell(""), cell(slide.columns[0].toLocaleUpperCase(), { bold: true, color: theme.muted, fontSize: fontSize - 2 }), cell(slide.columns[1].toLocaleUpperCase(), { bold: true, color: theme.accent, fontSize: fontSize - 2 })],
+        ...slide.rows.map((row) => [cell(row.label, { bold: true, color: theme.muted }), cell(row.values[0]), cell(row.values[1], { bold: true })]),
+      ]
+      const tableH = Math.min(BODY_BOTTOM - BODY_TOP - (slide.verdict ? 70 : 0), 62 * rows.length)
+      ctx.slide.addTable(rows, {
+        x: I(PAD), y: I(BODY_TOP), w: I(contentW), colW: [I(contentW * 0.26), I(contentW * 0.37), I(contentW * 0.37)],
+        rowH: I(tableH / rows.length),
+        border: { type: "solid", color: theme.border, pt: 0.75 },
+        fill: { color: theme.dark ? theme.surface : theme.bg, transparency: theme.surfaceStyle === "glass" ? 40 : 0 },
+      })
+      if (slide.verdict) {
+        accentRule(ctx, PAD, BODY_TOP + tableH + 40, 28, 3)
+        text(ctx, slide.verdict, { x: PAD + 42, y: BODY_TOP + tableH + 24, w: contentW - 42, h: 50 }, { size: PT(22), min: 10, bold: true, color: theme.text })
+      }
+      return
+    }
+
+    case "chart": {
+      heading(ctx, slide, slide.title)
+      let top = BODY_TOP
+      if (slide.unit) {
+        text(ctx, slide.unit, { x: PAD, y: top - 24, w: 600, h: 24 }, { size: 12.5, min: 9 })
+        top += 6
+      }
+      const chartW = slide.takeaway ? contentW - 348 : contentW
+      // 2.1 must not be labelled "2": keep one decimal whenever the data has one.
+      const format = slide.data.some((d) => !Number.isInteger(d.value)) ? "#,##0.0" : "#,##0"
+      ctx.slide.addChart("bar", [{
+        name: slide.unit || slide.title,
+        labels: slide.data.map((d) => d.label),
+        values: slide.data.map((d) => d.value),
+      }], {
+        x: I(PAD), y: I(top), w: I(chartW), h: I(BODY_BOTTOM + 30 - top),
+        barDir: "col",
+        chartColors: [theme.series[0]],
+        catAxisLabelColor: theme.muted,
+        valAxisLabelColor: theme.muted,
+        catAxisLabelFontFace: theme.pptxBodyFont,
+        valAxisLabelFontFace: theme.pptxBodyFont,
+        catAxisLabelFontSize: 11,
+        valAxisLabelFontSize: 10,
+        catAxisLineShow: false,
+        valAxisLineShow: false,
+        valGridLine: { color: theme.border, style: "solid", size: 0.5 },
+        showValue: true,
+        dataLabelFormatCode: format,
+        valAxisLabelFormatCode: format,
+        dataLabelColor: theme.text,
+        dataLabelFontSize: 11,
+        dataLabelPosition: "outEnd",
+        barGapWidthPct: 60,
+        showLegend: false,
+      })
+      if (slide.takeaway) {
+        ctx.slide.addShape("rect", { x: I(PAD + chartW + 48), y: I(top + 8), w: I(3), h: I(150), fill: { color: theme.accent }, line: { color: theme.accent, width: 0 } })
+        text(ctx, slide.takeaway, { x: PAD + chartW + 72, y: top, w: contentW - chartW - 72, h: BODY_BOTTOM - top }, { role: "heading", size: PT(25), min: 11, color: theme.text })
+      }
+      return
+    }
+
+    case "closing": {
+      accentRule(ctx, CANVAS_W / 2 - 36, 190)
+      text(ctx, slide.title, { x: 110, y: 222, w: CANVAS_W - 220, h: 220 }, { role: "heading", size: PT(upper ? 62 : 76) * headlineScale(slide), min: 20, align: "center", valign: "middle", upper, dense: false })
+      if (slide.subtitle) text(ctx, slide.subtitle, { x: 190, y: 456, w: CANVAS_W - 380, h: 96 }, { size: PT(26), min: 11, align: "center" })
+      if (slide.contact) {
+        const w = Math.min(640, Math.max(220, slide.contact.length * 12 + 60))
+        ctx.slide.addShape("roundRect", { x: I(CANVAS_W / 2 - w / 2), y: I(574), w: I(w), h: I(48), rectRadius: I(24), fill: { color: theme.bg, transparency: 100 }, line: { color: theme.border, width: 1 } })
+        text(ctx, slide.contact, { x: CANVAS_W / 2 - w / 2 + 16, y: 586, w: w - 32, h: 26 }, { size: 15, min: 9, bold: true, color: theme.accent, align: "center", dense: false })
+      }
+      return
+    }
+
+    case "features": {
+      heading(ctx, slide, slide.title)
+      const count = slide.items.length
+      const columns = count === 4 ? 2 : 3
+      const rows = Math.ceil(count / columns)
+      const gap = 22
+      let top = BODY_TOP
+      if (slide.intro) {
+        text(ctx, slide.intro, { x: PAD, y: top - 18, w: 1000, h: 48 }, { size: PT(22), min: 10 })
+        top += 40
+      }
+      const cardW = (contentW - gap * (columns - 1)) / columns
+      const cardH = (BODY_BOTTOM + 10 - top - gap * (rows - 1)) / rows
+      const compact = rows > 1
+      const featurePad = inset(ctx, compact ? 24 : 32)
+      const featureIcon = compact ? 54 : 70
+      const featureTitle = uniform(ctx, slide.items.map((f) => f.title), { w: cardW - featurePad.x * 2, h: compact ? 34 : 44 }, { role: "heading", size: PT(compact ? 23 : 27), min: 10, color: theme.text })
+      const featureBody = uniform(ctx, slide.items.map((f) => f.body), { w: cardW - featurePad.x * 2, h: Math.max(30, cardH - featurePad.top - featureIcon - 18 - (compact ? 40 : 52) - 16) }, { size: PT(compact ? 17 : 19), min: 8 })
+      slide.items.forEach((item, i) => {
+        const x = PAD + (i % columns) * (cardW + gap)
+        const y = top + Math.floor(i / columns) * (cardH + gap)
+        const pad = inset(ctx, compact ? 24 : 32)
+        surface(ctx, { x, y, w: cardW, h: cardH })
+        const accent = theme.id === "candy" ? theme.series[i % 3] : theme.accent
+        const iconBox = compact ? 54 : 70
+        const candy = theme.id === "candy"
+        ctx.slide.addShape("roundRect", {
+          x: I(x + pad.x), y: I(y + pad.top), w: I(iconBox), h: I(iconBox), rectRadius: I(Math.min(20, theme.radius || 8)),
+          fill: { color: accent, transparency: candy ? 0 : 84 }, line: { color: candy ? theme.text : accent, transparency: candy ? 0 : 100, width: candy ? 1.75 : 0 },
+        })
+        const pad2 = iconBox * 0.24
+        icon(ctx, item.icon, candy ? "FFFFFF" : accent, { x: x + pad.x + pad2, y: y + pad.top + pad2, w: iconBox - pad2 * 2, h: iconBox - pad2 * 2 })
+        const textTop = y + pad.top + iconBox + 18
+        text(ctx, item.title, { x: x + pad.x, y: textTop, w: cardW - pad.x * 2, h: compact ? 34 : 44 }, featureTitle)
+        if (item.body) text(ctx, item.body, { x: x + pad.x, y: textTop + (compact ? 40 : 52), w: cardW - pad.x * 2, h: Math.max(30, y + cardH - textTop - (compact ? 40 : 52) - 16) }, featureBody)
+      })
+      return
+    }
+
+    case "process": {
+      heading(ctx, slide, slide.title)
+      const count = slide.steps.length
+      const overlap = 22
+      const stepW = (contentW + overlap * (count - 1)) / count
+      const arrowH = 150
+      const y = 280
+      // A chevron's notch is half its height deep: the words start after it.
+      const notch = arrowH / 2
+      const textWOf = (i: number) => stepW - (i === 0 ? 30 : notch + 14) - notch - 6
+      const processTitle = uniform(ctx, slide.steps.map((s) => s.title), { w: textWOf(1), h: arrowH - 70 }, { role: "heading", size: PT(count === 5 ? 21 : 25), min: 9, color: theme.onAccent })
+      const processBody = uniform(ctx, slide.steps.map((s) => s.body), { w: stepW - 70, h: BODY_BOTTOM + 40 - (y + arrowH + 22) }, { size: PT(count === 5 ? 17 : 19), min: 8 })
+      slide.steps.forEach((step, i) => {
+        const x = PAD + i * (stepW - overlap)
+        ctx.slide.addShape(i === 0 ? "homePlate" : "chevron", {
+          x: I(x), y: I(y), w: I(stepW), h: I(arrowH),
+          fill: { color: theme.accent, transparency: i % 2 ? 16 : 0 },
+          line: { color: theme.accent, transparency: 100, width: 0 },
+        })
+        const textX = x + (i === 0 ? 30 : notch + 14)
+        const textW = textWOf(i)
+        text(ctx, String(i + 1).padStart(2, "0"), { x: textX, y: y + 26, w: textW, h: 20 }, { role: "label", size: 10.5, bold: true, color: theme.onAccent, dense: false })
+        text(ctx, step.title, { x: textX, y: y + 52, w: textW, h: arrowH - 70 }, processTitle)
+        if (step.body) text(ctx, step.body, { x: x + (i === 0 ? 16 : 40), y: y + arrowH + 22, w: stepW - 70, h: BODY_BOTTOM + 40 - (y + arrowH + 22) }, processBody)
+      })
+      return
+    }
+
+    case "gallery": {
+      // Pictures first: everything written afterwards sits on top of them.
+      const slots = gallerySlots(theme, slide.items.length, Boolean(slide.intro))
+      slide.items.forEach((item, i) => photo(ctx, `${slide.id}#${i}`, slots[i], item.image?.credit))
+      heading(ctx, slide, slide.title)
+      if (slide.intro) text(ctx, slide.intro, { x: PAD, y: BODY_TOP - 18, w: 1000, h: 48 }, { size: PT(22), min: 10 })
+      const caption = uniform(ctx, slide.items.map((item) => item.caption), { w: slots[0].box.w, h: 52 }, { role: "heading", size: PT(22), min: 9, color: theme.text })
+      slide.items.forEach((item, i) => {
+        const slot = slots[i]
+        text(ctx, item.caption, { x: slot.box.x, y: slot.box.y + slot.box.h + 14, w: slot.box.w, h: 52 }, caption)
+      })
+      return
+    }
+  }
+}
+
+/* ------------------------------------------------------------------ build */
+
+function composePptx(deck: Pick<Deck, "title" | "theme" | "slides">, assets: PptxAssets) {
+  const theme = deckTheme(deck.theme)
+  const pptx = new PptxGenJS()
+  pptx.layout = "LAYOUT_WIDE"
+  pptx.title = deck.title
+  pptx.author = "Malik AI"
+  pptx.company = "Malik AI"
+  pptx.subject = deck.title
+  const measure = assets.measure || estimateTextWidth
+
+  deck.slides.forEach((slide, index) => {
+    const page = pptx.addSlide()
+    const art = assets.backdrops?.get(slide.id)
+    // The background art is the slide background itself: it cannot be
+    // dragged around by accident and every app draws it under the content.
+    page.background = art ? { data: art.replace(/^data:/, ""), path: `art.${/^data:image\/png/.test(art) ? "png" : "jpeg"}` } : { color: theme.bg }
+    const ctx: Ctx = { slide: page, theme, density: slideDensity(slide), index, total: deck.slides.length, assets, measure }
+    drawSlide(ctx, slide)
+    if (slide.layout !== "title" && slide.layout !== "closing" && slide.layout !== "hero") pageNumber(ctx)
+    if (slide.notes) page.addNotes(slide.notes)
+  })
+  return pptx
+}
+
+function normaliseAssets(input?: Map<string, string> | PptxAssets): PptxAssets {
+  if (!input) return {}
+  if (input instanceof Map) return { images: input }
+  return input
+}
 
 /**
- * The soft glow in a corner that the screen draws behind text slides. A
- * PowerPoint shape cannot hold a radial gradient, but an SVG picture can, so
- * the glow is placed as a small vector image — soft on every screen size.
+ * Builds the file in Node. `assets` holds pictures the caller has already
+ * fetched and rasterised (or a plain map of photo data URLs, the older form);
+ * this module never touches the network and can run entirely offline.
  */
-function glow(ctx: Ctx) {
-  const opacity = ctx.theme.dark ? 0.24 : 0.13
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><radialGradient id="g" cx="50" cy="50" r="50" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#${ctx.theme.accent}" stop-opacity="${opacity}"/><stop offset="1" stop-color="#${ctx.theme.accent}" stop-opacity="0"/></radialGradient></defs><circle cx="50" cy="50" r="50" fill="url(#g)"/></svg>`
-  ctx.slide.addImage({ data: svgData(svg), x: SLIDE_W - 3.9, y: -3.9, w: 7.2, h: 7.2 })
+export async function buildPptx(deck: Pick<Deck, "title" | "theme" | "slides">, assets?: Map<string, string> | PptxAssets): Promise<Buffer> {
+  const output = await composePptx(deck, normaliseAssets(assets)).write({ outputType: "nodebuffer" })
+  return Buffer.isBuffer(output) ? output : Buffer.from(output as ArrayBuffer)
 }
 
-/** The dark gradient that keeps words readable over a full-bleed photo. */
-function heroShade(ctx: Ctx) {
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 90" preserveAspectRatio="none"><defs><linearGradient id="h" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#000" stop-opacity=".82"/><stop offset=".42" stop-color="#000" stop-opacity=".52"/><stop offset=".74" stop-color="#000" stop-opacity=".12"/><stop offset="1" stop-color="#000" stop-opacity="0"/></linearGradient><linearGradient id="v" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="#000" stop-opacity=".55"/><stop offset=".5" stop-color="#000" stop-opacity="0"/></linearGradient></defs><rect width="160" height="90" fill="url(#h)"/><rect width="160" height="90" fill="url(#v)"/></svg>`
-  ctx.slide.addImage({ data: svgData(svg), x: 0, y: 0, w: SLIDE_W, h: SLIDE_H })
+/** Builds the file in the browser. */
+export async function buildPptxBlob(deck: Pick<Deck, "title" | "theme" | "slides">, assets: PptxAssets): Promise<Blob> {
+  return (await composePptx(deck, assets).write({ outputType: "blob" })) as Blob
 }
+
+/* ------------------------------------------------------------------ icons */
 
 /**
  * An icon component as SVG text. Next.js does not allow react-dom/server in
  * a route, and an icon is only an <svg> with a few paths, so the element tree
  * is walked by hand: components are called, host elements are written out.
+ * The SVG is rasterised before it reaches a slide (see PptxAssets.icon).
  */
 type Node = { type: unknown; props: Record<string, unknown> } | string | number | boolean | null | undefined | Node[]
 
@@ -164,426 +845,26 @@ export function svgMarkup(node: Node): string {
   return ""
 }
 
-const iconCache = new Map<string, string>()
-
-/** A card's icon, drawn from the same vector the screen uses. */
-function iconData(name: DeckIconName, color: string) {
-  const key = `${name}:${color}`
-  const cached = iconCache.get(key)
-  if (cached) return cached
+/** A feature icon as standalone SVG markup, ready to be rasterised. */
+export function iconSvg(name: DeckIconName, color: string, size = 96) {
   const Icon = DECK_ICONS[name] || DECK_ICONS.sparkles
-  const svg = svgMarkup(createElement(Icon, { size: 96, color: `#${color}`, strokeWidth: 1.8 }) as unknown as Node)
-  const withNamespace = svg.includes("xmlns=") ? svg : svg.replace("<svg", '<svg xmlns="http://www.w3.org/2000/svg"')
-  const data = svgData(withNamespace)
-  iconCache.set(key, data)
-  return data
+  const svg = svgMarkup(createElement(Icon, { size, color: `#${color}`, strokeWidth: 1.8 }) as unknown as Node)
+  return svg.includes("xmlns=") ? svg : svg.replace("<svg", '<svg xmlns="http://www.w3.org/2000/svg"')
 }
 
-/* ---------------------------------------------------------------- layouts */
-
-function drawSlide(ctx: Ctx, slide: Slide, images: Map<string, string>) {
-  const { theme } = ctx
-  const imageData = images.get(slide.id)
-
-  switch (slide.layout) {
-    case "title": {
-      const hasImage = Boolean(imageData)
-      const textW = hasImage ? 6.2 : CONTENT_W
-      if (hasImage) {
-        image(ctx, imageData, SLIDE_W - 6.35, 0, 6.35, SLIDE_H, slide.imageCredit)
-        // The photo meets the text on a diagonal, as on screen.
-        ctx.slide.addShape("rtTriangle", {
-          x: SLIDE_W - 6.36, y: 0, w: 0.98, h: SLIDE_H, flipV: true,
-          fill: { color: theme.bg }, line: { color: theme.bg, width: 0 },
-        })
-      }
-      if (slide.kicker) {
-        ctx.slide.addText(slide.kicker.toUpperCase(), {
-          x: M, y: 2.0, w: textW - 0.4, h: 0.4, fontFace: theme.pptxBodyFont, fontSize: 13, bold: true,
-          color: theme.accent, charSpacing: 3, margin: 0,
-        })
-      }
-      ctx.slide.addText(slide.title, {
-        x: M, y: 2.45, w: textW - 0.4, h: 2.4, fontFace: theme.pptxHeadingFont, fontSize: Math.round((hasImage ? 44 : 54) * headlineScale(slide)), bold: true,
-        color: theme.text, valign: "top", fit: "shrink", margin: 0, lineSpacingMultiple: 0.95,
-      })
-      if (slide.subtitle) body(ctx, slide.subtitle, { x: M, y: 5.0, w: textW - 0.6, h: 1.3, fontSize: 19 })
-      return
-    }
-
-    case "section": {
-      if (slide.number) {
-        ctx.slide.addText(slide.number, {
-          x: M, y: 1.6, w: 4, h: 1.6, fontFace: theme.pptxHeadingFont, fontSize: 96, bold: true, color: theme.accent, margin: 0,
-        })
-      }
-      ctx.slide.addText(slide.title, {
-        x: M, y: 3.3, w: CONTENT_W, h: 1.6, fontFace: theme.pptxHeadingFont, fontSize: Math.round(46 * headlineScale(slide)), bold: true,
-         color: theme.text, valign: "top", fit: "shrink", margin: 0,
-      })
-      if (slide.subtitle) body(ctx, slide.subtitle, { x: M, y: 5.0, w: CONTENT_W * 0.75, h: 1.2, fontSize: 19 })
-      return
-    }
-
-    case "bullets": {
-      heading(ctx, slide.title, { fontSize: Math.round(32 * headlineScale(slide)) })
-      let y = BODY_Y
-      if (slide.intro) {
-        body(ctx, slide.intro, { x: M, y, w: CONTENT_W, h: 0.6, fontSize: 17 })
-        y += 0.75
-      }
-      const rowH = Math.min(1.2, (SLIDE_H - 0.8 - y) / slide.points.length)
-      slide.points.forEach((point, i) => {
-        const top = y + i * rowH
-        ctx.slide.addShape("line", { x: M, y: top, w: CONTENT_W, h: 0, line: { color: theme.border, width: 0.75 } })
-        ctx.slide.addText(String(i + 1).padStart(2, "0"), {
-          x: M, y: top + 0.14, w: 0.7, h: 0.4, fontFace: theme.pptxBodyFont, fontSize: 13, bold: true, color: theme.accent, margin: 0,
-        })
-        ctx.slide.addText(point.title, {
-          x: M + 0.8, y: top + 0.1, w: 4.4, h: rowH - 0.2, fontFace: theme.pptxHeadingFont, fontSize: 19, bold: true,
-          color: theme.text, valign: "top", fit: "shrink", margin: 0,
-        })
-        if (point.body) body(ctx, point.body, { x: M + 5.4, y: top + 0.12, w: CONTENT_W - 5.4, h: rowH - 0.22, fontSize: 15 })
-      })
-      return
-    }
-
-    case "two-column": {
-      heading(ctx, slide.title, { fontSize: Math.round(32 * headlineScale(slide)) })
-      const gap = 0.35
-      const colW = (CONTENT_W - gap) / 2
-      ;[slide.left, slide.right].forEach((column, i) => {
-        const x = M + i * (colW + gap)
-        panel(ctx, x, BODY_Y, colW, BODY_H)
-        ctx.slide.addText(column.heading, {
-          x: x + 0.35, y: BODY_Y + 0.3, w: colW - 0.7, h: 0.5, fontFace: theme.pptxHeadingFont, fontSize: 20, bold: true,
-          color: i === 0 ? theme.muted : theme.accent, margin: 0,
-        })
-        ctx.slide.addText(column.points.map((point) => ({ text: point, options: { bullet: { indent: 16 }, breakLine: true } })), {
-          x: x + 0.35, y: BODY_Y + 0.95, w: colW - 0.7, h: BODY_H - 1.25, fontFace: theme.pptxBodyFont, fontSize: 16,
-          color: theme.text, valign: "top", fit: "shrink", margin: 0, paraSpaceAfter: 8, lineSpacingMultiple: 1.1,
-        })
-      })
-      return
-    }
-
-    case "stat": {
-      heading(ctx, slide.title, { fontSize: Math.round(32 * headlineScale(slide)) })
-      const count = slide.stats.length
-      const gap = 0.35
-      const cellW = (CONTENT_W - gap * (count - 1)) / count
-      // One size for the whole row, set by the longest value, so "≈3 200"
-      // never wraps onto two lines and the numbers still line up.
-      const longest = Math.max(...slide.stats.map((stat) => stat.value.length))
-      const valueSize = Math.min(count === 1 ? 110 : 76, Math.floor((cellW * 72) / (Math.max(longest, 2) * 0.68)))
-      slide.stats.forEach((stat, i) => {
-        const x = M + i * (cellW + gap)
-        ctx.slide.addShape("line", { x, y: BODY_Y + 0.2, w: cellW, h: 0, line: { color: theme.accent, width: 2 } })
-        ctx.slide.addText(stat.value.replace(/ /g, "\u00a0"), {
-          x, y: BODY_Y + 0.45, w: cellW, h: 1.8, fontFace: theme.pptxHeadingFont, fontSize: valueSize, bold: true,
-          color: theme.accent, valign: "top", fit: "shrink", margin: 0,
-        })
-        body(ctx, stat.label, { x, y: BODY_Y + 2.35, w: cellW, h: 1.1, fontSize: 17, color: theme.text })
-      })
-      if (slide.context) body(ctx, slide.context, { x: M, y: SLIDE_H - 1.35, w: CONTENT_W, h: 0.6, fontSize: 13 })
-      return
-    }
-
-    case "quote": {
-      ctx.slide.addText("“", {
-        x: M, y: 0.7, w: 2, h: 1.8, fontFace: theme.pptxHeadingFont, fontSize: 150, bold: true, color: theme.accent, margin: 0,
-      })
-      ctx.slide.addText(slide.quote, {
-        x: M + 0.2, y: 2.1, w: CONTENT_W - 0.4, h: 3.1, fontFace: theme.pptxHeadingFont, fontSize: Math.round(32 * headlineScale(slide)),
-         color: theme.text, valign: "top", fit: "shrink", margin: 0, lineSpacingMultiple: 1.1,
-      })
-      if (slide.author) {
-        ctx.slide.addText([
-          { text: slide.author, options: { bold: true, color: theme.text, breakLine: Boolean(slide.role) } },
-          ...(slide.role ? [{ text: slide.role, options: { color: theme.muted } }] : []),
-        ], { x: M + 0.2, y: 5.5, w: CONTENT_W - 0.4, h: 1, fontFace: theme.pptxBodyFont, fontSize: 16, margin: 0 })
-      }
-      return
-    }
-
-    case "image-text": {
-      const imgW = 5.42
-      const inset = 0.46
-      const onLeft = slide.imageSide === "left"
-      const textX = onLeft ? imgW + inset + 0.6 : M
-      const textW = SLIDE_W - imgW - inset - 0.6 - M
-      image(ctx, imageData, onLeft ? inset : SLIDE_W - imgW - inset, inset, imgW, SLIDE_H - inset * 2, slide.imageCredit)
-      ctx.slide.addText(slide.title, {
-        x: textX, y: 1.2, w: textW, h: 1.6, fontFace: theme.pptxHeadingFont, fontSize: Math.round(32 * headlineScale(slide)), bold: true,
-         color: theme.text, valign: "bottom", fit: "shrink", margin: 0,
-      })
-      let y = 3.05
-      if (slide.body) {
-        body(ctx, slide.body, { x: textX, y, w: textW, h: 1.5, fontSize: 16 })
-        y += 1.6
-      }
-      if (slide.points.length) {
-        ctx.slide.addText(slide.points.map((point) => ({ text: point, options: { bullet: { indent: 16 }, breakLine: true } })), {
-          x: textX, y, w: textW, h: SLIDE_H - y - 0.7, fontFace: theme.pptxBodyFont, fontSize: 15,
-          color: theme.text, valign: "top", fit: "shrink", margin: 0, paraSpaceAfter: 6,
-        })
-      }
-      return
-    }
-
-    case "cards": {
-      heading(ctx, slide.title, { fontSize: Math.round(32 * headlineScale(slide)) })
-      const count = slide.cards.length
-      const gap = 0.3
-      const cardW = (CONTENT_W - gap * (count - 1)) / count
-      slide.cards.forEach((card, i) => {
-        const x = M + i * (cardW + gap)
-        panel(ctx, x, BODY_Y, cardW, BODY_H)
-        ctx.slide.addText(String(i + 1).padStart(2, "0"), {
-          x: x + 0.3, y: BODY_Y + 0.3, w: 1, h: 0.4, fontFace: theme.pptxBodyFont, fontSize: 13, bold: true, color: theme.accent, margin: 0,
-        })
-        ctx.slide.addText(card.title, {
-          x: x + 0.3, y: BODY_Y + 0.9, w: cardW - 0.6, h: 1.1, fontFace: theme.pptxHeadingFont, fontSize: 19, bold: true,
-          color: theme.text, valign: "top", fit: "shrink", margin: 0,
-        })
-        if (card.body) body(ctx, card.body, { x: x + 0.3, y: BODY_Y + 1.75, w: cardW - 0.6, h: BODY_H - 2.05, fontSize: 14 })
-      })
-      return
-    }
-
-    case "timeline": {
-      heading(ctx, slide.title, { fontSize: Math.round(32 * headlineScale(slide)) })
-      const count = slide.steps.length
-      const stepW = CONTENT_W / count
-      const lineY = BODY_Y + 0.55
-      ctx.slide.addShape("line", { x: M, y: lineY, w: CONTENT_W, h: 0, line: { color: theme.border, width: 1.5 } })
-      slide.steps.forEach((step, i) => {
-        const x = M + i * stepW
-        ctx.slide.addShape("ellipse", { x: x, y: lineY - 0.11, w: 0.22, h: 0.22, fill: { color: theme.accent }, line: { color: theme.accent, width: 0 } })
-        ctx.slide.addText(step.label, {
-          x, y: BODY_Y - 0.05, w: stepW - 0.25, h: 0.4, fontFace: theme.pptxBodyFont, fontSize: 12, bold: true, color: theme.accent, margin: 0,
-        })
-        ctx.slide.addText(step.title, {
-          x, y: lineY + 0.4, w: stepW - 0.3, h: 0.95, fontFace: theme.pptxHeadingFont, fontSize: 17, bold: true,
-          color: theme.text, valign: "top", fit: "shrink", margin: 0,
-        })
-        if (step.body) body(ctx, step.body, { x, y: lineY + 1.15, w: stepW - 0.3, h: 2.2, fontSize: 13 })
-      })
-      return
-    }
-
-    case "comparison": {
-      heading(ctx, slide.title, { fontSize: Math.round(32 * headlineScale(slide)) })
-      const cell = (text: string, options: Record<string, unknown> = {}) => ({
-        text,
-        options: { fontFace: theme.pptxBodyFont, fontSize: 14, color: theme.text, valign: "middle", margin: 0.08, ...options },
-      })
-      const rows = [
-        [cell(""), cell(slide.columns[0], { bold: true, color: theme.muted }), cell(slide.columns[1], { bold: true, color: theme.accent })],
-        ...slide.rows.map((row) => [cell(row.label, { bold: true, color: theme.muted }), cell(row.values[0]), cell(row.values[1])]),
-      ]
-      const tableH = Math.min(BODY_H - (slide.verdict ? 0.8 : 0), 0.62 * rows.length)
-      ctx.slide.addTable(rows, {
-        x: M, y: BODY_Y, w: CONTENT_W, colW: [CONTENT_W * 0.28, CONTENT_W * 0.36, CONTENT_W * 0.36],
-        rowH: tableH / rows.length,
-        border: { type: "solid", color: theme.border, pt: 0.75 },
-        fill: { color: theme.bg },
-      })
-      if (slide.verdict) {
-        body(ctx, slide.verdict, { x: M, y: BODY_Y + tableH + 0.25, w: CONTENT_W, h: 0.6, fontSize: 16, color: theme.text, bold: true })
-      }
-      return
-    }
-
-    case "chart": {
-      heading(ctx, slide.title, { fontSize: Math.round(32 * headlineScale(slide)) })
-      const chartW = slide.takeaway ? CONTENT_W * 0.66 : CONTENT_W
-      // 2.1 must not be labelled "2": keep one decimal whenever the data has one.
-      const format = slide.data.some((d) => !Number.isInteger(d.value)) ? "#,##0.0" : "#,##0"
-      ctx.slide.addChart("bar", [{
-        name: slide.unit || slide.title,
-        labels: slide.data.map((d) => d.label),
-        values: slide.data.map((d) => d.value),
-      }], {
-        x: M, y: BODY_Y, w: chartW, h: BODY_H,
-        barDir: "col",
-        chartColors: [theme.series[0]],
-        catAxisLabelColor: theme.muted,
-        valAxisLabelColor: theme.muted,
-        catAxisLabelFontFace: theme.pptxBodyFont,
-        valAxisLabelFontFace: theme.pptxBodyFont,
-        catAxisLabelFontSize: 12,
-        valAxisLabelFontSize: 11,
-        catAxisLineShow: false,
-        valAxisLineShow: false,
-        valGridLine: { color: theme.border, style: "solid", size: 0.5 },
-        showValue: true,
-        dataLabelFormatCode: format,
-        valAxisLabelFormatCode: format,
-        dataLabelColor: theme.text,
-        dataLabelFontSize: 12,
-        dataLabelPosition: "outEnd",
-        barGapWidthPct: 60,
-        showLegend: false,
-      })
-      if (slide.takeaway) {
-        ctx.slide.addShape("line", { x: M + chartW + 0.4, y: BODY_Y + 0.2, w: 0, h: 1.6, line: { color: theme.accent, width: 2 } })
-        body(ctx, slide.takeaway, { x: M + chartW + 0.6, y: BODY_Y + 0.15, w: CONTENT_W - chartW - 0.6, h: BODY_H - 0.3, fontSize: 18, color: theme.text })
-      }
-      return
-    }
-
-    case "closing": {
-      ctx.slide.addText(slide.title, {
-        x: M, y: 2.0, w: CONTENT_W, h: 2.3, fontFace: theme.pptxHeadingFont, fontSize: Math.round(50 * headlineScale(slide)), bold: true,
-         color: theme.text, align: "center", valign: "middle", fit: "shrink", margin: 0,
-      })
-      if (slide.subtitle) body(ctx, slide.subtitle, { x: M + 1.5, y: 4.4, w: CONTENT_W - 3, h: 1.1, fontSize: 19, align: "center" })
-      if (slide.contact) {
-        ctx.slide.addText(slide.contact, {
-          x: M, y: 5.7, w: CONTENT_W, h: 0.5, fontFace: theme.pptxBodyFont, fontSize: 16, bold: true,
-          color: theme.accent, align: "center", margin: 0,
-        })
-      }
-      return
-    }
-
-    case "hero": {
-      if (imageData) image(ctx, imageData, 0, 0, SLIDE_W, SLIDE_H, slide.imageCredit)
-      else ctx.slide.addShape("rect", { x: 0, y: 0, w: SLIDE_W, h: SLIDE_H, fill: { color: "0B0B0F" }, line: { color: "0B0B0F", width: 0 } })
-      // Darken the photo where the words sit, with the screen's own gradient.
-      heroShade(ctx)
-      if (slide.kicker) {
-        ctx.slide.addText(slide.kicker.toUpperCase(), {
-          x: 0.92, y: 3.0, w: 8, h: 0.4, fontFace: theme.pptxBodyFont, fontSize: 13, bold: true, color: "FFFFFF", charSpacing: 3, margin: 0,
-        })
-      }
-      ctx.slide.addText(slide.title, {
-        x: 0.92, y: 3.45, w: 8.6, h: 2.0, fontFace: theme.pptxHeadingFont, fontSize: Math.round(54 * headlineScale(slide)), bold: true,
-         color: "FFFFFF", valign: "top", fit: "shrink", margin: 0, lineSpacingMultiple: 0.95,
-      })
-      if (slide.subtitle) body(ctx, slide.subtitle, { x: 0.92, y: 5.55, w: 7.8, h: 1.1, fontSize: 19, color: "EDEDED" })
-      return
-    }
-
-    case "features": {
-      heading(ctx, slide.title, { fontSize: Math.round(32 * headlineScale(slide)) })
-      const count = slide.items.length
-      const columns = count === 4 ? 2 : 3
-      const rows = Math.ceil(count / columns)
-      const gap = 0.28
-      let top = BODY_Y
-      if (slide.intro) {
-        body(ctx, slide.intro, { x: M, y: top - 0.1, w: CONTENT_W, h: 0.5, fontSize: 16 })
-        top += 0.5
-      }
-      const cardW = (CONTENT_W - gap * (columns - 1)) / columns
-      const cardH = (SLIDE_H - 0.7 - top - gap * (rows - 1)) / rows
-      const compact = rows > 1
-      slide.items.forEach((item, i) => {
-        const x = M + (i % columns) * (cardW + gap)
-        const y = top + Math.floor(i / columns) * (cardH + gap)
-        panel(ctx, x, y, cardW, cardH)
-        const iconBox = compact ? 0.62 : 0.72
-        ctx.slide.addShape("roundRect", {
-          x: x + 0.3, y: y + 0.3, w: iconBox, h: iconBox, rectRadius: 0.12,
-          fill: { color: theme.accent, transparency: 84 }, line: { color: theme.accent, transparency: 100, width: 0 },
-        })
-        const pad = iconBox * 0.24
-        ctx.slide.addImage({ data: iconData(item.icon, theme.accent), x: x + 0.3 + pad, y: y + 0.3 + pad, w: iconBox - pad * 2, h: iconBox - pad * 2 })
-        const textTop = y + 0.3 + iconBox + 0.2
-        ctx.slide.addText(item.title, {
-          x: x + 0.3, y: textTop, w: cardW - 0.6, h: compact ? 0.45 : 0.6, fontFace: theme.pptxHeadingFont, fontSize: compact ? 16 : 19,
-          bold: true, color: theme.text, valign: "top", fit: "shrink", margin: 0,
-        })
-        if (item.body) {
-          body(ctx, item.body, { x: x + 0.3, y: textTop + (compact ? 0.45 : 0.62), w: cardW - 0.6, h: Math.max(0.4, y + cardH - textTop - (compact ? 0.6 : 0.8)), fontSize: compact ? 12 : 14 })
-        }
-      })
-      return
-    }
-
-    case "process": {
-      heading(ctx, slide.title, { fontSize: Math.round(32 * headlineScale(slide)) })
-      const count = slide.steps.length
-      const overlap = 0.22
-      const stepW = (CONTENT_W + overlap * (count - 1)) / count
-      // A chevron's notch is half its height deep, so the arrows are kept
-      // low enough for the words inside to have room.
-      const arrowH = 1.15
-      const y = BODY_Y + 0.5
-      slide.steps.forEach((step, i) => {
-        const x = M + i * (stepW - overlap)
-        ctx.slide.addShape(i === 0 ? "homePlate" : "chevron", {
-          x, y, w: stepW, h: arrowH,
-          fill: { color: theme.accent, transparency: i % 2 ? 18 : 0 },
-          line: { color: theme.accent, transparency: 100, width: 0 },
-        })
-        const textX = x + (i === 0 ? 0.3 : 0.64)
-        ctx.slide.addText([
-          { text: String(i + 1).padStart(2, "0"), options: { fontSize: 11, bold: true, breakLine: true } },
-          { text: step.title, options: { fontSize: count === 5 ? 14 : 17, bold: true, fontFace: theme.pptxHeadingFont } },
-        ], {
-          x: textX, y: y + 0.12, w: stepW - (textX - x) - 0.62, h: arrowH - 0.24,
-          fontFace: theme.pptxBodyFont, color: theme.onAccent, valign: "middle", fit: "shrink", margin: 0,
-        })
-        if (step.body) body(ctx, step.body, { x: textX, y: y + arrowH + 0.25, w: stepW - 0.8, h: SLIDE_H - (y + arrowH + 0.25) - 0.8, fontSize: count === 5 ? 12 : 14 })
-      })
-      return
-    }
-
-    case "gallery": {
-      heading(ctx, slide.title, { fontSize: Math.round(32 * headlineScale(slide)) })
-      let top = BODY_Y
-      if (slide.intro) {
-        body(ctx, slide.intro, { x: M, y: top - 0.1, w: CONTENT_W, h: 0.5, fontSize: 16 })
-        top += 0.5
-      }
-      const count = slide.items.length
-      const gap = 0.3
-      const w = (CONTENT_W - gap * (count - 1)) / count
-      const photoH = SLIDE_H - top - 1.35
-      slide.items.forEach((item, i) => {
-        const x = M + i * (w + gap)
-        image(ctx, images.get(`${slide.id}#${i}`), x, top, w, photoH, item.image?.credit)
-        ctx.slide.addText(item.caption, {
-          x, y: top + photoH + 0.15, w, h: 0.55, fontFace: theme.pptxHeadingFont, fontSize: 16, bold: true,
-          color: theme.text, valign: "top", fit: "shrink", margin: 0,
-        })
-      })
-      return
-    }
-  }
-}
-
-/**
- * Builds the file. `images` maps a slide id (or "slideId#index" for a
- * gallery photo) to a data URL; the caller is
- * responsible for fetching pictures, so this module never touches the network
- * and can be exercised entirely offline.
- */
-export async function buildPptx(deck: Pick<Deck, "title" | "theme" | "slides">, images: Map<string, string> = new Map()): Promise<Buffer> {
+/** Every icon a deck needs, as [name, colour] pairs, so they can be rasterised up front. */
+export function deckIcons(deck: Pick<Deck, "theme" | "slides">): Array<[DeckIconName, string]> {
   const theme = deckTheme(deck.theme)
-  const pptx = new PptxGenJS()
-  pptx.layout = "LAYOUT_WIDE"
-  pptx.title = deck.title
-  pptx.author = "Malik AI"
-  pptx.company = "Sovereign Hub"
-  pptx.subject = deck.title
-
-  deck.slides.forEach((slide, index) => {
-    const pageSlide = pptx.addSlide()
-    pageSlide.background = { color: theme.bg }
-    const ctx: Ctx = { slide: pageSlide, theme, density: slideDensity(slide), index, total: deck.slides.length }
-    // The glow sits under the content, on every slide without a photograph.
-    if (!(IMAGE_LAYOUTS.has(slide.layout) && images.get(slide.id)) && slide.layout !== "gallery") glow(ctx)
-    drawSlide(ctx, slide, images)
-    if (slide.layout !== "title" && slide.layout !== "closing" && slide.layout !== "hero") pageNumber(ctx)
-    if (slide.notes) pageSlide.addNotes(slide.notes)
-  })
-
-  const output = await pptx.write({ outputType: "nodebuffer" })
-  return Buffer.isBuffer(output) ? output : Buffer.from(output as ArrayBuffer)
+  const seen = new Map<string, [DeckIconName, string]>()
+  for (const slide of deck.slides) {
+    if (slide.layout !== "features") continue
+    slide.items.forEach((item, i) => {
+      void i
+      const color = theme.id === "candy" ? "FFFFFF" : theme.accent
+      seen.set(`${item.icon}:${color}`, [item.icon, color])
+    })
+  }
+  return [...seen.values()]
 }
 
 /** A filename that survives every operating system and every download bar. */

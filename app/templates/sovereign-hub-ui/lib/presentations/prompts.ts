@@ -120,6 +120,23 @@ WRITING RULES — these decide whether the deck is good:
     with fake figures or unrelated images. Headlines must remain legible from the back of a room.
 `.trim()
 
+/** What each design system is for, so the planner can pick one by meaning. */
+const THEME_GUIDE = [
+  "aurora — technology, AI, startups, investor pitches, the future (dark, glowing gradients, glass cards)",
+  "cyber — gaming, crypto, hackathons, cybersecurity (black, neon grid, uppercase)",
+  "ocean — corporate reports, finance, sales, strategy, medicine (clean white and blue)",
+  "steppe — Kazakhstan, Kazakh history and culture, national heritage (deep blue, gold ornament)",
+  "royal — luxury, premium brands, real estate, ceremonies (purple and gold, serif)",
+  "editorial — fashion, media, art, culture, design (magazine serif, red accent, rules)",
+  "sunset — marketing, brands, travel, lifestyle, beauty (warm light gradient)",
+  "candy — school lessons, children, education games (bright, playful, rounded)",
+  "forest — ecology, nature, agriculture, sustainability (dark green, organic)",
+  "sand — food, coffee shops, restaurants, crafts, warm classics (cream, terracotta, serif)",
+  "ember — launches, sport, energy, bold motivation (dark with fiery orange)",
+  "paper — science, research, lectures, minimal academic decks (white, Swiss minimal)",
+  "obsidian — neutral premium black and white, when nothing else clearly fits",
+].map((line) => `- ${line}`).join("\n")
+
 function languageLine(language: DeckLanguage) {
   return `Write every visible string in ${LANGUAGE_NAME[language]}. imageQuery and imagePrompt stay in English.`
 }
@@ -129,7 +146,7 @@ export function outlineSystemPrompt(input: { language: DeckLanguage; tone: DeckT
 You are the story architect of a world-class presentation studio. You plan decks; you do not design them.
 
 Return ONLY a JSON object, no prose, no code fence:
-{"title":"deck title, ≤8 words","items":[{"title":"slide claim, ≤10 words","point":"one sentence: what this slide must make the audience believe","layout":"<layout>"}]}
+{"title":"deck title, ≤8 words","theme":"<design system id>","items":[{"title":"slide claim, ≤10 words","point":"one sentence: what this slide must make the audience believe","layout":"<layout>"}]}
 
 Produce EXACTLY ${input.count} items.
 ${input.investor ? `This is an INVESTOR DECK. Each item MUST also have "section". Include these ten sections, in this exact order:
@@ -166,6 +183,9 @@ Design like a world-class deck, not a document:
   choose a process, a comparison, a gallery or feature cards instead.
 - Distinguish "known", "assumption" and "missing" in the slide's intended message, especially for investors.
 - Reuse the specific examples, constraints and priorities the person gave you, not generic industry boilerplate.
+
+Design system — choose the ONE "theme" whose character fits the topic and audience best:
+${THEME_GUIDE}
 
 Arc: open with why this matters to THIS audience, show what is broken or possible, show what changes, prove it, say how,
 end with the ask or the one thing to remember. For a history or education topic: context, key events, people, meaning
