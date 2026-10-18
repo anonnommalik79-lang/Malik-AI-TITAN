@@ -71,6 +71,13 @@ for (const [prompt, expected] of [
   ["Сгенерируй сайт с видео", "create"], ["Build a site with a gallery", "create"],
   ["Создай красивую фотографию для моего сайта", null], ["Create an image for my website", null],
 ]) test(`intent: ${prompt}`, () => assert.equal(websiteIntent(prompt), expected))
+test("creation verbs beat later add/repair instructions in one website brief", () => {
+  assert.equal(websiteIntent("Создай сайт отеля. Добавь бронирование. Исправь ошибки. Проверь адаптивность."), "create")
+  assert.equal(websiteIntent("Не создавай изображение. Создай сайт гостиницы и добавь бронирование."), "create")
+  assert.equal(websiteIntent("Не создавай сайт"), null)
+  assert.equal(websiteIntent("Добавь видео на страницу сайта"), "edit")
+})
+
 test("contextual edit/preview use the existing project", () => {
   assert.equal(websiteIntent("Добавь страницу тарифов", true), "edit")
   assert.equal(websiteIntent("Открой предпросмотр", true), "preview")
