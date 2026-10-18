@@ -45,6 +45,10 @@ export function siteForgeTurn(prompt: string, input: { messages?: unknown; attac
   if (Array.isArray(input.attachments) && input.attachments.length) return null
   if (/https?:\/\/|```/i.test(text) || STACK.test(text)) return null
   const asksForSite = SITE_NOUN.test(text) && CREATE.test(text) && !QUESTION.test(text)
+  // Review-only requests and explicit prohibitions still must not build a site,
+  // even if quoted/descriptive text later mentions "создание сайта".
+  if (/^\s*(?:исправь|почини|проверь|проанализируй|оцени|аудит|audit|review|fix|debug|переведи|translate)\b/iu.test(text)) return null
+  if (/^\s*(?:не\s+(?:создавай|делай|строй|генерируй)\s+(?:(?:мне|новый|этот)\s+){0,3}(?:сайт\p{L}*|лендинг\p{L}*|website)|(?:do not|don't)\s+(?:create|build|generate)\s+(?:a\s+|the\s+)?(?:website|site|landing\s+page))/iu.test(text)) return null
   if (NOT_BUILD.test(text) && !asksForSite) return null
   const previous = lastForgeSite(input.messages)
   if (previous) {
