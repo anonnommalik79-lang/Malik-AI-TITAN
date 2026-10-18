@@ -242,6 +242,7 @@ async function save(turn: BackgroundChatTurn) {
       if (row.value && !existing) throw new BackgroundStorageError()
       if (existing && existing.ownerId !== turn.ownerId) throw new BackgroundStorageError()
       if (existing && existing.status !== "pending") return cacheTurn(existing)
+      if (existing && turn.status === "pending" && (existing.content?.length || 0) > (turn.content?.length || 0)) turn = { ...turn, content: existing.content }
       const result = await writePrivateJsonConditional(objectKey(turn.turnId), encryptTurn(turn, privateSecret()), row.etag)
       if (result.stored) { stored = true; break }
       if (!result.conflict) throw new BackgroundStorageError()
@@ -286,7 +287,8 @@ export async function startBackgroundChatTurn(turnId: string, ownerId: string) {
     return cacheTurn(turn)
   }
   memoryStore().set(normalized, turn)
-  return save(turn)
+  try { return await save(turn) }
+  catch (error) { if (memoryStore().get(normalized) === turn) memoryStore().delete(normalized); throw error }
 }
 
 export async function completeBackgroundChatTurn(turnId: string, input: {

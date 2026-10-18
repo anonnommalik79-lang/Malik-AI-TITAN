@@ -17,7 +17,7 @@ export async function prepareDocumentAssets(input: { owner?: RequestEntitlement;
   if (!generate && !photos) return []
   if (!owner?.authenticated) throw new Error("SIGN_IN_REQUIRED")
   signal?.throwIfAborted()
-  let url = "", credit = ""
+  let url: string, credit: string
   const step = activity?.start(generate ? "Создаю иллюстрацию для презентации" : "Подбираю фото для презентации", "media", generate ? "image.generate" : "research.photos")
   try {
     const query = markdown.match(/<!--\s*photo-query:\s*([^\n<>]{3,160})\s*-->/iu)?.[1] || markdown.match(/^#{1,2}\s+(.+)$/m)?.[1] || intent.original.slice(0, 180)

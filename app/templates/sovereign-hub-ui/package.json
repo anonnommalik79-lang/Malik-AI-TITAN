@@ -6,6 +6,7 @@
     "node": ">=20 <23"
   },
   "scripts": {
+    "test:native-execution": "node scripts/verify-native-execution.mjs && node scripts/verify-background-ownership.mjs && node scripts/verify-background-chat-survives.mjs",
     "test:domain-intelligence": "node --test scripts/verify-domain-intelligence.mjs scripts/verify-domain-execution.mjs && node scripts/verify-live-intelligence-lanes.mjs",
     "test:website-engine": "node --test scripts/verify-website-engine.mjs scripts/verify-website-experience.mjs",
     "test:website-engine-browser": "node scripts/verify-website-engine-browser.mjs",

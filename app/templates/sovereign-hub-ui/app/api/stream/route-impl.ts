@@ -596,7 +596,7 @@ async function runSelectedAnswer(
     }
   }
   if(!fileFormat||"incomplete" in answer&&answer.incomplete||/safety|unavailable|evidence-gate/.test(answer.provider))return answer
-  let assets:DocumentAsset[]=[]
+  let assets:DocumentAsset[]
   try{
     assets=documentAssets(source?.artifact?.metadata?.documentAssets)
     if(/(?:без|убери|remove|without|no)\s+(?:фото|изображени|images?|photos?)/iu.test(originalPrompt))assets=[]
