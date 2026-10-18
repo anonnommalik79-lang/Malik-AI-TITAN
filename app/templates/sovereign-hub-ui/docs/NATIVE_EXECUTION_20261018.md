@@ -68,3 +68,5 @@ Final combined verification: production webpack build PASS, TypeScript PASS,
 execution checks PASS; 13 background ownership checks PASS; background stream
 survival PASS; 93 presentation checks and 7 stream lane checks PASS. The existing
 universal-intent and website-engine/experience suites also passed after the merge.
+Lint of changed TypeScript/TSX files: 0 errors after documenting an intentional
+control-byte sanitizer; 85 warnings remain in existing dashboard/router code.

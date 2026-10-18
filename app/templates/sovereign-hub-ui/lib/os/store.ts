@@ -496,6 +496,7 @@ const kindWords: Record<ArtifactKind, string> = {
 }
 
 function clean(value: unknown, max: number) {
+  // eslint-disable-next-line no-control-regex -- Intentionally strip unsafe control bytes from stored labels.
   return String(value || "").replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "").replace(/\s+/g, " ").trim().slice(0, max)
 }
 
