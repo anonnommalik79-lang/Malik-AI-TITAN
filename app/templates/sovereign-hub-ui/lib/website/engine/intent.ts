@@ -4,18 +4,21 @@ export function websiteIntent(prompt: string, hasProject = false): "create" | "e
   if (!text || text.length > 28_000) return null
   const opening = text.split(/\r?\n/).filter(line => !/^\s*>/.test(line)).join(" ").slice(0, 2200)
   if (/^(?:как|почему|что такое|объясни|расскажи|how|why|what is|explain)(?!\p{L})/iu.test(opening)) return null
-  if (/(?:не\s+(?:создавай|делай|строй|генерируй)|do not (?:create|build|generate)|don't (?:create|build))/iu.test(opening)) return null
+  // Negating an image subtask must not cancel a following website request.
+  if (/^\s*(?:не\s+(?:создавай|делай|строй|генерируй)\s+(?:(?:мне|новый|этот|полноценный)\s+){0,3}(?:сайт\p{L}*|лендинг\p{L}*|website|web\s*site)|(?:do not|don't)\s+(?:create|build|generate)\s+(?:a\s+|the\s+)?(?:website|site|landing\s+page))/iu.test(opening)) return null
   const site = /(?:сайт\p{L}*|лендинг\p{L}*|веб[- ]?приложени\p{L}*|веб[- ]?интерфейс\p{L}*|интерфейс|React[- ]?проект\p{L}*|website|\bsite\b|web\s*app|landing\s*page|homepage|сайтты)/iu
   const create = /(?:создай|создайте|сгенерируй|сгенерируйте|сделай|сделайте|собери|построй|разработай|сверстай|жаса|құр|\b(?:create|build|make|implement|design)\b)/iu
   const edit = /(?:добавь|измени|исправь|почини|замени|улучши|поменяй|удали|\b(?:add|change|fix|debug|replace|improve|remove)\b)/iu
   if (hasProject && /(?:открой|покажи|open|show).*(?:превью|предпросмотр|preview)/iu.test(opening)) return "preview"
-  if (edit.test(opening) && (hasProject || site.test(opening))) return "edit"
+  // Creating a new site takes precedence over later add/fix/test requirements.
   // «Create an image FOR my website» targets media, whereas «create a website
   // WITH images» targets a project. Co-occurrence alone is not creation intent.
   const target = site.exec(opening), media = /(?:фотографи|фото|картинк|изображени|видео|анимаци|\b(?:image|photo|video|animation|icon)\b)/iu.exec(opening)
   if (target && media && media.index < target.index && /(?:для|на|for|on)\s+(?:[\p{L}]+\s+){0,3}$/iu.test(opening.slice(media.index, target.index))) return null
   if (create.test(opening) && site.test(opening)) return "create"
   return null
+  if (edit.test(opening) && (hasProject || site.test(opening))) return "edit"
+
 }
 
 export function lastWebsiteJob(messages: unknown): string | null {
