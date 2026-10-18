@@ -98,6 +98,8 @@ test("long create-site brief with QA instructions still enters Site Forge", () =
   assert.deepEqual(siteForgeTurn(brief + " Опиши компоненты и требования к разделам. ".repeat(210)), { kind: "new" }, "brief exceeding 6000 chars")
   assert.equal(siteForgeTurn("Проверь код моего сайта"), null)
   assert.equal(siteForgeTurn("Исправь мой сайт"), null)
+  assert.equal(siteForgeTurn("Не создавай сайт"), null)
+  assert.equal(siteForgeTurn("Проверь создание сайта"), null)
 })
 
 test("blueprints: the business decides structure, booking and art direction", () => {
