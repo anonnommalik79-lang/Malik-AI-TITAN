@@ -189,6 +189,8 @@ export type OutlineItem = {
 export type DeckOutline = {
   title: string
   items: OutlineItem[]
+  /** The design system the planner judged right for this topic, if any. */
+  theme?: ThemeId
 }
 
 export type Deck = {
@@ -206,7 +208,18 @@ export type DeckLanguage = "ru" | "kk" | "en"
 
 export type DeckTone = "confident" | "friendly" | "academic" | "bold"
 
-export type ThemeId = "obsidian" | "paper" | "ember" | "forest" | "sand" | "royal"
+/**
+ * Thirteen design systems. Each is more than a palette: it carries its own
+ * typography, background art, card surface, photo shape and cover
+ * composition (see themes.ts and design.ts), so two decks in two themes do
+ * not look like one template in two colours.
+ */
+export const THEME_ID_LIST = [
+  "obsidian", "paper", "ember", "forest", "sand", "royal",
+  "aurora", "cyber", "editorial", "sunset", "candy", "steppe", "ocean",
+] as const
+
+export type ThemeId = (typeof THEME_ID_LIST)[number]
 
 /** Layouts that carry one picture in imageUrl. The gallery carries several, per item. */
 export const IMAGE_LAYOUTS: ReadonlySet<SlideLayout> = new Set(["title", "image-text", "hero"])

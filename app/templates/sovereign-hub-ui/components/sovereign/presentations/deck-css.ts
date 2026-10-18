@@ -263,52 +263,20 @@ export const DECK_CSS = `
 .deck-closing-slide .deck-sub { font-size: 26px; color: var(--deck-muted); max-width: 900px; }
 .deck-contact { margin-top: 42px; padding: 12px 22px; border-radius: 999px; border: 1px solid var(--deck-border); font-size: 20px; font-weight: 700; color: var(--deck-accent); }
 
-/* ------------------------------------------------------------- shapes
+/* ------------------------------------------------------------- art
  *
- * Soft light behind the content, drawn per layout: a glow in a corner, a ring
- * behind a chapter number, a halo behind a closing line. Photo layouts have
- * their photograph instead.
+ * The theme's background art: one SVG per slide from design.ts, the same
+ * picture the PowerPoint export puts behind the slide. It sits under all the
+ * content and never takes a pointer.
  */
-.deck-deco { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
-.deck-deco i,
-.deck-deco b { position: absolute; display: block; border-radius: 50%; }
-.deck-deco i {
-  right: -240px;
-  top: -280px;
-  width: 660px;
-  height: 660px;
-  background: radial-gradient(circle, color-mix(in srgb, var(--deck-accent) 24%, transparent) 0%, transparent 66%);
+.deck-art {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-position: center;
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
 }
-.deck-deco b {
-  left: -180px;
-  bottom: -250px;
-  width: 460px;
-  height: 460px;
-  background: radial-gradient(circle, color-mix(in srgb, var(--deck-accent) 12%, transparent) 0%, transparent 66%);
-}
-.deck-slide[data-dark="false"] .deck-deco i { background: radial-gradient(circle, color-mix(in srgb, var(--deck-accent) 13%, transparent) 0%, transparent 66%); }
-.deck-slide[data-dark="false"] .deck-deco b { background: radial-gradient(circle, color-mix(in srgb, var(--deck-accent) 7%, transparent) 0%, transparent 66%); }
-.deck-slide[data-layout="section"] .deck-deco b {
-  left: auto;
-  right: -140px;
-  bottom: -200px;
-  width: 620px;
-  height: 620px;
-  background: none;
-  border: 2px solid color-mix(in srgb, var(--deck-accent) 30%, transparent);
-  box-shadow: inset 0 0 0 60px color-mix(in srgb, var(--deck-accent) 4%, transparent);
-}
-.deck-slide[data-layout="closing"] .deck-deco i { right: 50%; top: -360px; transform: translateX(50%); width: 900px; height: 900px; }
-.deck-slide[data-layout="closing"] .deck-deco b {
-  left: 50%;
-  bottom: -520px;
-  width: 1000px;
-  height: 700px;
-  transform: translateX(-50%);
-  background: none;
-  border: 2px solid color-mix(in srgb, var(--deck-accent) 22%, transparent);
-}
-.deck-slide:is([data-layout="hero"], [data-layout="gallery"], [data-layout="image-text"]) .deck-deco { display: none; }
 
 /* ------------------------------------------------------------- photos */
 .deck-credit {
@@ -638,6 +606,159 @@ export const DECK_CSS = `
 .deck-slide[data-build="true"] .deck-gallery-photo img { animation: deck-zoom 2.4s cubic-bezier(.2, .7, .2, 1) both; }
 
 
+/* ===================================================== DESIGN SYSTEMS
+ * A theme is a visual language, not a palette: these rules read the
+ * data-theme, data-surface, data-case and data-gradient flags that
+ * SlideRenderer sets from themes.ts. PowerPoint reads the same flags.
+ */
+.deck-h { letter-spacing: var(--deck-heading-tracking, -0.028em); }
+.deck-kicker { font-family: var(--deck-label-font); }
+.deck-step-label, .deck-row b, .deck-card b, .deck-process-arrow b { font-family: var(--deck-label-font); }
+
+/* Upper-case display themes set a little smaller so a long claim still fits. */
+.deck-slide[data-case="upper"] .deck-h { text-transform: uppercase; }
+.deck-slide[data-case="upper"] .deck-head .deck-h { font-size: 44px; line-height: 1.08; }
+.deck-slide[data-case="upper"] .deck-title-slide .deck-h { font-size: 70px; }
+.deck-slide[data-case="upper"] .deck-title-slide[data-image="true"] .deck-h { font-size: 54px; }
+.deck-slide[data-case="upper"] .deck-hero .deck-h { font-size: 72px; }
+.deck-slide[data-case="upper"] .deck-section-slide .deck-h { font-size: 60px; }
+.deck-slide[data-case="upper"] .deck-closing-slide .deck-h { font-size: 62px; }
+.deck-slide[data-case="upper"] .deck-imgtext .deck-h { font-size: 42px; }
+
+/* Gradient display type on covers, chapter openers, closings and numbers. */
+.deck-slide[data-gradient="true"] :is(.deck-title-slide, .deck-section-slide, .deck-closing-slide) .deck-h,
+.deck-slide[data-gradient="true"] :is(.deck-stat-value, .deck-num) {
+  background: linear-gradient(100deg, var(--deck-text) 0%, var(--deck-accent) 52%, var(--deck-accent-2) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  caret-color: var(--deck-text);
+}
+.deck-slide[data-gradient="true"] :is(.deck-stat-value, .deck-num) { background-image: linear-gradient(100deg, var(--deck-accent), var(--deck-accent-2)); }
+.deck-title-rule { background: linear-gradient(90deg, var(--deck-accent), var(--deck-accent-2)); }
+.deck-bar-fill { background: linear-gradient(180deg, var(--deck-accent-2), var(--deck-accent)); }
+.deck-slide[data-theme="obsidian"] .deck-bar-fill,
+.deck-slide[data-theme="paper"] .deck-bar-fill { background: var(--deck-accent); }
+.deck-process-arrow {
+  background:
+    linear-gradient(135deg, color-mix(in srgb, #fff 16%, transparent), transparent 60%),
+    linear-gradient(90deg, var(--deck-accent), color-mix(in srgb, var(--deck-accent) 72%, var(--deck-accent-2)));
+}
+
+/* ---------------------------------------------------- bullets as tiles */
+.deck-rows[data-variant="grid"] {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 22px;
+  height: 100%;
+  align-content: center;
+}
+.deck-rows[data-variant="grid"][data-count="3"] { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.deck-slide .deck-rows[data-variant="grid"] .deck-row {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  max-height: none;
+  padding: 28px 30px 30px;
+  border: 1px solid var(--deck-border);
+  border-radius: var(--deck-radius);
+  background: var(--deck-surface);
+  overflow: hidden;
+}
+.deck-slide .deck-rows[data-variant="grid"] .deck-row b {
+  padding: 0;
+  font-family: var(--deck-heading-font);
+  font-size: 46px;
+  font-weight: var(--deck-heading-weight);
+  line-height: 1;
+  letter-spacing: -0.03em;
+  color: var(--deck-accent);
+}
+.deck-slide .deck-rows[data-variant="grid"] .deck-row strong { font-size: 27px; line-height: 1.15; }
+.deck-slide .deck-rows[data-variant="grid"] .deck-row p { font-size: 19px; line-height: 1.42; }
+.deck-slide .deck-rows[data-variant="grid"][data-count="3"] .deck-row { padding: 32px 30px 34px; }
+
+/* ----------------------------------------------------------- surfaces */
+:is(.deck-panel, .deck-feature, .deck-gallery-photo) { border-radius: var(--deck-radius); }
+.deck-slide[data-tiles="true"] .deck-stat {
+  padding: 30px 30px 34px;
+  border: 1px solid var(--deck-border);
+  border-radius: var(--deck-radius);
+  background: var(--deck-surface);
+}
+.deck-slide[data-tiles="true"][data-build="true"] .deck-stat::before { display: none; }
+
+.deck-slide[data-surface="glass"][data-dark="true"] :is(.deck-panel, .deck-feature, .deck-rows[data-variant="grid"] .deck-row, .deck-stat) {
+  background: linear-gradient(160deg, rgba(255, 255, 255, .11), rgba(255, 255, 255, .035));
+  border: 1px solid rgba(255, 255, 255, .16);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .12), 0 24px 60px rgba(0, 0, 0, .28);
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+}
+.deck-slide[data-surface="glass"][data-dark="false"] :is(.deck-panel, .deck-feature, .deck-rows[data-variant="grid"] .deck-row, .deck-stat) {
+  background: rgba(255, 255, 255, .64);
+  border: 1px solid rgba(255, 255, 255, .96);
+  box-shadow: 0 20px 50px rgba(120, 40, 60, .10);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+}
+.deck-slide[data-surface="outline"] :is(.deck-panel, .deck-feature, .deck-rows[data-variant="grid"] .deck-row) {
+  background: transparent;
+  border: 1.5px solid color-mix(in srgb, var(--deck-accent) 42%, transparent);
+}
+.deck-slide[data-surface="soft"] :is(.deck-panel, .deck-feature, .deck-rows[data-variant="grid"] .deck-row, .deck-stat) {
+  border-color: transparent;
+  box-shadow: 0 18px 44px rgba(16, 32, 64, .09);
+}
+.deck-slide[data-surface="soft"][data-dark="true"] :is(.deck-panel, .deck-feature, .deck-rows[data-variant="grid"] .deck-row, .deck-stat) { box-shadow: 0 22px 50px rgba(0, 0, 0, .38); }
+.deck-slide[data-surface="brutal"] :is(.deck-panel, .deck-feature, .deck-rows[data-variant="grid"] .deck-row, .deck-stat) {
+  background: var(--deck-surface);
+  border: 3px solid var(--deck-text);
+  box-shadow: 7px 7px 0 var(--deck-text);
+}
+.deck-slide[data-surface="line"] :is(.deck-panel, .deck-feature, .deck-rows[data-variant="grid"] .deck-row) {
+  background: transparent;
+  border: 0;
+  border-top: 2px solid var(--deck-text);
+  border-radius: 0;
+  box-shadow: none;
+}
+.deck-slide[data-surface="line"] .deck-rows[data-variant="grid"] .deck-row,
+.deck-slide[data-surface="line"] .deck-card,
+.deck-slide[data-surface="line"] .deck-feature { padding-left: 0; padding-right: 8px; }
+.deck-slide:is([data-surface="brutal"], [data-surface="line"], [data-surface="outline"]) .deck-feature::after { display: none; }
+.deck-slide:is([data-surface="line"], [data-surface="brutal"]) .deck-card::before { display: none; }
+.deck-slide[data-surface="brutal"] .deck-gallery-photo { border: 3px solid var(--deck-text); box-shadow: 7px 7px 0 var(--deck-text); }
+.deck-slide[data-surface="line"] .deck-gallery-photo { border-radius: 0; box-shadow: none; border: 0; }
+
+/* ------------------------------------------------- theme signatures */
+/* Candy: every tile and icon takes its own bright colour. */
+.deck-slide[data-theme="candy"] :is(.deck-card, .deck-feature, .deck-rows[data-variant="grid"] .deck-row):nth-child(3n + 2) { --deck-accent: var(--deck-series-2); }
+.deck-slide[data-theme="candy"] :is(.deck-card, .deck-feature, .deck-rows[data-variant="grid"] .deck-row):nth-child(3n) { --deck-accent: var(--deck-series-3); }
+.deck-slide[data-theme="candy"] .deck-feature-icon { background: var(--deck-accent); color: #fff; border: 2.5px solid var(--deck-text); }
+.deck-slide[data-theme="candy"] .deck-card b { background: var(--deck-accent); color: #fff; }
+/* Cyber: neon display type and code-style labels. */
+.deck-slide[data-theme="cyber"] :is(.deck-title-slide, .deck-section-slide, .deck-closing-slide, .deck-hero) .deck-h { text-shadow: 0 0 28px color-mix(in srgb, var(--deck-accent) 40%, transparent); }
+.deck-slide[data-theme="cyber"] .deck-kicker::before { content: "// "; color: var(--deck-accent-2); }
+.deck-slide[data-theme="cyber"] .deck-stat-value { text-shadow: 0 0 30px color-mix(in srgb, var(--deck-accent) 45%, transparent); }
+/* Editorial: magazine numerals and an italic kicker. */
+.deck-slide[data-theme="editorial"] .deck-kicker { font-family: var(--deck-heading-font); font-style: italic; text-transform: none; letter-spacing: 0; font-size: 22px; }
+.deck-slide[data-theme="editorial"] .deck-row b { font-family: var(--deck-heading-font); font-style: italic; font-size: 30px; letter-spacing: 0; padding-top: 0; }
+.deck-slide[data-theme="editorial"] .deck-title-slide .deck-h { font-size: 88px; line-height: .98; }
+.deck-slide[data-theme="editorial"] .deck-title-slide[data-image="true"] .deck-h { font-size: 60px; }
+.deck-slide[data-theme="editorial"] .deck-quote-mark { font-style: italic; }
+/* Steppe: a turquoise diamond before every kicker. */
+.deck-slide[data-theme="steppe"] .deck-kicker::before { content: "\\25C6  "; color: var(--deck-accent-2); }
+/* Royal: wide-tracked labels, a fine gold rule. */
+.deck-slide[data-theme="royal"] .deck-kicker { letter-spacing: .32em; }
+.deck-slide[data-theme="royal"] .deck-title-rule { height: 1.5px; width: 110px; }
+/* Aurora and Sunset: gradient number pills. */
+.deck-slide:is([data-theme="aurora"], [data-theme="sunset"]) .deck-card b { background: linear-gradient(90deg, var(--deck-accent), var(--deck-accent-2)); color: var(--deck-on-accent); }
+/* A narrower cover column for the editorial half-page photo. */
+.deck-title-slide[data-cover="band"][data-image="true"] .deck-h { font-size: 58px; }
+
 /* ===================================================== ART DIRECTION V3
  * Smart density on the fixed 1280 × 720 slide, never responsive reflow.
  * No invisible text, line clamps, or arbitrary clipping of user content.
@@ -805,6 +926,18 @@ export const DECK_CSS = `
 .deck-slide[data-density="ultra"] .deck-bars { gap: 8px; padding-bottom: 58px; }
 .deck-slide[data-density="ultra"] .deck-bar-label { bottom: -50px; font-size: 12px; white-space: normal; line-height: 1.18; overflow-wrap: anywhere; text-overflow: clip; }
 .deck-slide[data-density="ultra"] .deck-body--center { padding-bottom: 10px; }
+
+/* A placed photo takes its box, cut and frame from design.ts (inline style);
+   earlier per-layout geometry must not fight it. */
+.deck-image[data-placed="true"] {
+  right: auto;
+  bottom: auto;
+  clip-path: none;
+  border-radius: 0;
+  box-shadow: none;
+  overflow: hidden;
+}
+.deck-slide .deck-rows[data-variant="grid"] .deck-row p:empty { display: none; }
 
 /* The app's own reduced-motion rule cannot reach into a shadow root. */
 @media (prefers-reduced-motion: reduce) {

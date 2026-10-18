@@ -1,11 +1,11 @@
 import { isIP } from "node:net"
 import sharp from "sharp"
 import { normalizeDeck } from "@/lib/presentations/deck"
-import { IMAGE_LAYOUTS } from "@/lib/presentations/types"
-import { buildPptx, pptxFileName } from "@/lib/presentations/pptx"
+import { deckPhotoJobs, pptxFileName } from "@/lib/presentations/pptx"
+import { buildServerPptx } from "@/lib/server/pptx-assets"
 import { readJsonBodyLimited, RequestSafetyError } from "@/lib/server/request-safety"
 import { resolveRequestEntitlement } from "@/lib/server/request-entitlement"
-import { renderBandwidthBlocked, renderResponseFitsBudget } from "@/lib/server/render-bandwidth"
+import { renderBandwidthBlocked, renderResponseBudgetBytes, renderResponseFitsBudget } from "@/lib/server/render-bandwidth"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -34,24 +34,12 @@ function fetchableImageUrl(value: string) {
   return url
 }
 
-async function compactPptxImage(buffer: Buffer) {
-  // Export pictures are intentionally lightweight copies. The full-resolution
-  // source stays in the Malik AI UI/provider; only the PPTX embed is reduced.
-  const compact = await sharp(buffer)
-    .rotate()
-    .resize({ width: 480, height: 320, fit: "inside", withoutEnlargement: true })
-    .jpeg({ quality: 42, mozjpeg: true })
-    .toBuffer()
-  return compact.length ? `data:image/jpeg;base64,${compact.toString("base64")}` : null
-}
-
-async function imageAsDataUrl(value: string): Promise<string | null> {
+/** The original bytes of a picture: an inline data URL or a public https image. */
+async function imageBytes(value: string): Promise<Buffer | null> {
   if (/^data:image\/(?:png|jpe?g|webp|gif);base64,/i.test(value)) {
     try {
-      const raw = value.slice(value.indexOf(",") + 1)
-      const buffer = Buffer.from(raw, "base64")
-      if (!buffer.length || buffer.length > MAX_IMAGE_BYTES) return null
-      return await compactPptxImage(buffer)
+      const buffer = Buffer.from(value.slice(value.indexOf(",") + 1), "base64")
+      return buffer.length && buffer.length <= MAX_IMAGE_BYTES ? buffer : null
     } catch {
       return null
     }
@@ -65,16 +53,40 @@ async function imageAsDataUrl(value: string): Promise<string | null> {
     const response = await fetch(url, { signal: controller.signal, redirect: "follow", cache: "no-store" })
     if (!response.ok) return null
     const type = (response.headers.get("content-type") || "").split(";")[0].trim().toLowerCase()
-    if (!/^image\/(?:png|jpe?g|webp|gif)$/.test(type)) return null
+    if (!/^image\/(?:png|jpe?g|webp|gif|avif)$/.test(type)) return null
     const declared = Number(response.headers.get("content-length") || 0)
     if (declared > MAX_IMAGE_BYTES) return null
     const buffer = Buffer.from(await response.arrayBuffer())
-    if (!buffer.length || buffer.length > MAX_IMAGE_BYTES) return null
-    return await compactPptxImage(buffer)
+    return buffer.length && buffer.length <= MAX_IMAGE_BYTES ? buffer : null
   } catch {
     return null
   } finally {
     clearTimeout(timer)
+  }
+}
+
+/**
+ * One slide photo, re-encoded, for the browser's own PowerPoint builder when
+ * the photo's host does not allow it to be read across origins. Signed-in
+ * users only, the same public-https rules as the export, one picture per
+ * response so it stays inside the response budget.
+ */
+export async function GET(request: Request) {
+  const entitlement = await resolveRequestEntitlement(request)
+  if (!entitlement.authenticated) return new Response(null, { status: 401, headers: { "cache-control": "no-store" } })
+  const target = new URL(request.url).searchParams.get("image") || ""
+  if (!fetchableImageUrl(target)) return new Response(null, { status: 400, headers: { "cache-control": "no-store" } })
+  const bytes = await imageBytes(target)
+  if (!bytes) return new Response(null, { status: 404, headers: { "cache-control": "no-store" } })
+  try {
+    let out = await sharp(bytes).rotate().resize({ width: 1920, height: 1920, fit: "inside", withoutEnlargement: true }).jpeg({ quality: 82, mozjpeg: true }).toBuffer()
+    if (!renderResponseFitsBudget(out.length)) out = await sharp(bytes).rotate().resize({ width: 1280, height: 1280, fit: "inside", withoutEnlargement: true }).jpeg({ quality: 70, mozjpeg: true }).toBuffer()
+    if (!renderResponseFitsBudget(out.length)) return renderBandwidthBlocked("presentation-photo", out.length)
+    return new Response(new Uint8Array(out), {
+      headers: { "content-type": "image/jpeg", "content-length": String(out.length), "cache-control": "private, max-age=600", "x-malik-router": "presentation-photo-v1" },
+    })
+  } catch {
+    return new Response(null, { status: 415, headers: { "cache-control": "no-store" } })
   }
 }
 
@@ -97,32 +109,21 @@ export async function POST(request: Request) {
     const deck = normalizeDeck(body.deck)
     if (!deck) return Response.json({ ok: false, error: "Презентация пуста или повреждена." }, { status: 400, headers: { "cache-control": "no-store" } })
 
-    // Every picture on the deck: one per photo slide, one per gallery photo
-    // (keyed "slideId#index"). Four at a time — enough to be quick, few
-    // enough not to open a dozen connections for one download.
-    const images = new Map<string, string>()
-    const jobs: Array<[string, string]> = deck.slides.flatMap((slide): Array<[string, string]> => {
-      if (slide.layout === "gallery") {
-        return slide.items.flatMap((item, index): Array<[string, string]> => (item.image?.url ? [[`${slide.id}#${index}`, item.image.url]] : []))
-      }
-      return IMAGE_LAYOUTS.has(slide.layout) && slide.imageUrl ? [[slide.id, slide.imageUrl]] : []
-    }).slice(0, 40)
+    // Every picture on the deck, by the slot it fills. Four at a time —
+    // enough to be quick, few enough not to open a dozen connections.
+    const photos = new Map<string, Buffer>()
+    const jobs = deckPhotoJobs(deck).slice(0, 40)
     await Promise.all(Array.from({ length: Math.min(4, jobs.length) }, async () => {
       while (jobs.length) {
-        const [key, url] = jobs.shift() as [string, string]
-        const data = await imageAsDataUrl(url)
-        if (data) images.set(key, data)
+        const job = jobs.shift()!
+        const bytes = await imageBytes(job.url)
+        if (bytes) photos.set(job.key, bytes)
       }
     }))
 
-    let file = await buildPptx(deck, images)
-    let slimmed = false
-    if (!renderResponseFitsBudget(file.length) && images.size) {
-      // Preserve all text, shapes, charts and notes. Only the embedded photo
-      // copies are dropped if they would push Render over the hard budget.
-      file = await buildPptx(deck, new Map())
-      slimmed = true
-    }
+    // The richest version that fits the response budget: art and photos
+    // first, then lighter copies, never at the cost of any text or shape.
+    const { file, tier } = await buildServerPptx(deck, photos, renderResponseBudgetBytes())
     if (!renderResponseFitsBudget(file.length)) return renderBandwidthBlocked("presentation-pptx", file.length)
 
     const name = pptxFileName(deck.title)
@@ -132,8 +133,8 @@ export async function POST(request: Request) {
         "content-disposition": `attachment; filename="presentation.pptx"; filename*=UTF-8''${encodeURIComponent(name)}`,
         "content-length": String(file.length),
         "cache-control": "no-store",
-        "x-malik-router": "presentation-export-v1",
-        "x-malik-bandwidth-mode": slimmed ? "slimmed-under-1mb" : "full-under-1mb",
+        "x-malik-router": "presentation-export-v2",
+        "x-malik-bandwidth-mode": `tier-${tier}`,
       },
     })
   } catch (error) {

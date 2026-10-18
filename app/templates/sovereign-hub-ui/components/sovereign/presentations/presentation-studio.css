@@ -913,3 +913,69 @@
   .ps-visual-message { flex-basis: calc(100% - 40px); }
   .ps-visual-check .ps-btn { margin-left: 36px; }
 }
+
+/* ============================================================ style picker
+ * Every theme is shown as itself: a real slide drawn by the renderer, not a
+ * swatch of three colours. The chrome around them stays black and white.
+ */
+.ps-themes { grid-template-columns: repeat(7, minmax(0, 1fr)); }
+.ps-theme-live,
+.ps-root .ps-theme-live {
+  position: relative;
+  display: block;
+  height: auto;
+  padding: 0;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-radius: 9px;
+}
+.ps-root .ps-theme-live::after { display: none; }
+.ps-theme-live .deck-frame { border-radius: inherit; }
+.ps-theme-auto,
+.ps-root .ps-theme-auto {
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 6px;
+  height: auto;
+  aspect-ratio: 16 / 9;
+  padding: 8px;
+  background: linear-gradient(135deg, #1a1a1a, #3a3a3a);
+  color: #fff;
+  text-align: center;
+}
+.ps-root .ps-theme-auto::after { display: none; }
+.ps-theme-auto small { font-size: 11px; line-height: 1.2; color: #bdbdbd; }
+
+.ps-style-gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
+  gap: 12px;
+  margin: 0 0 16px;
+  padding: 12px;
+  border: 1px solid var(--ps-line);
+  border-radius: 14px;
+  background: #0a0a0a;
+}
+.ps-style-option {
+  display: block;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--ps-line);
+  border-radius: 12px;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color .15s, transform .15s;
+}
+.ps-style-option:hover { border-color: var(--ps-line-strong); transform: translateY(-1px); }
+.ps-style-option[aria-pressed="true"] { border-color: #fff; box-shadow: 0 0 0 1px #fff; }
+.ps-style-label { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px 10px; }
+.ps-style-label b { font-size: 12.5px; font-weight: 700; color: #fff; }
+.ps-style-label small { overflow: hidden; font-size: 11px; color: var(--ps-muted); white-space: nowrap; text-overflow: ellipsis; }
+
+@media (max-width: 900px) {
+  .ps-themes { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .ps-style-gallery { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

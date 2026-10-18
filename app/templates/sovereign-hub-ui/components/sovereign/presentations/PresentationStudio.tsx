@@ -24,6 +24,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Copy,
+  Dices,
   Download,
   FileDown,
   Image as ImageIcon,
@@ -47,7 +48,7 @@ import {
   normalizeSlide,
   slideId,
 } from "@/lib/presentations/deck"
-import { DECK_THEMES, DEFAULT_THEME, THEME_IDS } from "@/lib/presentations/themes"
+import { DECK_THEMES, DEFAULT_THEME, THEME_IDS, nextTheme, pickTheme } from "@/lib/presentations/themes"
 import {
   IMAGE_LAYOUTS,
   SLIDE_LAYOUTS,
@@ -163,14 +164,16 @@ const RICH_TOPICS = [
   "Как работает искусственный интеллект — лекция для школьников: простые примеры, чем ИИ полезен и где он ошибается",
 ]
 
-const THEME_NOTES: Record<ThemeId, string> = {
-  obsidian: "Элегантная тьма",
-  paper: "Чистый и минималистичный",
-  ember: "Энергия и смелость",
-  forest: "Гармония природы",
-  sand: "Тёплая классика",
-  royal: "Премиальный стиль",
+/** A sample cover for the style picker, drawn by the real renderer in every theme. */
+const STYLE_SAMPLE: Slide = {
+  id: "style-sample",
+  layout: "title",
+  kicker: "Malik AI",
+  title: "Заголовок презентации",
+  subtitle: "Так выглядит ваша обложка в этом стиле",
 }
+
+type ThemeChoice = ThemeId | "auto"
 
 /** Wide screens get the two-column start screen with the live preview. */
 const DESKTOP_QUERY = "(min-width: 901px)"
@@ -394,6 +397,10 @@ export function PresentationStudio({ username }: { username?: string }) {
   const [requestedCount, setCount] = useState(10)
   const [tone, setTone] = useState<DeckTone>("confident")
   const [theme, setTheme] = useState<ThemeId>(DEFAULT_THEME)
+  // "auto" lets the planner (or the topic's words) choose the design system.
+  const [themeChoice, setThemeChoice] = useState<ThemeChoice>("auto")
+  const [stylePicker, setStylePicker] = useState(false)
+  const [exportNote, setExportNote] = useState("")
   const [language, setLanguage] = useState<DeckLanguage>("ru")
   const [quota, setQuota] = useState<Quota | null>(null)
   const [authenticated, setAuthenticated] = useState(true)
@@ -507,9 +514,12 @@ export function PresentationStudio({ username }: { username?: string }) {
       return
     }
     setLanguage(lang)
-    setOutline(result.data.outline as DeckOutline)
+    const planned = result.data.outline as DeckOutline
+    // Auto: the planner's suggestion, or the theme the topic's words call for.
+    setTheme(themeChoice === "auto" ? planned.theme && DECK_THEMES[planned.theme] ? planned.theme : pickTheme(clean, toneValue) : themeChoice)
+    setOutline(planned)
     setStage("outline")
-  }, [applyQuota])
+  }, [applyQuota, themeChoice])
 
   // A deck asked for in the chat arrives here with its topic already set.
   useEffect(() => {
@@ -901,20 +911,34 @@ export function PresentationStudio({ username }: { username?: string }) {
     ? `-partial-${readySlides.length}-of-${entries.length}` : ""
   const exportStatus = exportSuffix ? ` · ${readySlides.length}/${entries.length}` : ""
 
+  // The file is built in the browser at full quality (photos, art, fitted
+  // text); the server builds a lighter copy only if that fails.
   const exportPptx = async () => {
     setBusy("export")
     setError("")
+    setExportNote("Готовлю дизайн слайдов…")
     try {
-      const response = await fetch("/api/presentations/export", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ deck: currentDeck() }),
-      })
-      if (!response.ok) {
-        const data = await response.json().catch(() => null)
-        throw new Error(String(data?.error || "Не удалось собрать файл."))
+      const deck = currentDeck()
+      let blob: Blob | null = null
+      try {
+        const { exportDeckPptx } = await import("@/lib/presentations/pptx-browser")
+        blob = await exportDeckPptx(deck, (step, done, total) => {
+          setExportNote(step === "art" ? `Рисую фон слайдов: ${done} из ${total}` : step === "photos" ? `Готовлю фото: ${done} из ${total}` : "Собираю файл PowerPoint…")
+        })
+      } catch (browserError) {
+        console.warn("[MALIK_PPTX_BROWSER]", browserError)
+        setExportNote("Собираю файл на сервере…")
+        const response = await fetch("/api/presentations/export", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ deck }),
+        })
+        if (!response.ok) {
+          const data = await response.json().catch(() => null)
+          throw new Error(String(data?.error || "Не удалось собрать файл."), { cause: browserError })
+        }
+        blob = await response.blob()
       }
-      const blob = await response.blob()
       const url = URL.createObjectURL(blob)
       const link = document.createElement("a")
       link.href = url
@@ -927,6 +951,7 @@ export function PresentationStudio({ username }: { username?: string }) {
       setError(exportError instanceof Error ? exportError.message : "Не удалось собрать файл.")
     } finally {
       setBusy(null)
+      setExportNote("")
     }
   }
 
@@ -968,7 +993,10 @@ export function PresentationStudio({ username }: { username?: string }) {
         Array.from(host.shadowRoot?.querySelectorAll("img") || []),
       )
       const loads = images.map((image) => (image.complete ? Promise.resolve() : image.decode().catch(() => undefined)))
-      return Promise.race([Promise.all(loads), new Promise((resolve) => window.setTimeout(resolve, 4000))])
+      // The theme's web fonts must be in before the page is printed, or the
+      // PDF falls back to a system face and every line wraps differently.
+      const fonts = document.fonts?.ready.catch(() => undefined) ?? Promise.resolve()
+      return Promise.race([Promise.all([...loads, fonts]), new Promise((resolve) => window.setTimeout(resolve, 5000))])
     }
     const frame = window.requestAnimationFrame(() =>
       window.requestAnimationFrame(() => {
@@ -1274,18 +1302,25 @@ export function PresentationStudio({ username }: { username?: string }) {
                 <span>Тема оформления</span>
               </div>
               <div className="ps-themes">
+                <button type="button" className="ps-theme ps-theme--auto" data-theme-id="auto" aria-pressed={themeChoice === "auto"} onClick={() => setThemeChoice("auto")}>
+                  <span className="ps-theme-swatch ps-theme-auto">
+                    <Sparkles size={24} aria-hidden="true" />
+                    <small>Подберу под тему</small>
+                    {themeChoice === "auto" ? <span className="ps-theme-check ps-desk-only" aria-hidden="true"><Check size={12} strokeWidth={3} /></span> : null}
+                  </span>
+                  <span className="ps-theme-name">Авто</span>
+                  <span className="ps-theme-desc ps-desk-only">Malik выберет стиль сам</span>
+                </button>
                 {THEME_IDS.map((id) => {
                   const option = DECK_THEMES[id]
                   return (
-                    <button key={id} type="button" className="ps-theme" data-theme-id={id} aria-pressed={theme === id} onClick={() => setTheme(id)}>
-                      <span className="ps-theme-swatch" style={{ background: `#${option.bg}`, border: `1px solid #${option.border}` }}>
-                        <i style={{ background: `#${option.text}` }} />
-                        <i style={{ background: `#${option.muted}` }} />
-                        <b style={{ background: `#${option.accent}` }} />
-                        {theme === id ? <span className="ps-theme-check ps-desk-only" aria-hidden="true"><Check size={12} strokeWidth={3} /></span> : null}
+                    <button key={id} type="button" className="ps-theme" data-theme-id={id} aria-pressed={themeChoice === id} onClick={() => { setThemeChoice(id); setTheme(id) }}>
+                      <span className="ps-theme-swatch ps-theme-live">
+                        <SlideFrame slide={STYLE_SAMPLE} theme={id} index={0} total={1} />
+                        {themeChoice === id ? <span className="ps-theme-check ps-desk-only" aria-hidden="true"><Check size={12} strokeWidth={3} /></span> : null}
                       </span>
                       <span className="ps-theme-name">{option.name}</span>
-                      <span className="ps-theme-desc ps-desk-only">{THEME_NOTES[id]}</span>
+                      <span className="ps-theme-desc ps-desk-only">{option.note}</span>
                     </button>
                   )
                 })}
@@ -1446,19 +1481,12 @@ export function PresentationStudio({ username }: { username?: string }) {
               onChange={(event) => setDeckTitle(event.target.value)}
               aria-label="Название презентации"
             />
-            <span className="ps-theme-dots" role="group" aria-label="Тема оформления">
-              {THEME_IDS.map((id) => (
-                <button
-                  key={id}
-                  type="button"
-                  className="ps-theme-dot"
-                  aria-pressed={theme === id}
-                  title={DECK_THEMES[id].name}
-                  style={{ background: `linear-gradient(135deg, #${DECK_THEMES[id].bg} 50%, #${DECK_THEMES[id].accent} 50%)` }}
-                  onClick={() => setTheme(id)}
-                />
-              ))}
-            </span>
+            <button type="button" className="ps-btn ps-btn--small ps-style-toggle" onClick={() => setStylePicker((value) => !value)} aria-expanded={stylePicker} title="Стиль оформления: превью каждого стиля на этом слайде">
+              <Palette size={14} /> Стиль · {DECK_THEMES[theme].name}
+            </button>
+            <button type="button" className="ps-icon-btn" onClick={() => setTheme((value) => nextTheme(value))} title="Другой стиль" aria-label="Другой стиль">
+              <Dices size={16} />
+            </button>
             <button type="button" className="ps-btn ps-btn--small" onClick={() => startShow(current)} disabled={!presentable.length}><Play size={14} /> Показ</button>
             <button type="button" className="ps-btn ps-btn--small" onClick={() => void exportPptx()} disabled={!presentable.length || generating || busy === "export"}>
               {busy === "export" ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />} PPTX{exportStatus}
@@ -1469,6 +1497,17 @@ export function PresentationStudio({ username }: { username?: string }) {
             </button>
           </div>
 
+          {stylePicker ? (
+            <div className="ps-style-gallery" role="group" aria-label="Стиль презентации">
+              {THEME_IDS.map((id) => (
+                <button key={id} type="button" className="ps-style-option" aria-pressed={theme === id} onClick={() => setTheme(id)}>
+                  <SlideFrame slide={active?.slide || presentable[0] || STYLE_SAMPLE} theme={id} index={active?.slide ? current : 0} total={Math.max(1, entries.length)} language={language} />
+                  <span className="ps-style-label"><b>{DECK_THEMES[id].name}</b><small>{DECK_THEMES[id].note}</small></span>
+                </button>
+              ))}
+            </div>
+          ) : null}
+          {exportNote ? <p className="ps-hint" style={{ marginTop: -4, marginBottom: 12 }} aria-live="polite">{exportNote}</p> : null}
           {qualityPanel}
           {generating ? <p className="ps-hint" style={{ marginTop: -4, marginBottom: 12 }} aria-live="polite">Пишу слайды: готово {readyCount} из {entries.length}</p> : null}
           {error ? <p className="ps-error" role="alert" style={{ marginTop: 0, marginBottom: 12 }}>{error}</p> : null}

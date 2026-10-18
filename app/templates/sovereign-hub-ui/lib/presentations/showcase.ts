@@ -15,7 +15,7 @@ export type ShowcaseItem = { slide: Slide; theme: ThemeId; label: string }
 export const SHOWCASE: ShowcaseItem[] = [
   {
     label: "Стратегия",
-    theme: "obsidian",
+    theme: "aurora",
     slide: {
       id: "showcase-1",
       layout: "title",
@@ -27,7 +27,7 @@ export const SHOWCASE: ShowcaseItem[] = [
   },
   {
     label: "Продукт",
-    theme: "paper",
+    theme: "ocean",
     slide: {
       id: "showcase-2",
       layout: "image-text",
@@ -55,7 +55,7 @@ export const SHOWCASE: ShowcaseItem[] = [
   },
   {
     label: "Экспансия",
-    theme: "sand",
+    theme: "sunset",
     slide: {
       id: "showcase-4",
       layout: "title",

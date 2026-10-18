@@ -1,6 +1,7 @@
 import { OsToolError } from "../failures"
 import type { DeckOutlineResult, DeckSlide, ToolDefinition } from "./contract"
 import { brandOf, briefOf, clip, languageOf, logoOf, planOf, projectContext, researchOf } from "./shared"
+import { pickTheme } from "@/lib/presentations/themes"
 
 /* --------------------------------------------------------- image.generate */
 
@@ -208,7 +209,7 @@ export const presentationTool: ToolDefinition = {
       const deck = {
         id: `deck-${context.task.id.replace(/[^\w-]/g, "").slice(-40)}`,
         title: outline.title || (brand ? `${brand.name}` : "Презентация"),
-        theme: "obsidian",
+        theme: pickTheme(topic),
         language,
         slides,
         prompt: clip(topic, 3_900),
