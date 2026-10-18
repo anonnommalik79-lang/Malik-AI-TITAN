@@ -39,10 +39,17 @@ export function lastForgeSite(messages: unknown): { plan: ForgePlan; photos: Pho
 /** Whether this chat turn belongs to the forge: a new site, a change to the last one, or neither. */
 export function siteForgeTurn(prompt: string, input: { messages?: unknown; attachments?: unknown } = {}): ForgeTurn | null {
   const text = String(prompt || "").trim()
-  if (!text || text.length > 6000) return null
+  // Site briefs can include a long acceptance checklist. A later sentence
+  // asking to "проверь" or "исправь" is not a separate review-only request.
+  if (!text || text.length > 28_000) return null
   if (Array.isArray(input.attachments) && input.attachments.length) return null
-  if (/https?:\/\/|```/i.test(text) || STACK.test(text) || NOT_BUILD.test(text)) return null
+  if (/https?:\/\/|```/i.test(text) || STACK.test(text)) return null
   const asksForSite = SITE_NOUN.test(text) && CREATE.test(text) && !QUESTION.test(text)
+  // Review-only requests and explicit prohibitions still must not build a site,
+  // even if quoted/descriptive text later mentions "создание сайта".
+  if (/^\s*(?:исправь|почини|проверь|проанализируй|оцени|аудит|audit|review|fix|debug|переведи|translate)\b/iu.test(text)) return null
+  if (/^\s*(?:не\s+(?:создавай|делай|строй|генерируй)\s+(?:(?:мне|новый|этот)\s+){0,3}(?:сайт\p{L}*|лендинг\p{L}*|website)|(?:do not|don't)\s+(?:create|build|generate)\s+(?:a\s+|the\s+)?(?:website|site|landing\s+page))/iu.test(text)) return null
+  if (NOT_BUILD.test(text) && !asksForSite) return null
   const previous = lastForgeSite(input.messages)
   if (previous) {
     const otherBusiness = asksForSite && pickBlueprint(text).id !== "generic" && pickBlueprint(text).id !== previous.plan.blueprint

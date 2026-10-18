@@ -92,6 +92,16 @@ test("requests: new sites, edits of the last site, and everything else", () => {
   assert.equal(siteForgeTurn(fixWrongKeyboardLayout(typed).text).kind, "new")
 })
 
+test("long create-site brief with QA instructions still enters Site Forge", () => {
+  const brief = "Создай полноценный премиальный сайт архитектурной студии. Добавь рабочую навигацию, портфолио и форму заявки. Проверь все кнопки, исправь возможные ошибки и оцени адаптивность. Мне нужен настоящий сайт с предпросмотром."
+  assert.deepEqual(siteForgeTurn(brief), { kind: "new" })
+  assert.deepEqual(siteForgeTurn(brief + " Опиши компоненты и требования к разделам. ".repeat(210)), { kind: "new" }, "brief exceeding 6000 chars")
+  assert.equal(siteForgeTurn("Проверь код моего сайта"), null)
+  assert.equal(siteForgeTurn("Исправь мой сайт"), null)
+  assert.equal(siteForgeTurn("Не создавай сайт"), null)
+  assert.equal(siteForgeTurn("Проверь создание сайта"), null)
+})
+
 test("blueprints: the business decides structure, booking and art direction", () => {
   const cases = { "сайт кофейни": "coffee", "сайт пекарни": "coffee", "сайт ресторана": "restaurant", "сайт пиццерии": "restaurant", "сайт барбершопа": "barber", "сайт салона красоты": "beauty", "сайт цветочного магазина": "beauty", "сайт фитнес клуба": "fitness", "сайт стоматологии": "clinic", "website for a boutique hotel": "hotel", "сайт магазина кроссовок": "shop", "сайт юридической фирмы": "studio", "сайт для моего бизнеса": "generic" }
   for (const [prompt, id] of Object.entries(cases)) assert.equal(pickBlueprint(prompt).id, id, prompt)
