@@ -206,8 +206,9 @@ console.log("\nwiring")
 
 check("the chat router uses the follow-up, the user's context and the resolved question", () => {
   const router = fs.readFileSync("lib/malik-god-router.ts", "utf8")
-  assert.match(router, /const focus = conversationFocus\((?:preparedEvidence\?\.prompt \|\| )?prompt, history\)/)
-  assert.match(router, /shouldUseWeb\(focus\.searchText, body\)/)
+  // Since the domain plan, the follow-up focus is only computed for a follow-up.
+  assert.match(router, /const focus = (?:domainPlan\.context\.followUp \? )?conversationFocus\((?:preparedEvidence\?\.prompt \|\| )?prompt, history\)/)
+  assert.match(router, /shouldUseWeb\(focus\.searchText, body(?:, domainPlan)?\)/)
   assert.match(router, /gatherSources\(focus\.searchText/)
   assert.match(router, /taskPrompt: focus\.shapeText/)
   assert.match(router, /userContextBlocks\(body\)/)

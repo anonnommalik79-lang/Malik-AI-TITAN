@@ -606,6 +606,82 @@ await check("all resting depleted keys fail fast without repeating requests", as
   assert.equal(log.length, 1, "exhausted provider stays rested on the next request")
 })
 
+/* -------- code continuations: one block, and «Продолжить» resumes in place */
+
+const completion = await import(`${root}lib/ai/answer-completion.ts`)
+const overlap = await import(`${root}lib/ai/continuation-overlap.ts`)
+const GAME_HEAD = "Вот игра:\n\n```html filename=index.html\n<!DOCTYPE html>\n<html><body><canvas id=\"c\"></canvas>\n<script>\nconst S = { score: 0 };\nfunction update(dt) {\n  S.score += dt;\n"
+const GAME_TAIL = "}\nfunction draw() { /* frame */ }\n</script>\n</body></html>\n```\n\nУправление: стрелки."
+
+function codeLane(name, continuation) {
+  const fetcher = async (url, init) => {
+    const body = JSON.parse(init.body)
+    const prompt = JSON.stringify(body.messages)
+    const stream = (lines) => new Response(sse(lines, { signal: init.signal }), { status: 200, headers: { "content-type": "text/event-stream" } })
+    if (/CURRENT ANSWER TAIL/.test(prompt)) return stream([...continuation.match(/[\s\S]{1,17}/g).map((piece) => openaiChunk(piece)), openaiChunk("", "stop")])
+    return stream([...GAME_HEAD.match(/[\s\S]{1,17}/g).map((piece) => openaiChunk(piece)), openaiChunk("", "length")])
+  }
+  return { lanes: [lane(name)], fetcher }
+}
+
+await check("a code continuation that re-opens its code block stays one block and closes", async () => {
+  for (const reopen of ["```html\n", "\n```javascript\n", "Продолжение кода:\n```html filename=index.html\n"]) {
+    let text = ""
+    const { lanes, fetcher } = codeLane("reopen-lane", reopen + GAME_TAIL)
+    const result = await engine.runMalikMax({ prompt: "Напиши игру на html и javascript", systemPrompt: "Write code.", maxTokens: 8_000, onToken: (chunk) => { text += chunk } }, { fetcher, lanes })
+    assert.equal(text, result.content, "what streamed is what was saved")
+    assert.equal(result.incomplete, undefined, `the answer is complete (${JSON.stringify(reopen)})`)
+    assert.equal(completion.hasOpenFence(result.content), false)
+    assert.equal(result.content.match(/^```/gmu).length, 2, "exactly one code block")
+    assert.doesNotMatch(result.content, /Продолжение кода/)
+    assert.match(result.content, /S\.score \+= dt;\n}\nfunction draw/)
+  }
+})
+
+await check("a bare ``` at the start of a continuation is a real closing fence and is kept", () => {
+  let out = ""
+  const filter = overlap.createReopenedFenceFilter(true, (chunk) => { out += chunk })
+  filter.push("``")
+  filter.push("`\n\nГотово.")
+  filter.end()
+  assert.equal(out, "```\n\nГотово.")
+  let code = ""
+  const plain = overlap.createReopenedFenceFilter(true, (chunk) => { code += chunk })
+  plain.push("      continue;\n    }\n")
+  plain.end()
+  assert.equal(code, "      continue;\n    }\n", "a code line with the word continue is code")
+})
+
+await check("«Продолжить» resumes the unfinished answer in place: one whole code block in one message", async () => {
+  const unfinished = completion.withIncompleteNote(GAME_HEAD, { reason: "rounds", openFence: true })
+  assert.match(unfinished, /блок кода не закрыт/)
+  const messages = [
+    { role: "user", content: "сгенерируй мне игру" },
+    // As the chat stores it: fence lines without a filename carry CR (protectChatCodeFences).
+    { role: "assistant", content: unfinished.replace(/```([a-zA-Z0-9_+-]*)[ \t]*\n/g, "```$1\r") },
+    { role: "user", content: completion.CONTINUE_PROMPT.ru.text },
+  ]
+  assert.equal(completion.isContinueRequest(completion.CONTINUE_PROMPT.ru.text), true)
+  assert.equal(completion.isContinueRequest("продолжи"), true)
+  assert.equal(completion.isContinueRequest("Продолжай, пожалуйста"), true)
+  assert.equal(completion.isContinueRequest("продолжи рассказ про драконов, но смешнее"), false)
+  const resumable = completion.resumableAnswer(messages)
+  assert.equal(resumable.request, "сгенерируй мне игру")
+  const resumeFrom = completion.resumeText(resumable.answer)
+  assert.equal(completion.hasOpenFence(resumeFrom), true, "the closing fence added for the note is taken off again")
+  assert.doesNotMatch(resumeFrom, /Ответ не завершён/)
+  let text = ""
+  const { lanes, fetcher } = codeLane("resume-lane", "```html\n" + GAME_TAIL)
+  const result = await engine.runMalikMax({ prompt: resumable.request, taskPrompt: resumable.request, systemPrompt: "Finish.", maxTokens: 400, resumeFrom, onToken: (chunk) => { text += chunk } }, { fetcher, lanes })
+  assert.equal(text, result.content)
+  assert.ok(result.content.startsWith(GAME_HEAD.trimEnd().slice(0, 40)), "the earlier part is sent again first")
+  assert.equal(result.incomplete, undefined, "only the new part counts against the budget")
+  assert.equal(result.content.match(/^```/gmu).length, 2)
+  assert.match(result.content, /<\/html>\n```/)
+  // A finished answer is not resumable; neither is a plain new request.
+  assert.equal(completion.resumableAnswer([{ role: "user", content: "привет" }, { role: "assistant", content: "Привет!" }, { role: "user", content: "продолжи" }]), null)
+})
+
 console.log(`\n${count - failures}/${count} checks passed`)
 if (failures) process.exit(1)
 

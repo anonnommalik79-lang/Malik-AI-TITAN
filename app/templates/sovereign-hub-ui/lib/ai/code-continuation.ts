@@ -9,9 +9,9 @@ export function answerContainsCode(text: string): boolean {
 
 /** Remove a model's redundant opening wrapper BEFORE overlap detection. Do not
  * strip the final closing fence or trim whitespace from a partial code token. */
-export function createCodeContinuationFilter(previous: string, emit: (chunk: string) => void): ContinuationFilter {
+export function createCodeContinuationFilter(previous: string, emit: (chunk: string) => void, options: { window?: number } = {}): ContinuationFilter {
   const fence = openCodeFence(previous)
-  const overlap = createContinuationFilter(previous, emit)
+  const overlap = createContinuationFilter(previous, emit, options)
   let prefix = "", decided = !fence, wrapperDropped = 0
   const drain = (final: boolean) => {
     if (decided) return

@@ -152,6 +152,48 @@ export const CONTINUE_PROMPT: Record<"ru" | "kk" | "en", { label: string; text: 
   en: { label: "Continue", text: "Continue your previous answer exactly where it stopped. Do not repeat what is already written; finish every missing part." },
 }
 
+/** «Продолжить» pressed, or the same said in a few words. */
+export function isContinueRequest(prompt: string) {
+  const text = String(prompt || "").trim()
+  if (!text || text.length > 400) return false
+  if (Object.values(CONTINUE_PROMPT).some((item) => item.text === text)) return true
+  return /^(?:продолжи(?:те)?|продолжай(?:те)?|продолжить|дальше|допиши(?:те)?|доделай|continue|go\s+on|keep\s+going|жалғастыр(?:ыңыз)?)(?:[\s,]+(?:пожалуйста|please|код|ответ|с\s+того\s+места|где\s+остановил\p{L}*))*[\s.!…]*$/iu.test(text)
+}
+
+type ChatMessage = { role?: unknown; content?: unknown }
+
+/**
+ * The answer «Продолжить» refers to: the last assistant message, if it is
+ * marked unfinished, with the request it was answering (an earlier
+ * «Продолжить» is skipped to reach the real one).
+ */
+export function resumableAnswer(messages: unknown): { answer: string; request: string } | null {
+  const list = (Array.isArray(messages) ? messages : []) as ChatMessage[]
+  let index = list.length - 1
+  // The current «Продолжить» may already be the last message.
+  if (index >= 0 && list[index]?.role === "user") index -= 1
+  const last = list[index]
+  if (last?.role !== "assistant" || typeof last.content !== "string" || !answerNeedsContinuation(last.content.replace(/\r(?!\n)/gu, "\n"))) return null
+  for (let at = index - 1; at >= 0; at -= 1) {
+    const message = list[at]
+    if (message?.role !== "user" || typeof message.content !== "string") continue
+    if (isContinueRequest(message.content)) continue
+    return { answer: last.content, request: message.content }
+  }
+  return null
+}
+
+/**
+ * The unfinished answer as it stood before its status line: the note goes,
+ * and so does the closing fence that was added only to keep the note out of
+ * the code — the continuation goes on inside that same block.
+ */
+export function resumeText(answer: string) {
+  const text = String(answer || "").replace(/\r(?!\n)/gu, "\n")
+  // stripIncompleteNote already removes the display-only closing fence once.
+  return stripIncompleteNote(text)
+}
+
 const squash = (value: string) => String(value || "").replace(/\s+/gu, " ").trim()
 
 /** Comparison that ignores whitespace layout: did the server change the words, not just the spacing? */

@@ -22,6 +22,13 @@ export const CHAT_ARTIFACT_SKILLS: readonly ChatArtifactSkill[] = [
     instruction: "Build a real presentation with a clear narrative arc, concise copy, useful grounded data and a strong final action. For native PowerPoint export, author Markdown with a heading for each slide, at most six concise points per slide and no unsupported quantitative claims; the existing server engine creates editable slides. Only produce an HTML presentation when HTML is explicitly requested. Do not claim an image or chart was inserted unless the actual tool confirms it.",
   },
   {
+    id: "game",
+    name: "Game Studio",
+    priority: 116,
+    patterns: [/(?<!\p{L})(?:игр(?:а|у|ы|е|ой|ушк\p{L}*)|мини[- ]?игр\p{L}*|видеоигр\p{L}*|ойын\p{L}*|аркад\p{L}*|платформер\p{L}*|шутер\p{L}*|раннер\p{L}*|тетрис\p{L}*|змейк\p{L}*|арканоид\p{L}*|game|games|platformer|shooter|tetris|roguelike)(?!\p{L})/iu],
+    instruction: "Build a genuinely playable game, not a page describing one: a main menu, the real game loop with the requested mechanics, keyboard and touch controls, collisions, scoring or progress, win and lose states, restart, and sound where it fits. Respect the requested engine or language (Unity, Godot, pygame, Phaser and so on); for a browser game without a named stack deliver one complete self-contained index.html with all JavaScript inline so the preview runs it at once. Keep the file within a size that can be finished in one answer: implement the core loop completely rather than starting more features than can be completed.",
+  },
+  {
     id: "software",
     name: "Software Builder",
     priority: 115,

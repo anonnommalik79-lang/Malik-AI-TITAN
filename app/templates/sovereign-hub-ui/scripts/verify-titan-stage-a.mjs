@@ -321,7 +321,9 @@ await check("the stream route, background store and chat all carry the final wor
   assert.match(dashboard, /typeof payload\?\.finalContent === "string"/)
   assert.match(dashboard, /stripIncompleteNote/)
   const engine = fs.readFileSync("lib/server/malik-max-engine.ts", "utf8")
-  assert.match(engine, /createContinuationFilter\(content, emit\)/)
+  assert.match(engine, /createContinuationFilter\(content, emit[,)]/)
+  // A continuation that re-opens its code block inside the open one is filtered first.
+  assert.match(engine, /createReopenedFenceFilter\(hasOpenFence\(content\), repeats\.push\)/)
   assert.match(engine, /assessAnswerCompletion\(content, \{/)
 })
 

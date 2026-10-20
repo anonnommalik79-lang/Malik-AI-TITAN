@@ -37,7 +37,9 @@ export function chatStreamTimings(body: Record<string, unknown>): ChatStreamTimi
   const retryable = canRetryChat(body)
   const prompt = String(body.originalQuestion || body.question || body.prompt || "")
   const largeBrief = briefNeedsDeep(prompt)
-  const firstTextMs = retryable ? (largeBrief ? 8 * 60_000 : 5 * 60_000) : 14 * 60_000
+  // Leave transport slack beyond the longest five-minute MAX recovery window.
+  // Silence detection remains unchanged, so a dead server still fails quickly.
+  const firstTextMs = retryable ? (largeBrief ? 8 * 60_000 : 6 * 60_000) : 14 * 60_000
   return {
     firstTextMs,
     // Three missed heartbeats and then some; a large prompt gets more slack

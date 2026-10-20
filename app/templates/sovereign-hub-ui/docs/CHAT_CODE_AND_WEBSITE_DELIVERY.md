@@ -4,7 +4,8 @@
 
 Branch: `codex/complete-code-20261020`, based on `dfdc37b1`.
 No component, global style, navigation, Sites studio or Render configuration was changed.
-No production deployment or push is part of this change.
+Publication to main and one manual Render deployment were subsequently authorized
+by the user. Deployment success must be checked separately from local tests.
 
 ## Reproduced causes
 
@@ -36,8 +37,10 @@ claim that production request/provider logs were available.
 - Matching Markdown fence parsing supports backtick/tilde lengths and the
   existing CR transport convention. A repeated opening wrapper is removed before
   overlap detection. Partial tokens and the real final closing marker survive.
-- Manual continuation removes the artificial display fence from history and
-  explicitly starts a new fenced continuation message. Incomplete HTML is not
+- Manual continuation removes the artificial display fence exactly once. Main's
+  in-place resume replays the earlier text and appends only newly generated output;
+  earlier output does not consume the new allowance. The history-only fallback
+  starts a new fenced continuation message. Incomplete HTML is not
   called finished merely because its Markdown fence was closed.
 - New stack-less websites go to the selected model for actual HTML/CSS/JS, not
   the fixed Forge renderer. Existing Forge edits and compound site+document
@@ -84,7 +87,7 @@ are explicit fixtures. The controlled JavaScript file is parsed, not executed.
 These tests do not prove the quality or functionality of an arbitrary live-model
 website, and do not certify production credentials, browser rendering or deploy.
 
-Confirmed local results:
+Confirmed local results before merging concurrent Game Studio commit `c0faf252`:
 
 - Code-completion + actual HTTP/SSE contract: 29/29 PASS.
 - Combined domain, document delivery, website engine/experience and chat design:
@@ -99,6 +102,13 @@ Confirmed local results:
 
 The initial restricted-shell build hit Windows EPERM creating a `.next` path;
 rerunning the local build with filesystem approval resolved that environment error.
+
+Integration with `c0faf252` preserves Game Studio, in-place resume, reopened-fence
+lead-ins and full-answer repeat filtering, alongside adaptive continuation and
+generated-output accounting. Combined regression suite: 281/281 PASS; MAX: 40/40
+PASS; code completion: 29/29 PASS. The full build additionally caught an equal
+browser/server deadline; the first-text transport ceiling now leaves one minute
+of slack beyond MAX's five-minute limit. Silence/heartbeat detection is unchanged.
 
 ## Remaining limits
 

@@ -49,6 +49,8 @@ await check('manual resume removes only the display fence and retains the real p
  const shown=completion.withIncompleteNote(partial,{reason:'rounds',openFence:true})
  assert.equal(completion.stripIncompleteNote(shown),partial)
  assert.equal(completion.stripIncompleteNote(shown.replace(/\n/g,'\r')),partial.replace(/\n/g,'\r'))
+ const nested='````md\n```js\nx();\n```'
+ assert.equal(completion.resumeText(completion.withIncompleteNote(nested,{reason:'time',openFence:true})),nested,'resume strips the artificial fence exactly once, not the real nested code ending')
  const log=[],result=await engine.runMalikMax({prompt:'Продолжи',history:[{role:'assistant',content:shown}],systemPrompt:'Helpful.',maxTokens:8000},{lanes:[lane()],fetcher:provider(()=>({text:'```html\nreturn 1;}\n</script></body></html>\n```'}),log)})
  assert.equal(result.incomplete,undefined);assert.ok(log[0].max_tokens>1500)
  assert.ok(log[0].messages.some(m=>m.role==='assistant'&&m.content===partial))
@@ -146,7 +148,7 @@ await check('actual chat POST delivers one complete continued answer through the
  const store=apiLoad('lib/os/store.ts');store.configureOsBackend(store.memoryBackend())
  const {POST}=apiLoad('app/api/stream/route-impl.ts')
  const {parseChatSseFrame,mergeChatStreamText}=apiLoad('lib/ai/chat-stream-contract.ts')
- const response=await POST(new Request('http://fixture/api/stream',{method:'POST',headers:{'content-type':'application/json',accept:'text/event-stream'},body:JSON.stringify({prompt:'сгенерируй мне игру',originalQuestion:'сгенерируй мне игру',model:'malik-max',stream:true,chatRecovery:true,maxTokens:8000})}))
+ const response=await POST(new Request('http://fixture/api/stream',{method:'POST',headers:{'content-type':'application/json',accept:'text/event-stream'},body:JSON.stringify({prompt:'Напиши код счётчика на JavaScript, покажи код в чате',originalQuestion:'Напиши код счётчика на JavaScript, покажи код в чате',model:'malik-max',stream:true,chatRecovery:true,maxTokens:8000})}))
  assert.equal(response.status,200)
  const events=(await response.text()).split(/\r?\n\r?\n/).map(parseChatSseFrame).filter(Boolean)
  let visible=''
