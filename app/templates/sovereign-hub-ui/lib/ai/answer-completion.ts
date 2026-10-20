@@ -38,6 +38,8 @@ export type CompletionSignals = {
   missing?: number[]
   /** A requested closing marker is still missing. */
   markerMissing?: boolean
+  /** Proven incomplete generated file, e.g. HTML missing its closing tag. */
+  codeIncomplete?: boolean
 }
 
 export function providerCutOff(finishReason?: string) {
@@ -45,7 +47,23 @@ export function providerCutOff(finishReason?: string) {
 }
 
 export function hasOpenFence(content: string) {
-  return (String(content || "").match(/^\s*(?:```|~~~)/gmu) || []).length % 2 === 1
+  return Boolean(openCodeFence(content))
+}
+
+export function openCodeFence(content: string): { marker: string; language: string } | null {
+  let open: { marker: string; language: string } | null = null
+  // The existing chat transport uses CR on fence headers; the Markdown
+  // renderer normalizes it too. History/completion must see the same lines.
+  for (const line of String(content || "").split(/\r\n|\r|\n/)) {
+    const match = /^ {0,3}(`{3,}|~{3,})([^\r\n]*)$/.exec(line)
+    if (!match) continue
+    if (open) {
+      if (match[1][0] === open.marker[0] && match[1].length >= open.marker.length && !match[2].trim()) open = null
+    } else if (!(match[1][0] === "`" && match[2].includes("`"))) {
+      open = { marker: match[1], language: match[2].trim().split(/\s/)[0].toLowerCase() }
+    }
+  }
+  return open
 }
 
 /**
@@ -57,7 +75,7 @@ export function assessAnswerCompletion(content: string, signals: CompletionSigna
   const missing = (signals.missing || []).filter((value) => Number.isInteger(value) && value > 0).slice(0, 12)
   const openFence = hasOpenFence(content)
   const cut = signals.interrupted || providerCutOff(signals.finishReason)
-  if (!cut && !openFence && !missing.length && !signals.markerMissing) return null
+  if (!cut && !openFence && !missing.length && !signals.markerMissing && !signals.codeIncomplete) return null
   const reason: AnswerIncompleteReason = signals.stopReason
     || (signals.interrupted ? "interrupted" : providerCutOff(signals.finishReason) ? "length" : "stalled")
   return {
@@ -92,7 +110,8 @@ export function incompleteNote(incomplete: AnswerIncomplete) {
 export function withIncompleteNote(content: string, incomplete: AnswerIncomplete | null | undefined) {
   const text = String(content || "")
   if (!incomplete || hasIncompleteNote(text)) return text
-  const closed = hasOpenFence(text) ? `${text.replace(/\s*$/u, "")}\n\`\`\`` : text.replace(/\s*$/u, "")
+  const fence = openCodeFence(text)
+  const closed = fence ? `${text.replace(/\s*$/u, "")}\n${fence.marker}` : text.replace(/\s*$/u, "")
   return `${closed}\n\n${incompleteNote(incomplete)}`
 }
 
@@ -111,7 +130,20 @@ export function answerNeedsContinuation(text: string) {
 
 /** History sent back to the model: the status line is for the person, not part of the answer. */
 export function stripIncompleteNote(text: string) {
-  return String(text || "").replace(TRAILING_NOTE, "").replace(/\s+$/u, "")
+  const value = String(text || "")
+  const note = TRAILING_NOTE.exec(value)?.[0]
+  const raw = value.replace(TRAILING_NOTE, "").replace(/\s+$/u, "")
+  // withIncompleteNote closes an open block for DISPLAY, not because the
+  // model finished it. Send the real open context back on a manual resume.
+  if (note?.includes("блок кода не закрыт")) {
+    const closing = /(?:\r\n|\r|\n) {0,3}(`{3,}|~{3,})[ \t]*$/u.exec(raw)
+    if (closing) {
+      const before = raw.slice(0, closing.index)
+      const fence = openCodeFence(before)
+      if (fence && closing[1][0] === fence.marker[0] && closing[1].length >= fence.marker.length) return before
+    }
+  }
+  return raw
 }
 
 export const CONTINUE_PROMPT: Record<"ru" | "kk" | "en", { label: string; text: string }> = {

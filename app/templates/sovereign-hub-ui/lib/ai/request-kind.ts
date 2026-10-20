@@ -1,4 +1,5 @@
 import { analyzeResponseRequest } from "@/lib/ai/response-intelligence"
+import { isSoftwareCreationRequest } from "./artifact-intent"
 
 /**
  * Short technical words are matched as whole words: «работа» is not «бот»,
@@ -11,7 +12,7 @@ const CODE_SYNTAX = /```|(?:^|\n)\s*(?:import\s+[\w{*]|from\s+\w+\s+import\s)|\b
 
 export function isCodeRequest(prompt: string) {
   const value = String(prompt || "")
-  return CODE_WORDS.test(value) || CODE_SYNTAX.test(value)
+  return isSoftwareCreationRequest(value) || CODE_WORDS.test(value) || CODE_SYNTAX.test(value)
     // A bug report is code when it is about software, not about a mistake in life.
     || (/ошибк/iu.test(value) && /(?:консол|терминал|компил|сборк|деплой|сервер|npm|pip|exception|traceback|stack\s*trace|undefined|null|error:|typeerror|syntaxerror)/iu.test(value))
 }

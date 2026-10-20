@@ -44,7 +44,7 @@ import { analyzeChatData, computedEvidenceInstruction } from "@/lib/analysis/cha
 import { runSiteForgeTurn } from "@/lib/sites/forge/chat-turn"
 import { websiteIntent } from "@/lib/website/engine/intent"
 import { siteForgeTurn } from "@/lib/sites/forge/chat"
-import { pickBlueprint } from "@/lib/sites/forge/blueprints"
+import { websiteNeedsPackagedBuild } from "@/lib/website/chat-art-direction"
 import { compactForgeHistory } from "@/lib/sites/forge/chat"
 import { buildOilGasSkillInstruction } from "@/lib/ai/oil-gas-skill"
 import { resolveWorkspaceMode, workModeInstruction } from "@/lib/ai/work-mode"
@@ -59,6 +59,7 @@ import { domainPlanInstruction, domainRequiresPlainChat, resolveDomainPlan } fro
 import {conversationRepairInstruction,conversationValidationFailure,validateConversationAnswer} from "@/lib/ai/conversation-validation"
 import {conversationSource,deliverConversationDocument,deliveryProblem} from "@/lib/server/conversation-delivery"
 import { prepareDocumentAssets } from "@/lib/server/document-assets"
+import { prepareChatWebsite, chatWebsiteInstruction } from "@/lib/server/chat-website-design"
 import { documentAssets, type DocumentAsset } from "@/lib/work/documents/assets"
 
 import { withCompute, observeComputeResult } from "@/lib/malik-compute/runtime"
@@ -431,6 +432,13 @@ async function runSelectedAnswer(
   const localAnswer=(content:string)=>({content,provider:"malik-document-export",model:"local-export",selectedModelId:selection?.modelId||DEFAULT_MALIK_MODEL_ID,usedWeb:false,sources:[],attempts:[]})
   if(intent.action==="stop")return localAnswer("Новые действия не запускаю. Активную генерацию можно остановить кнопкой «Стоп»; отмена другой задачи этим сообщением не подтверждена.")
   if(intent.clarification==="missing-attachment")return localAnswer("Указанного вложения нет среди доступных файлов этого сообщения. Прикрепите нужное изображение — его содержимое не было угадано или отредактировано.")
+  // New chat sites are model-authored, not a content plan poured into the
+  // fixed Forge renderer. Existing Forge edits keep their lossless plan path.
+  const authoredWebsite = intent.target !== "document" && websiteIntent(originalPrompt) === "create"
+    && siteForgeTurn(originalPrompt, { messages: body?.history || body?.messages, attachments: body?.attachments })?.kind !== "edit"
+    && !routePetroleum(originalPrompt, body?.selectedSkillId).domain && !parsePluginCommand(originalPrompt)
+    && !domainPlan.execution?.outputs.some(output => output.type === "document")
+  if (authoredWebsite) body = await prepareChatWebsite(body, { prompt: originalPrompt, signal, onProgress })
   // Site creation runs a real generator before reporting success. Never
   // short-circuit to a queued project handle with zero generated files.
   // The Forge handles matching service/hospitality sites below; multi-file
@@ -510,7 +518,7 @@ async function runSelectedAnswer(
   }
   // A website request becomes a finished multi-page site; a change to that site
   // edits its plan. Everything after this sees the site as one line of history.
-  const siteForge = routePetroleum(originalPrompt, body?.selectedSkillId).domain || domainRequiresPlainChat(domainPlan) ? null : await runSiteForgeTurn({
+  const siteForge = authoredWebsite || routePetroleum(originalPrompt, body?.selectedSkillId).domain || domainRequiresPlainChat(domainPlan) ? null : await runSiteForgeTurn({
     prompt: originalPrompt, body, modelId: selection?.modelId || DEFAULT_MALIK_MODEL_ID, defaultModelId: DEFAULT_MALIK_MODEL_ID,
     allowCatalog: Boolean(selection && hasMalikProAccess(selection.entitlement.plan)), signal, onProgress,
   })
@@ -687,6 +695,7 @@ async function runSelectedAnswerUnchecked(
         superpowerPrompt,
         preparedEvidence ? freshnessEvidenceInstruction(classifyFreshness(preparedEvidence.prompt)) + "\n" + sourceContext(preparedEvidence.sources, preparedEvidence.prompt) : "",
         buildChatArtifactSkillPrompt(coderPrompt(body)),
+        chatWebsiteInstruction(body),
         conversationIntentInstruction(resolveConversationIntent({prompt:coderPrompt(body),messages:coderHistory(body),attachments:body?.attachments})),
         domainPlanInstruction(resolveDomainPlan({prompt:coderPrompt(body),messages:coderHistory(body),attachments:body?.attachments})),
         buildOilGasSkillInstruction(coderPrompt(body)),
@@ -800,6 +809,7 @@ async function runSelectedAnswerUnchecked(
       "Treat MALIK_MEDIA_ACTION_FACT / MALIK_MEDIA_ACTION_HISTORY entries in history as factual completed actions and describe them accurately when asked.",
       "Answer in the user's language unless explicitly asked otherwise.",
       artifactSkillPrompt,
+      chatWebsiteInstruction(body),
       intentInstruction,
       conversationRepairInstruction(body?.metadata?.conversationRepair),
       buildOilGasSkillInstruction(coderInput),
@@ -864,12 +874,14 @@ async function runProjectAnswer(
   }
 
   onStatus?.("Malik AI проектирует структуру и рабочую логику")
+  const websiteContext = await prepareChatWebsite(body, { prompt: coderPrompt(body), onProgress: event => onStatus?.(event.text) })
 
   const project = await generateProjectWithBrain({
     prompt,
     framework: "next",
     language: "typescript",
     modelId: selectedModelId,
+    websiteContext,
   })
 
   if (project.status !== "completed" || !project.qa?.passed || !project.files.length) {
@@ -1197,17 +1209,15 @@ async function handlePOST(request: Request) {
     const selection = await resolveStrictMalikSelection(request, body)
     if (routePetroleum(coderPrompt(body), body?.selectedSkillId).engine === "petroleum") { body.isProjectRequest = false; body.forceCanvas = false; body.responseMode = "chat"; body.isCodeRequest = false }
     const entitlement = selection?.entitlement ?? await resolveRequestEntitlement(request)
-    // Route ordinary sites through the existing model+media Forge so the
-    // first response contains actual HTML and an inline preview, not a
-    // "planning 0/0 files" status card. Structured web apps/code projects
-    // instead run the checked source builder and return a real ZIP.
+    // A stack-less new site is authored by the selected model in chat.
+    // Only an explicit framework/backend/package needs the checked ZIP
+    // builder. Existing Forge plan edits retain their original update path.
     if (!hasMalikAttachments(body?.attachments) && !routePetroleum(coderPrompt(body), body?.selectedSkillId).domain) {
       const prompt = coderPrompt(body)
       const siteIntent = websiteIntent(prompt)
       if (siteIntent && !domainRequiresPlainChat(requestDomain)) {
         const turn = siteForgeTurn(prompt, { messages: body?.history || body?.messages, attachments: body?.attachments })
-        const blueprint = pickBlueprint(prompt).id
-        if (turn && (turn.kind === "edit" || (blueprint !== "generic" && blueprint !== "studio"))) {
+        if (turn?.kind === "edit" || !websiteNeedsPackagedBuild(prompt)) {
           body = { ...body, isProjectRequest: false, forceCanvas: false, responseMode: "chat" }
         } else if (siteIntent === "create") {
           body = { ...body, isProjectRequest: true, forceCanvas: false, responseMode: "chat" }

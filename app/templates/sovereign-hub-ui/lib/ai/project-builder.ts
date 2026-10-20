@@ -1,6 +1,7 @@
 import type { MalikModelId } from "@/lib/ai/malik-models"
 import { runStrictMalikModel } from "@/lib/server/malik-model-router"
 import { analyzeProject } from "@/lib/work/code/diagnostics"
+import { chatWebsiteInstruction } from "@/lib/server/chat-website-design"
 
 export type ProjectFile = {
   path: string
@@ -24,6 +25,8 @@ export type ProjectBuilderInput = {
   language?: "typescript" | "javascript"
   style?: "premium-dark" | "minimal" | "saas" | "dashboard"
   modelId?: MalikModelId
+  /** Server-only Symbol context; JSON clients cannot supply verified media. */
+  websiteContext?: object
 }
 
 export type ProjectBuilderResult = {
@@ -134,7 +137,7 @@ PRODUCTION CODE CONTRACT:
 - Do not use TODO, FIXME, placeholder, lorem ipsum, stub, pseudo-code, "rest omitted", "implement here", fake testimonials, fake customers, fake revenue or comments in place of logic.
 - Never omit imports, types, handlers or supporting files required by code you return.
 - Do not require a secret for the project to render. If an optional external integration is relevant, provide a functional local mode and document the optional env variable in README.
-- Avoid remote image dependencies; use CSS, inline SVG, gradients and local UI where possible.
+- Use only exact supplied verified remote media when available; otherwise prefer original CSS/SVG/local UI over invented image URLs.
 - app/layout.tsx must import ./globals.css and export a default RootLayout.
 - app/page.tsx must export a default component.
 - README.md must contain exact install/run/build commands, a concise feature list, architecture notes and any optional environment variables.
@@ -223,7 +226,7 @@ function validateProject(files: ProjectFile[]) {
   if (!/export\s+default\s+(?:async\s+)?(?:function|class|[A-Za-z_$])/m.test(layout)) issues.push("app/layout.tsx must export a default layout")
   else checks.push("layout default export")
 
-  if (!/import\s+[\"']\.\/globals\.css[\"']/.test(layout)) issues.push("app/layout.tsx must import ./globals.css")
+  if (!/import\s+["']\.\/globals\.css["']/.test(layout)) issues.push("app/layout.tsx must import ./globals.css")
   else checks.push("global CSS wired")
 
   if (css.trim().length < 350) issues.push("app/globals.css is too small for a finished product")
@@ -244,7 +247,7 @@ function validateProject(files: ProjectFile[]) {
     issues.push("Project uses environment variables without .env.example")
   } else checks.push("environment contract coherent")
 
-  const imports = [...combined.matchAll(/from\s+[\"']([^\"']+)[\"']/g)].map((match) => match[1])
+  const imports = [...combined.matchAll(/from\s+["']([^"']+)["']/g)].map((match) => match[1])
   const externalImports = imports.filter((source) => !source.startsWith(".") && !source.startsWith("@/") && !source.startsWith("react") && !source.startsWith("next") && source !== "lucide-react" && source !== "zod")
   if (externalImports.length) issues.push(`Unsupported package imports: ${[...new Set(externalImports)].slice(0, 6).join(", ")}`)
   else checks.push("dependency surface valid")
@@ -312,7 +315,7 @@ async function generateFiles(input: ProjectBuilderInput, feedback = ""): Promise
 
   const result = await runStrictMalikModel({
     modelId,
-    systemPrompt: BUILDER_SYSTEM_PROMPT,
+    systemPrompt: [BUILDER_SYSTEM_PROMPT, chatWebsiteInstruction(input.websiteContext)].filter(Boolean).join("\n\n"),
     prompt: `USER PROJECT BRIEF:\n${input.prompt.slice(0, 24_000)}${preferences ? `\n\nPREFERENCES:\n${preferences}` : ""}${feedbackBlock}`,
     maxTokens: Number(process.env.MAX_CODE_OUTPUT_TOKENS || 8_000),
     temperature: feedback ? 0.03 : 0.08,

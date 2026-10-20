@@ -1,5 +1,5 @@
 import { briefChecklist, briefMissingMarker, missingBriefItems, preserveBriefEdges } from "@/lib/ai/brief-quality"
-import type { AnswerIncomplete } from "@/lib/ai/answer-completion"
+import { hasOpenFence, openCodeFence, stripIncompleteNote, type AnswerIncomplete } from "@/lib/ai/answer-completion"
 import { isCodeRequest, isFastChatRequest, wantsFullShape } from "@/lib/ai/request-kind"
 import {
   canUseMalikModel,
@@ -146,7 +146,7 @@ export function buildMessages(input: {
 }): ProviderMessage[] {
   const normalizedHistory = (input.history || [])
     .filter((message) => (message?.role === "user" || message?.role === "assistant") && typeof message.content === "string")
-    .map((message) => ({ role: message.role, content: message.content.trim() }))
+    .map((message) => ({ role: message.role, content: message.role === "assistant" ? stripIncompleteNote(message.content) : message.content.trim() }))
     .filter((message) => message.content)
   const historyMessageLimit = Math.max(12, Math.min(128, Number(process.env.MALIK_MAX_HISTORY_MESSAGES || 64)))
   const configuredHistoryChars = Math.max(24_000, Math.min(800_000, Number(process.env.MALIK_MAX_HISTORY_CHARS || 180_000)))
@@ -473,7 +473,7 @@ export function visibleFinalText(value: string) {
 export function codeAnswerNeedsMore(value: string, prompt: string) {
   const text = String(value || "").trim()
   if (!text) return true
-  if ((text.match(/```/g) || []).length % 2 === 1) return true
+  if (hasOpenFence(text)) return true
   const asksHtml = /(?:html|index\.html)/i.test(prompt)
   const asksCompleteImplementation = /(?:complete|full|runnable|single[- ]file|write|create|build|implement|готов|полный|целиком|сделай|напиши|создай)/i.test(prompt)
   if (asksHtml && asksCompleteImplementation) {
@@ -827,10 +827,13 @@ export function providerSpecificBody(
 
 export function continuationPrompt(originalPrompt: string, content: string, taskPrompt = originalPrompt) {
   const tail = content.length > 12_000 ? content.slice(-12_000) : content
+  const fence = openCodeFence(content)
   return [
     "Continue the coding answer exactly where it stopped.",
     "Do not restart, repeat, summarize, or explain previous code.",
     "Return only the missing continuation and finish all open code blocks/files.",
+    fence ? `You are ALREADY INSIDE the ${fence.language || "code"} fenced block (${fence.marker}). Do not emit another opening fence. Continue raw code at the exact last byte, including a partial line/token if needed. Close the original fence only after the implementation is finished.` : "Continue the implementation, not a new explanation or replacement file.",
+    content.length > 12_000 ? `EXISTING ANSWER START (context only; never repeat):\n${content.slice(0, 1800)}` : "",
     "",
     `ORIGINAL REQUEST:\n${preserveBriefEdges(originalPrompt, 10_000)}`,
     "",

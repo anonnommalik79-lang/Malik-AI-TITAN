@@ -1,6 +1,7 @@
 ﻿import type { AIFileAttachment, AITaskType } from "./types"
 
 import { isExplicitImageGenerationRequest, isExplicitImageEditRequest, isExplicitVideoGenerationRequest, isTextOnlyMediaDiscussion } from "./image-intent"
+import { isSoftwareCreationRequest } from "./artifact-intent"
 
 export type SmartTaskType =
   | "chat"
@@ -260,6 +261,14 @@ export function detectTask(prompt: string, attachments: AIFileAttachment[] = [])
     fileScore,
     researchScore,
     chatScore,
+  }
+  if (isSoftwareCreationRequest(text) && !imageConsent && !videoConsent && !explicitProject) {
+    return {
+      task: "code", smartTask: "code", confidence: 0.95,
+      scores: { ...scores, componentScore: Math.max(componentScore, 85) },
+      reason: "Runnable software requested; keep a complete implementation in chat, not a component-only or fast-text answer.",
+      shouldUseProjectBuilder: false, shouldReturnSingleComponent: false,
+    }
   }
 
   const ranked = [

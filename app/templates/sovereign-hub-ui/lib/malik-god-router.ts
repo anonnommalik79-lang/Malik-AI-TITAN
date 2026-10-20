@@ -19,6 +19,7 @@ import { accuracyInstruction, finalizeAccuracy, type AccuracyReport } from "@/li
 import { accuracyTokenGate } from "@/lib/ai/accuracy/stream"
 import { fetchPageText } from "@/lib/malik-research/fetch-page"
 import { runStrictMalikModel } from "@/lib/server/malik-model-router"
+import { chatWebsiteInstruction } from "@/lib/server/chat-website-design"
 import { fetchEiaSpotEvidence } from "@/lib/server/petroleum-eia"
 import { classifyFreshness, freshnessMode, isModelLeaderboardRequest, NO_WEB, publicSearchText, type FreshnessMode } from "@/lib/ai/freshness-intent"
 import { assessSources, currentEvidenceAvailable, finalizeFreshAnswer, freshnessCheckLine, freshnessEvidenceInstruction, safeEvidenceUrl, sourceDisagreements, unavailableFreshAnswer } from "@/lib/live-intelligence/evidence"
@@ -1162,7 +1163,7 @@ export async function malikGodAnswer(
       // Speed and code lanes follow what is really being asked: «а третий?»
       // after an overview question is another overview, not small talk.
       taskPrompt: focus.shapeText,
-      systemPrompt: [body?.metadata?.petroleumDomain ? petroleumKnowledgeInstruction() : "", typeof body?.metadata?.petroleumComputedEvidence === "string" ? [
+      systemPrompt: [chatWebsiteInstruction(body), body?.metadata?.petroleumDomain ? petroleumKnowledgeInstruction() : "", typeof body?.metadata?.petroleumComputedEvidence === "string" ? [
         "PETROLEUM VERIFIED DATA INPUT (locally calculated; user inputs are not field-verified):",
         body.metadata.petroleumComputedEvidence.slice(0, 16_000),
         "Produce the full requested multidisciplinary engineering analysis in the user language, not just this table. Preserve the exact computed values and stated units. Separate verified arithmetic from hypotheses. Cover EVERY applicable requested section, including pressure/production diagnostics, competing hypotheses, investigation plan, HSE and project economics. Compute extra economic results only with enough assumptions and explicitly label results not independently verified. If a table contains fewer periods than the user's task requires, say so, do not invent missing periods or a decline fit. NEVER claim simulations, live sources or engineering approvals without tool evidence. Output one cohesive answer; the system appends visual charts automatically.",

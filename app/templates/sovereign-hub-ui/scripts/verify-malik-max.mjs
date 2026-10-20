@@ -534,7 +534,8 @@ await check("billing-depleted Gemini keys rest for two hours instead of cycling 
 await check("MAX response uses finite wall times instead of hanging fourteen minutes", async () => {
   assert.equal(engine.maxResponseWallMs(true, false, false), 90000)
   assert.ok(engine.maxResponseWallMs(true, false, false) < 100000, "short chat stays below common proxy cutoffs")
-  assert.equal(engine.maxResponseWallMs(false, true, true), 180000)
+  assert.equal(engine.maxResponseWallMs(false, true, true), 300000)
+  assert.equal(engine.maxResponseWallMs(false, true, false), 240000)
   assert.equal(engine.maxResponseWallMs(false, false, true), 160000)
   assert.ok(engine.maxResponseWallMs(false, false, false) < 180000)
 })

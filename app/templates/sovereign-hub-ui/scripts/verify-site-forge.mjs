@@ -382,15 +382,17 @@ async function stream(body) {
   return { events, done, answer: (done[0]?.finalContent ?? events.filter((event) => event.type === "content").map((event) => event.content).join("")).replace(/\r(?!\n)/g, "\n") }
 }
 
-test("chat: «создай сайт на кофейню» answers with a finished, previewable site", async () => {
+test("chat: existing Forge sites retain lossless, finished and previewable edits", async () => {
+  const first = await forgeSite({ prompt: "создай сайт на кофейню", model: async () => JSON.stringify(PLAN) })
+  const history = [{ role: "user", content: "создай сайт на кофейню" }, { role: "assistant", content: forgeChatMessage(first, "new") }]
   modelCalls.length = 0
   modelAnswer = () => JSON.stringify(PLAN)
-  const { answer, done, events } = await stream({ originalQuestion: "создай сайт на кофейню фулл страницами рабочий крутым дизайном" })
+  const { answer, done, events } = await stream({ originalQuestion: "сделай сайт темнее", messages: history })
   assert.equal(done.length, 1)
   assert.equal(done[0].provider, "malik-site-forge")
   assert.equal(modelCalls.length, 1)
   assert.equal(modelCalls[0].modelId, "malik-max")
-  assert.match(answer, /\*\*Сайт «Aroma Beans» готов\*\* — 6 страниц/)
+  assert.match(answer, /\*\*Сайт «Aroma Beans» обновлён/)
   assert.match(answer, /```html filename=index\.html\n<!doctype html>/)
   assert.match(answer, /Перед публикацией замените/)
   assert.ok(events.some((event) => event.type === "progress" && /фотографии/.test(event.text || "")))
@@ -398,13 +400,13 @@ test("chat: «создай сайт на кофейню» answers with a finishe
   assert.equal(reviewSiteHtml(html).ok, true)
   // The oil ensemble does not write site copy; the default model does.
   modelCalls.length = 0
-  await stream({ originalQuestion: "сделай сайт для барбершопа", modelId: "malik-oil-1tb", model: "malik-oil-1tb" })
+  await stream({ originalQuestion: "сделай сайт темнее", messages: history, modelId: "malik-oil-1tb", model: "malik-oil-1tb" })
   assert.equal(modelCalls[0].modelId, "malik-max")
 })
 
 test("chat: the next question does not drag the whole site into the model's context", async () => {
-  modelAnswer = () => JSON.stringify(PLAN)
-  const { answer } = await stream({ originalQuestion: "создай сайт на кофейню" })
+  const first = await forgeSite({ prompt: "создай сайт на кофейню", model: async () => JSON.stringify(PLAN) })
+  const answer = forgeChatMessage(first, "new")
   chatModelCalls.length = 0
   await stream({ originalQuestion: "Кто такой Абай?", messages: [{ role: "user", content: "создай сайт на кофейню" }, { role: "assistant", content: answer }, { role: "user", content: "Кто такой Абай?" }] })
   const sent = JSON.stringify(chatModelCalls[0].messages)

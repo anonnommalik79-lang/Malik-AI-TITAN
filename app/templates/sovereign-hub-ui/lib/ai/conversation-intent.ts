@@ -78,7 +78,7 @@ export function resolveConversationIntent(input:{prompt:string;messages?:unknown
  }
  Object.assign(active,current);if(CANCEL_FILE.test(text)||current.presentation==="json"&&!current.format)delete active.format
  if(/верни.*(?:стар|предыдущ|прежн).*(?:стиль|тон)|restore.*(?:previous|old).*(?:style|tone)/iu.test(text)&&tones.length>1&&!current.tone)active.tone=tones.at(-2)
- const directCreation=/(?<!\p{L})(?:создай|созда[йи]|сдела[йи]|подготовь|напиши|дай|выдай|create|make|write|export|жаса)/iu.test(text)
+ const directCreation=/(?<!\p{L})(?:создай|созда[йи]|сдела[йи]|сгенерируй|подготовь|напиши|дай|выдай|create|build|generate|design|make|write|export|жаса)/iu.test(text)
  const formatOnly=Boolean(current.format&&text.replace(/(?:pdf|word|docx|pptx|xlsx|excel|csv|txt|markdown|md|html|json|zip|ворд|эксель|файл|документ|формат|вместо|формате|сделай|сделаи|хочу|нет|не|теперь|дай|выдай|мне|это|в|на|а|и|пожалуйста|as|a|file|make|give|me|export|no|now|then|the|please|in)/giu,"").replace(/[\s,.!?—-]/g,"").length<3)
  const source=last?{index:last.index,content:last.content,artifactId:last.content.match(/\/api\/os\/artifacts\/(art_[a-zA-Z0-9_-]{3,72})\/export\?format=/)?.[1],tooLarge:last.content.length>400_000}:undefined
  let target:ConversationIntent["target"]="text"
@@ -94,7 +94,7 @@ export function resolveConversationIntent(input:{prompt:string;messages?:unknown
   if(isExplicitImageEditRequest(original,attachments.some(a=>a?.kind==="image"||String(a?.mime||"").startsWith("image/")))||isExplicitImageGenerationRequest(original))target="image"
   else if(isExplicitVideoGenerationRequest(original))target="video"
   else if(/сайт|website|landing/iu.test(text)&&directCreation)target="website"
-  else if(/код|скрипт|component|code|python|typescript|react/iu.test(text)&&directCreation)target="code"
+  else if(primary==="code"||/код|скрипт|component|code|python|typescript|react/iu.test(text)&&directCreation)target="code"
   else if(active.format&&(directCreation||followUp||formatOnly))target="document"
  }
  let clarification:ConversationIntent["clarification"]

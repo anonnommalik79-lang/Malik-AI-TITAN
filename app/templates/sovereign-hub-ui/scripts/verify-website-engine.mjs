@@ -263,8 +263,9 @@ test("static multi-page preview selects the requested source document", async ()
   const data = await response.json()
   assert.equal(data.preview.entry, "gallery.html"); assert.equal(data.preview.routes.length, 2)
 })
-test("a lunar resort website builds real HTML through Forge before the chat answer completes", async () => {
+test("a stack-less lunar resort website is model-authored HTML, not a Forge template or empty job", async () => {
   let modelCalls = 0, researchCalls = 0, forgeCalls = 0
+  let designContext = ""
   class FixtureModelError extends Error {}
   const streamLoad = workTestLoader({
     "@/lib/auth/server": { getOptionalWorkOSAuth: async () => ({ user: { id: "fixture", email: "owner-fixture", emailVerified: true } }) },
@@ -279,9 +280,14 @@ test("a lunar resort website builds real HTML through Forge before the chat answ
     },
     "@/lib/malik-god-router": {
       asPlainText: answer => answer.content,
-      malikGodAnswer: async () => { modelCalls++; throw new Error("Wrong route") },
+      malikGodAnswer: async body => {
+        modelCalls++
+        designContext = streamLoad("lib/server/chat-website-design.ts").chatWebsiteInstruction(body)
+        return { content: "```html filename=index.html\n<!doctype html><html><head><title>LUNA SERENITAS</title></head><body><h1>Moon resort concept</h1></body></html>\n```", provider: "fixture-model", model: "fixture", usedWeb: false, sources: [], attempts: [] }
+      },
       gatherSourcesForPrompt: async () => { researchCalls++; throw new Error("Wrong research route") }, sourceContext: () => "",
     },
+    "@/lib/website/engine/media": { discoverAssets: async () => ({ assets: [], missing: ["hero"] }) },
     "@/lib/sites/forge/chat-turn": {
       runSiteForgeTurn: async () => {
         forgeCalls++
@@ -301,10 +307,11 @@ test("a lunar resort website builds real HTML through Forge before the chat answ
   const response = await POST(new Request("http://fixture.test/api/stream", { method: "POST", headers: { "content-type": "application/json", accept: "text/event-stream" }, body: JSON.stringify({ stream: true, originalQuestion: "Build a luxury lunar resort website called LUNA SERENITAS with photos and a live preview", workspaceMode: "work", isProjectRequest: true, forceCanvas: true }) }))
   const wire = await response.text()
   assert.equal(response.status, 200)
-  assert.match(wire, /LUNA SERENITAS website ready/)
+  assert.match(wire, /LUNA SERENITAS/)
   assert.match(wire, /<!doctype html>/)
   assert.doesNotMatch(wire, /malik-project|Проект сохранён/)
-  assert.equal(forgeCalls, 1); assert.equal(modelCalls, 0); assert.equal(researchCalls, 0)
+  assert.equal(forgeCalls, 0); assert.equal(modelCalls, 1); assert.equal(researchCalls, 0)
+  assert.match(designContext, /NASA Moon/); assert.match(designContext, /YOU write the actual HTML/)
   assert.equal((wire.match(/^event: done$/gm) || []).length, 1)
 })
 test("a reused idempotency key cannot silently replace a different brief", async () => {

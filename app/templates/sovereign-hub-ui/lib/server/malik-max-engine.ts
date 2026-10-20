@@ -2,6 +2,7 @@ import { missingBriefItems, briefMissingMarker, briefNeedsDeep } from "@/lib/ai/
 import { isModelLeaderboardRequest } from "@/lib/ai/freshness-intent"
 import { assessAnswerCompletion, type AnswerIncompleteReason } from "@/lib/ai/answer-completion"
 import { createContinuationFilter } from "@/lib/ai/continuation-overlap"
+import { answerContainsCode, createCodeContinuationFilter } from "@/lib/ai/code-continuation"
 import {
   getMalikModel,
   MALIK_MODELS,
@@ -734,7 +735,7 @@ function laneRequest(lane: MaxLane, call: CallInput): { url: string; headers: Re
   const temperature = typeof call.temperature === "number" ? call.temperature : 0.4
 
   if (lane.direct) {
-    const maxTokens = Math.max(64, Math.min(call.maxTokens, lane.direct.outputCap))
+    const maxTokens = Math.max(1, Math.min(call.maxTokens, lane.direct.outputCap))
     if (lane.protocol === "anthropic") {
       return {
         url: lane.direct.url,
@@ -821,6 +822,7 @@ type RaceResult = {
   usage?: unknown
   interrupted: boolean
   firstTokenMs: number
+  outputLimit?: number
 }
 
 export function classifyMaxProviderFailure(status: number, detail: string) {
@@ -888,6 +890,7 @@ export function raceLanes(options: RaceOptions): Promise<RaceResult> {
       thinking: boolean
       finishReason?: string
       usage?: unknown
+      outputLimit?: number
       firstTimer: ReturnType<typeof setTimeout> | null
       done: boolean
     }
@@ -1006,6 +1009,8 @@ export function raceLanes(options: RaceOptions): Promise<RaceResult> {
       let request: { url: string; headers: Record<string, string>; body: unknown }
       try {
         request = laneRequest(lane, options.call)
+        const settings = request.body as { max_tokens?: number; max_completion_tokens?: number; generationConfig?: { maxOutputTokens?: number } }
+        attempt.outputLimit = settings.max_tokens ?? settings.max_completion_tokens ?? settings.generationConfig?.maxOutputTokens
       } catch (error) {
         // "Too large for this lane's per-minute budget" is about this request,
         // not about the lane.
@@ -1080,6 +1085,7 @@ export function raceLanes(options: RaceOptions): Promise<RaceResult> {
             usage: attempt.usage,
             interrupted,
             firstTokenMs: attempt.firstAt - attempt.startedAt,
+            outputLimit: attempt.outputLimit,
           })
           return
         }
@@ -1177,13 +1183,26 @@ function estimateTokens(text: string) {
   return Math.ceil(String(text || "").length / 3.2)
 }
 
+/** Provider counts include discarded repetitions; deduplication cannot give
+ * free output credit back. Fall back only when usage was not supplied. */
+export function generatedOutputTokens(usage: unknown, text: string) {
+  if (usage && typeof usage === "object") {
+    const value = usage as Record<string, unknown>
+    for (const key of ["completion_tokens", "output_tokens", "candidatesTokenCount"]) {
+      const count = value[key]
+      if (typeof count === "number" && Number.isFinite(count) && count > 0) return Math.ceil(count)
+    }
+  }
+  return estimateTokens(text)
+}
+
 /** Keep ordinary chat responsive without cutting a good explanation at 60 seconds.
  * A finite 90s ceiling leaves room for slower free providers and recovery,
  * while staying below common 100s reverse-proxy limits.
  */
 export function maxResponseWallMs(fastMode: boolean, codeMode: boolean, longBrief: boolean) {
   if (fastMode) return 90_000
-  if (codeMode) return longBrief ? 180_000 : 145_000
+  if (codeMode) return longBrief ? 300_000 : 240_000
   return longBrief ? 160_000 : 115_000
 }
 
@@ -1206,8 +1225,10 @@ export type MaxInput = {
 export async function runMalikMax(input: MaxInput, deps: { fetcher?: typeof fetch; lanes?: MaxLane[] } = {}): Promise<StrictMalikResult> {
   const started = Date.now()
   const taskPrompt = input.taskPrompt || input.prompt
-  const codeMode = isCodeRequest(taskPrompt)
-  const fastMode = !codeMode && isFastChatRequest(taskPrompt, input.attachments)
+  const continuingCode = /^(?:продолж|допиши|continue|finish|жалғастыр)/iu.test(taskPrompt.trim())
+    && answerContainsCode(input.history?.filter(message => message.role === "assistant").at(-1)?.content || "")
+  let codeMode = isCodeRequest(taskPrompt) || continuingCode
+  let fastMode = !codeMode && isFastChatRequest(taskPrompt, input.attachments)
   const needsVision = (input.attachments || []).some((item) => item?.kind === "image" || String(item?.mime || "").startsWith("image/"))
   const lanes = deps.lanes || await buildMaxLanes({ prompt: input.prompt, attachments: input.attachments, codeMode, fastMode, needsVision })
   if (!lanes.length) {
@@ -1221,29 +1242,35 @@ export async function runMalikMax(input: MaxInput, deps: { fetcher?: typeof fetc
 
   // The caller has already fitted the budget to the task and the account's
   // daily allowance.
-  const budget = Math.max(256, Math.min(Number(input.maxTokens) || (codeMode ? 16_000 : 8_000), codeMode ? 48_000 : 32_000))
+  const requested = Number(input.maxTokens)
+  if (input.maxTokens !== undefined && (!Number.isFinite(requested) || requested <= 0)) {
+    throw new MalikModelRouteError("ANSWER_BUDGET_EXHAUSTED", "Недостаточно доступного лимита для генерации ответа.", 429, "malik-max")
+  }
+  const budget = Math.max(1, Math.min(Math.floor(requested || (codeMode ? 16_000 : 8_000)), codeMode ? 48_000 : 32_000))
   // Leaderboard answers must fit a bounded model call instead of spending the
   // entire HTTP deadline on an uncontrolled essay. Other tasks are unaffected.
   const rankingRequest = !codeMode && isModelLeaderboardRequest(taskPrompt)
-  const perCall = (spent: number) => Math.max(256, Math.min(fastMode ? 1_500 : rankingRequest ? 2_800 : 16_000, budget - spent + 200))
-  const timing = fastMode
+  const perCall = (spent: number) => Math.max(1, Math.min(fastMode ? 1_500 : !codeMode && rankingRequest ? 2_800 : 16_000, budget - spent))
+  const timing = () => fastMode
     ? { hedgeMs: 1_500, firstTokenMs: 13_000, firstDeadlineMs: 40_000, idleMs: 22_000 }
     : codeMode
       ? { hedgeMs: 12_000, firstTokenMs: 120_000, firstDeadlineMs: 180_000, idleMs: 90_000 }
       : { hedgeMs: 8_000, firstTokenMs: 75_000, firstDeadlineMs: 150_000, idleMs: 60_000 }
-  const totalMs = maxResponseWallMs(fastMode, codeMode, briefNeedsDeep(taskPrompt))
-  const timeLeft = () => Math.max(0, totalMs - (Date.now() - started))
+  const timeLeft = () => Math.max(0, maxResponseWallMs(fastMode, codeMode, briefNeedsDeep(taskPrompt)) - (Date.now() - started))
   // Do not let a stalled *first* answer consume the entire time window.
   // Reserve a recovery window for another provider to finish a partial stream.
   // Follow-up rounds may use the remaining wall time, but never exceed it.
   const boundedTiming = (reserveRecovery = false) => {
     const left = timeLeft()
-    const recovery = reserveRecovery && fastMode ? Math.min(18_000, Math.floor(left / 3)) : 0
+    const recovery = !reserveRecovery ? 0
+      : fastMode ? Math.min(18_000, Math.floor(left / 3))
+      : codeMode ? Math.min(45_000, Math.floor(left / 4)) : 0
     const remaining = Math.max(1_000, left - recovery)
+    const limits = timing()
     return {
-      ...timing,
-      firstTokenMs: Math.min(timing.firstTokenMs, remaining),
-      firstDeadlineMs: Math.min(timing.firstDeadlineMs, remaining),
+      ...limits,
+      firstTokenMs: Math.min(limits.firstTokenMs, remaining),
+      firstDeadlineMs: Math.min(limits.firstDeadlineMs, remaining),
       totalMs: remaining,
     }
   }
@@ -1257,7 +1284,10 @@ export async function runMalikMax(input: MaxInput, deps: { fetcher?: typeof fetc
 
   const base: CallInput = {
     prompt: input.prompt,
-    systemPrompt: input.systemPrompt,
+    systemPrompt: [input.systemPrompt,
+      codeMode ? `COMPLETE CODE DELIVERY: The entire answer has at most ${budget} output tokens across all chunks. Produce a complete runnable implementation within that allowance. Spend it on working code and essential instructions, not long introductions. Prefer compact, complete logic over an unfinished oversized file; never replace required behavior with TODOs or claim tests ran without receipts.` : "",
+      continuingCode ? "MANUAL CODE RESUME: This is a NEW chat message continuing the prior implementation. Return only the missing continuation, not a replacement or repeated file. Wrap code in a NEW fenced block with its original language so this message renders correctly, then close it when finished. The prior open block is context, not a requirement to emit a lone closing fence." : "",
+    ].filter(Boolean).join("\n"),
     history: input.history,
     attachments: input.attachments,
     maxTokens: perCall(0),
@@ -1279,22 +1309,38 @@ export async function runMalikMax(input: MaxInput, deps: { fetcher?: typeof fetc
     fetcher: deps.fetcher,
     signal: input.signal,
   })
+  if (!codeMode && answerContainsCode(content)) { codeMode = true; fastMode = false }
+  let consumed = generatedOutputTokens(result.usage, result.content)
   const used = [result.lane.id]
   let usage: unknown = result.usage
   let lowProgressRounds = 0
   // Why the engine stopped continuing while the answer may still be open.
   let stopReason: AnswerIncompleteReason | undefined = "rounds"
 
-  for (let round = 0; round < MAX_CONTINUATIONS; round += 1) {
-    const spent = estimateTokens(content)
+  // Smaller provider output caps may need more chunks. Real output budget,
+  // wall clock, no-progress checks and cancellation still bound every turn.
+  let continuationAllowance = codeMode ? 8 : MAX_CONTINUATIONS
+  const continuationLimit = () => {
+    if (!codeMode) return MAX_CONTINUATIONS
+    // Some gateways silently clamp the requested limit. A length stop gives
+    // us an observed chunk size as well as the request's declared ceiling.
+    const observed = truncatedFinish(result.finishReason)
+      ? generatedOutputTokens(result.usage, result.content)
+      : 16_000
+    const chunkSize = Math.max(128, Math.min(result.outputLimit || 16_000, observed, 16_000))
+    continuationAllowance = Math.max(continuationAllowance, Math.min(24, Math.max(8, Math.ceil(budget / chunkSize) + 2)))
+    return continuationAllowance
+  }
+  for (let round = 0; round < continuationLimit(); round += 1) {
+    const spent = consumed
     // Neither incomplete code nor missing items authorize spending beyond the
     // caller's budget or the account quota; keep an unfinished result honest.
-    if (spent >= budget - 256) { stopReason = "budget"; break }
-    const cutShort = truncatedFinish(result.finishReason) && spent < budget - 150
+    if (spent >= budget) { stopReason = "budget"; break }
+    const cutShort = truncatedFinish(result.finishReason)
     const codeOpen = codeMode && (codeAnswerNeedsMore(content, input.prompt)
       || missingBriefItems(taskPrompt, content).length > 0
       || briefMissingMarker(taskPrompt, content))
-    const structuredOpen = !codeMode && spent < budget - 256 && structuredAnswerNeedsMore(taskPrompt, content)
+    const structuredOpen = !codeMode && structuredAnswerNeedsMore(taskPrompt, content)
     if (!result.interrupted && !cutShort && !codeOpen && !structuredOpen) { stopReason = undefined; break }
     if (timeLeft() < 10_000) { stopReason = "time"; break }
     if (input.signal?.aborted) throw abortError()
@@ -1309,20 +1355,23 @@ export async function runMalikMax(input: MaxInput, deps: { fetcher?: typeof fetc
     // A model that repeatedly says STOP while leaving requested parts undone
     // is not always the best model for the next continuation.
     const alternatives = lanes.filter((lane) => lane.id !== result.lane.id)
-    const order = result.interrupted
+    const cramped = codeMode && truncatedFinish(result.finishReason) && (result.outputLimit || 16_000) < 1024
+    const order = result.interrupted && alternatives.length
       ? alternatives
-      : round > 0 && result.finishReason?.toLowerCase() === "stop" && alternatives.length
+      : (cramped || round > 0 && result.finishReason?.toLowerCase() === "stop") && alternatives.length
         ? [...alternatives, result.lane]
         : [result.lane, ...alternatives]
     const before = content
     const missingBefore = missingBriefItems(taskPrompt, before).length
     // Whatever the continuation re-sends from the answer is dropped as it streams.
-    const repeats = createContinuationFilter(content, emit)
+    const repeats = codeMode ? createCodeContinuationFilter(content, emit) : createContinuationFilter(content, emit)
     try {
       result = await raceLanes({
         lanes: order,
         call: {
           ...base,
+          codeMode,
+          fastMode,
           prompt: codeMode ? continuationPrompt(input.prompt, content, taskPrompt) : longOutputContinuationPrompt(input.prompt, content, taskPrompt),
           history: [],
           attachments: [],
@@ -1340,11 +1389,14 @@ export async function runMalikMax(input: MaxInput, deps: { fetcher?: typeof fetc
         signal: input.signal,
       })
       repeats.end()
+      consumed += generatedOutputTokens(result.usage, result.content)
+      if (!codeMode && answerContainsCode(content)) { codeMode = true; fastMode = false }
       if (repeats.dropped) console.info("[MALIK_MAX] continuation repeats dropped", repeats.dropped)
       used.push(result.lane.id)
       usage = { previous: usage, continuation: result.usage }
       const newText = content.slice(before.length).trim()
       const requirementsImproved = missingBriefItems(taskPrompt, content).length < missingBefore
+        || codeMode && codeAnswerNeedsMore(before, taskPrompt) && !codeAnswerNeedsMore(content, taskPrompt)
       // Prevent five expensive STOP → tiny fragment → STOP loops.
       lowProgressRounds = newText.length < 96 && !requirementsImproved ? lowProgressRounds + 1 : 0
       if (lowProgressRounds >= 2 && !result.interrupted) { stopReason = "stalled"; break }
@@ -1366,6 +1418,7 @@ export async function runMalikMax(input: MaxInput, deps: { fetcher?: typeof fetc
     stopReason,
     missing: missingBriefItems(taskPrompt, content),
     markerMissing: briefMissingMarker(taskPrompt, content),
+    codeIncomplete: codeMode && codeAnswerNeedsMore(content, taskPrompt),
   })
   console.info("[MALIK_MAX] done", JSON.stringify({ lanes: used, ms: Date.now() - started, tokens: estimateTokens(content), incomplete: incomplete?.reason || null }))
   return {
