@@ -1,7 +1,7 @@
 import { missingBriefItems, briefMissingMarker, briefNeedsDeep } from "@/lib/ai/brief-quality"
 import { isModelLeaderboardRequest } from "@/lib/ai/freshness-intent"
-import { assessAnswerCompletion, type AnswerIncompleteReason } from "@/lib/ai/answer-completion"
-import { createContinuationFilter } from "@/lib/ai/continuation-overlap"
+import { assessAnswerCompletion, hasOpenFence, type AnswerIncompleteReason } from "@/lib/ai/answer-completion"
+import { createContinuationFilter, createReopenedFenceFilter } from "@/lib/ai/continuation-overlap"
 import {
   getMalikModel,
   MALIK_MODELS,
@@ -1201,13 +1201,21 @@ export type MaxInput = {
   onToken?: (chunk: string) => void
   /** Stops every lane when the caller no longer needs the answer. */
   signal?: AbortSignal
+  /**
+   * An earlier answer that stopped unfinished («Продолжить»). It is sent to
+   * the chat first and then continued, so the person gets one whole answer —
+   * one code block that previews — instead of two halves in two messages.
+   * Only the new part counts against the budget.
+   */
+  resumeFrom?: string
 }
 
 export async function runMalikMax(input: MaxInput, deps: { fetcher?: typeof fetch; lanes?: MaxLane[] } = {}): Promise<StrictMalikResult> {
   const started = Date.now()
   const taskPrompt = input.taskPrompt || input.prompt
-  const codeMode = isCodeRequest(taskPrompt)
-  const fastMode = !codeMode && isFastChatRequest(taskPrompt, input.attachments)
+  const resumed = String(input.resumeFrom || "")
+  const codeMode = isCodeRequest(taskPrompt) || hasOpenFence(resumed)
+  const fastMode = !resumed && !codeMode && isFastChatRequest(taskPrompt, input.attachments)
   const needsVision = (input.attachments || []).some((item) => item?.kind === "image" || String(item?.mime || "").startsWith("image/"))
   const lanes = deps.lanes || await buildMaxLanes({ prompt: input.prompt, attachments: input.attachments, codeMode, fastMode, needsVision })
   if (!lanes.length) {
@@ -1269,16 +1277,22 @@ export async function runMalikMax(input: MaxInput, deps: { fetcher?: typeof fetc
     publicLabel: input.publicLabel,
   }
 
-  let result = await raceLanes({
-    lanes,
-    call: base,
-    onToken: emit,
-    ...boundedTiming(true),
-    minFlush: fastMode ? 2 : 24,
-    maxParallel: fastMode ? 2 : MAX_PARALLEL,
-    fetcher: deps.fetcher,
-    signal: input.signal,
-  })
+  // A resumed answer is already written: it goes out first, and the loop
+  // below treats it as one the provider cut off.
+  if (resumed) emit(resumed)
+  const baseTokens = resumed ? estimateTokens(resumed) : 0
+  let result: RaceResult = resumed
+    ? { lane: lanes[0], content: resumed, finishReason: "length", interrupted: false, firstTokenMs: 0 }
+    : await raceLanes({
+      lanes,
+      call: base,
+      onToken: emit,
+      ...boundedTiming(true),
+      minFlush: fastMode ? 2 : 24,
+      maxParallel: fastMode ? 2 : MAX_PARALLEL,
+      fetcher: deps.fetcher,
+      signal: input.signal,
+    })
   const used = [result.lane.id]
   let usage: unknown = result.usage
   let lowProgressRounds = 0
@@ -1286,7 +1300,7 @@ export async function runMalikMax(input: MaxInput, deps: { fetcher?: typeof fetc
   let stopReason: AnswerIncompleteReason | undefined = "rounds"
 
   for (let round = 0; round < MAX_CONTINUATIONS; round += 1) {
-    const spent = estimateTokens(content)
+    const spent = estimateTokens(content) - baseTokens
     // Neither incomplete code nor missing items authorize spending beyond the
     // caller's budget or the account quota; keep an unfinished result honest.
     if (spent >= budget - 256) { stopReason = "budget"; break }
@@ -1316,8 +1330,10 @@ export async function runMalikMax(input: MaxInput, deps: { fetcher?: typeof fetc
         : [result.lane, ...alternatives]
     const before = content
     const missingBefore = missingBriefItems(taskPrompt, before).length
-    // Whatever the continuation re-sends from the answer is dropped as it streams.
-    const repeats = createContinuationFilter(content, emit)
+    // Whatever the continuation re-sends from the answer is dropped as it
+    // streams; a code block it re-opens inside the open one is dropped first.
+    const repeats = createContinuationFilter(content, emit, codeMode ? { window: 200_000 } : {})
+    const reopened = createReopenedFenceFilter(hasOpenFence(content), repeats.push)
     try {
       result = await raceLanes({
         lanes: order,
@@ -1329,7 +1345,7 @@ export async function runMalikMax(input: MaxInput, deps: { fetcher?: typeof fetc
           maxTokens: perCall(spent),
           temperature: Math.min(typeof input.temperature === "number" ? input.temperature : 0.3, 0.3),
         },
-        onToken: repeats.push,
+        onToken: reopened.push,
         ...boundedTiming(),
         // The final missing section or marker can legitimately be very short.
         // Buffering thresholds for full answers must not discard that tail.
@@ -1339,8 +1355,9 @@ export async function runMalikMax(input: MaxInput, deps: { fetcher?: typeof fetc
         fetcher: deps.fetcher,
         signal: input.signal,
       })
+      reopened.end()
       repeats.end()
-      if (repeats.dropped) console.info("[MALIK_MAX] continuation repeats dropped", repeats.dropped)
+      if (repeats.dropped || reopened.dropped) console.info("[MALIK_MAX] continuation repeats dropped", repeats.dropped + reopened.dropped)
       used.push(result.lane.id)
       usage = { previous: usage, continuation: result.usage }
       const newText = content.slice(before.length).trim()
@@ -1349,6 +1366,7 @@ export async function runMalikMax(input: MaxInput, deps: { fetcher?: typeof fetc
       lowProgressRounds = newText.length < 96 && !requirementsImproved ? lowProgressRounds + 1 : 0
       if (lowProgressRounds >= 2 && !result.interrupted) { stopReason = "stalled"; break }
     } catch (error) {
+      reopened.end()
       repeats.end()
       if (input.signal?.aborted) throw error
       stopReason = "continuation-failed"

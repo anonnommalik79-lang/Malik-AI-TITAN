@@ -27,6 +27,11 @@ const deps = {
   runSiteForgeTurn: async () => null,
   websiteChatTurn: async () => null,
   compactForgeHistory: messages => messages,
+  // Games and «Продолжить» have their own suites (test:game-studio, test:max);
+  // these fixtures are neither, and the real «Продолжить» check is used.
+  runGameStudioTurn: async () => null,
+  compactGameHistory: messages => messages,
+  ...load("lib/ai/answer-completion.ts"),
   analyzeChatData: () => null,
   computedEvidenceInstruction: load("lib/analysis/chat.ts").computedEvidenceInstruction,
   buildOilGasSkillInstruction: () => "",

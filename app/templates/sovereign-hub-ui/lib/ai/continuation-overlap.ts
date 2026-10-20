@@ -102,3 +102,59 @@ export function createContinuationFilter(
     get dropped() { return dropped },
   }
 }
+
+/** A fence line that opens a block: ``` or ~~~ with a language. A bare ``` may be a closing fence and is kept. */
+const OPENING_FENCE = /^[ \t]*(?:```|~~~)[ \t]*[\w.+#-]+[^\n`]*\n/u
+/** A short lead-in a model writes before re-opening its code («Продолжение кода:», "Here is the rest:"). */
+const LEAD_IN = /^[ \t]*(?:[*_#>]+[ \t]*)?[^\n`]{0,120}?(?:продолж|дальше|остав|остальн|оконч|continu|rest\b|remaining|here\b|жалғас)[^\n`]{0,80}\n+/iu
+
+/**
+ * A code answer that stopped inside a code block is continued *inside* that
+ * block. Models often start the continuation with a new «```html» anyway,
+ * sometimes after a line like «Продолжение:». In Markdown that line is not a
+ * fence (a closing fence has no language) — it lands in the code as text and
+ * the block can never be closed: every later fence flips the count, and the
+ * engine keeps asking for more until it runs out of attempts. That happened to
+ * a game in the chat. The re-opening line (and its lead-in) is dropped here,
+ * before the overlap filter sees the text.
+ */
+export function createReopenedFenceFilter(insideOpenBlock: boolean, emit: (chunk: string) => void) {
+  let pending = ""
+  let decided = !insideOpenBlock
+  let dropped = 0
+  const decide = (final: boolean) => {
+    if (decided) return
+    const start = pending.replace(/^\s+/u, "")
+    const lead = LEAD_IN.exec(start)
+    const afterLead = lead ? start.slice(lead[0].length) : start
+    const fence = OPENING_FENCE.exec(afterLead)
+    if (fence) {
+      decided = true
+      const rest = afterLead.slice(fence[0].length)
+      dropped += pending.length - rest.length
+      pending = ""
+      if (rest) emit(rest)
+      return
+    }
+    // Enough has arrived to know there is no re-opened fence in the first lines.
+    const settled = /\n[^\n]*\n/u.test(afterLead) || afterLead.length > 260 || (!lead && /\S/u.test(afterLead) && !/^[ \t]*(?:`{1,3}|~{1,3})?[ \t]*[\w.+#-]*$/u.test(afterLead.split("\n")[0]))
+    if (settled || final) {
+      decided = true
+      const out = pending
+      pending = ""
+      if (out) emit(out)
+    }
+  }
+  return {
+    push(chunk: string) {
+      if (!chunk) return
+      if (decided) { emit(chunk); return }
+      pending += chunk
+      decide(false)
+    },
+    end() {
+      if (!decided) decide(true)
+    },
+    get dropped() { return dropped },
+  }
+}

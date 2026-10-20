@@ -85,6 +85,9 @@ const router = load("lib/ai/router.ts", {
   // The router learned "superpowers" after this test was written; none apply
   // to a short greeting, which is what it measures.
   "./superpowers": { detectMalikSuperpowers: () => [], buildMalikSuperpowerSystemPrompt: () => "", superpowerOutputBudget: () => 0 },
+  // The router also learned artifact and media-discussion binding (no providers in them): the real modules.
+  "./artifact-intent": load("lib/ai/artifact-intent.ts"),
+  "./image-intent": load("lib/ai/image-intent.ts", { "./artifact-intent": load("lib/ai/artifact-intent.ts") }),
 }, "\nexport { normalize };", { CHAT_HISTORY_WINDOW: "12" })
 const system = "LANGUAGE: answer only in Kazakh. Understand калайсын as қалайсың."
 const history = Array.from({ length: 20 }, (_, i) => ({ role: i % 2 ? "assistant" : "user", content: `turn ${i}` }))
