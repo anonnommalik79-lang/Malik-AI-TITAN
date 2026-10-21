@@ -19,13 +19,15 @@ export function shouldUseWeb(prompt: string, options: WebSearchOptions = {}, ser
   if (!text || options.disableResearch || options.research === false) return false
   if (NO_WEB.test(text) && !serverPlan) return false
   const plan = serverPlan || resolveDomainPlan({ prompt, messages: options.history || options.messages })
-  if (plan.evidence.web === "off") return false
+  if (plan.evidence.web === "off" && options.forceResearch !== true) return false
   // A build brief may contain «современный», «2026» or ask for photos/video.
   // Those are project requirements, not a news-research answer. Any factual
   // content research belongs to a separate project stage.
   if (websiteIntent(prompt)) return false
   if (plan.evidence.web === "required") return true
   if (/(?:не\s+(?:ищи|гугли|загугливай)|без\s+(?:поиска|интернета|гугла)|do not (?:search|browse)|don't (?:search|browse)|without (?:web|search|internet))/i.test(text)) return false
+  // An explicit opt-in forces search, except for explicit opt-out and site generation.
+  if (options.forceResearch === true) return true
 
   // An explicit search request always wins.
   if (/(?:по[ий]щ[иь]|поиск\s+(?:в|по)|загугл|гугл[еи]|найди\s+(?:в\s+(?:сети|интернете)|через\s+веб)|проверь\s+(?:онлайн|в\s+сети)|\b(?:google|browse|search the web|look up|search online)\b)/i.test(text)) return true
