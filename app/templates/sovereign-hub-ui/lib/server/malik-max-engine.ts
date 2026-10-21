@@ -1542,7 +1542,7 @@ export async function runMalikMax(input: MaxInput, deps: { fetcher?: typeof fetc
     const spent = consumed
     // Neither incomplete code nor missing items authorize spending beyond the
     // caller's budget or the account quota; keep an unfinished result honest.
-    if (spent >= budget) { stopReason = "budget"; break }
+    if (spent >= budget - 256) { stopReason = "budget"; break }
     const cutShort = truncatedFinish(result.finishReason)
     const codeOpen = codeMode && (codeAnswerNeedsMore(content, input.prompt)
       || missingBriefItems(taskPrompt, content).length > 0
