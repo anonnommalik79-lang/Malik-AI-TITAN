@@ -303,7 +303,10 @@ function catalogLanes(allowCatalog: boolean): MaxLane[] {
   const seen = new Set<string>()
   const lanes: MaxLane[] = []
   for (const def of MALIK_MODELS) {
-    if (def.id === "malik-max" || def.provider === "malik-orchestrator") continue
+    // Specialized ensembles and explicit-only Ling must never drain quotas in automatic chat.
+    if (def.id === "malik-max" || def.provider === "malik-orchestrator"
+      || def.provider === "malik-oil-ensemble" || def.provider === "ling-openrouter") continue
+    if (def.autoEligible === false && !allowCatalog) continue
     if (def.access === "catalog" && !allowCatalog) continue
     const signature = `${def.provider}:${def.providerModel}`
     if (seen.has(signature)) continue
