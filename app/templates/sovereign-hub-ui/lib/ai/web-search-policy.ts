@@ -35,7 +35,7 @@ export function shouldUseWeb(prompt: string, options: WebSearchOptions = {}, ser
   // A date inside an explicitly creative brief is a story setting, not a
   // request for current facts. News and explicit research still use evidence.
   if (/^(?:(?:пожалуйста|please)\s+)?(?:(?:напиши|сочини|придумай)\s+(?:стих|сказк|рассказ|песн)|(?:write|compose)\s+(?:(?:a|an)\s+)?(?:story|poem|fairy\s+tale|song|lyrics)\b)/iu.test(text)) {
-    return options.forceResearch === true || /(?:источник|исследован|новост|\b(?:sources|research|news|current events)\b)/iu.test(text)
+    return /(?:источник|исследован|новост|\b(?:sources|research|news|current events)\b)/iu.test(text)
   }
 
   // "Напиши последние новости" still needs live evidence. A generic writing
@@ -53,8 +53,6 @@ export function shouldUseWeb(prompt: string, options: WebSearchOptions = {}, ser
   if (/^(?:(?:пожалуйста|можешь|давай)\s+)?(?:переведи|перевод|перепиши|сократи|исправь|напиши|сочини|придумай|создай|сделай|почини|добавь|измени|сверстай|посчитай|реши|найди\s+(?:ошибку|баг|сумму|корень)|translate\b|rewrite\b|summari[sz]e\b|write\b|create\b|build\b|implement\b|fix\b|calculate\b|debug\b)/i.test(text)) return false
   if (/(?:\bhtml\b|\bcss\b|javascript|typescript|python|react|next\.?js|node\.?js|\bsql\b|index\.html|localstorage|код|скрипт|компонент|функц|api\b)/i.test(text)) return false
   if (/(?:кто\s+ты|что\s+ты\s+умеешь|что\s+умеешь|\bwho are you\b|\bwhat can you do\b)/i.test(text)) return false
-
-  if (options.forceResearch) return true
 
   // Event programmes and participant lists need a live check even without
   // "search", "today" or a question mark in a conversational request.
