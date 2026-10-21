@@ -682,6 +682,50 @@ await check("«Продолжить» resumes the unfinished answer in place: on
   assert.equal(completion.resumableAnswer([{ role: "user", content: "привет" }, { role: "assistant", content: "Привет!" }, { role: "user", content: "продолжи" }]), null)
 })
 
+
+await check("elite-first queue excludes weaker routes until every elite fails", async () => {
+  const weak = lane("fast-reserve", { power: 62 })
+  const failed = lane("missing-elite", { power: 95 })
+  const strong = lane("fast-elite", { power: 90 })
+  assert.deepEqual(engine.splitMaxLanes([weak, strong, failed]).elite.map((l) => l.id), [strong.id, failed.id])
+  const firstLog = []
+  const answer = await engine.raceStrongFirst({
+    lanes: [strong, weak], call, onToken: () => {},
+    minFlush: 8, fetcher: makeFetcher(firstLog), ...raceTiming,
+  })
+  assert.equal(answer.lane.id, strong.id)
+  assert.ok(!firstLog.some((item) => item.name === "fast-reserve"), "reserve must not race healthy elites")
+  const fallbackLog = []
+  const fallback = await engine.raceStrongFirst({
+    lanes: [failed, weak], call, onToken: () => {},
+    minFlush: 8, fetcher: makeFetcher(fallbackLog), ...raceTiming,
+  })
+  assert.equal(fallback.lane.id, weak.id)
+  assert.deepEqual(fallbackLog.map((item) => item.name), ["missing-elite", "fast-reserve"])
+})
+
+await check("expert panel gets two independent reviews before synthesis, without streaming drafts", async () => {
+  const first = lane("fast-panel-a", { power: 91 })
+  const second = lane("fast-panel-b", { power: 88 })
+  const weak = lane("fast-panel-weak", { power: 68 })
+  const log = []
+  const panel = await engine.runExpertPanel({
+    lanes: [first, second, weak], call: { ...call, maxTokens: 3_000 },
+    totalMs: 35_000, codeMode: false, fetcher: makeFetcher(log),
+  })
+  assert.ok(panel, "healthy elite panel should synthesize")
+  assert.ok(log.filter((item) => item.name === "fast-panel-a").length >= 2)
+  assert.ok(log.some((item) => item.name === "fast-panel-b"))
+  assert.ok(!log.some((item) => item.name === "fast-panel-weak"))
+  assert.match(JSON.stringify(log.at(-1).body), /INTERNAL CROSS-MODEL REVIEWS/)
+})
+
+await check("elite power includes GPT-6 only when the real model is configured", () => {
+  assert.equal(engine.lanePower("gpt-6-astra"), 97)
+  assert.ok(engine.lanePower("glm-5.3") >= 86)
+  assert.ok(engine.lanePower("qwen/qwen3.5-397b-a17b:free") >= 86)
+})
+
 console.log(`\n${count - failures}/${count} checks passed`)
 if (failures) process.exit(1)
 

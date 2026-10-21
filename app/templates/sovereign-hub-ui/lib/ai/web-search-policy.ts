@@ -19,13 +19,15 @@ export function shouldUseWeb(prompt: string, options: WebSearchOptions = {}, ser
   if (!text || options.disableResearch || options.research === false) return false
   if (NO_WEB.test(text) && !serverPlan) return false
   const plan = serverPlan || resolveDomainPlan({ prompt, messages: options.history || options.messages })
-  if (plan.evidence.web === "off") return false
+  if (plan.evidence.web === "off" && options.forceResearch !== true) return false
   // A build brief may contain «современный», «2026» or ask for photos/video.
   // Those are project requirements, not a news-research answer. Any factual
   // content research belongs to a separate project stage.
   if (websiteIntent(prompt)) return false
   if (plan.evidence.web === "required") return true
   if (/(?:не\s+(?:ищи|гугли|загугливай)|без\s+(?:поиска|интернета|гугла)|do not (?:search|browse)|don't (?:search|browse)|without (?:web|search|internet))/i.test(text)) return false
+  // An explicit opt-in forces search, except for explicit opt-out and site generation.
+  if (options.forceResearch === true) return true
 
   // An explicit search request always wins.
   if (/(?:по[ий]щ[иь]|поиск\s+(?:в|по)|загугл|гугл[еи]|найди\s+(?:в\s+(?:сети|интернете)|через\s+веб)|проверь\s+(?:онлайн|в\s+сети)|\b(?:google|browse|search the web|look up|search online)\b)/i.test(text)) return true
@@ -33,7 +35,7 @@ export function shouldUseWeb(prompt: string, options: WebSearchOptions = {}, ser
   // A date inside an explicitly creative brief is a story setting, not a
   // request for current facts. News and explicit research still use evidence.
   if (/^(?:(?:пожалуйста|please)\s+)?(?:(?:напиши|сочини|придумай)\s+(?:стих|сказк|рассказ|песн)|(?:write|compose)\s+(?:(?:a|an)\s+)?(?:story|poem|fairy\s+tale|song|lyrics)\b)/iu.test(text)) {
-    return options.forceResearch === true || /(?:источник|исследован|новост|\b(?:sources|research|news|current events)\b)/iu.test(text)
+    return /(?:источник|исследован|новост|\b(?:sources|research|news|current events)\b)/iu.test(text)
   }
 
   // "Напиши последние новости" still needs live evidence. A generic writing
@@ -51,8 +53,6 @@ export function shouldUseWeb(prompt: string, options: WebSearchOptions = {}, ser
   if (/^(?:(?:пожалуйста|можешь|давай)\s+)?(?:переведи|перевод|перепиши|сократи|исправь|напиши|сочини|придумай|создай|сделай|почини|добавь|измени|сверстай|посчитай|реши|найди\s+(?:ошибку|баг|сумму|корень)|translate\b|rewrite\b|summari[sz]e\b|write\b|create\b|build\b|implement\b|fix\b|calculate\b|debug\b)/i.test(text)) return false
   if (/(?:\bhtml\b|\bcss\b|javascript|typescript|python|react|next\.?js|node\.?js|\bsql\b|index\.html|localstorage|код|скрипт|компонент|функц|api\b)/i.test(text)) return false
   if (/(?:кто\s+ты|что\s+ты\s+умеешь|что\s+умеешь|\bwho are you\b|\bwhat can you do\b)/i.test(text)) return false
-
-  if (options.forceResearch) return true
 
   // Event programmes and participant lists need a live check even without
   // "search", "today" or a question mark in a conversational request.

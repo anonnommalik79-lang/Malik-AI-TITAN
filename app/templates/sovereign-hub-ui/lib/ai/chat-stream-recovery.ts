@@ -266,12 +266,15 @@ export async function fetchRecoverableChat(input: RequestInfo | URL, init: Reque
                 const saved = await within(fetcher(`/api/stream/background/${encodeURIComponent(turnId)}`, { cache: "no-store", signal }), budget, signal)
                 // Permissions and rate limits are terminal: no hot polling, and
                 // never a replay that would bypass them.
-                if ([401, 403, 404].includes(saved.status)) {
-                  finalError = saved.status === 404 ? "Сохранённый запрос не найден или недоступен этому аккаунту. Новый запрос автоматически не запускался." : "Сессия истекла или доступ запрещён. Войдите снова, чтобы открыть сохранённый ответ."
+                if ([401, 403, 404, 429].includes(saved.status)) {
+                  finalError = saved.status === 429
+                    ? "Лимит запросов при восстановлении ответа исчерпан. Автоматический опрос остановлен."
+                    : saved.status === 404
+                      ? "Сохранённый запрос не найден или недоступен этому аккаунту. Новый запрос автоматически не запускался."
+                      : "Сессия истекла или доступ запрещён. Войдите снова, чтобы открыть сохранённый ответ."
                   turnSettled = true
                   break
                 }
-                if (saved.status === 429) { await wait(Math.min(60_000, Math.max(1, deadline - Date.now())), signal); continue }
                 const payload = saved.ok ? await within(saved.json(), budget, signal) : null
                 const turn = payload?.turn
                 if (turn?.status === "complete" && turn.content) {
