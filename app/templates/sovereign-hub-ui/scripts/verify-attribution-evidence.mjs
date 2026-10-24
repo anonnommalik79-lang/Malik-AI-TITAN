@@ -14,6 +14,7 @@ assert.equal(attributionKind("когда умер этот политик?"), "b
 assert.equal(attributionKind("переведи: кто основал компанию"), null)
 assert.equal(attributionKind("напиши рассказ про основателя организации"), null)
 assert.equal(attributionKind("создай сайт о биографии"), null)
+assert.equal(attributionKind("напиши статью про основателя корпорации"), null)
 assert.equal(attributionKind("посчитай 2+2"), null)
 assert.match(attributionSystemInstruction(factQuestion), /PERSON, ROLE, ORGANIZATION and DATE/)
 
