@@ -4,6 +4,7 @@ import { assessAnswerCompletion, hasOpenFence, type AnswerIncompleteReason } fro
 import { createContinuationFilter, createReopenedFenceFilter } from "@/lib/ai/continuation-overlap"
 import { answerContainsCode, createCodeContinuationFilter } from "@/lib/ai/code-continuation"
 import type { ExecutionReporter } from "@/lib/ai/chat-execution"
+import { labelledMetricDisagreements } from "@/lib/ai/claim-ledger"
 import {
   getMalikModel,
   MALIK_MODELS,
@@ -1310,7 +1311,8 @@ export async function runExpertPanel(options: {
     throw abortError()
   }
   const valid = reviews.filter((item): item is { lane: MaxLane; content: string } => Boolean(item))
-  options.activity?.finish(reviewCall, { participants: valid.length, externalVerification: false }, valid.length >= 2 ? "completed" : "failed", valid.length >= 2 ? undefined : "Недостаточно доступных вариантов для сопоставления; используется обычная подготовка ответа")
+  const numericalDisagreements = options.codeMode ? 0 : labelledMetricDisagreements(valid.map(item => item.content))
+  options.activity?.finish(reviewCall, { participants: valid.length, numericalDisagreements, externalVerification: false }, valid.length >= 2 ? "completed" : "failed", valid.length >= 2 ? undefined : "Недостаточно доступных вариантов для сопоставления; используется обычная подготовка ответа")
   if (valid.length < 2) {
     console.info("[MALIK_MAX] expert panel skipped", JSON.stringify({ participants: valid.length }))
     return null

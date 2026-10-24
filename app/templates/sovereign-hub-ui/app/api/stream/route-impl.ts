@@ -6,10 +6,16 @@ import { currentEvidenceAvailable, finalizeFreshAnswer, freshnessEvidenceInstruc
 import { isContinueRequest, resumableAnswer, resumeText, sameAnswerText, withIncompleteNote } from "@/lib/ai/answer-completion"
 import { finalizeAccuracy } from "@/lib/ai/accuracy/engine"
 import { accuracyTokenGate } from "@/lib/ai/accuracy/stream"
+import { buildClaimLedger } from "@/lib/ai/claim-ledger"
+import type { MalikFactAudit } from "@/lib/ai/fact-audit"
 import { after } from "next/server"
 import { parsePluginCommand } from "@/lib/server/plugin-runtime"
 import { runPluginModelAnswer } from "@/lib/server/plugin-model-answer"
 import { generateProjectWithBrain } from "@/lib/ai/project-builder"
+import { passportMarkdown } from "@/lib/proof/passport"
+import { projectPassport } from "@/lib/proof/project"
+import { selfBuildIntent } from "@/lib/selfbuild/intent"
+import { buildSelfProject } from "@/lib/selfbuild/studio"
 import { DEFAULT_MALIK_MODEL_ID, hasMalikProAccess } from "@/lib/ai/malik-models"
 import { checkUsageLimit, recordChatUsage } from "@/lib/limits/rate-limit"
 import {
@@ -82,6 +88,7 @@ function wantsSse(request: Request, body: any) {
 
 function isProjectBuildRequest(body: any) {
   return body?.isProjectRequest === true || (body?.forceCanvas === true && body?.responseMode === "canvas")
+    || (!hasMalikAttachments(body?.attachments) && body?.modelId !== "malik-oil-1tb" && body?.model !== "malik-oil-1tb" && selfBuildIntent(coderPrompt(body)))
 }
 
 function requiresImageEditPipeline(body: any) {
@@ -883,6 +890,7 @@ async function runProjectAnswer(
   selection: Awaited<ReturnType<typeof resolveStrictMalikSelection>>,
   ownerId: string,
   onStatus?: (text: string) => void,
+  execution?: { activity?: ExecutionReporter; signal?: AbortSignal },
 ) {
   let prompt = coderPrompt(body)
   const selectedModelId = selection?.modelId || DEFAULT_MALIK_MODEL_ID
@@ -915,9 +923,10 @@ async function runProjectAnswer(
   }
 
   onStatus?.("Malik AI проектирует структуру и рабочую логику")
-  const websiteContext = await prepareChatWebsite(body, { prompt: coderPrompt(body), onProgress: event => onStatus?.(event.text) })
+  const selfbuild = selfBuildIntent(prompt)
+  const websiteContext = selfbuild ? undefined : await prepareChatWebsite(body, { prompt: coderPrompt(body), onProgress: event => onStatus?.(event.text) })
 
-  const project = await generateProjectWithBrain({
+  const project = selfbuild ? await buildSelfProject({prompt,modelId:selectedModelId,...execution}) : await generateProjectWithBrain({
     prompt,
     framework: "next",
     language: "typescript",
@@ -935,7 +944,7 @@ async function runProjectAnswer(
     )
   }
 
-  onStatus?.("Код прошёл QA. Malik AI упаковывает проект в ZIP")
+  onStatus?.("Статическая проверка завершена. Упаковываю исходники с паспортом проверок")
   const artifact = await putProjectArtifact(project, ownerId)
   const downloadUrl = `/api/ai/project/artifacts/${artifact.id}/download`
   const isRussian = /[а-яёәіңғүұқөһ]/iu.test(prompt)
@@ -947,26 +956,28 @@ async function runProjectAnswer(
 
   const content = isRussian
     ? [
-        "## Проект готов",
+        "## Исходники проекта готовы",
         "",
-        `Malik AI собрал **${project.files.length} файлов**, проверил структуру и логику и только после успешного QA упаковал результат.`,
+        `Malik AI собрал **${project.files.length} файлов** и проверил структуру, синтаксис и импорты. ${selfbuild ? "Статус реального запуска тестов — в паспорте ниже." : "Сборка и запуск не выполнялись."}`,
         "",
         `[Скачать ${artifact.filename}](${downloadUrl})`,
         "",
         featureFiles ? `Основные файлы: ${featureFiles}.` : "",
-        `Проверка: **пройдена**, раундов QA: **${project.qa.rounds}**.`,
-        "Запуск: `npm install` → `npm run dev`. Финальная проверка: `npm run build`.",
+        `Раундов статического QA: **${project.qa.rounds}**.`,
+        passportMarkdown(project.passport || projectPassport(project), "ru"),
+        selfbuild ? "Проверить локально: `node --test`. Команда CLI описана в README.md." : "Запуск: `npm install` → `npm run dev`. Финальная проверка: `npm run build`.",
       ].filter(Boolean).join("\n")
     : [
-        "## Project ready",
+        "## Project source ready",
         "",
-        `Malik AI generated **${project.files.length} files**, validated the structure and implementation, and packaged the result only after QA passed.`,
+        `Malik AI generated **${project.files.length} files** and checked structure, syntax and imports. ${selfbuild ? "Actual test execution status is in the passport below." : "Build and runtime were not tested."}`,
         "",
         `[Download ${artifact.filename}](${downloadUrl})`,
         "",
         featureFiles ? `Main files: ${featureFiles}.` : "",
-        `QA: **passed**, rounds: **${project.qa.rounds}**.`,
-        "Run: `npm install` → `npm run dev`. Final check: `npm run build`.",
+        `Static QA rounds: **${project.qa.rounds}**.`,
+        passportMarkdown(project.passport || projectPassport(project), "en"),
+        selfbuild ? "Verify locally: `node --test`. CLI usage is in README.md." : "Run: `npm install` → `npm run dev`. Final check: `npm run build`.",
       ].filter(Boolean).join("\n")
 
   return {
@@ -1054,7 +1065,7 @@ function liveSseResponse(
       }, 15_000)
 
       const answerPromise = isProjectBuildRequest(body)
-        ? runProjectAnswer(body, selection, entitlement.userId, (text) => { activity.status(text, "code"); send("status", { type: "status", text }) })
+        ? runProjectAnswer(body, selection, entitlement.userId, (text) => { activity.status(text, "code"); send("status", { type: "status", text }) }, { activity, signal: generation.signal })
         : runSelectedAnswer(
             body,
             selection,
@@ -1126,6 +1137,13 @@ function liveSseResponse(
         ])
         stopHeartbeat()
         activity.finish(responseCall, { characters: content.length, sources: answer.sources.length, artifact: "projectArtifact" in answer ? answer.projectArtifact : undefined })
+        const reviewSteps = activity.snapshot().steps.filter(step => step.tool === "malik.review" && step.state === "completed")
+        const expertDisagreements = reviewSteps.reduce((sum, step) => {
+          try { return sum + (Number(JSON.parse(step.output || "{}").numericalDisagreements) || 0) } catch { return sum }
+        }, 0)
+        const ledger = "projectArtifact" in answer ? null : buildClaimLedger({answer:content,prompt:coderPrompt(body),sources:answer.sources,expertDisagreements})
+        const previousAudit = ("factAudit" in answer ? answer.factAudit : null) as MalikFactAudit | null
+        const factAudit = ledger ? { ...(previousAudit || {checked:0,supported:0,missing:0,brokenCitations:0,claims:[],status:"unchecked" as const,summary:"Проверены только распознанные явные утверждения"}),ledger } : previousAudit
         send("done", {
           type: "done",
           provider: answer.provider,
@@ -1138,7 +1156,8 @@ function liveSseResponse(
           // The answer's own figures, checked against the pages it was written
           // from. This rides on `done` rather than an event of its own so the
           // durable-turn tee and every existing reader carry it unchanged.
-          factAudit: "factAudit" in answer ? answer.factAudit ?? null : null,
+          factAudit,
+          truthLedger: ledger,
           accuracy: "accuracy" in answer ? answer.accuracy ?? null : null,
           artifactDelivery: "artifactDelivery" in answer ? answer.artifactDelivery : undefined,
           ...("artifactDelivery" in answer && answer.artifactDelivery?.ok===false ? {ok:false,error:"DOCUMENT_DELIVERY_FAILED"} : {}),

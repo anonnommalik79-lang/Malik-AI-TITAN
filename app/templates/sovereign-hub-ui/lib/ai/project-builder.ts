@@ -2,6 +2,8 @@ import type { MalikModelId } from "@/lib/ai/malik-models"
 import { runStrictMalikModel } from "@/lib/server/malik-model-router"
 import { analyzeProject } from "@/lib/work/code/diagnostics"
 import { chatWebsiteInstruction } from "@/lib/server/chat-website-design"
+import { projectPassport } from "@/lib/proof/project"
+import type { ProofPassport } from "@/lib/proof/passport"
 
 export type ProjectFile = {
   path: string
@@ -14,6 +16,8 @@ export type ProjectQualityReport = {
   checks: string[]
   issues: string[]
   reviewer?: string
+  reviewStatus?: "pass" | "fail" | "not_run"
+  staticIssues?: string[]
   rounds: number
 }
 
@@ -42,6 +46,7 @@ export type ProjectBuilderResult = {
   model?: string
   error?: string
   qa?: ProjectQualityReport
+  passport?: ProofPassport
   createdAt: string
 }
 
@@ -279,7 +284,7 @@ function projectSnapshot(files: ProjectFile[], maxChars = 18_000) {
   return out.trim()
 }
 
-function reviewerPassed(review: string) {
+function reviewerPassed(review: string | null) {
   return /^PASS\b/i.test(String(review || "").trim())
 }
 
@@ -298,7 +303,7 @@ async function aiReview(input: ProjectBuilderInput, files: ProjectFile[]) {
     })
     return String(result.content || "").trim().slice(0, 5000)
   } catch {
-    return "PASS"
+    return null
   }
 }
 
@@ -356,29 +361,34 @@ export async function generateProjectWithBrain(input: ProjectBuilderInput): Prom
     rounds += 1
     let files = mergeBaseFiles(generated.files, title)
     let staticQa = validateProject(files)
-    let reviewer = staticQa.issues.length ? "" : await aiReview(input, files)
+    let reviewer = staticQa.issues.length ? null : await aiReview(input, files)
 
     // Repair with the real diagnostics; a second repair only when the first
     // one reduced the problems, so a model that cannot fix it is not looped.
-    for (let repair = 0; repair < 2 && (staticQa.issues.length || !reviewerPassed(reviewer)); repair++) {
+    for (let repair = 0; repair < 2 && (staticQa.issues.length || (reviewer !== null && !reviewerPassed(reviewer))); repair++) {
       const before = staticQa.issues.length
       const feedback = [...staticQa.issues, reviewer && !reviewerPassed(reviewer) ? reviewer : ""].filter(Boolean).join("\n")
       generated = await generateFiles(input, feedback)
       rounds += 1
       files = mergeBaseFiles(generated.files, title)
       staticQa = validateProject(files)
-      reviewer = staticQa.issues.length ? "" : await aiReview(input, files)
+      reviewer = staticQa.issues.length ? null : await aiReview(input, files)
       if (staticQa.issues.length && staticQa.issues.length >= before) break
     }
 
-    const reviewOk = staticQa.issues.length === 0 && reviewerPassed(reviewer)
+    // A missing review does not invalidate downloadable source, but must never
+    // be promoted into proof that the review passed.
+    const reviewOk = staticQa.issues.length === 0 && (reviewer === null || reviewerPassed(reviewer))
     const qa: ProjectQualityReport = {
       passed: reviewOk,
       checks: staticQa.checks,
       issues: [...staticQa.issues, reviewer && !reviewerPassed(reviewer) ? reviewer : ""].filter(Boolean),
       reviewer: reviewer || undefined,
+      reviewStatus: reviewer === null ? "not_run" : reviewerPassed(reviewer) ? "pass" : "fail",
+      staticIssues: staticQa.issues,
       rounds,
     }
+    const passport = projectPassport({ projectId, title, files, qa })
 
     if (!qa.passed) {
       return {
@@ -394,6 +404,7 @@ export async function generateProjectWithBrain(input: ProjectBuilderInput): Prom
         model: generated.model,
         error: qa.issues.join("; ").slice(0, 4000) || "Project QA failed.",
         qa,
+        passport,
         createdAt,
       }
     }
@@ -401,7 +412,7 @@ export async function generateProjectWithBrain(input: ProjectBuilderInput): Prom
     return {
       projectId,
       title,
-      description: `Production project generated from the user's brief and validated in ${rounds} QA round${rounds === 1 ? "" : "s"}.`,
+      description: `Source project generated and statically checked in ${rounds} QA round${rounds === 1 ? "" : "s"}. Build and runtime not tested.`,
       status: "completed",
       plan: [
         "Parse the user's requirements as the source of truth",
@@ -417,6 +428,7 @@ export async function generateProjectWithBrain(input: ProjectBuilderInput): Prom
       provider: generated.provider,
       model: generated.model,
       qa,
+      passport,
       createdAt,
     }
   } catch (error) {

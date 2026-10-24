@@ -139,7 +139,7 @@ try {
     args[4]("Confirmed answer.")
     return { content: "Confirmed answer.", sources: [], usedWeb: true, provider: "test", model: "test", selectedModelId: "malik-max" }
   }
-  const { liveSseResponse } = functionsFrom("app/api/stream/route-impl.ts", ["protectChatCodeFences", "createStreamingFenceProtector", "liveSseResponse"], {
+  const { liveSseResponse } = functionsFrom("app/api/stream/route-impl.ts", ["coderPrompt", "protectChatCodeFences", "createStreamingFenceProtector", "liveSseResponse"], {
     after: (callback) => callbacks.push(callback), createExecutionReporter, DEFAULT_MALIK_MODEL_ID: "malik-max",
     isProjectBuildRequest: () => false, runSelectedAnswer: (...args) => modelRun(...args),
     estimateMultimodalTokens: () => 0, hasMalikAttachments: () => false,
@@ -147,6 +147,8 @@ try {
     recordChatUsage: () => usage, persistFounderChatTurn: () => history,
     malikModelErrorPayload: (error) => ({ message: String(error) }),
     sameAnswerText, withIncompleteNote,
+    buildClaimLedger: load("lib/ai/claim-ledger.ts").buildClaimLedger,
+    normalizeProviderTokenUsage: load("lib/ai/token-telemetry.ts").normalizeProviderTokenUsage,
   })
   await check("SSE delivers done while history and usage writes are still pending", async () => {
     const response = liveSseResponse({ prompt: screenshotPrompt }, null, { userId: "offline-test", plan: "owner" })

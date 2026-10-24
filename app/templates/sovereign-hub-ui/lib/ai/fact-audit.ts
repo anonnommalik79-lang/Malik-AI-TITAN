@@ -38,6 +38,8 @@
  * numbers the user supplied in the question count as grounded.
  */
 
+import { normalizeClaimLedger, type ClaimLedger } from "./claim-ledger"
+
 export type MalikFactVerdict = "supported" | "missing" | "bad-citation" | "unchecked"
 
 export type MalikFactClaim = {
@@ -54,6 +56,7 @@ export type MalikFactClaim = {
 }
 
 export type MalikFactAudit = {
+  ledger?: ClaimLedger | null
   /** Substantive figures the answer stated. Citations are counted separately. */
   checked: number
   /** Figures found in at least one page, or supplied by the question. */
@@ -567,6 +570,7 @@ const VERDICTS: MalikFactVerdict[] = ["supported", "missing", "bad-citation", "u
 export function normalizeFactAudit(value: unknown): MalikFactAudit | null {
   if (!value || typeof value !== "object") return null
   const raw = value as Record<string, unknown>
+  const ledger = normalizeClaimLedger(raw.ledger)
   const checked = Number(raw.checked)
   const supported = Number(raw.supported)
   if (!Number.isFinite(checked) || !Number.isFinite(supported)) return null
@@ -601,13 +605,14 @@ export function normalizeFactAudit(value: unknown): MalikFactAudit | null {
 
   const missing = Number.isFinite(Number(raw.missing)) ? Number(raw.missing) : Math.max(0, checked - supported)
   const brokenCitations = Number.isFinite(Number(raw.brokenCitations)) ? Number(raw.brokenCitations) : 0
-  if (!checked && !brokenCitations) return null
+  if (!checked && !brokenCitations && !ledger) return null
 
   // The status is recomputed rather than trusted: it is what decides how loud
   // the panel is, and a stored turn from an older build may not carry one.
   const unchecked = raw.status === "unchecked" && !supported && !missing && !brokenCitations
 
   return {
+    ...(ledger ? { ledger } : {}),
     checked,
     supported,
     missing,

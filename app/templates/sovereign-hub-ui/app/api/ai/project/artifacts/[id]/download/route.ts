@@ -1,5 +1,5 @@
 import { buildProjectZip } from "@/lib/business/project-zip"
-import { getProjectArtifact } from "@/lib/server/project-artifact-store"
+import { getProjectArtifact, projectArtifactFiles } from "@/lib/server/project-artifact-store"
 import { resolveRequestEntitlement } from "@/lib/server/request-entitlement"
 import { renderBandwidthBlocked, renderResponseFitsBudget } from "@/lib/server/render-bandwidth"
 
@@ -20,10 +20,7 @@ export async function GET(request: Request, context: RouteContext) {
     )
   }
 
-  const zip = buildProjectZip(artifact.project.files.map((file) => ({
-    name: file.path,
-    content: file.content,
-  })))
+  const zip = buildProjectZip(projectArtifactFiles(artifact.project))
 
   // buildProjectZip returns a Blob: its length is `size`.
   if (!renderResponseFitsBudget(zip.size)) return renderBandwidthBlocked("project-zip", zip.size)

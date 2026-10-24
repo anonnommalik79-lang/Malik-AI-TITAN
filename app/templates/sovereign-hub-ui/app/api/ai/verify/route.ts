@@ -1,4 +1,5 @@
 import { auditAnswerFacts, recheckFigure } from "@/lib/ai/fact-audit"
+import { buildClaimLedger } from "@/lib/ai/claim-ledger"
 import { gatherSourcesForPrompt } from "@/lib/malik-god-router"
 import { readJsonBodyLimited, RequestSafetyError } from "@/lib/server/request-safety"
 import { resolveRequestEntitlement } from "@/lib/server/request-entitlement"
@@ -60,7 +61,9 @@ export async function POST(request: Request) {
       ? [question, sentence || claim].filter(Boolean).join(" · ").slice(0, 320)
       : question || answer.slice(0, 320)
 
-    const sources = await gatherSourcesForPrompt(query)
+    const initialLedger = answer ? buildClaimLedger({answer,prompt:question}) : null
+    const onlyLocalClaims = initialLedger && initialLedger.claims.every(item => item.origin === "calculation" || item.origin === "user-data" || item.origin === "assumption" || item.origin === "forecast")
+    const sources = onlyLocalClaims && !claim ? [] : await gatherSourcesForPrompt(query)
 
     if (claim) {
       const result = recheckFigure({ claim, sources, prompt: question })
@@ -76,8 +79,10 @@ export async function POST(request: Request) {
       )
     }
 
+    const ledger = buildClaimLedger({answer,prompt:question,sources})
+    const audit = auditAnswerFacts({answer,sources,prompt:question})
     return Response.json(
-      { ok: true, kind: "answer", audit: auditAnswerFacts({ answer, sources, prompt: question }), sources },
+      { ok: true, kind: "answer", audit: ledger ? {...(audit || {checked:0,supported:0,missing:0,brokenCitations:0,claims:[],status:"unchecked",summary:"Проверены только распознанные явные утверждения"}),ledger} : audit, sources },
       { headers: { "cache-control": "no-store", "x-malik-router": "fact-audit-recheck" } },
     )
   } catch (error) {

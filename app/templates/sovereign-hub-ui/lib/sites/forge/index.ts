@@ -4,6 +4,8 @@ import { resolvePhotos, type PhotoFinder } from "./photos"
 import { reviewSiteHtml, type QualityReport } from "./quality"
 import { renderSite, type PhotoMap } from "./render"
 import { appliedSkills, type AppliedSkill } from "./skills"
+import { sitePassport, embedSitePassport } from "./passport"
+import type { ProofPassport } from "@/lib/proof/passport"
 
 /**
  * Malik Site Forge — a request in, a finished multi-page site out.
@@ -25,6 +27,7 @@ export type ForgeResult = {
   photos: PhotoMap
   pages: string[]
   quality: QualityReport
+  passport: ProofPassport
   planner: { used: boolean; attempts: number; issues: string[] }
   photoStats: { total: number; filled: number }
   /** Interface skills the finished page really carries (each one checked in the HTML). */
@@ -77,13 +80,15 @@ export async function forgeSite(input: { prompt: string; model?: ForgeModel; fin
 
   input.onStage?.("review")
   const quality = reviewSiteHtml(rendered.html)
+  const passport = sitePassport(plan.brand.name, rendered.html, quality)
   const slots = 3 + plan.gallery.length + plan.catalog.items.length
   return {
-    html: rendered.html,
+    html: embedSitePassport(rendered.html, passport),
     plan,
     photos,
     pages: rendered.pages,
     quality,
+    passport,
     planner: { used, attempts, issues },
     photoStats: { total: slots, filled: Object.values(photos).filter(Boolean).length },
     skills: appliedSkills(rendered.html, plan),

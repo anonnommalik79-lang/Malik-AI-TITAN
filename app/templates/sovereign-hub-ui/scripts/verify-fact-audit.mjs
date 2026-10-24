@@ -1,18 +1,9 @@
 import assert from "node:assert/strict"
 import fs from "node:fs"
-import ts from "typescript"
+import { workTestLoader } from "./work-test-loader.mjs"
 
-function loadTypeScriptModule(file) {
-  const source = fs.readFileSync(file, "utf8")
-  const js = ts.transpileModule(source, {
-    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
-  }).outputText
-  const box = { exports: {} }
-  new Function("require", "module", "exports", js)(
-    (name) => { throw new Error(`unexpected require(${name})`) }, box, box.exports,
-  )
-  return box.exports
-}
+// Execute real dependencies too; the shared audit now restores a claim ledger.
+const loadTypeScriptModule = workTestLoader({})
 
 const { auditAnswerFacts } = loadTypeScriptModule("lib/ai/fact-audit.ts")
 
@@ -404,7 +395,9 @@ check("a failing audit can never take the answer down with it", () => {
 
 check("the chat stream carries the audit on its done event", () => {
   const stream = read("app/api/stream/route-impl.ts")
-  assert.match(stream, /factAudit: "factAudit" in answer \? answer\.factAudit \?\? null : null/)
+  assert.match(stream, /const previousAudit = \("factAudit" in answer \? answer\.factAudit : null\)/)
+  assert.match(stream, /factAudit,\s*truthLedger: ledger/)
+  assert.match(stream, /const factAudit = ledger \? \{ \.\.\.\(previousAudit/)
 })
 
 check("the dashboard keeps the audit on the message it belongs to", () => {
@@ -441,7 +434,7 @@ check("the on-demand verification route exists and is guarded", () => {
   assert.match(route, /status: 401/)
   assert.match(route, /gatherSourcesForPrompt\(query\)/)
   assert.match(route, /recheckFigure\(\{ claim, sources, prompt: question \}\)/)
-  assert.match(route, /auditAnswerFacts\(\{ answer, sources, prompt: question \}\)/)
+  assert.match(route, /auditAnswerFacts\(\{\s*answer,\s*sources,\s*prompt:\s*question\s*\}\)/)
 })
 
 check("the route searches for the figure inside its own subject", () => {
@@ -463,7 +456,7 @@ check("a flagged or unchecked figure carries the button that checks it", () => {
 
 check("an unsourced answer offers to check itself", () => {
   const view = read("components/sovereign/chat-view.tsx")
-  assert.match(view, /\{unchecked && answer \? \(/)
+  assert.match(view, /\{unchecked && answer && \(!shown\.ledger \|\| shown\.ledger\.claims\.some\(claim => claim\.origin === "external-fact"\)\) \? \(/)
   assert.match(view, /checkWholeAnswer/)
 })
 

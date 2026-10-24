@@ -7371,7 +7371,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
           const sources = Array.isArray(payload?.sources)
             ? payload.sources.map(reviveWebSource).filter(Boolean).slice(0, 12) as MalikWebSource[]
             : finalResearch?.sources || []
-          if (payload?.usedWeb || finalResearch) {
+          if (payload?.usedWeb || payload?.factAudit || finalResearch) {
             const previous = finalResearch || {
               status: "done" as const,
               usedWeb: Boolean(payload?.usedWeb),

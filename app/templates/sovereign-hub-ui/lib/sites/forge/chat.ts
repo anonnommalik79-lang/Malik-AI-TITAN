@@ -3,6 +3,7 @@ import { readForgeSite, type ForgeResult } from "./index"
 import { forgeLocale, type ForgePlan } from "./plan"
 import type { PhotoMap } from "./render"
 import { skillLines } from "./skills"
+import { passportMarkdown } from "@/lib/proof/passport"
 
 /**
  * Malik Site Forge in the chat: which requests it takes, how the answer reads,
@@ -128,6 +129,8 @@ export function forgeChatMessage(result: ForgeResult, mode: "new" | "edit") {
     copy.publish,
     "",
     photoLine,
+    "",
+    passportMarkdown(result.passport, plan.locale),
     ...(result.planner.used ? [] : ["", copy.fallback]),
     "",
     copy.next,

@@ -56,6 +56,8 @@ export type ProofPassport = {
   /** What nobody verified (checks that did not run, plus declared blind spots). */
   untested: string[]
   artifacts: PassportArtifact[]
+  /** Content binding, not a signature or a security certification. */
+  sourceHash?: string
   logs: string[]
   status: PassportStatus
 }
@@ -84,6 +86,7 @@ export function buildPassport(input: {
   blindSpots?: string[]
   artifacts?: PassportArtifact[]
   logs?: string[]
+  sourceHash?: string
   now?: Date
 }): ProofPassport {
   const now = (input.now || new Date()).toISOString()
@@ -112,6 +115,7 @@ export function buildPassport(input: {
     knownIssues: (input.knownIssues || []).map((line) => clip(line, 300)).filter(Boolean).slice(0, 20),
     untested: [...new Set(untested)].slice(0, 20),
     artifacts: (input.artifacts || []).slice(0, 20),
+    ...(/^[a-f0-9]{64}$/.test(input.sourceHash || "") ? { sourceHash: input.sourceHash } : {}),
     logs: (input.logs || []).map((line) => clip(line, 600)).slice(0, 30),
     status: passportStatus(checks),
   }
@@ -122,8 +126,23 @@ export function readPassport(value: unknown): ProofPassport | null {
   const data = typeof value === "string" ? (() => { try { return JSON.parse(value) } catch { return null } })() : value
   if (!data || typeof data !== "object" || (data as ProofPassport).version !== PASSPORT_VERSION || !Array.isArray((data as ProofPassport).checks)) return null
   const passport = data as ProofPassport
-  // The status is recomputed, never trusted from the stored copy.
-  return { ...passport, status: passportStatus(passport.checks) }
+  if (passport.checks.length > 40 || !["game", "site", "project", "selfbuild", "world", "oil"].includes(passport.kind)
+    || typeof passport.projectId !== "string" || typeof passport.title !== "string"
+    || !Number.isFinite(Date.parse(passport.createdAt))
+    || passport.checks.some(check => !check || typeof check !== "object"
+      || !["pass", "fail", "not_run"].includes(check.status)
+      || !["static", "build", "unit", "integration", "runtime", "browser", "review"].includes(check.kind)
+      || typeof check.id !== "string" || typeof check.label !== "string" || typeof check.required !== "boolean"
+      || !Array.isArray(check.details) || check.details.some(detail => typeof detail !== "string")
+      || (check.status !== "not_run" && (!check.ranAt || !Number.isFinite(Date.parse(check.ranAt)))))) return null
+  // Rebuild all derived evidence, not only the top-level verdict. This is
+  // structural validation, NOT authentication of a client-provided receipt.
+  return buildPassport({
+    ...passport, blindSpots: Array.isArray(passport.untested) ? passport.untested : [],
+    knownIssues: Array.isArray(passport.knownIssues) ? passport.knownIssues : [],
+    artifacts: Array.isArray(passport.artifacts) ? passport.artifacts : [],
+    logs: Array.isArray(passport.logs) ? passport.logs : [], now: new Date(passport.createdAt),
+  })
 }
 
 type Locale = "ru" | "kk" | "en"

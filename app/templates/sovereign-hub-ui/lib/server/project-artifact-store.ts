@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto"
 
 import type { ProjectBuilderResult } from "@/lib/ai/project-builder"
+import { projectPassport } from "@/lib/proof/project"
+import { readPassport } from "@/lib/proof/passport"
 import { deletePrivateJson, readPrivateJson, writePrivateJson } from "@/lib/server/private-json-store"
 
 export type StoredProjectArtifact = {
@@ -67,7 +69,7 @@ export async function putProjectArtifact(project: ProjectBuilderResult, ownerId:
     id: crypto.randomUUID(),
     ownerId: normalizedOwner,
     filename: `${slugify(project.title)}.zip`,
-    project,
+    project: { ...project, passport: exportPassport(project) },
     createdAt: now,
     expiresAt: now + ARTIFACT_TTL_MS,
   }
@@ -75,6 +77,29 @@ export async function putProjectArtifact(project: ProjectBuilderResult, ownerId:
   cleanup(now)
   await writePrivateJson(artifactKey(normalizedOwner, artifact.id), artifact)
   return artifact
+}
+
+/** Always regenerated from server-owned QA; model-authored passports are removed. */
+export function projectArtifactFiles(project: ProjectBuilderResult) {
+  const passport = exportPassport(project)
+  passport.artifacts = project.files.filter(file => file.path.toUpperCase() !== "PROOF_PASSPORT.JSON").slice(0, 20).map(file => ({
+    name: file.path, bytes: Buffer.byteLength(file.content), sha256: createHash("sha256").update(file.content).digest("hex"),
+  }))
+  return [
+    ...project.files.filter(file => file.path.toUpperCase() !== "PROOF_PASSPORT.JSON").map(file => ({ name: file.path, content: file.content })),
+    { name: "PROOF_PASSPORT.json", content: JSON.stringify(passport, null, 2) },
+  ]
+}
+
+function exportPassport(project: ProjectBuilderResult) {
+  const stored = readPassport(project.passport)
+  if (stored?.kind === "selfbuild") {
+    const content = project.files.map(file => ({path:file.path,content:file.content})).sort((a,b)=>a.path.localeCompare(b.path))
+    const hash = createHash("sha256").update(JSON.stringify(content)).digest("hex")
+    if (stored.sourceHash === hash && stored.projectId === project.projectId) return stored
+    // Stale receipts must never bless edited code.
+  }
+  return projectPassport(project)
 }
 
 export async function getProjectArtifact(id: string, ownerId: string) {

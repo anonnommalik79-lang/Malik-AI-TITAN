@@ -60,6 +60,7 @@ import type { AIPlan } from "@/lib/ai/types"
 import type { MalikMessageResearch, MalikResearchStep, MalikWebSource } from "@/lib/ai/web-research-types"
 import { fixWrongKeyboardLayout } from "@/lib/ai/keyboard-layout"
 import type { MalikFactAudit, MalikFactClaim } from "@/lib/ai/fact-audit"
+import { ClaimLedgerPanel } from "./ClaimLedgerPanel"
 import { DEFAULT_MALIK_MODEL_ID, getMalikModel, type MalikModelId } from "@/lib/ai/malik-models"
 import { clientFetchWithTimeout } from "@/lib/api-client"
 import { MalikModelSelector } from "./MalikModelSelector"
@@ -1526,7 +1527,7 @@ function FactAuditPanel({
           className="-my-2 min-w-0 flex-1 py-2 text-left"
         >
           <strong className={cn("block text-[12.5px] font-semibold", flagged ? "text-white" : "text-zinc-300")}>
-            {flagged ? "Проверка фактов: есть что перепроверить" : unchecked ? "Факты не проверены" : "Проверка фактов пройдена"}
+            {shown.ledger ? "Реестр проверок утверждений" : flagged ? "Проверка фактов: есть что перепроверить" : unchecked ? "Факты не проверены" : "Проверка фактов пройдена"}
           </strong>
           {/* The count is the whole message, so on a phone it wraps rather
               than getting cut off mid-word. */}
@@ -1540,7 +1541,7 @@ function FactAuditPanel({
         {/* An answer written without a search has never been compared with
             anything. Saying that is honest but useless on its own, so the way
             to fix it sits right next to the sentence that reports it. */}
-        {unchecked && answer ? (
+        {unchecked && answer && (!shown.ledger || shown.ledger.claims.some(claim => claim.origin === "external-fact")) ? (
           <button
             type="button"
             onClick={checkWholeAnswer}
@@ -1557,6 +1558,7 @@ function FactAuditPanel({
         </button>
       </div>
 
+      {open && shown.ledger ? <ClaimLedgerPanel ledger={shown.ledger} /> : null}
       {rows.length ? (
         <ul className="border-t border-white/[0.06] px-2 py-2">
           {rows.map((claim, index) => (

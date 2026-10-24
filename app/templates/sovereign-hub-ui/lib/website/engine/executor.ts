@@ -12,7 +12,7 @@ export type ExecutionReceipt = {
   browser: { passed: boolean; details: string[] }
   previewUrl?: string
 }
-function configuration() {
+export function executorConfiguration() {
   const raw = process.env.WEBSITE_EXECUTOR_URL
   const token = process.env.WEBSITE_EXECUTOR_TOKEN
   if (!raw || !token || token.length < 32) return null
@@ -20,9 +20,9 @@ function configuration() {
   if (url.protocol !== "https:" || url.username || url.password || url.search || url.hash) throw new Error("UNSAFE_EXECUTOR_CONFIGURATION")
   return { url: url.href.replace(/\/$/, ""), token }
 }
-export const executorConfigured = () => Boolean(configuration())
+export const executorConfigured = () => Boolean(executorConfiguration())
 export async function executeProject(job: WebsiteJob, signal: AbortSignal): Promise<ExecutionReceipt | null> {
-  const config = configuration()
+  const config = executorConfiguration()
   if (!config) return null
   const hash = sourceHash(job.files)
   const idempotencyKey = `${job.id}:${hash}`

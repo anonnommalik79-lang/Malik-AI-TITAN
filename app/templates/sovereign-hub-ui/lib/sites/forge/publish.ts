@@ -2,6 +2,7 @@ import { blueprintById, GENERIC_BLUEPRINT, type ForgeLocale } from "./blueprints
 import { readForgeSite } from "./index"
 import { fallbackPlan, mergePlan, type ForgePlan } from "./plan"
 import { reviewSiteHtml } from "./quality"
+import { embedSitePassport, sitePassport } from "./passport"
 import { renderSite, type PhotoMap, type SitePhoto } from "./render"
 
 /**
@@ -61,9 +62,10 @@ export function preparePublishedSite(html: unknown): PreparedSite | PrepareError
     const plan: ForgePlan = { ...merged, samples: (Array.isArray(raw.samples) ? raw.samples : []).filter((field) => SAMPLE_FIELDS.has(field)) }
     const rendered = renderSite(plan, cleanPhotos(site.photos))
     if (rendered.html.length > PUBLISH_LIMITS.pageBytes) return { ok: false, code: "SITE_TOO_LARGE" }
-    if (!reviewSiteHtml(rendered.html).ok) return { ok: false, code: "INVALID_SITE" }
+    const quality = reviewSiteHtml(rendered.html)
+    if (!quality.ok) return { ok: false, code: "INVALID_SITE" }
     const brand = plan.brand.name
-    return { ok: true, html: rendered.html, title: (plan.seo.title || brand).slice(0, 120), brand, key: `${brand.trim().toLowerCase()}|${plan.blueprint}`, plan }
+    return { ok: true, html: embedSitePassport(rendered.html, sitePassport(brand, rendered.html, quality)), title: (plan.seo.title || brand).slice(0, 120), brand, key: `${brand.trim().toLowerCase()}|${plan.blueprint}`, plan }
   } catch {
     return { ok: false, code: "INVALID_SITE" }
   }
