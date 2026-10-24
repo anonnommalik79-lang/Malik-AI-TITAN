@@ -85,15 +85,21 @@ function independentlySupported(sources: readonly AttributionSource[], check: (s
   }
   return primary || hosts.size >= 2
 }
+// Same-sentence matching avoids joining a founder to another person's death
+// or founding year merely because both appear somewhere on the same page.
+const DENIED_ROLE = /(?:не\\s+(?:был|являл|счит|основа|возглав|руковод|созд)|никогда\\s+не|was\\s+not|not\\s+(?:the\\s+)?founder|never\\s+(?:founded|led))/iu
+
+function namedFactSentences(source: AttributionSource, name: string): string[] {
+  return textOf(source)
+    .split(/[.!?;]+(?:\\s+|$)|\\n+/u)
+    .map(sentence => sentence.trim())
+    .filter(sentence => sentence.length >= 15)
+    .filter(sentence => twoNames(sentence).some(mention => similarName(name, mention)))
+    .filter(sentence => (ROLE.test(sentence) || BIO.test(sentence)) && !DENIED_ROLE.test(sentence))
+}
+
 function namedRoleEvidence(source: AttributionSource, name: string): boolean {
-  const content = textOf(source)
-  for (const mention of twoNames(content)) {
-    if (!similarName(name, mention)) continue
-    const index = content.indexOf(mention)
-    const around = content.slice(Math.max(0, index - 200), index + mention.length + 200)
-    if (ROLE.test(around) || BIO.test(around)) return true
-  }
-  return false
+  return namedFactSentences(source, name).length > 0
 }
 
 export function gateAttributionAnswer(input: {
@@ -134,13 +140,7 @@ export function gateAttributionAnswer(input: {
       const content = textOf(source)
       if (!content.includes(year)) return false
       if (!names.length) return CREATION.test(content) || BIO.test(content)
-      return names.some(name => {
-        const mention = twoNames(content).find(candidate => similarName(name, candidate))
-        if (!mention) return false
-        const index = content.indexOf(mention)
-        const local = content.slice(Math.max(0, index - 260), index + mention.length + 260)
-        return local.includes(year) && (ROLE.test(local) || BIO.test(local))
-      })
+      return names.some(name => namedFactSentences(source, name).some(sentence => sentence.includes(year)))
     })
     if (!supported) return { content: attributionUnavailable(kind, "unsupported"), withheld: true, reason: "unsupported-year" }
   }
