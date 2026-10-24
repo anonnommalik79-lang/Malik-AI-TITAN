@@ -55,7 +55,7 @@ export async function runGameStudioTurn(input: {
       model,
       smoke: (plan, logic, signal) => smokeRunGame(plan, logic, { signal }),
       signal: input.signal,
-      ...(turn.kind === "edit" ? { base: { plan: turn.plan, logic: turn.logic } } : {}),
+      ...(turn.kind === "edit" ? { base: { plan: turn.plan, logic: turn.logic, version: turn.version } } : {}),
       onStage: (stage, detail) => {
         const text = PROGRESS[stage][locale]
         input.onProgress?.({ phase: "game-studio", text: detail?.round ? `${text} (${detail.round}/${detail.of})` : text })

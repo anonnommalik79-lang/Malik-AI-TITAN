@@ -2,6 +2,7 @@ import {
   GAME_AUTHOR_SYSTEM, extractLogic, gameAuthorPrompt, gameContinuePrompt, gameEditPrompt, gameRepairPrompt, joinContinuation, wholeLines,
 } from "./author"
 import { buildGameHtml } from "./page"
+import { gamePassport } from "./passport"
 import { GAME_PLANNER_SYSTEM, fallbackGamePlan, gameLocale, gamePlannerPrompt, mergeGamePlan, parseJsonObject } from "./plan"
 import { staticGameReport } from "./qa"
 import { smokeProblems, type SmokeOutcome } from "./smoke-harness"
@@ -27,7 +28,7 @@ const MAX_CONTINUATIONS = 4
 const MAX_REPAIRS = 2
 const TASK = "Write a complete JavaScript HTML5 canvas game file (game.js) — complete runnable code"
 
-type Version = { logic: string; qa: GameQa; problems: string[] }
+type Version = { logic: string; qa: GameQa; problems: string[]; checkedAt: string; runMs?: number }
 
 export async function buildGame(input: {
   prompt: string
@@ -35,7 +36,7 @@ export async function buildGame(input: {
   smoke?: GameSmoke
   signal?: AbortSignal
   /** An existing game to change, with the person's instruction. */
-  base?: { plan: GamePlan; logic: string }
+  base?: { plan: GamePlan; logic: string; version?: number }
   onStage?: (stage: GameStage, detail?: { round?: number; of?: number; problems?: number }) => void
 }): Promise<GameResult> {
   const stage = input.onStage || (() => {})
@@ -95,12 +96,16 @@ export async function buildGame(input: {
 
   const check = async (logic: string): Promise<Version> => {
     stage("check")
+    const checkedAt = new Date().toISOString()
+    let runMs: number | undefined
     const report = staticGameReport(logic)
     const qa: GameQa = { syntax: report.syntax, policy: report.policy, contract: report.contract, run: { status: "not_run", details: [] } }
     let problems = [...report.problems]
     if (!problems.length && input.smoke) {
       stage("run")
+      const runStarted = Date.now()
       const outcome = await input.smoke(plan, logic, input.signal)
+      runMs = Date.now() - runStarted
       const found = smokeProblems(outcome)
       const active = outcome.active || outcome.idle
       qa.run = outcome.notRun
@@ -115,7 +120,7 @@ export async function buildGame(input: {
         }
       problems = found
     }
-    return { logic, qa, problems }
+    return { logic, qa, problems, checkedAt, runMs }
   }
 
   // 3. Check, run, and repair with the real findings.
@@ -136,7 +141,8 @@ export async function buildGame(input: {
 
   stage("page")
   const ok = best.qa.syntax.status === "pass" && best.qa.policy.status === "pass" && best.qa.contract.status === "pass" && best.qa.run.status !== "fail"
-  return { plan, logic: best.logic, html: buildGameHtml(plan, best.logic), qa: best.qa, calls, ok }
+  const passport = gamePassport({ plan, logic: best.logic, qa: best.qa, checkedAt: best.checkedAt, runMs: best.runMs, version: (input.base?.version || 0) + 1, repairs: calls.repairs })
+  return { passport, plan, logic: best.logic, html: buildGameHtml(plan, best.logic, passport), qa: best.qa, calls, ok }
 }
 
 /** Fewer and lighter problems rank lower: a file that does not parse is worst, a game that runs is best. */

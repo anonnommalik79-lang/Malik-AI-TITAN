@@ -961,6 +961,24 @@ function CodeBlock({ language, filename, code, previewFiles, autoPreview = false
   useEffect(() => {
     if (autoPreview && previewable && previewSrcDoc) setPreviewOpen(true)
   }, [autoPreview, previewable, previewSrcDoc])
+  // A Malik game reports from inside the preview whether it really runs in
+  // this browser: the browser check its proof passport could not do on the server.
+  const previewFrame = useRef<HTMLIFrameElement>(null)
+  const [browserCheck, setBrowserCheck] = useState<{ status: "booted" | "running" | "error"; frames?: number; message?: string } | null>(null)
+  useEffect(() => {
+    setBrowserCheck(null)
+    if (!previewOpen) return
+    const onMessage = (event: MessageEvent) => {
+      if (!previewFrame.current || event.source !== previewFrame.current.contentWindow) return
+      const data = event.data as { type?: unknown; frames?: unknown; playFrames?: unknown; message?: unknown } | null
+      if (!data || typeof data.type !== "string") return
+      if (data.type === "malik-game-error") setBrowserCheck({ status: "error", message: String(data.message || "").slice(0, 200) })
+      else if (data.type === "malik-game-ready") setBrowserCheck({ status: "running", frames: Number(data.playFrames || data.frames) || undefined })
+      else if (data.type === "malik-game-booted") setBrowserCheck((current) => current?.status === "running" || current?.status === "error" ? current : { status: "booted" })
+    }
+    window.addEventListener("message", onMessage)
+    return () => window.removeEventListener("message", onMessage)
+  }, [previewOpen, previewKey, previewSrcDoc])
   const lineCount = Math.max(1, code.split("\n").length)
   // A patch shows what changed; a drawn project tree becomes folders.
   const diff = useMemo(() => isUnifiedDiff(language, code) ? diffStats(code) : null, [language, code])
@@ -1051,16 +1069,23 @@ function CodeBlock({ language, filename, code, previewFiles, autoPreview = false
           </div>
           <div className="malik-md-live-preview__stage">
             <iframe
+              ref={previewFrame}
               key={"preview-" + previewKey}
               srcDoc={previewSrcDoc}
               title={"Предпросмотр " + (filename || "кода")}
               sandbox="allow-scripts allow-forms allow-modals allow-popups"
             />
           </div>
-          <div className="malik-md-live-preview__report" role="status">
+          <div className="malik-md-live-preview__report" role="status" data-browser-check={browserCheck?.status || undefined}>
             <span className="malik-md-live-preview__report-label">ОТЧЁТ</span>
             <strong>Предпросмотр</strong>
-            <span>{lineCount} строк · изолированный sandbox · работу кода проверьте в окне выше</span>
+            {browserCheck?.status === "running"
+              ? <span>✅ Проверено в вашем браузере: игра запущена{browserCheck.frames ? `, ${browserCheck.frames} кадров` : ""} без ошибок</span>
+              : browserCheck?.status === "error"
+                ? <span>❌ Ошибка в вашем браузере: {browserCheck.message || "игра остановилась"}. Напишите «исправь игру».</span>
+                : browserCheck?.status === "booted"
+                  ? <span>Меню игры загрузилось в вашем браузере · нажмите «Играть», чтобы проверить запуск</span>
+                  : <span>{lineCount} строк · изолированный sandbox · работу кода проверьте в окне выше</span>}
           </div>
         </section>
       ) : null}

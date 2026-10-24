@@ -78,6 +78,8 @@ export type GameQa = {
 }
 
 export type GameResult = {
+  /** What was really checked, with the status derived from it (lib/proof/passport.ts). */
+  passport: import("@/lib/proof/passport").ProofPassport
   plan: GamePlan
   logic: string
   html: string

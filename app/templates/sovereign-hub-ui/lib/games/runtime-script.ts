@@ -588,7 +588,7 @@ export const GAME_RUNTIME_JS = String.raw`(function (root) {
     var audio = createAudio(plan.theme && plan.theme.mood);
     if (store.get("muted") === "1") audio.setMuted(true);
     var game = M.definition;
-    var ratio = 1, frames = 0, readySent = false;
+    var ratio = 1, frames = 0, readySent = false, bootSent = false;
 
     function post(message) { try { if (root.parent && root.parent !== root) root.parent.postMessage(message, "*"); } catch (e) { /* no parent */ } }
     function showError(error) {
@@ -758,7 +758,8 @@ export const GAME_RUNTIME_JS = String.raw`(function (root) {
       ctx.clearRect(0, 0, W, H);
       core.render(ctx);
       frames++;
-      if (!readySent && frames > 30 && api.state === "playing" && !core.error) { readySent = true; post({ type: "malik-game-ready", frames: frames }); }
+      if (!bootSent && frames > 10 && !core.error) { bootSent = true; post({ type: "malik-game-booted", frames: frames }); }
+      if (!readySent && frames > 30 && api.state === "playing" && !core.error) { readySent = true; post({ type: "malik-game-ready", frames: frames, playFrames: api.frame }); }
       root.requestAnimationFrame(frame);
     }
     core.setup();

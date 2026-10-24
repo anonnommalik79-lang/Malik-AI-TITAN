@@ -1,4 +1,5 @@
 import { GAME_RUNTIME_JS } from "./runtime-script"
+import { passportScriptJson, readPassport, type ProofPassport } from "@/lib/proof/passport"
 import type { GamePlan } from "./types"
 
 /**
@@ -89,7 +90,7 @@ kbd{font:inherit;font-size:${pixel ? "9px" : "12px"};padding:3px 8px;border-radi
 `.trim()
 }
 
-export function buildGameHtml(plan: GamePlan, logic: string) {
+export function buildGameHtml(plan: GamePlan, logic: string, passport?: ProofPassport) {
   const title = escapeHtml(plan.title)
   const lang = plan.locale === "kk" ? "kk" : plan.locale === "ru" ? "ru" : "en"
   return [
@@ -113,6 +114,7 @@ export function buildGameHtml(plan: GamePlan, logic: string) {
     '<div id="touch" hidden></div>',
     "</main>",
     `<script id="malik-game-plan" type="application/json">${jsonScript(plan)}</script>`,
+    ...(passport ? [`<script id="malik-proof-passport" type="application/json">${passportScriptJson(passport)}</script>`] : []),
     `<script id="malik-game-runtime">${scriptSafe(GAME_RUNTIME_JS)}</script>`,
     `<script id="malik-game-logic">\n${scriptSafe(logic)}\n</script>`,
     "<script>MalikGame.boot()</script>",
@@ -122,7 +124,7 @@ export function buildGameHtml(plan: GamePlan, logic: string) {
 }
 
 /** The plan and the logic of a game this studio made, read back from its page (for edits). */
-export function readGamePage(html: string): { plan: GamePlan; logic: string } | null {
+export function readGamePage(html: string): { plan: GamePlan; logic: string; passport: ProofPassport | null } | null {
   const text = String(html || "")
   const planMatch = text.match(/<script id="malik-game-plan" type="application\/json">([\s\S]*?)<\/script>/u)
   const logicMatch = text.match(/<script id="malik-game-logic">\n?([\s\S]*?)\n?<\/script>/u)
@@ -130,7 +132,8 @@ export function readGamePage(html: string): { plan: GamePlan; logic: string } | 
   try {
     const plan = JSON.parse(planMatch[1]) as GamePlan
     if (!plan || plan.version !== 1 || typeof plan.title !== "string") return null
-    return { plan, logic: logicMatch[1].replace(/<\\\/(script)/giu, "</$1").replace(/<\\!--/gu, "<!--") }
+    const passportMatch = text.match(/<script id="malik-proof-passport" type="application\/json">([\s\S]*?)<\/script>/u)
+    return { plan, logic: logicMatch[1].replace(/<\\\/(script)/giu, "</$1").replace(/<\\!--/gu, "<!--"), passport: passportMatch ? readPassport(passportMatch[1]) : null }
   } catch {
     return null
   }

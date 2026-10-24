@@ -1,3 +1,4 @@
+import { passportMarkdown } from "@/lib/proof/passport"
 import { readGamePage } from "./page"
 import type { GameLocale, GamePlan, GameResult } from "./types"
 
@@ -19,16 +20,16 @@ const NOT_BUILD = /(?<!\p{L})(?:проанализируй|оцени|объяс
 const EDIT = /(?<!\p{L})(?:добав\p{L}*|измени\p{L}*|поменя\p{L}*|замени\p{L}*|убер\p{L}*|убра\p{L}*|удали\p{L}*|исправ\p{L}*|почини\p{L}*|переделай|перепиши|сделай|ускорь|замедли|увелич\p{L}*|уменьш\p{L}*|усложни|упрости|быстрее|медленнее|сложнее|проще|больше|меньше|fix|change|add|remove|replace|make|faster|slower|harder|easier|bigger|smaller|өзгерт\p{L}*|қос\p{L}*|түзет\p{L}*)(?!\p{L})/iu
 const NEW_GAME = /(?<!\p{L})(?:нов\p{L}*|друг\p{L}*|ещё\s+одн\p{L}*|еще\s+одн\p{L}*|another|new)(?!\p{L})/iu
 
-export type GameTurn = { kind: "new" } | { kind: "edit"; plan: GamePlan; logic: string }
+export type GameTurn = { kind: "new" } | { kind: "edit"; plan: GamePlan; logic: string; version: number }
 
 /** The last game this studio made in the chat, read from the full messages. */
-export function lastGame(messages: unknown): { plan: GamePlan; logic: string } | null {
+export function lastGame(messages: unknown): { plan: GamePlan; logic: string; version: number } | null {
   const list = Array.isArray(messages) ? messages as Message[] : []
   for (let index = list.length - 1, seen = 0; index >= 0 && seen < 8; index -= 1, seen += 1) {
     const message = list[index]
     if (message?.role !== "assistant" || typeof message.content !== "string" || !message.content.includes('id="malik-game-logic"')) continue
     const game = readGamePage(message.content.replace(/\r(?!\n)/gu, "\n"))
-    if (game) return game
+    if (game) return { plan: game.plan, logic: game.logic, version: game.passport?.projectVersion || 1 }
   }
   return null
 }
@@ -51,7 +52,7 @@ export function gameStudioTurn(prompt: string, input: { messages?: unknown; atta
   if (previous) {
     if (creates && (NEW_GAME.test(text) || !EDIT.test(text) || /(?<!\p{L})(?:игр(?:а|у)|game)(?!\p{L})/iu.test(text) && /(?<!\p{L})(?:про|about|на\s+тему)(?!\p{L})/iu.test(text))) return { kind: "new" }
     const wondering = /\?\s*$/u.test(text) && !/(?<!\p{L})(?:можешь|можете|could you|can you)(?!\p{L})/iu.test(text)
-    if (EDIT.test(text) && !QUESTION.test(text) && !wondering && !/```|https?:\/\//iu.test(text) && !OTHER_STACK.test(text)) return { kind: "edit", plan: previous.plan, logic: previous.logic }
+    if (EDIT.test(text) && !QUESTION.test(text) && !wondering && !/```|https?:\/\//iu.test(text) && !OTHER_STACK.test(text)) return { kind: "edit", plan: previous.plan, logic: previous.logic, version: previous.version }
   }
   return creates ? { kind: "new" } : null
 }
@@ -130,6 +131,8 @@ export function gameChatMessage(result: GameResult, mode: "new" | "edit") {
     checks.length ? `**${copy.check}:** ${checks.join("; ")}.` : "",
     ...(problems.length ? ["", `${staticOk ? copy.failRun : copy.failStatic}:`, ...problems.map((problem) => `- ${problem}`), "", copy.ask] : ["", copy.browser]),
     ...(mode === "new" && !result.calls.plan ? ["", copy.planFallback] : []),
+    "",
+    passportMarkdown(result.passport, plan.locale),
     "",
     copy.next,
   ].filter((line, index, lines) => line !== "" || lines[index - 1] !== "").join("\n")
