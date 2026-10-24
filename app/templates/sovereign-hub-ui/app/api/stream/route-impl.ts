@@ -1,4 +1,5 @@
 import { asPlainText, malikGodAnswer, gatherSourcesForPrompt, sourceContext, type PreparedLiveEvidence } from "@/lib/malik-god-router"
+import { normalizeProviderTokenUsage } from "@/lib/ai/token-telemetry"
 import { classifyFreshness, freshnessMode } from "@/lib/ai/freshness-intent"
 import { shouldUseWeb } from "@/lib/ai/web-search-policy"
 import { currentEvidenceAvailable, finalizeFreshAnswer, freshnessEvidenceInstruction, unavailableFreshAnswer } from "@/lib/live-intelligence/evidence"
@@ -1144,6 +1145,8 @@ function liveSseResponse(
           incomplete,
           ...(finalContent !== undefined ? { finalContent } : {}),
           tookMs: Date.now() - startedAt,
+          // Only official provider usage is published; absent metrics remain unknown.
+          usage: normalizeProviderTokenUsage("usage" in answer ? answer.usage : undefined) ?? null,
           agentRuntime: "agentRuntime" in answer ? answer.agentRuntime : undefined,
           projectArtifact: "projectArtifact" in answer ? answer.projectArtifact : undefined,
           execution: activity.settle("completed"),
