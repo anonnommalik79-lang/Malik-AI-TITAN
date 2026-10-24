@@ -69,6 +69,26 @@ assert.equal(pass(factQuestion, "Имя выдумано", []).withheld, true)
 const generic = pass("как работает React?", "React — библиотека", [])
 assert.equal(generic.withheld, false, "Non-sensitive questions must not be censored")
 
+// Production regression: a multi-founder answer can mix Cyrillic and Latin
+// sources without converting proper company names into imaginary people.
+const appleQuestion = "Кто основал компанию Apple, в каком году и на основании каких источников?"
+const appleSources = [
+  { url:"https://university-history.example/apple", title:"Apple company history",
+    snippet:"Apple was founded in 1976 by Steve Jobs, Steve Wozniak and Ronald Wayne. Apple Computer was established in April." },
+  { url:"https://museum-history.example/apple", title:"История Apple",
+    snippet:"Компанию Apple основали в 1976 году Стив Джобс, Стив Возняк и Рональд Уэйн. Apple Computer — первоначальное название." },
+]
+const apple = answer => gateAttributionAnswer({question:appleQuestion,answer,sources:appleSources,searchEnabled:true})
+assert.equal(attributionKind(appleQuestion),"identity")
+const appleAnswer = "Apple была основана в 1976 году. Основатели: Стив Джобс, Стив Возняк и Рональд Уэйн."
+assert.equal(apple(appleAnswer).withheld,false,"Historical multi-founder answer with independent bilingual evidence should survive")
+assert.equal(apple("Основатели Apple — Стив Джобс и Билл Гейтс.").withheld,true,"Fabricated co-founder must never pass")
+assert.match(apple("Основатели Apple — Стив Джобс и Билл Гейтс.").content,/Стив Джобс/,"Verified co-founder must survive partial rejection")
+assert.doesNotMatch(apple("Основатели Apple — Стив Джобс и Билл Гейтс.").content,/Билл Гейтс/,"Unsupported name must not be repeated")
+assert.equal(apple("Apple основана в 1988 году. Основатели: Стив Джобс, Стив Возняк и Рональд Уэйн.").withheld,true,"Wrong founding year must fail")
+const offTopic = [{url:"https://unrelated-history.example/other",title:"Другой бизнес",snippet:"Apple названа в заголовке. Билл Гейтс основал компанию Microsoft в 1975 году."}, appleSources[0]]
+assert.equal(gateAttributionAnswer({question:appleQuestion,answer:"Apple основал Билл Гейтс.",sources:offTopic,searchEnabled:true}).withheld,true,"Other-company evidence must not validate an attribution")
+
 const router = readFileSync(new URL("../lib/malik-god-router.ts", import.meta.url), "utf8")
 const policy = readFileSync(new URL("../lib/ai/web-search-policy.ts", import.meta.url), "utf8")
 assert.match(router, /onToken: \(attribution \|\| needsCurrentEvidence/)
