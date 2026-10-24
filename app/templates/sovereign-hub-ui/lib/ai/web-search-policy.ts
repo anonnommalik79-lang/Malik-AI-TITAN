@@ -3,6 +3,7 @@ import { analysisFrame, asksAnalysis } from "@/lib/ai/analysis-shape"
 import { needsCurrentEvidence } from "./current-evidence"
 import { truthNeedsLiveEvidence } from "./truth-engine"
 import { classifyFreshness, NO_WEB } from "./freshness-intent"
+import { attributionKind } from "./attribution-evidence"
 import { websiteIntent } from "@/lib/website/engine/intent"
 import { resolveDomainPlan, type DomainPlan } from "./domain-intelligence"
 export type WebSearchOptions = {
@@ -42,6 +43,9 @@ export function shouldUseWeb(prompt: string, options: WebSearchOptions = {}, ser
   // or API keyword must not bypass checks of releases, prices and availability.
   if (needsCurrentEvidence(text)) return true
   if (truthNeedsLiveEvidence(text)) return true
+  // Historical named-person/date questions are static in time but NOT safe
+  // to answer without corroboration. This branch must run before STATIC.
+  if (attributionKind(text)) return true
   // An analyst checks the current numbers before analysing a market, a company, a technology or an event.
   if (asksAnalysis(text) && (["market", "company", "technology", "event"].includes(analysisFrame(text)) || (analysisFrame(text) === "decision" && /бизнес|кофейн|магазин|салон|открыва|открыть|инвест|вклад|акци|крипт|недвиж|business|invest|stock|crypto/iu.test(text)))) return true
   const freshness = classifyFreshness(text)

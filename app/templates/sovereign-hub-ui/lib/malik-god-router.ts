@@ -28,6 +28,7 @@ import { mapBounded } from "@/lib/live-intelligence/concurrency"
 import { indexedSources } from "@/lib/live-intelligence/index-reader"
 import { parseKnowledgeFeed, KNOWLEDGE_FEEDS, type KnowledgeFeed } from "@/lib/live-intelligence/feed-updater"
 import { shouldUseWeb } from "@/lib/ai/web-search-policy"
+import { attributionKind, attributionSystemInstruction, attributionUnavailable, gateAttributionAnswer } from "@/lib/ai/attribution-evidence"
 import { currentModelQueries, currentModelSubjects, currentResearchDate, currentSourcePriority, mentionedCurrentModels, needsCurrentEvidence, officialProductQuery } from "@/lib/ai/current-evidence"
 import { normalizeWebSearchQuery, eventSearchTitle, localRoleQuery } from "@/lib/ai/web-search-query"
 import { fetchResearchResponse } from "@/lib/malik-research/bounded-fetch"
@@ -1140,7 +1141,11 @@ export async function malikGodAnswer(
     // A follow-up («а третий?») is searched and shaped together with the
     // question it continues, never as a bare fragment.
     const focus = domainPlan.context.followUp ? conversationFocus(preparedEvidence?.prompt || prompt, history) : { followUp: false, anchor: "", searchText: requestPrompt, shapeText: requestPrompt }
+    const attribution = attributionKind(focus.searchText)
     const usedWeb = domainPlan.evidence.web !== "off" && (shouldUseWeb(focus.searchText, body, domainPlan) || powerForcesWeb && body?.research !== false && !body?.disableResearch && !NO_WEB.test(focus.searchText))
+    if (attribution && !usedWeb) {
+      return { content: attributionUnavailable(attribution, "search-off"), provider: "attribution-evidence-gate", model: "no-evidence", selectedModelId: selection.modelId, usedWeb: false, sources: [], attempts: [] }
+    }
     const [webSources, connected, science, eiaEvidence] = await Promise.all([
       usedWeb ? preparedEvidence ? Promise.resolve(preparedEvidence.sources) : gatherSources(focus.searchText, emitResearch, activity, signal, freshnessMode(body?.responseDepth || body?.metadata?.responseDepth)) : Promise.resolve([] as SourceItem[]),
       serverConnected
@@ -1150,6 +1155,9 @@ export async function malikGodAnswer(
       fetchEiaSpotEvidence(prompt, {signal}),
     ])
     const sources: SourceItem[] = [...webSources, ...(connected.sources as SourceItem[]), ...(science.sources as SourceItem[])].slice(0, 32)
+    if (attribution && !webSources.length) {
+      return { content: attributionUnavailable(attribution, "missing"), provider: "attribution-evidence-gate", model: "no-evidence", selectedModelId: selection.modelId, usedWeb: false, sources: [], attempts: [] }
+    }
     const freshness = classifyFreshness(focus.searchText)
     if (usedWeb && needsCurrentEvidence(focus.searchText) && !currentEvidenceAvailable(webSources, freshness)) {
       return { content: unavailableFreshAnswer(freshness), provider: "live-evidence-gate", model: "no-current-evidence", selectedModelId: selection.modelId, usedWeb: webSources.length > 0, sources: webSources, attempts: [] }
@@ -1192,7 +1200,7 @@ export async function malikGodAnswer(
         "PETROLEUM VERIFIED DATA INPUT (locally calculated; user inputs are not field-verified):",
         body.metadata.petroleumComputedEvidence.slice(0, 16_000),
         "Produce the full requested multidisciplinary engineering analysis in the user language, not just this table. Preserve the exact computed values and stated units. Separate verified arithmetic from hypotheses. Cover EVERY applicable requested section, including pressure/production diagnostics, competing hypotheses, investigation plan, HSE and project economics. Compute extra economic results only with enough assumptions and explicitly label results not independently verified. If a table contains fewer periods than the user's task requires, say so, do not invent missing periods or a decline fit. NEVER claim simulations, live sources or engineering approvals without tool evidence. Output one cohesive answer; the system appends visual charts automatically.",
-      ].join("\n\n") : "", computedEvidenceInstruction(body?.metadata), systemPrompt(usedEvidence, prompt, brainInstruction, attachments, body?.metadata, Boolean(connected.context), sources.length > 0, focus), mathEngineInstruction(math), plannedMathInstruction(plannedMath), accuracyInstruction(focus.searchText), workModeInstruction(prompt, resolveWorkspaceMode(body?.workspaceMode)), userContextBlocks(body), universalContract].filter(Boolean).join("\n\n"),
+      ].join("\n\n") : "", computedEvidenceInstruction(body?.metadata), systemPrompt(usedEvidence, prompt, brainInstruction, attachments, body?.metadata, Boolean(connected.context), sources.length > 0, focus), mathEngineInstruction(math), plannedMathInstruction(plannedMath), accuracyInstruction(focus.searchText), workModeInstruction(prompt, resolveWorkspaceMode(body?.workspaceMode)), attributionSystemInstruction(focus.searchText), userContextBlocks(body), universalContract].filter(Boolean).join("\n\n"),
       history,
       attachments,
       maxTokens: Math.max(1, answerBudget(body, prompt, Math.max(brain.outputTokenTarget, powerOutputTokens)) - domainPlanningBudget),
@@ -1200,12 +1208,16 @@ export async function malikGodAnswer(
       reasoningEffort: brain.depth === "instant" ? "low" : brain.depth === "balanced" ? "medium" : "high",
       allowCatalog: selection.allowCatalog === true,
       activity,
-      onToken: (needsCurrentEvidence(focus.searchText) || truthNeedsLiveEvidence(focus.searchText)) ? undefined : accuracyTokenGate(focus.searchText, emitToken),
+      // Do not stream unverified person/date claims before the evidence gate.
+      onToken: (attribution || needsCurrentEvidence(focus.searchText) || truthNeedsLiveEvidence(focus.searchText)) ? undefined : accuracyTokenGate(focus.searchText, emitToken),
       signal,
     }).catch((error) => { activity?.finish(modelCall, undefined, "failed", error instanceof Error ? error.message : String(error)); throw error })
     const verificationCall = activity?.start("Проверка вычислений и согласованности", "code", "malik.accuracy")
     const verified = finalizeAccuracy(cleanText(result.content), focus.searchText, sources)
-    const content = finalizeFreshAnswer(finalizeTruthAnswer(verified.content, focus.searchText, sources, true), freshness, webSources, sources)
+    const checkedContent = finalizeFreshAnswer(finalizeTruthAnswer(verified.content, focus.searchText, sources, true), freshness, webSources, sources)
+    const attributionAudit = gateAttributionAnswer({ question: focus.searchText, answer: checkedContent, sources: webSources, searchEnabled: usedWeb })
+    const content = attributionAudit.content
+    if (attributionAudit.withheld) console.info("[MALIK_ATTRIBUTION_GATE]", attributionAudit.reason || "unsupported")
     activity?.finish(verificationCall, { checked: verified.report.checked, corrected: verified.report.issues.length, verificationMs: verified.report.verificationMs, additionalModelCalls: 0 })
     activity?.finish(modelCall, { characters: content.length, model: result.selectedModelId, sources: sources.length })
     return {
@@ -1230,14 +1242,18 @@ export async function malikGodAnswer(
   }
 
   const legacyFocus = domainPlan.context.followUp ? conversationFocus(preparedEvidence?.prompt || prompt, Array.isArray(body?.history) ? body.history : Array.isArray(body?.messages) ? body.messages : []) : { followUp: false, anchor: "", searchText: requestPrompt, shapeText: requestPrompt }
+  const legacyAttribution = attributionKind(legacyFocus.searchText)
   const usedWeb = domainPlan.evidence.web !== "off" && (shouldUseWeb(legacyFocus.searchText, body, domainPlan) || powerForcesWeb && body?.research !== false && !body?.disableResearch && !NO_WEB.test(legacyFocus.searchText))
+  if (legacyAttribution && !usedWeb) {
+    return { content: attributionUnavailable(legacyAttribution, "search-off"), provider: "attribution-evidence-gate", model: "no-evidence", usedWeb: false, sources: [], attempts: [] }
+  }
   const requestedMaxTokens = Number(body?.maxTokens)
   const maxTokens = Number.isFinite(requestedMaxTokens) && requestedMaxTokens > 0
     ? Math.floor(requestedMaxTokens)
     : powerOutputTokens
   // A shared prompt cache must never serve another user's connected data, and
   // a follow-up («а третий?») never shares an answer with another conversation.
-  const cacheable = usedWeb && !fusionActive && !legacyFocus.followUp && !universalIntent.followUp && !universalIntent.requirements.format && !needsCurrentEvidence(legacyFocus.searchText) && !truthNeedsLiveEvidence(legacyFocus.searchText)
+  const cacheable = !legacyAttribution && usedWeb && !fusionActive && !legacyFocus.followUp && !universalIntent.followUp && !universalIntent.requirements.format && !needsCurrentEvidence(legacyFocus.searchText) && !truthNeedsLiveEvidence(legacyFocus.searchText)
     && !serverConnected && mayShareAnswerCache(body, prompt)
   const cache = cacheable ? getCache(prompt) : null
   const cacheFitsBudget = !cache || !maxTokens || Math.ceil(String(cache.content || "").length / 3) <= maxTokens
@@ -1263,6 +1279,9 @@ export async function malikGodAnswer(
     scienceActive ? collectMalikScienceContext(prompt) : Promise.resolve({ context: "", sources: [] as any[], providers: [] as string[] }),
   ])
   const sources: SourceItem[] = [...webSources, ...connected.sources, ...(science.sources as SourceItem[])].slice(0, 32)
+  if (legacyAttribution && !webSources.length) {
+    return { content: attributionUnavailable(legacyAttribution, "missing"), provider: "attribution-evidence-gate", model: "no-evidence", usedWeb: false, sources: [], attempts: [] }
+  }
   const freshness = classifyFreshness(legacyFocus.searchText)
   if (usedWeb && needsCurrentEvidence(legacyFocus.searchText) && !currentEvidenceAvailable(webSources, freshness)) {
     return { content: unavailableFreshAnswer(freshness), provider: "live-evidence-gate", model: "no-current-evidence", usedWeb: webSources.length > 0, sources: webSources, attempts: [] }
@@ -1276,7 +1295,8 @@ export async function malikGodAnswer(
   let answer: GodAnswer
   if (result.content) {
     const verified = finalizeAccuracy(result.content, legacyFocus.searchText, sources)
-    const content = finalizeFreshAnswer(finalizeTruthAnswer(verified.content, legacyFocus.searchText, sources, true), freshness, webSources, sources)
+    const checkedContent = finalizeFreshAnswer(finalizeTruthAnswer(verified.content, legacyFocus.searchText, sources, true), freshness, webSources, sources)
+    const content = gateAttributionAnswer({ question: legacyFocus.searchText, answer: checkedContent, sources: webSources, searchEnabled: usedWeb }).content
     answer = {
       content,
       provider: result.provider,
