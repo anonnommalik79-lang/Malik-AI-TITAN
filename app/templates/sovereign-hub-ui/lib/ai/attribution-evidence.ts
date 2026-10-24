@@ -87,11 +87,11 @@ function independentlySupported(sources: readonly AttributionSource[], check: (s
 }
 // Same-sentence matching avoids joining a founder to another person's death
 // or founding year merely because both appear somewhere on the same page.
-const DENIED_ROLE = /(?:не\\s+(?:был|являл|счит|основа|возглав|руковод|созд)|никогда\\s+не|was\\s+not|not\\s+(?:the\\s+)?founder|never\\s+(?:founded|led))/iu
+const DENIED_ROLE = /(?:не\s+(?:был|являл|счит|основа|возглав|руковод|созд)|никогда\s+не|was\s+not|not\s+(?:the\s+)?founder|never\s+(?:founded|led))/iu
 
 function namedFactSentences(source: AttributionSource, name: string): string[] {
   return textOf(source)
-    .split(/[.!?;]+(?:\\s+|$)|\\n+/u)
+    .split(/[.!?;]+(?:\s+|$)|\n+/u)
     .map(sentence => sentence.trim())
     .filter(sentence => sentence.length >= 15)
     .filter(sentence => twoNames(sentence).some(mention => similarName(name, mention)))
