@@ -19,8 +19,8 @@ const CREATION = /(?:основа[нлт]|созда[нлт]|образова|о
 const BIO = /(?:родил|рождени|умер|смерт|погиб|убил|убит|казн|born|died|killed|қайтыс|туған)/iu
 const WHO = /(?:^|[\s,])(?:а\s+)?(?:кто|кем|кім|who|назови|имя|название\s+лидера|основател|руководител|лидер)/iu
 const WHEN = /(?:^|[\s,])(?:а\s+)?(?:когда|каком\s+году|в\s+какие\s+годы|дат[ауы]|год\s+основани|when|what\s+year|қай\s+жылы|қашан)/iu
-const TRANSFORM = /^(?:переведи|перепиши|сократи|резюмируй|translate|rewrite|summarize|аудар)(?:\s|$)/iu
-const CREATE = /^(?:(?:напиши|сочини|придумай|создай|сделай|write|compose|make|create|build)\s+)(?:(?:мне|a|an|the)\s+)?(?:рассказ|стих|песн|сказк|игр|сайт|приложени|код|сценари|fiction|story|poem|song|game|website|app|code|script)\b/iu
+const TRANSFORM = /^(?:переведи|перепиши|сократи|резюмируй|translate|rewrite|summarize|аудар)(?:[\s:]|$)/iu
+const CREATE = /^(?:(?:напиши|сочини|придумай|создай|сделай|write|compose|make|create|build)\s+)(?:(?:мне|a|an|the)\s+)?(?:рассказ|стих|песн|сказк|игр|сайт|приложени|код|сценари|fiction|story|poem|song|game|website|app|code|script)(?!\p{L})/iu
 const YEARS = /(?<!\d)(?:1[5-9]\d{2}|20\d{2})(?!\d)/gu
 const NAMES = /(?<![\p{L}])(?:[А-ЯЁ][а-яё]{2,}|[A-Z][a-z]{2,})\s+(?:[А-ЯЁ][а-яё]{2,}|[A-Z][a-z]{2,})(?![\p{L}])/gu
 
