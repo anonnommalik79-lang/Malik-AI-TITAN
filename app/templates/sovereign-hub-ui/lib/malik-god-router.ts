@@ -589,7 +589,7 @@ function buildQueries(prompt: string) {
   const q = normalizeWebSearchQuery(prompt)
   // Historical founding questions need an entity-first query, not the entire
   // long request containing instructions about a ledger or source formatting.
-  const foundedOrganization = attributionKind(prompt)
+  const foundedOrganization = /(?:основа\p{L}*|found\p{L}*|co-?found\p{L}*)/iu.test(prompt)
     ? /(?:компани[юяи]|company|корпораци[юяи])\s+[«"'“]?([A-Za-z][A-Za-z0-9.-]{1,70})/iu.exec(prompt)?.[1]
     : undefined
   if (foundedOrganization) return [
