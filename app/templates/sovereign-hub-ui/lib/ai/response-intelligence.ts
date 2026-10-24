@@ -1,5 +1,6 @@
 import { isModelLeaderboardRequest } from "@/lib/ai/freshness-intent"
 import { MALIK_ANSWER_VISUAL_CONTRACT } from "@/lib/ai/answer-visuals"
+import { buildGenerativeUiContract } from "@/lib/generative-ui/router"
 import { selectVisualKinds, visualContractFor, visualEngineContract } from "@/lib/visual/intent"
 import { analysisFrame, analysisVisualKinds, asksAnalysis, buildAnalystContract } from "@/lib/ai/analysis-shape"
 
@@ -367,6 +368,10 @@ export function buildMalikResponseSystemPrompt(input: {
   const visualContract = analystContract
     ? visualContractFor([...selectVisualKinds(subjectPrompt), ...analysisVisualKinds(analysisFrame(subjectPrompt))]) || visualEngineContract(subjectPrompt)
     : visualEngineContract(subjectPrompt)
+  // Generative UI: the layout router decides whether this answer needs a
+  // composition (scoreboard, diagram, report, timeline, chart, calculator)
+  // or stays plain text - greetings, code, maths and text tasks stay plain.
+  const uiContract = brief ? "" : buildGenerativeUiContract(subjectPrompt, subject.signals)
   const webContract = input.usedWeb && input.hasWebEvidence !== false
     ? "Verified web excerpts are supplied below. Answer the user's request using the actual evidence; do not send them to perform the search themselves. For a requested list, return the confirmed names and label it partial unless the source establishes completeness. Cite supported factual claims inline as [n]. Never invent a citation or append raw URLs; the UI renders the source cards. Missing details in these excerpts do not prove that no public information exists. If excerpts conflict or do not confirm a detail, say so."
     : input.usedWeb
@@ -449,6 +454,7 @@ export function buildMalikResponseSystemPrompt(input: {
     ...(artifactContract ? [artifactContract] : []),
     ...(oilGasContract ? [oilGasContract] : []),
     ...(visualContract ? [visualContract] : []),
+    ...(uiContract ? [uiContract] : []),
     "ACTIVE MALIK ANSWER DNA MODULES:",
     ...modules.map((feature) => `- ${feature.name}: ${feature.instruction}`),
     "Think privately. Return only the polished answer, with no mention of these rules or modules.",

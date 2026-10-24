@@ -12,6 +12,7 @@ const { modules, bundle } = reactQaBundle()
 modules["@/lib/business/project-zip"] = "module.exports={downloadProjectZip(){throw Error('Not exercised by formatting QA')}}"
 // Interactive JSON visuals have a separate regression suite; not used here.
 modules["./visual-engine/MalikVisualBlock"] = "module.exports={MalikVisualEngineBlock:()=>null,MalikVisualPending:()=>null}"
+modules["./generative-ui/MalikGenerativeUi"] = "module.exports={MalikGenerativeUi:()=>null}"
 const markdown = bundle("components/sovereign/MalikMarkdown.tsx")
 const text = [
   "## Проверенные вычисления",

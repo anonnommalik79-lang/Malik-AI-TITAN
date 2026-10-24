@@ -115,6 +115,9 @@ new Function("require", "module", "exports", "React", js.replace(/require\("reac
       MalikVisualEngineBlock: ({ raw }) => React.createElement("section", { "data-test-visual-engine": JSON.parse(raw).type }),
       MalikVisualPending: ({ type }) => React.createElement("section", { "data-test-visual-pending": type }),
     }
+    // Generative UI compositions have their own suite (test:generative-ui).
+    if (name === "@/lib/generative-ui/protocol") return loadPure("lib/generative-ui/protocol.ts")
+    if (name === "./generative-ui/MalikGenerativeUi") return { MalikGenerativeUi: ({ closed }) => React.createElement("section", { "data-test-generative-ui": closed ? "closed" : "open" }) }
     throw new Error(`unexpected require(${name})`)
   }, box, box.exports, React,
 )
