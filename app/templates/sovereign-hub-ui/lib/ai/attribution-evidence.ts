@@ -66,12 +66,52 @@ function twoNames(text: string): string[] {
   const ignored = /^(?:Великая Отечественная|Вторая Мировая|Тяп Ляп|Советский Союз|Соединенные Штаты|The Founder|This Organization)$/iu
   return [...new Set([...text.matchAll(NAMES)].map(m => m[0]).filter(value => !ignored.test(value)))].slice(0, 10)
 }
+/** Compare transliterated personal names as well as same-script inflections.
+ * Keep surnames stricter than given names; phonetics alone is not proof. */
+function latinWord(raw: string): string {
+  const letters: Record<string, string> = {
+    а:"a",б:"b",в:"v",г:"g",д:"d",е:"e",ё:"yo",ж:"zh",з:"z",и:"i",й:"i",к:"k",л:"l",
+    м:"m",н:"n",о:"o",п:"p",р:"r",с:"s",т:"t",у:"u",ф:"f",х:"h",ц:"ts",ч:"ch",
+    ш:"sh",щ:"sch",ъ:"",ы:"y",ь:"",э:"e",ю:"yu",я:"ia",
+  }
+  return raw.toLowerCase().normalize("NFKD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/дж/gu, "j").replace(/уэ/gu, "wa")
+    .replace(/[а-яё]/gu, char => letters[char] ?? char)
+    .replace(/w/gu, "v").replace(/y/gu, "i")
+}
+function editDistance(a: string, b: string): number {
+  if (a === b) return 0
+  let row = Array.from({length:b.length+1},(_,i)=>i)
+  for (let i=1;i<=a.length;i++) {
+    const next=[i]
+    for(let j=1;j<=b.length;j++) next[j]=Math.min(next[j-1]+1,row[j]+1,row[j-1]+(a[i-1]===b[j-1]?0:1))
+    row=next
+  }
+  return row[b.length]
+}
 function similarName(one: string, two: string): boolean {
-  const a = one.toLowerCase().replace(/ё/gu, "е").split(/\s+/u)
-  const b = two.toLowerCase().replace(/ё/gu, "е").split(/\s+/u)
-  return a.length === 2 && b.length === 2 && a.every((word, i) => {
-    const stem = word.slice(0, Math.max(4, word.length - 2))
-    return b[i].startsWith(stem) && b[i].length <= word.length + 3
+  const a = one.toLowerCase().replace(/ё/gu,"е").split(/\s+/u)
+  const b = two.toLowerCase().replace(/ё/gu,"е").split(/\s+/u)
+  if(a.length!==2||b.length!==2)return false
+  const sameScript = a.every((word,i)=>{
+    const stem=word.slice(0,Math.max(4,word.length-2))
+    return b[i].startsWith(stem) && b[i].length<=word.length+3
+  })
+  if(sameScript)return true
+  const left=a.map(latinWord),right=b.map(latinWord)
+  // A cross-script match needs BOTH names and a close surname.
+  return editDistance(left[1],right[1])<=1 && editDistance(left[0],right[0])<=2
+}
+function organizationInQuestion(question: string): string {
+  return /(?:компани[юяи]|company|корпораци[юяи])\s+[«"'“]?([A-Za-z][A-Za-z0-9.-]{1,70})/iu.exec(question)?.[1]?.toLowerCase() || ""
+}
+function attributedPeople(answer: string, question: string): string[] {
+  const organization=organizationInQuestion(question)
+  const prose=answer.split(/\r?\n/).filter(line => !/^\s*(?:источники|sources|references)\s*:/iu.test(line)).join("\n")
+  return twoNames(prose).filter(name => {
+    const first=name.split(/\s+/u)[0].toLowerCase()
+    if(/^(?:компания|корпорация|организация|основатели|сооснователи|источники|проверенные|непроверенные|дата|год|факты|apple|computer|company|sources|verified|founders)$/iu.test(first))return false
+    return !organization || !name.toLowerCase().split(/\s+/u).includes(organization)
   })
 }
 function independentlySupported(sources: readonly AttributionSource[], check: (source: AttributionSource) => boolean): boolean {
@@ -112,11 +152,14 @@ export function gateAttributionAnswer(input: {
   if (!kind) return { content: input.answer, withheld: false }
   if (!input.searchEnabled) return { content: attributionUnavailable(kind, "search-off"), withheld: true, reason: "search-off" }
 
-  const usable = input.sources.filter(source => hostOf(source) && textOf(source).length >= 50)
+  const subject = organizationInQuestion(input.question)
+  // A search hit about a different company is not evidence about this one.
+  const usable = input.sources.filter(source => hostOf(source) && textOf(source).length >= 50
+    && (!subject || [textOf(source), source.url || ""].some(text => text.toLowerCase().includes(subject))))
   if (!usable.length) return { content: attributionUnavailable(kind, "missing"), withheld: true, reason: "no-sources" }
 
   const answer = input.answer.slice(0, 2400)
-  const names = twoNames(answer)
+  const names = attributedPeople(answer, input.question)
   const years = [...new Set([...answer.matchAll(YEARS)].map(match => match[0]))]
   const unsure = /(?:не\s+(?:могу|удалось)|недостаточн|нет\s+достоверн|неизвестн|uncertain|cannot\s+confirm)/iu.test(answer)
   if (kind === "identity" && !names.length) {
@@ -130,17 +173,25 @@ export function gateAttributionAnswer(input: {
       : { content: attributionUnavailable(kind, "unsupported"), withheld: true, reason: "no-year" }
   }
 
-  for (const name of names) {
-    if (!independentlySupported(usable, source => namedRoleEvidence(source, name))) {
-      return { content: attributionUnavailable(kind, "unsupported"), withheld: true, reason: "unsupported-name" }
+  const supportedNames = names.filter(name => independentlySupported(usable, source => namedRoleEvidence(source,name)))
+  if (kind === "identity" && supportedNames.length !== names.length) {
+    // Never echo unsupported people; retain independently corroborated names.
+    if (supportedNames.length) return {
+      content: "По доступным независимым источникам подтверждаются: " + supportedNames.join(", ") +
+        ".\n\nДругие упомянутые имена пока не подтверждены достаточными источниками. Полный список требует проверки.",
+      withheld: true, reason: "partial-identity",
     }
+    return { content: attributionUnavailable(kind,"unsupported"), withheld: true, reason:"unsupported-name" }
   }
   for (const year of years) {
     const supported = independentlySupported(usable, source => {
       const content = textOf(source)
       if (!content.includes(year)) return false
       if (!names.length) return CREATION.test(content) || BIO.test(content)
-      return names.some(name => namedFactSentences(source, name).some(sentence => sentence.includes(year)))
+      if (names.some(name => namedFactSentences(source, name).some(sentence => sentence.includes(year)))) return true
+      // Founding date can be in a separate sentence from cofounders' names.
+      return Boolean(subject) && textOf(source).split(/[.!?;]+(?:\s+|$)|\n+/u).some(sentence =>
+        sentence.includes(year) && sentence.toLowerCase().includes(subject) && CREATION.test(sentence))
     })
     if (!supported) return { content: attributionUnavailable(kind, "unsupported"), withheld: true, reason: "unsupported-year" }
   }

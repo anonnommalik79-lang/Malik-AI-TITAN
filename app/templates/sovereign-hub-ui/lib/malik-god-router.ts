@@ -587,6 +587,16 @@ function knownPersonSearchName(value: string) {
 function buildQueries(prompt: string) {
   const year = currentResearchDate().slice(0, 4)
   const q = normalizeWebSearchQuery(prompt)
+  // Historical founding questions need an entity-first query, not the entire
+  // long request containing instructions about a ledger or source formatting.
+  const foundedOrganization = /(?:основа\p{L}*|found\p{L}*|co-?found\p{L}*)/iu.test(prompt)
+    ? /(?:компани[юяи]|company|корпораци[юяи])\s+[«"'“]?([A-Za-z][A-Za-z0-9.-]{1,70})/iu.exec(prompt)?.[1]
+    : undefined
+  if (foundedOrganization) return [
+    foundedOrganization + " founders founding date official history",
+    foundedOrganization + " сооснователи дата основания",
+    q,
+  ].slice(0, Math.max(1, Math.min(3, Number(process.env.MALIK_GOD_MAX_SEARCH_QUERIES || 3))))
   if (/(?:историческ|история|\bin (?:19|20)\d{2}\b|в (?:19|20)\d{2} году|тарих)/iu.test(prompt) && !needsCurrentEvidence(prompt)) return [q]
   const truthQuery = officialTruthQuery(prompt)
   if (truthQuery) return [truthQuery, q].slice(0, Math.max(1, Math.min(3, Number(process.env.MALIK_GOD_MAX_SEARCH_QUERIES || 3))))
@@ -793,7 +803,7 @@ async function gatherSources(prompt: string, emit?: ResearchEmitter, activity?: 
     activity?.finish(call, page ? { title: page.title, characters: page.text.length, excerpt: page.text.slice(0, 1200) } : { title: source.title, snippet: source.snippet, limitation: "Полная страница недоступна; доступен только поисковый фрагмент" }, page ? "completed" : "failed", page ? undefined : "Не удалось прочитать полную страницу")
     if (page) readPages++
     return page
-      ? { ...source, title: page.title || source.title, snippet: page.text.slice(0, 2200), publishedAt: page.publishedAt || source.publishedAt, updatedAt: page.updatedAt, checkedAt: new Date().toISOString(), readAt: page.readAt || new Date().toISOString(), ...(page.image ? { image: page.image } : {}) }
+      ? { ...source, title: page.title || source.title, snippet: page.text.slice(0, attributionKind(prompt) ? 5200 : 2200), publishedAt: page.publishedAt || source.publishedAt, updatedAt: page.updatedAt, checkedAt: new Date().toISOString(), readAt: page.readAt || new Date().toISOString(), ...(page.image ? { image: page.image } : {}) }
       : source
   })
   signal?.throwIfAborted()
