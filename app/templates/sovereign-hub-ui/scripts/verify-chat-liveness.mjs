@@ -189,4 +189,87 @@ await check("the generic «Сервис ответа временно недос
   assert.doesNotMatch(source, /["'`]Сервис ответа временно недоступен/, "no code path may produce the generic message")
 })
 
+// Regression: «Кто основал Apple…» kept the server busy for eleven minutes
+// without a word (the turn's lease was renewed, so the server was alive), and
+// the person got «Сервер слишком долго не отдаёт готовый ответ». The server
+// now holds every text answer to a deadline and always delivers something.
+const { chatAnswerDeadline, withinChatDeadline } = load("lib/ai/chat-deadline.ts")
+const never = () => new Promise(() => {})
+const tiny = { rescueAtMs: 40, rescueMs: 40, hardMs: 120 }
+function deadlineRun(overrides = {}) {
+  const log = []
+  let wrote = false
+  return {
+    log,
+    write: () => { wrote = true },
+    run: {
+      wrote: () => wrote,
+      stop: () => log.push("stop"),
+      rescue: async () => { log.push("rescue"); return "rescued" },
+      partial: (reason) => { log.push("partial:" + reason); return "partial" },
+      ...overrides,
+    },
+  }
+}
+
+await check("a silent pipeline is stopped and replaced by a direct answer", async () => {
+  const { run, log } = deadlineRun()
+  const started = Date.now()
+  assert.equal(await withinChatDeadline(never(), tiny, started, run), "rescued")
+  assert.deepEqual(log, ["stop", "rescue"])
+  assert.ok(Date.now() - started < 1_000)
+})
+
+await check("an answer that is still being written at the hard deadline is delivered as written", async () => {
+  const { run, log, write } = deadlineRun()
+  write()
+  assert.equal(await withinChatDeadline(never(), tiny, Date.now(), run), "partial")
+  assert.deepEqual(log, ["stop", "partial:time"])
+})
+
+await check("a failure before any word is rescued; mid-answer it keeps the text", async () => {
+  const failing = () => Promise.reject(Object.assign(new Error("provider down"), { status: 503 }))
+  const silent = deadlineRun()
+  assert.equal(await withinChatDeadline(failing(), tiny, Date.now(), silent.run), "rescued")
+  const midway = deadlineRun()
+  midway.write()
+  assert.equal(await withinChatDeadline(failing(), tiny, Date.now(), midway.run), "partial")
+  assert.deepEqual(midway.log, ["stop", "partial:interrupted"])
+})
+
+await check("quota, sign-in and the person's own stop are never papered over", async () => {
+  for (const error of [Object.assign(new Error("limit"), { status: 429 }), Object.assign(new Error("stopped"), { name: "AbortError" })]) {
+    const { run, log } = deadlineRun()
+    await assert.rejects(withinChatDeadline(Promise.reject(error), tiny, Date.now(), run), error)
+    assert.deepEqual(log, [])
+  }
+})
+
+await check("an answer in time passes through untouched", async () => {
+  const { run, log } = deadlineRun()
+  assert.equal(await withinChatDeadline(Promise.resolve("answer"), tiny, Date.now(), run), "answer")
+  assert.deepEqual(log, [])
+})
+
+await check("deadlines fit inside each other and inside the browser's wait", async () => {
+  const engine = fs.readFileSync("lib/server/malik-max-engine.ts", "utf8")
+  const wallFn = engine.match(/export function maxResponseWallMs[\s\S]*?\n\}/)?.[0] || ""
+  assert.match(wallFn, /if \(codeMode\) return longBrief \? 300_000 : 240_000\s+return longBrief \? 160_000 : 115_000/, "engine walls changed: update chatAnswerDeadline")
+  const walls = { "false,false": 115_000, "false,true": 160_000, "true,false": 240_000, "true,true": 300_000 }
+  for (const code of [false, true]) for (const deep of [false, true]) {
+    const d = chatAnswerDeadline({ code, deep })
+    assert.ok(d.rescueAtMs >= walls[`${code},${deep}`] + 30_000, "the full pipeline gets its whole engine window, plus search, first")
+    assert.ok(d.rescueAtMs + d.rescueMs < d.hardMs, "a rescue finishes before the hard deadline")
+  }
+  for (const prompt of ["Сколько будет 2+2?", taxPrompt]) {
+    const deep = briefNeedsDeep(prompt)
+    const timing = chatStreamTimings({ originalQuestion: prompt, workspaceMode: "chat" })
+    assert.ok(timing.firstTextMs > chatAnswerDeadline({ code: true, deep }).hardMs, "the server always speaks before the browser gives up")
+  }
+  const route = fs.readFileSync("app/api/stream/route-impl.ts", "utf8")
+  assert.match(route, /withinChatDeadline\(answerPromise, deadline, startedAt/, "the live chat stream is held to the deadline")
+  assert.match(route, /owner !== writer/, "a stopped run cannot write into the rescue answer")
+  assert.match(fs.readFileSync("lib/malik-god-router.ts", "utf8"), /export async function malikRescueAnswer[\s\S]{0,4000}gateAttributionAnswer/, "the rescue keeps the attribution gate")
+})
+
 console.log(`\n${checks}/${checks} chat liveness checks passed`)

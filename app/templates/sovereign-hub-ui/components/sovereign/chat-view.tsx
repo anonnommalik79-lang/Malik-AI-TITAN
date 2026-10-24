@@ -88,7 +88,6 @@ import { PREFILL_EVENT, takePrefillPrompt } from "@/lib/malik-context"
 import { AnswerSheet } from "./answer-sheet/AnswerSheet"
 import { ChatExecution } from "./ChatExecution"
 import type { ExecutionTrace } from "@/lib/ai/chat-execution"
-import { isSheetRequest } from "@/lib/ai/answer-sheet"
 import { loadAnswerFeedback, nextAnswerMark, saveAnswerFeedback } from "@/lib/ai/answer-feedback-client"
 import type { WorkspaceMode } from "@/lib/ai/work-mode"
 import { openOs } from "./os/os-client"
@@ -2047,10 +2046,8 @@ export function ChatView({ messages, workspaceMode = "chat", onSendMessage, onIm
   const [responseDepth, setResponseDepth] = useState<ResponseDepth>(() => loadResponseDepth(userPlan))
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const [feedbackMap, setFeedbackMap] = useState<Record<string, "up" | "down">>({})
-  // The answer sheet: one answer on its own page. `auto` is a sheet that
-  // opened by itself because a document was asked for.
+  // The answer sheet: one answer on its own page, opened from «Лист / PDF».
   const [sheet, setSheet] = useState<{ id: string; auto: boolean } | null>(null)
-  const closedSheets = useRef<Set<string>>(new Set())
   const [imageCredits, setImageCredits] = useState<ImageCreditSnapshot | null>(null)
   const [showAttachMenu, setShowAttachMenu] = useState(false)
   const [imageCreatorOpen, setImageCreatorOpen] = useState(false)
@@ -2800,31 +2797,14 @@ export function ChatView({ messages, workspaceMode = "chat", onSendMessage, onIm
   }, [])
   useChatShortcuts({ messages, focusComposer, composerEmpty, restoreLastPrompt, notify: notifyShortcut })
 
-  // A document request opens the sheet the moment the answer starts being
-  // written, so the reader watches it being written there. Answers that were
-  // already in the chat never pop open by themselves.
+  // Every answer is written in the chat. A document request used to open the
+  // sheet by itself, which covered the chat with an empty white page while
+  // the model was still thinking; the sheet now opens only from «Лист / PDF».
   const lastMessage = messages[messages.length - 1]
-  const lastMessageId = lastMessage?.id
-  const lastMessageStreaming = Boolean(lastMessage?.isStreaming)
   // The turn being answered right now: its two rows get the entry animation.
   const liveTurn = Boolean(lastMessage && lastMessage.role === "assistant" && lastMessage.isStreaming)
-  useEffect(() => {
-    if (!lastMessage || lastMessage.role !== "assistant" || !lastMessage.isStreaming) return
-    if (lastMessage.imageConfirmation || lastMessage.generatedMedia) return
-    if (closedSheets.current.has(lastMessage.id)) return
-    const request = [...messages].reverse().find((item) => item.role === "user")
-    if (!request || request.attachments?.length || !isSheetRequest(request.content)) return
-    setSheet((current) => (current?.id === lastMessage.id ? current : { id: lastMessage.id, auto: true }))
-    // Only a new streaming answer matters here.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lastMessageId, lastMessageStreaming])
 
-  const closeSheet = React.useCallback(() => {
-    setSheet((current) => {
-      if (current) closedSheets.current.add(current.id)
-      return null
-    })
-  }, [])
+  const closeSheet = React.useCallback(() => setSheet(null), [])
 
   const sheetIndex = sheet ? messages.findIndex((item) => item.id === sheet.id) : -1
   const sheetMessage = sheetIndex >= 0 ? messages[sheetIndex] : null

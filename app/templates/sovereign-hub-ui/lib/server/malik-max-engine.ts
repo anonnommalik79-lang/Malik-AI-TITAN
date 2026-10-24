@@ -1427,6 +1427,11 @@ export type MaxInput = {
    * Only the new part counts against the budget.
    */
   resumeFrom?: string
+  /**
+   * The chat's answer of last resort: no expert panel, and the whole call,
+   * continuations included, fits this many milliseconds.
+   */
+  wallMs?: number
 }
 
 export async function runMalikMax(input: MaxInput, deps: { fetcher?: typeof fetch; lanes?: MaxLane[] } = {}): Promise<StrictMalikResult> {
@@ -1464,7 +1469,7 @@ export async function runMalikMax(input: MaxInput, deps: { fetcher?: typeof fetc
     : codeMode
       ? { hedgeMs: 12_000, firstTokenMs: 120_000, firstDeadlineMs: 180_000, idleMs: 90_000 }
       : { hedgeMs: 8_000, firstTokenMs: 75_000, firstDeadlineMs: 150_000, idleMs: 60_000 }
-  const timeLeft = () => Math.max(0, maxResponseWallMs(fastMode, codeMode, briefNeedsDeep(taskPrompt)) - (Date.now() - started))
+  const timeLeft = () => Math.max(0, (input.wallMs ?? maxResponseWallMs(fastMode, codeMode, briefNeedsDeep(taskPrompt))) - (Date.now() - started))
   // Do not let a stalled *first* answer consume the entire time window.
   // Reserve a recovery window for another provider to finish a partial stream.
   // Follow-up rounds may use the remaining wall time, but never exceed it.
@@ -1513,7 +1518,7 @@ export async function runMalikMax(input: MaxInput, deps: { fetcher?: typeof fetc
   // Small talk remains quick. Substantive requests consult 2-3 strong models
   // independently, then one strong model synthesizes their assessments.
   // Injected/single-model lanes keep their existing deterministic behavior.
-  const panel = !resumed && !deps.lanes && !fastMode && budget >= 2_500
+  const panel = !resumed && !input.wallMs && !deps.lanes && !fastMode && budget >= 2_500
     ? await runExpertPanel({
         lanes, call: base, totalMs: Math.max(0, timeLeft() - 17_000),
         codeMode, fetcher: deps.fetcher, signal: input.signal, activity: input.activity,

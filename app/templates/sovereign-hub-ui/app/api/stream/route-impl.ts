@@ -1,4 +1,9 @@
-import { asPlainText, malikGodAnswer, gatherSourcesForPrompt, sourceContext, type PreparedLiveEvidence } from "@/lib/malik-god-router"
+import { asPlainText, malikGodAnswer, malikRescueAnswer, gatherSourcesForPrompt, sourceContext, type PreparedLiveEvidence } from "@/lib/malik-god-router"
+import { chatAnswerDeadline, withinChatDeadline } from "@/lib/ai/chat-deadline"
+import { canRetryChat } from "@/lib/ai/chat-stream-recovery"
+import { briefNeedsDeep } from "@/lib/ai/brief-quality"
+import { isCodeRequest } from "@/lib/ai/request-kind"
+import type { MalikWebSource } from "@/lib/ai/web-research-types"
 import { normalizeProviderTokenUsage } from "@/lib/ai/token-telemetry"
 import { classifyFreshness, freshnessMode } from "@/lib/ai/freshness-intent"
 import { shouldUseWeb } from "@/lib/ai/web-search-policy"
@@ -1064,34 +1069,77 @@ function liveSseResponse(
         })
       }, 15_000)
 
+      // Only the run that currently owns the answer may write to the chat: a
+      // run stopped at the deadline cannot leak text into the one replacing it.
+      let writer: "main" | "rescue" = "main"
+      const writeAnswer = (owner: typeof writer) => (chunk: string) => {
+        if (!chunk || cancelled || owner !== writer) return
+        streamedAny = true
+        if (!writingStatusSent) {
+          writingStatusSent = true
+          send("progress", { type: "progress", phase: "writing", text: "Пишет ответ…" })
+          activity.status("Ответ поступает в чат")
+        }
+        const safeChunk = protectStreamChunk(chunk)
+        if (safeChunk) {
+          streamedText += safeChunk
+          send("content", { type: "content", content: safeChunk, contentMode: "delta" })
+        }
+      }
+      // Sources the full run found, so a rescue answers from them instead of searching again.
+      const foundSources: MalikWebSource[] = []
+      const mainRun = new AbortController()
       const answerPromise = isProjectBuildRequest(body)
         ? runProjectAnswer(body, selection, entitlement.userId, (text) => { activity.status(text, "code"); send("status", { type: "status", text }) }, { activity, signal: generation.signal })
         : runSelectedAnswer(
             body,
             selection,
-            (progress) => { if (!progress.kind && progress.phase !== "generating") activity.status(progress.text); send("progress", { type: "progress", ...progress }) },
-            maxOutputTokens,
-            (chunk) => {
-              if (!chunk || cancelled) return
-              streamedAny = true
-              if (!writingStatusSent) {
-                writingStatusSent = true
-                send("progress", { type: "progress", phase: "writing", text: "Пишет ответ…" })
-                activity.status("Ответ поступает в чат")
-              }
-              const safeChunk = protectStreamChunk(chunk)
-              if (safeChunk) {
-                streamedText += safeChunk
-                send("content", { type: "content", content: safeChunk, contentMode: "delta" })
-              }
+            (progress) => {
+              if (writer !== "main") return
+              if (progress?.kind === "source" && progress.source?.url && foundSources.length < 16 && !foundSources.some((source) => source.url === progress.source.url)) foundSources.push(progress.source)
+              if (!progress.kind && progress.phase !== "generating") activity.status(progress.text)
+              send("progress", { type: "progress", ...progress })
             },
+            maxOutputTokens,
+            writeAnswer("main"),
             activity,
-            generation.signal,
+            AbortSignal.any([generation.signal, mainRun.signal]),
             undefined,
             entitlement,
           )
+      const deadline = chatAnswerDeadline({ code: isCodeRequest(coderPrompt(body)), deep: briefNeedsDeep(coderPrompt(body)) })
+      const settledAnswer = isProjectBuildRequest(body) || !canRetryChat(body) ? answerPromise : withinChatDeadline(answerPromise, deadline, startedAt, {
+        wrote: () => streamedAny,
+        stop: () => { writer = "rescue"; mainRun.abort() },
+        rescue: () => {
+          writer = "rescue"
+          send("progress", { type: "progress", phase: "thinking", text: "Отвечаю напрямую по найденным данным…" })
+          activity.status("Полный разбор не уложился во время — быстрый ответ по найденным данным")
+          const requested = Number(body?.maxTokens)
+          const rescueBody = maxOutputTokens
+            ? { ...body, maxTokens: Number.isFinite(requested) && requested > 0 ? Math.min(Math.floor(requested), maxOutputTokens) : maxOutputTokens, maxTokensCap: maxOutputTokens }
+            : body
+          return malikRescueAnswer(rescueBody, {
+            modelId: selection?.modelId || DEFAULT_MALIK_MODEL_ID,
+            allowCatalog: Boolean(selection && hasMalikProAccess(selection.entitlement.plan)),
+          }, foundSources, {
+            wallMs: deadline.rescueMs,
+            onToken: writeAnswer("rescue"),
+            activity,
+            signal: AbortSignal.any([generation.signal, AbortSignal.timeout(deadline.rescueMs + 10_000)]),
+          })
+        },
+        partial: (reason) => {
+          const tail = protectStreamChunk("", true)
+          if (tail) {
+            streamedText += tail
+            send("content", { type: "content", content: tail, contentMode: "delta" })
+          }
+          return { content: streamedText, provider: "malik-chat-deadline", model: "partial", selectedModelId: selection?.modelId || DEFAULT_MALIK_MODEL_ID, usedWeb: foundSources.length > 0, sources: foundSources, attempts: [], incomplete: { reason } }
+        },
+      })
 
-      void answerPromise.then(async (answer) => {
+      void settledAnswer.then(async (answer) => {
         const multimodalCost = estimateMultimodalTokens(hasMalikAttachments(body?.attachments) ? body.attachments : [])
         if (multimodalCost > 0) {
           try {

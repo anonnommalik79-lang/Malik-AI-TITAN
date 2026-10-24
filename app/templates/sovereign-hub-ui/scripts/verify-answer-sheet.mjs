@@ -80,12 +80,13 @@ check("a long document is written faster, never slower than its budget", () => {
   assert.ok(timeline.every((item, i) => i === 0 || item.start >= timeline[i - 1].start), "in reading order")
 })
 
-check("the chat opens the sheet for document requests and offers it on long answers", () => {
+check("answers stay in the chat; the sheet opens only from «Лист / PDF»", () => {
   const chat = read("components/sovereign/chat-view.tsx")
   assert.match(chat, /import \{ AnswerSheet \} from "\.\/answer-sheet\/AnswerSheet"/)
-  assert.match(chat, /isSheetRequest\(request\.content\)/)
   assert.match(chat, /title="Открыть на листе"/)
-  assert.match(chat, /closedSheets\.current\.has\(lastMessage\.id\)/, "a closed sheet does not pop open again")
+  assert.match(chat, /const openSheetFor = useCallback\(\(id: string\) => setSheet\(\{ id, auto: false \}\), \[\]\)/)
+  assert.doesNotMatch(chat, /isSheetRequest\(/, "a document request never covers the chat with an empty white sheet")
+  assert.doesNotMatch(chat, /auto: true/, "no sheet opens by itself")
 })
 
 check("the sheet is a whole black-and-white page, safe from the app's dialog rules", () => {

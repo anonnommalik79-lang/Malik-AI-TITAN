@@ -149,6 +149,11 @@ try {
     sameAnswerText, withIncompleteNote,
     buildClaimLedger: load("lib/ai/claim-ledger.ts").buildClaimLedger,
     normalizeProviderTokenUsage: load("lib/ai/token-telemetry.ts").normalizeProviderTokenUsage,
+    ...load("lib/ai/chat-deadline.ts"),
+    canRetryChat: load("lib/ai/chat-stream-recovery.ts").canRetryChat,
+    briefNeedsDeep: load("lib/ai/brief-quality.ts").briefNeedsDeep,
+    isCodeRequest: () => false, hasMalikProAccess: () => false,
+    malikRescueAnswer: async () => { throw new Error("rescue is not expected in these checks") },
   })
   await check("SSE delivers done while history and usage writes are still pending", async () => {
     const response = liveSseResponse({ prompt: screenshotPrompt }, null, { userId: "offline-test", plan: "owner" })

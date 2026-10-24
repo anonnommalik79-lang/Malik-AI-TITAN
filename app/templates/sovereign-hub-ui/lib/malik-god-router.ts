@@ -1325,6 +1325,68 @@ export async function malikGodAnswer(
   return answer
 }
 
+/**
+ * The chat's answer of last resort. When the full pipeline has not written a
+ * word in time (lib/ai/chat-deadline.ts), one direct model call answers from
+ * the sources that pipeline had already found: no planning, no new search, no
+ * expert panel. The truth, freshness and attribution checks still apply.
+ */
+export async function malikRescueAnswer(
+  body: any,
+  selection: { modelId: MalikModelId; allowCatalog?: boolean },
+  found: SourceItem[],
+  options: { wallMs: number; onToken?: (chunk: string) => void; activity?: ExecutionReporter; signal?: AbortSignal },
+): Promise<GodAnswer> {
+  const prompt = extractPrompt(body)
+  const history = Array.isArray(body?.history) ? body.history : Array.isArray(body?.messages) ? body.messages : []
+  const intent = resolveConversationIntent({ prompt, messages: history, attachments: body?.attachments })
+  const domainPlan = resolveDomainPlan({ prompt, messages: history, attachments: body?.attachments, intent })
+  const focus = domainPlan.context.followUp ? conversationFocus(prompt, history) : { followUp: false, anchor: "", searchText: prompt, shapeText: prompt }
+  const sources = found.slice(0, 12)
+  const attribution = attributionKind(focus.searchText)
+  if (attribution && !sources.length) {
+    return { content: attributionUnavailable(attribution, "missing"), provider: "attribution-evidence-gate", model: "no-evidence", selectedModelId: selection.modelId, usedWeb: false, sources: [], attempts: [] }
+  }
+  const freshness = classifyFreshness(focus.searchText)
+  if (needsCurrentEvidence(focus.searchText) && !currentEvidenceAvailable(sources, freshness)) {
+    return { content: unavailableFreshAnswer(freshness), provider: "live-evidence-gate", model: "no-current-evidence", selectedModelId: selection.modelId, usedWeb: sources.length > 0, sources, attempts: [] }
+  }
+  const brain = analyzeMalikBrainV1({ prompt, historyLength: history.length, requestedDepth: body?.responseDepth || body?.metadata?.responseDepth })
+  const { runMalikMax } = await import("@/lib/server/malik-max-engine")
+  const step = options.activity?.start("Быстрый ответ по найденным данным", "model", selection.modelId, { sources: sources.length })
+  const result = await runMalikMax({
+    prompt: [`Question:\n${prompt}`, sources.length ? `Web sources:\n${sourceContext(sources, focus.searchText)}` : ""].filter(Boolean).join("\n\n"),
+    taskPrompt: focus.shapeText,
+    systemPrompt: [systemPrompt(sources.length > 0, prompt, buildMalikBrainSystemInstruction(brain), [], body?.metadata, false, sources.length > 0, focus), accuracyInstruction(focus.searchText), attributionSystemInstruction(focus.searchText), userContextBlocks(body), conversationIntentInstruction(intent), domainPlanInstruction(domainPlan)].filter(Boolean).join("\n\n"),
+    history,
+    maxTokens: answerBudget(body, prompt, brain.outputTokenTarget),
+    temperature: brain.temperature,
+    reasoningEffort: "low",
+    allowCatalog: selection.allowCatalog === true,
+    // Do not stream unverified person/date claims before the evidence gate.
+    onToken: attribution || needsCurrentEvidence(focus.searchText) || truthNeedsLiveEvidence(focus.searchText) ? undefined : accuracyTokenGate(focus.searchText, options.onToken),
+    signal: options.signal,
+    wallMs: options.wallMs,
+  }).catch((error) => { options.activity?.finish(step, undefined, "failed", error instanceof Error ? error.message : String(error)); throw error })
+  const verified = finalizeAccuracy(cleanText(result.content), focus.searchText, sources)
+  const checkedContent = finalizeFreshAnswer(finalizeTruthAnswer(verified.content, focus.searchText, sources, true), freshness, sources, sources)
+  const content = gateAttributionAnswer({ question: focus.searchText, answer: checkedContent, sources, searchEnabled: true }).content
+  options.activity?.finish(step, { characters: content.length, sources: sources.length })
+  return {
+    content,
+    provider: result.provider,
+    model: result.model,
+    selectedModelId: selection.modelId,
+    usedWeb: sources.length > 0,
+    sources,
+    accuracy: verified.report,
+    factAudit: auditGroundedAnswer(answerCardsToText(content), sources, prompt, verified.report, freshness.needsSearch ? freshnessCheckLine(freshness) : undefined),
+    ...(result.incomplete ? { incomplete: result.incomplete } : {}),
+    usage: result.usage,
+    attempts: [{ provider: result.provider, model: result.model, ok: true, status: 200, latencyMs: result.latencyMs }],
+  }
+}
+
 export function asPlainText(answer: GodAnswer) {
   const debug = env("MALIK_GOD_SHOW_PROVIDER") === "true"
   if (!debug) return answer.content

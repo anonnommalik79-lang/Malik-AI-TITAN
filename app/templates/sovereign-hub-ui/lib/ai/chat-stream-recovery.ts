@@ -1,4 +1,5 @@
 import { briefNeedsDeep } from "./brief-quality"
+import { chatAnswerDeadline } from "./chat-deadline"
 import { answerRevises } from "./answer-completion"
 import { chatCompletionError, MAX_CHAT_SSE_FRAME_CHARS, mergeChatStreamText, parseChatSseFrame } from "./chat-stream-contract"
 import { resolveConversationIntent } from "./conversation-intent"
@@ -30,16 +31,16 @@ export type ChatStreamTimings = { firstTextMs: number; idleMs: number; recoveryM
  * alive and about to answer, then showed «Сервис ответа временно недоступен».
  *
  * `firstTextMs` is only a ceiling for a server that keeps beating but never
- * writes. It sits well above the server's own wall clock, so the server always
- * finishes first and reports its real result or its real error.
+ * writes. For a text answer the server promises to finish by its hard
+ * deadline (lib/ai/chat-deadline.ts, the slowest kind - code - assumed here),
+ * so the server always finishes first and reports its real result.
  */
 export function chatStreamTimings(body: Record<string, unknown>): ChatStreamTimings {
   const retryable = canRetryChat(body)
   const prompt = String(body.originalQuestion || body.question || body.prompt || "")
   const largeBrief = briefNeedsDeep(prompt)
-  // Leave transport slack beyond the longest five-minute MAX recovery window.
   // Silence detection remains unchanged, so a dead server still fails quickly.
-  const firstTextMs = retryable ? (largeBrief ? 8 * 60_000 : 6 * 60_000) : 14 * 60_000
+  const firstTextMs = retryable ? chatAnswerDeadline({ code: true, deep: largeBrief }).hardMs + 60_000 : 14 * 60_000
   return {
     firstTextMs,
     // Three missed heartbeats and then some; a large prompt gets more slack
