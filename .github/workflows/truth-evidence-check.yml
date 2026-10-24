@@ -1,0 +1,35 @@
+name: Historical truth guard
+
+on:
+  pull_request:
+    paths:
+      - "app/templates/sovereign-hub-ui/lib/ai/attribution-evidence.ts"
+      - "app/templates/sovereign-hub-ui/lib/ai/web-search-policy.ts"
+      - "app/templates/sovereign-hub-ui/lib/malik-god-router.ts"
+      - "app/templates/sovereign-hub-ui/scripts/verify-attribution-evidence.mjs"
+      - "app/templates/sovereign-hub-ui/package.json"
+      - ".github/workflows/truth-evidence-check.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app/templates/sovereign-hub-ui
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/templates/sovereign-hub-ui/package-lock.json
+      - name: Install dependencies
+        run: npm ci --legacy-peer-deps
+      - name: Regression against invented historical names and years
+        run: npm run test:truth
+      - name: Typecheck
+        run: npm run typecheck
