@@ -48,6 +48,7 @@ function hooks() {
     useState(initial) { const i = cursor++; if (!(i in slots)) slots[i] = typeof initial === "function" ? initial() : initial; return [slots[i], (value) => { slots[i] = typeof value === "function" ? value(slots[i]) : value }] },
     useRef(initial) { const i = cursor++; return slots[i] ||= { current: initial } },
     useId() { cursor++; return "qa-activity" },
+    useMemo(factory, deps) { const i = cursor++; if (!same(slots[i]?.deps, deps)) slots[i] = { value: factory(), deps }; return slots[i].value },
     useCallback(fn, deps) { const i = cursor++; if (!same(slots[i]?.deps, deps)) slots[i] = { fn, deps }; return slots[i].fn },
     useEffect(fn, deps) { const i = cursor++; if (!same(effects[i]?.deps, deps)) { pending.push(() => { effects[i]?.cleanup?.(); effects[i] = { deps, cleanup: fn() } }) } },
   }
