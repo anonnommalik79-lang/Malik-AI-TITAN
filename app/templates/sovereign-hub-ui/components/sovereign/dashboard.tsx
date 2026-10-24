@@ -19,6 +19,7 @@ import { readWebSearchEnabled } from "@/lib/ai/web-search-preference"
 import { chatHttpErrorMessage, chatVisibleErrorMessage } from "@/lib/ai/errors"
 import { fetchRecoverableChat } from "@/lib/ai/chat-stream-recovery"
 import { chatCompletionError, mergeChatStreamText } from "@/lib/ai/chat-stream-contract"
+import { readResponseMetrics, type MalikResponseMetrics } from "@/lib/ai/token-telemetry"
 import { mergeStreamingAssistantCheckpoints, restoreInterruptedAssistant } from "@/lib/ai/stream-checkpoint"
 import { fixWrongKeyboardLayout } from "@/lib/ai/keyboard-layout"
 import { explicitlyRequestsPackagedProject } from "@/lib/chat-code-routing"
@@ -291,6 +292,8 @@ interface Message {
   superflow?: SuperflowRef
   /** How long Malik worked before the first word, and the steps it reported. */
   thought?: MessageThought
+  /** Response time and only upstream-reported token counts. */
+  responseMetrics?: MalikResponseMetrics
   /** Earlier answers to the same question, kept when the answer was regenerated. */
   versions?: MessageVersion[]
 }
@@ -1549,6 +1552,7 @@ function reviveMessage(message: any): Message {
     attachments,
     superflow: reviveSuperflowRef(message?.superflow),
     thought: reviveThought(message?.thought),
+    responseMetrics: readResponseMetrics(message?.responseMetrics),
     execution: normalizeExecutionTrace(message?.execution, true),
     textOnly: message?.textOnly === true,
     versions: Array.isArray(message?.versions)
@@ -6641,6 +6645,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
   }
 
   let finalExecution: ExecutionTrace | undefined
+  let turnMetrics: MalikResponseMetrics | undefined
   let textOnlyAnswer = false
   const applyExecution = (trace: ExecutionTrace) => {
     finalExecution = trace
@@ -6675,6 +6680,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
               research: finalResearch || m.research,
               actionPlan: finalActionPlan || m.actionPlan,
               thought,
+              responseMetrics: turnMetrics ?? { tookMs: Math.max(0, Date.now() - startTime) },
               execution: finalExecution,
               textOnly: textOnlyAnswer,
             }
@@ -6703,6 +6709,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
       research: finalResearch || assistantMessage.research,
       actionPlan: finalActionPlan || assistantMessage.actionPlan,
       thought,
+      responseMetrics: turnMetrics ?? { tookMs: Math.max(0, Date.now() - startTime) },
       execution: finalExecution,
       textOnly: textOnlyAnswer,
     }
@@ -7350,6 +7357,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
           const completionError = chatCompletionError(payload)
           if (completionError) throw new Error(completionError)
           sawDone = true
+          turnMetrics = readResponseMetrics(payload)
           // The server's final text wins over what streamed: it may carry a
           // «⚠️» check or the «Ответ не завершён» line the stream never had.
           if (typeof payload?.finalContent === "string" && payload.finalContent.trim()) {
