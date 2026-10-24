@@ -12,6 +12,7 @@
  */
 
 import { answerVisualsToText } from "./answer-visuals"
+import { uiFencesToText } from "@/lib/generative-ui/fallback"
 
 export type CardLink = { label: string; url: string }
 export type CardFact = { label: string; value: string }
@@ -183,7 +184,7 @@ function cardText(item: AnswerCard): string {
  * markers against the sources.
  */
 export function answerCardsToText(answer: string): string {
-  return answerVisualsToText(String(answer || "").replace(FENCE, (whole, body: string) => {
+  return answerVisualsToText(uiFencesToText(String(answer || "")).replace(FENCE, (whole, body: string) => {
     const block = parseAnswerCards(body)
     if (!block) return ""
     if (block.type === "hero") return cardText(block.item)

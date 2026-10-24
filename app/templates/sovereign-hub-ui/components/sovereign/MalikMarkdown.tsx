@@ -18,6 +18,8 @@ import { groundedAnswerPhotoPlans, isPhotoLineup, parseAnswerPhotoHints } from "
 import { sourceReferencePhoto } from "@/lib/media/source-reference-photos"
 import { VISUAL_LIMITS, detectVisualFence, sniffPendingVisual, type VisualEngineType } from "@/lib/visual/detect"
 import { MalikVisualEngineBlock, MalikVisualPending } from "./visual-engine/MalikVisualBlock"
+import { MalikGenerativeUi } from "./generative-ui/MalikGenerativeUi"
+import { UI_FENCE } from "@/lib/generative-ui/protocol"
 
 /**
  * Renders an assistant answer as structured text.
@@ -339,6 +341,8 @@ type Block =
   | { kind: "quiz"; quiz: AnswerQuiz | null; pending: boolean }
   /** ```malik-oil-report: the visual oil report, recalculated by the deterministic engine. */
   | { kind: "oil"; raw: string; pending: boolean }
+  /** ```malik-ui: a Generative UI composition drawn from safe primitives. */
+  | { kind: "ui"; raw: string; closed: boolean }
 
 const LIST_ITEM = /^(\s*)([-*•+]|\d{1,3}[.)])\s+(.*)$/
 const DETAILS_OPEN = /^\s*<details(?:\s+open)?\s*>\s*(?:<summary>(.*?)<\/summary>)?\s*$/i
@@ -598,6 +602,11 @@ function parseBlocks(source: string): Block[] {
           const engine = visual ? null : detectVisualFence(raw)
           blocks.push({ kind: "visual", visual, pending: false, engine: engine ? { ...engine, raw } : undefined })
         }
+        pendingFilename = ""
+        continue
+      }
+      if (fence.language === UI_FENCE) {
+        blocks.push({ kind: "ui", raw: body.join("\n"), closed })
         pendingFilename = ""
         continue
       }
@@ -1280,6 +1289,7 @@ export function MalikMarkdown({ text, className, allowImages = true, referencePh
     if (!photosOn || blocks.some((block) =>
       (block.kind === "photos" && block.lineup) ||
       (block.kind === "cards" && Boolean(block.block)) ||
+      block.kind === "ui" ||
       (block.kind === "visual" && block.visual?.type === "flow")
     )) return new Map<string, AnswerVisualSlot>()
     // Event lineups need explicit subject metadata: a guessed portrait is not attendance evidence.
@@ -1472,7 +1482,7 @@ export function MalikMarkdown({ text, className, allowImages = true, referencePh
       if (block.kind === "visual" && block.visual && visuals.size < 2) visuals.set(position, block.visual)
     })
     // An answer with its own interactive blocks needs no inferred chart beside them.
-    if (visuals.size || streaming || blocks.some((block) => block.kind === "visual" && block.engine)) return visuals
+    if (visuals.size || streaming || blocks.some((block) => (block.kind === "visual" && block.engine) || block.kind === "ui")) return visuals
     let title = ""
     blocks.forEach((block, position) => {
       if (block.kind === "h") title = block.text
@@ -1582,6 +1592,7 @@ export function MalikMarkdown({ text, className, allowImages = true, referencePh
             {plans.map((plan) => <MalikReferenceImages key={plan.topic} question="" planOverride={plan} row={!singleVisualSubject} hero={singleVisualSubject} isLatest={visualContext?.isLatest} />)}
           </section>
         }
+        if (block.kind === "ui") return <MalikGenerativeUi key={key} raw={block.raw} closed={block.closed} streaming={streaming} sources={citations} stateKey={visualContext?.messageId ? `${visualContext.messageId}:${key}` : undefined} renderMarkdown={(markdown) => <MalikMarkdown text={markdown} citations={citations} allowImages={false} referencePhotos={false} />} />
         if (block.kind === "cards") {
           if (block.block) return <MalikAnswerCards key={key} block={block.block} sources={citations} question={question} previousQuestion={previousQuestion} hasAttachment={hasAttachment} autoPhotos={allowsAnswerPhotoHints(question, hasAttachment, previousQuestion)} />
           return streaming ? <p key={key} className="malik-md-p" role="status">Собираю карточки…</p> : null
