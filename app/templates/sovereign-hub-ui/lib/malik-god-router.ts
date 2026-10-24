@@ -62,6 +62,8 @@ type GodAnswer = {
   usedWeb: boolean
   sources: SourceItem[]
   attempts: ProviderAttempt[]
+  /** Official upstream token receipt, when available; never guessed. */
+  usage?: unknown
   selectedModelId?: MalikModelId
   /** Null whenever the answer had nothing checkable in it. */
   factAudit?: MalikFactAudit | null
@@ -1216,6 +1218,7 @@ export async function malikGodAnswer(
       accuracy: verified.report,
       factAudit: auditGroundedAnswer(answerCardsToText(content), sources, prompt, verified.report, freshness.needsSearch ? freshnessCheckLine(freshness) : undefined),
       ...(result.incomplete ? { incomplete: result.incomplete } : {}),
+      usage: result.usage,
       attempts: [{
         provider: result.provider,
         model: result.model,
@@ -1312,5 +1315,6 @@ export function asJson(answer: GodAnswer) {
     factAudit: answer.factAudit ?? null,
     accuracy: answer.accuracy ?? null,
     attempts: answer.attempts,
+    usage: answer.usage ?? null,
   }
 }
