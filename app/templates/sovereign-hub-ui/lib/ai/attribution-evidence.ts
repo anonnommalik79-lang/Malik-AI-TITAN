@@ -17,7 +17,7 @@ export type AttributionKind = "identity" | "founding-date" | "biographical-date"
 const ROLE = /(?:основател|основа[лтн]|создал|создат|организатор|лидер|руковод|возглав|глав[ауы]|предводител|founder|founded|created|leader|headed|led\b|басшы|негізін\s+қал|жетекш)/iu
 const CREATION = /(?:основа[нлт]|созда[нлт]|образова|организова|возник|появил|начал.{0,12}существ|found(?:ed)?|establish|formed|created|құрылған|құрды)/iu
 const BIO = /(?:родил|рождени|умер|смерт|погиб|убил|убит|казн|born|died|killed|қайтыс|туған)/iu
-const WHO = /(?:^|[\s,])(?:а\s+)?(?:кто|кем|кім|who|назови|имя|название\s+лидера|основател|руководител|лидер)/iu
+const WHO = /(?:^|[\s,])(?:а\s+)?(?:кто|кем|кім|who|назови|имя|название\s+лидера)/iu
 const WHEN = /(?:^|[\s,])(?:а\s+)?(?:когда|каком\s+году|в\s+какие\s+годы|дат[ауы]|год\s+основани|when|what\s+year|қай\s+жылы|қашан)/iu
 const TRANSFORM = /^(?:переведи|перепиши|сократи|резюмируй|translate|rewrite|summarize|аудар)(?:[\s:]|$)/iu
 const CREATE = /^(?:(?:напиши|сочини|придумай|создай|сделай|write|compose|make|create|build)\s+)(?:(?:мне|a|an|the)\s+)?(?:рассказ|стих|песн|сказк|игр|сайт|приложени|код|сценари|fiction|story|poem|song|game|website|app|code|script)(?!\p{L})/iu
@@ -28,7 +28,8 @@ export function attributionKind(question: string): AttributionKind | null {
   const text = String(question || "").normalize("NFKC").trim().replace(/\s+/g, " ")
   if (!text || text.length > 2000 || TRANSFORM.test(text) || CREATE.test(text)) return null
   const who = WHO.test(text), when = WHEN.test(text)
-  if (who && ROLE.test(text)) return "identity"
+  const bareRole = /^(?:(?:а|скажи|подскажи)\s+)?(?:основател[ьи]?|руководител[ьи]?|лидер[ы]?|глав[ауы]|founder|leader)\s+(?:of\s+)?\S+/iu.test(text)
+  if ((who || bareRole) && ROLE.test(text)) return "identity"
   if (when && CREATION.test(text)) return "founding-date"
   if (when && BIO.test(text)) return "biographical-date"
   if (/^(?:в\s+)?(?:каком|какие)\s+год[уые]/iu.test(text) && CREATION.test(text)) return "founding-date"
