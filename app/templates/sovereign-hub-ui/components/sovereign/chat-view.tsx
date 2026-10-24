@@ -7,6 +7,7 @@ import { MalikMarkdown } from "./MalikMarkdown"
 import { WorkDownloadMenu } from "./WorkDownloadMenu"
 import { buildCanvasSrcDoc, createCanvasBlobUrl } from "@/lib/canvas-preview"
 import { isChatArtifactCreationRequest } from "@/lib/ai/chat-artifact-skills"
+import type { MalikResponseMetrics } from "@/lib/ai/token-telemetry"
 import { stripAnswerPhotoHints } from "@/lib/ai/answer-photo-hints"
 import { answerCardsToText } from "@/lib/ai/answer-cards"
 import { answerQuizzesToText } from "@/lib/ai/answer-quiz"
@@ -160,6 +161,8 @@ interface Message {
   superflow?: SuperflowRef
   /** How long the turn took before its first word, with the reported steps. */
   thought?: { ms: number; steps: string[] }
+  /** Actual elapsed response time and provider-supplied token usage. */
+  responseMetrics?: MalikResponseMetrics
   /** Earlier answers to the same question (regenerated in place). */
   versions?: Array<{ content: string; at: number }>
 }
@@ -1972,6 +1975,36 @@ function MessageBubble({
             ) : null}
           </div>
         )}
+        {/* Compact, inspectable completion statistics, directly below the answer.
+            No token number is shown unless the provider reported it. */}
+        {!isUser && !streaming && !olderVersion && Boolean(message.content) && !message.imageConfirmation && message.responseMetrics ? (
+          <details className="malik-response-telemetry mt-2 w-fit max-w-full rounded-lg border border-white/[0.09] bg-white/[0.025] px-3 py-1.5 text-xs text-zinc-400 open:bg-white/[0.045]">
+            <summary className="flex cursor-pointer list-none items-center gap-1.5 text-[12px] transition hover:text-zinc-200 [&::-webkit-details-marker]:hidden" aria-label="Статистика ответа MALIK AI">
+              <Timer size={12} aria-hidden="true" />
+              <span className="tabular-nums">{(message.responseMetrics.tookMs / 1000).toLocaleString("ru-RU", { maximumFractionDigits: 1 })} с</span>
+              <span aria-hidden="true" className="text-zinc-600">·</span>
+              <span className="tabular-nums">{message.responseMetrics.usage
+                ? `${message.responseMetrics.usage.totalTokens.toLocaleString("ru-RU")} токенов`
+                : "токены: нет данных"}</span>
+              <ChevronRight size={12} className="ml-0.5 opacity-60" aria-hidden="true" />
+            </summary>
+            <div className="mt-2 border-t border-white/10 pt-2 text-[11px] leading-5 text-zinc-400">
+              {message.responseMetrics.usage ? (
+                <>
+                  <div className="flex flex-wrap gap-x-4 gap-y-1 tabular-nums">
+                    {message.responseMetrics.usage.inputTokens !== undefined ? <span>Вход: {message.responseMetrics.usage.inputTokens.toLocaleString("ru-RU")}</span> : null}
+                    {message.responseMetrics.usage.outputTokens !== undefined ? <span>Выход: {message.responseMetrics.usage.outputTokens.toLocaleString("ru-RU")}</span> : null}
+                    <span>Всего: {message.responseMetrics.usage.totalTokens.toLocaleString("ru-RU")}</span>
+                  </div>
+                  <p className="mt-1 text-zinc-500">Точные данные, полученные от провайдера модели. Дополнительные внутренние вызовы могут не учитываться.</p>
+                </>
+              ) : (
+                <p>Провайдер не прислал точный расход токенов — MALIK AI не подменяет его приблизительным числом.</p>
+              )}
+              <p className="mt-1 text-zinc-500">Время ответа: {message.responseMetrics.tookMs.toLocaleString("ru-RU")} мс.</p>
+            </div>
+          </details>
+        ) : null}
         {!isUser && showFollowUps && onFollowUp ? <FollowUpChips onSend={onFollowUp} question={question} answer={displayContent} hasAttachment={questionHasAttachment} /> : null}
         {isUser && message.content ? <UserMessageActions id={message.id} text={message.content} onEdit={onEditPrompt} /> : null}
       </div>
