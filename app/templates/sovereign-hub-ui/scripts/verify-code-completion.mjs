@@ -73,10 +73,14 @@ await check('450-line HTML/JavaScript output finishes through more than five sma
  const whole='```html\n<!doctype html><html><body><canvas id="game"></canvas><script>\n'+script+'</script></body></html>\n```'
  const size=800,chunks=Array.from({length:Math.ceil(whole.length/size)},(_,i)=>whole.slice(i*size,(i+1)*size)),log=[]
  assert.ok(chunks.length>6)
+ const activity=load('lib/ai/chat-execution.ts').createExecutionReporter(()=>{})
  let streamed=''
- const result=await engine.runMalikMax({prompt:'сгенерируй мне игру',systemPrompt:'Be helpful.',maxTokens:12000,onToken:c=>{streamed+=c}},{lanes:[lane(300)],fetcher:provider(i=>({text:chunks[i]||'',finish:i<chunks.length-1?'length':'stop',usage:{completion_tokens:250}}),log)})
+ const result=await engine.runMalikMax({prompt:'сгенерируй мне игру',systemPrompt:'Be helpful.',maxTokens:12000,onToken:c=>{streamed+=c},activity},{lanes:[lane(300)],fetcher:provider(i=>({text:chunks[i]||'',finish:i<chunks.length-1?'length':'stop',usage:{completion_tokens:250}}),log)})
  assert.equal(result.incomplete,undefined);assert.equal(result.content,whole);assert.equal(streamed,whole);assert.equal(log.length,chunks.length)
  assert.ok(log[0].max_tokens<=300);assert.doesNotMatch(JSON.stringify(log[0].messages),/FAST CHAT MODE/)
+ assert.equal(activity.snapshot().steps.length,chunks.length-1)
+ assert(activity.snapshot().steps.every(step=>step.tool==='malik.continue'&&step.state==='completed'))
+ assert(!JSON.stringify(activity.snapshot()).includes('score_0'),'continuation receipts never copy generated source or hidden prompts')
  const js=result.content.match(/<script>([\s\S]*?)<\/script>/)[1];assert.doesNotThrow(()=>new vm.Script(js));assert.equal(router.codeAnswerNeedsMore(result.content,'Создай игру'),false)
 })
 await check('a mislabeled ordinary answer containing real HTML is promoted before continuation',async()=>{

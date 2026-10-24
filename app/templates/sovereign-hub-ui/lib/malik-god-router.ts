@@ -37,6 +37,7 @@ import { buildMalikSuperpowerSystemPrompt, detectMalikSuperpowers, superpowerOut
 import { collectMalikConnectedContext, requestedFusionConnectors } from "@/lib/server/context-fusion"
 import { collectMalikScienceContext } from "@/lib/server/science-context"
 import type { ExecutionReporter } from "@/lib/ai/chat-execution"
+import { compactSearchReceipt } from "@/lib/ai/chat-activity"
 import { petroleumKnowledgeInstruction } from "@/lib/work/petroleum/knowledge"
 import { computeMathForMessage, describeTask, mathEngineInstruction, mathReceiptText } from "@/lib/work/math/skill"
 import { mathPlanningInstruction, plannedMathInstruction, plannedMathReceiptText, planWorkMath } from "@/lib/work/math/model-plan"
@@ -721,15 +722,23 @@ async function gatherSources(prompt: string, emit?: ResearchEmitter, activity?: 
     ...(!intent.needsSearch || intent.historical ? [{ name: "wikipedia", run: searchWikipedia }] : []),
     { name: "gdelt", run: searchGdelt },
   ]
-  const [live, indexed] = await Promise.all([
+  // Publish before starting I/O: the UI must observe a genuinely running search.
+  const searchCall = activity?.start("Проверка актуальных источников", "search", "web.search", { mode })
+  let live: Awaited<ReturnType<typeof runLiveSearch>>
+  let indexed: { sources: SourceItem[]; health: unknown }
+  try {
+    ;[live, indexed] = await Promise.all([
     runLiveSearch({ prompt, queries: needsCurrentEvidence(prompt) ? [...queries].sort((a, b) => Number(b.includes("site:")) - Number(a.includes("site:"))) : queries, providers, mode, signal: budget,
       rank: (sources) => rankSourcesForPrompt(prompt, sources),
       onQuery: (query) => emit?.({ kind: "search", text: `Ищу актуальную информацию · ${query}` }),
     }),
-    intent.needsSearch ? indexedSources(prompt) : Promise.resolve({ sources: [] as SourceItem[], health: { status: "not-requested" } }),
-  ])
-  const searchCall = activity?.start("Проверка актуальных источников", "search", "web.search", { mode })
-  activity?.finish(searchCall, { calls: live.calls, cacheHits: live.cacheHits, fallbackSuccesses: live.fallbackSuccesses, providers: live.attempts, index: indexed.health }, live.sources.length ? "completed" : "failed", live.sources.length ? undefined : "Поиск не вернул доступных подтверждений")
+    intent.needsSearch ? indexedSources(prompt).catch(() => ({ sources: [] as SourceItem[], health: { status: "unavailable" } })) : Promise.resolve({ sources: [] as SourceItem[], health: { status: "not-requested" } }),
+    ])
+    signal?.throwIfAborted()
+  } catch (error) {
+    activity?.finish(searchCall, undefined, signal?.aborted ? "cancelled" : "failed", signal?.aborted ? "Поиск остановлен пользователем" : "Поиск не завершён: источник недоступен или истекло время ожидания")
+    throw error
+  }
   const all = [...live.sources, ...indexed.sources]
   const maxSearchResults = Math.max(1, Math.min(16, Number(process.env.MALIK_GOD_MAX_SEARCH_RESULTS || 16)))
   // Deduplicate the complete provider pool first. Truncating before ranking
@@ -739,6 +748,10 @@ async function gatherSources(prompt: string, emit?: ResearchEmitter, activity?: 
     rankSourcesForPrompt(prompt, uniqueSources(all, Math.max(maxSearchResults * 8, 96))),
     maxSearchResults,
   )
+  activity?.finish(searchCall, compactSearchReceipt(unique, {
+    calls: live.calls, cacheHits: live.cacheHits, fallbackSuccesses: live.fallbackSuccesses,
+    providers: live.attempts, index: indexed.health,
+  }), unique.length ? "completed" : "failed", unique.length ? undefined : "Поиск не вернул доступных подтверждений")
 
   for (const source of unique.slice(0, 10)) {
     emit?.({
@@ -754,6 +767,7 @@ async function gatherSources(prompt: string, emit?: ResearchEmitter, activity?: 
 
   const maxSources = Math.max(1, Math.min(8, Number(process.env.MALIK_GOD_MAX_SOURCES || 8)))
   const preferred = unique.slice(0, Math.min(maxSources, mode === "fast" ? 2 : mode === "deep" ? 4 : 6))
+  let readPages = 0
   const read = await mapBounded(preferred, 2, async (source) => {
     const call = activity?.start(`Чтение · ${source.domain}`, "read", "web.read", { url: source.url }, source.url)
     emit?.({
@@ -765,19 +779,28 @@ async function gatherSources(prompt: string, emit?: ResearchEmitter, activity?: 
       provider: source.provider,
       source,
     })
-    const page = await fetchPageText(source, { signal: budget, timeoutMs: 8000 })
+    let page: Awaited<ReturnType<typeof fetchPageText>>
+    try {
+      page = await fetchPageText(source, { signal: budget, timeoutMs: 8000 })
+      signal?.throwIfAborted()
+    } catch (error) {
+      activity?.finish(call, undefined, signal?.aborted ? "cancelled" : "failed", signal?.aborted ? "Чтение остановлено пользователем" : "Не удалось прочитать страницу")
+      throw error
+    }
     activity?.finish(call, page ? { title: page.title, characters: page.text.length, excerpt: page.text.slice(0, 1200) } : { title: source.title, snippet: source.snippet, limitation: "Полная страница недоступна; доступен только поисковый фрагмент" }, page ? "completed" : "failed", page ? undefined : "Не удалось прочитать полную страницу")
+    if (page) readPages++
     return page
-      ? { ...source, title: page.title || source.title, snippet: page.text.slice(0, 2200), publishedAt: page.publishedAt || source.publishedAt, updatedAt: page.updatedAt, checkedAt: new Date().toISOString(), readAt: page.readAt, ...(page.image ? { image: page.image } : {}) }
+      ? { ...source, title: page.title || source.title, snippet: page.text.slice(0, 2200), publishedAt: page.publishedAt || source.publishedAt, updatedAt: page.updatedAt, checkedAt: new Date().toISOString(), readAt: page.readAt || new Date().toISOString(), ...(page.image ? { image: page.image } : {}) }
       : source
   })
+  signal?.throwIfAborted()
 
   const sources = read.flatMap((item) => item.status === "fulfilled" ? [item.value] : [])
   const finalSources = assessSources(prompt, uniqueSources([...sources, ...unique], maxSources), intent)
   emit?.({
     kind: "done",
     text: finalSources.length
-      ? `Прочитано и отобрано источников · ${finalSources.length}`
+      ? `Отобрано источников · ${finalSources.length}; прочитано страниц · ${readPages}`
       : "Открытые источники не вернули доступных страниц",
   })
   console.info("[MALIK_WEB_RESEARCH]", JSON.stringify({ ms: Date.now() - started, queries: live.queries, providerCalls: live.calls, cacheHits: live.cacheHits, fallbackSuccesses: live.fallbackSuccesses, cost: live.cost, found: unique.length, returned: finalSources.length, deadlineReached: budget.aborted }))
@@ -1174,6 +1197,7 @@ export async function malikGodAnswer(
       temperature: typeof body?.temperature === "number" ? body.temperature : brain.temperature,
       reasoningEffort: brain.depth === "instant" ? "low" : brain.depth === "balanced" ? "medium" : "high",
       allowCatalog: selection.allowCatalog === true,
+      activity,
       onToken: (needsCurrentEvidence(focus.searchText) || truthNeedsLiveEvidence(focus.searchText)) ? undefined : accuracyTokenGate(focus.searchText, emitToken),
       signal,
     }).catch((error) => { activity?.finish(modelCall, undefined, "failed", error instanceof Error ? error.message : String(error)); throw error })

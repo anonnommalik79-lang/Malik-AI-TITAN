@@ -175,3 +175,34 @@
     animation: none !important;
   }
 }
+
+/* Observed activity lives inside the existing message column; shell/composer
+   geometry and global colors are intentionally untouched. */
+.malik-execution__evidence { display: flex; flex-wrap: wrap; gap: 5px 14px; color: #999; font-size: 12px; margin: 6px 0 10px; }
+.malik-execution__evidence button, .malik-execution__journal-heading button { border: 0; background: transparent; padding: 0; color: #bfbfbf; text-decoration: underline; text-underline-offset: 3px; min-height: 32px; }
+.malik-execution__journal { max-width: 100%; min-width: 0; margin: 10px 0 16px; }
+.malik-execution__journal-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; color: #a1a1aa; font-size: 13px; }
+.malik-execution__journal ol { list-style: none; padding: 0 0 0 13px; margin: 8px 0 0; border-left: 1px solid #303030; display: grid; gap: 12px; }
+.malik-execution__journal li { min-width: 0; animation: malik-execution-reveal .18s ease-out; }
+.malik-execution__journal li > div { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #aaa; }
+.malik-execution__journal li > div svg { flex-shrink: 0; }
+.malik-execution__journal li p { margin: 5px 0 0 22px; font-size: 13px; line-height: 1.65; color: #d4d4d4; overflow-wrap: anywhere; white-space: pre-wrap; }
+.malik-execution__limitations { display: flex; align-items: flex-start; gap: 7px; color: #aaa; font-size: 12px; }
+.malik-execution__limitations svg { flex-shrink: 0; margin-top: 3px; }
+.malik-execution__filters { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 8px; }
+.malik-execution__filters select, .malik-execution__find { min-height: 36px; border: 1px solid #333; border-radius: 8px; background: #151515; padding: 6px 9px; font-size: 12px; box-sizing: border-box; }
+.malik-execution__filters select { max-width: 100%; }
+.malik-execution__find { display: flex; align-items: center; gap: 7px; flex: 1 1 120px; min-width: 0; }
+.malik-execution__find input { border: 0; background: transparent; outline-offset: 1px; width: 100%; min-width: 0; }
+.malik-execution__count, .malik-execution__copy-status { color: #999; font-size: 11px; margin: 6px 0 12px; }
+.malik-execution__source-chips a > span { display: flex; flex-direction: column; min-width: 0; white-space: normal; }
+.malik-execution__source-chips b { font-size: 12px; font-weight: 500; overflow-wrap: anywhere; }
+.malik-execution__source-chips small { font-size: 11px; color: #bbb; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 280px; }
+.malik-execution__source-chips em { font-size: 10px; color: #999; font-style: normal; }
+@media (prefers-reduced-motion: reduce) { .malik-execution__journal li { animation: none; } }
+@media (max-width: 600px) {
+  .malik-execution__journal-heading button, .malik-execution__evidence button { min-height: 44px; }
+  .malik-execution__filters select, .malik-execution__find { min-height: 44px; }
+  .malik-execution__source-chips a { width: 100%; box-sizing: border-box; border-radius: 12px; }
+  .malik-execution__source-chips small { max-width: 100%; }
+}

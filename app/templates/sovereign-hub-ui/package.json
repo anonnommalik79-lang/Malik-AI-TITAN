@@ -6,6 +6,7 @@
     "node": ">=20 <23"
   },
   "scripts": {
+    "test:chat-activity": "node --test scripts/verify-chat-activity.mjs",
     "test:code-completion": "node scripts/verify-code-completion.mjs",
     "test:chat-website-design": "node --test scripts/verify-chat-website-design.mjs",
     "test:native-execution": "node scripts/verify-native-execution.mjs && node scripts/verify-background-ownership.mjs && node scripts/verify-background-chat-survives.mjs",

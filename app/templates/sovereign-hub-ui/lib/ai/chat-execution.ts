@@ -42,7 +42,7 @@ export function executionOverview(trace?: ExecutionTrace): string[] {
   if (code) statements.push(`Завершено операций с кодом или расчётами: ${code}. Что именно выполнено, показано в квитанциях.`)
   if (media) statements.push(`Завершено операций с изображениями или видео: ${media}. Результаты указаны в действиях ниже.`)
   const models = completed.filter(step => step.kind === "model").length
-  if (models) statements.push(`Завершено обращений к модели: ${models}.`)
+  if (models) statements.push(`Завершено этапов обращения к модели: ${models}. Это не счётчик отдельных API-вызовов.`)
   const failed = trace.steps.filter(step => step.state === "failed").length
   if (failed) statements.push(`Действий с ошибкой: ${failed}. Их нельзя считать успешно выполненными.`)
   const unfinished = trace.steps.filter(step => step.state === "cancelled" || step.state === "interrupted").length

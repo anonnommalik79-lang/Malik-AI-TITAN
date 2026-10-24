@@ -3,6 +3,7 @@ import { isModelLeaderboardRequest } from "@/lib/ai/freshness-intent"
 import { assessAnswerCompletion, hasOpenFence, type AnswerIncompleteReason } from "@/lib/ai/answer-completion"
 import { createContinuationFilter, createReopenedFenceFilter } from "@/lib/ai/continuation-overlap"
 import { answerContainsCode, createCodeContinuationFilter } from "@/lib/ai/code-continuation"
+import type { ExecutionReporter } from "@/lib/ai/chat-execution"
 import {
   getMalikModel,
   MALIK_MODELS,
@@ -1241,6 +1242,7 @@ export async function runExpertPanel(options: {
   codeMode: boolean
   fetcher?: typeof fetch
   signal?: AbortSignal
+  activity?: ExecutionReporter
 }): Promise<RaceResult | null> {
   const elite = splitMaxLanes(options.lanes).elite.filter((lane) => cooldownLeft(lane) === 0)
   if (elite.length < 2 || options.totalMs < 30_000 || options.signal?.aborted) return null
@@ -1264,6 +1266,8 @@ export async function runExpertPanel(options: {
     families.add(family)
   }
   if (selected.length < 2) return null
+
+  const reviewCall = options.activity?.start("Независимая проверка задачи", "model", "malik.review", { participants: selected.length })
 
   const startedAt = Date.now()
   const reviewWindow = Math.min(options.codeMode ? 45_000 : 25_000, Math.floor(options.totalMs * 0.40))
@@ -1301,8 +1305,12 @@ export async function runExpertPanel(options: {
       return null
     }
   }))
-  if (options.signal?.aborted) throw abortError()
+  if (options.signal?.aborted) {
+    options.activity?.finish(reviewCall, undefined, "cancelled", "Проверка остановлена пользователем")
+    throw abortError()
+  }
   const valid = reviews.filter((item): item is { lane: MaxLane; content: string } => Boolean(item))
+  options.activity?.finish(reviewCall, { participants: valid.length, externalVerification: false }, valid.length >= 2 ? "completed" : "failed", valid.length >= 2 ? undefined : "Недостаточно доступных вариантов для сопоставления; используется обычная подготовка ответа")
   if (valid.length < 2) {
     console.info("[MALIK_MAX] expert panel skipped", JSON.stringify({ participants: valid.length }))
     return null
@@ -1325,6 +1333,7 @@ export async function runExpertPanel(options: {
     "what is uncertain; never invent citations, test runs, calculations or sources. " +
     "For code, implement the full requested deliverable, not the reviews; do not return a plan " +
     "instead of code. Answer in the user's language and fulfill their requested format."
+  const synthesisCall = options.activity?.start("Сопоставляю варианты ответа", "model", "malik.synthesis", { participants: valid.length })
   try {
     // Keep the highest-ranked available elite as synthesizer. If it fails,
     // raceLanes immediately tries the next elite, without activating reserves.
@@ -1346,13 +1355,18 @@ export async function runExpertPanel(options: {
       fetcher: options.fetcher,
       signal: options.signal,
     })
-    if (result.interrupted || !visibleFinalText(result.content)) return null
+    if (result.interrupted || !visibleFinalText(result.content)) {
+      options.activity?.finish(synthesisCall, undefined, "interrupted", "Сопоставление не завершено; используется обычная подготовка ответа")
+      return null
+    }
+    options.activity?.finish(synthesisCall, { characters: result.content.length, externalVerification: false })
     console.info("[MALIK_MAX] expert panel finished", JSON.stringify({
       reviewers: valid.map((item) => item.lane.id), synthesizer: result.lane.id,
       ms: Date.now() - startedAt,
     }))
     return result
   } catch (error) {
+    options.activity?.finish(synthesisCall, undefined, options.signal?.aborted ? "cancelled" : "failed", options.signal?.aborted ? "Сопоставление остановлено пользователем" : "Сопоставление недоступно; используется обычная подготовка ответа")
     if (options.signal?.aborted) throw error
     console.warn("[MALIK_MAX] expert panel fallback", error instanceof Error ? error.message : String(error))
     return null
@@ -1400,6 +1414,8 @@ export type MaxInput = {
   temperature?: number
   reasoningEffort?: "low" | "medium" | "high"
   onToken?: (chunk: string) => void
+  /** Server-owned operation receipts only; review text never leaves the engine. */
+  activity?: ExecutionReporter
   /** Stops every lane when the caller no longer needs the answer. */
   signal?: AbortSignal
   /**
@@ -1498,7 +1514,7 @@ export async function runMalikMax(input: MaxInput, deps: { fetcher?: typeof fetc
   const panel = !resumed && !deps.lanes && !fastMode && budget >= 2_500
     ? await runExpertPanel({
         lanes, call: base, totalMs: Math.max(0, timeLeft() - 17_000),
-        codeMode, fetcher: deps.fetcher, signal: input.signal,
+        codeMode, fetcher: deps.fetcher, signal: input.signal, activity: input.activity,
       })
     : null
   let result: RaceResult = resumed
@@ -1542,7 +1558,7 @@ export async function runMalikMax(input: MaxInput, deps: { fetcher?: typeof fetc
     const spent = consumed
     // Neither incomplete code nor missing items authorize spending beyond the
     // caller's budget or the account quota; keep an unfinished result honest.
-    if (spent >= budget - 256) { stopReason = "budget"; break }
+    if (spent >= budget) { stopReason = "budget"; break }
     const cutShort = truncatedFinish(result.finishReason)
     const codeOpen = codeMode && (codeAnswerNeedsMore(content, input.prompt)
       || missingBriefItems(taskPrompt, content).length > 0
@@ -1574,6 +1590,7 @@ export async function runMalikMax(input: MaxInput, deps: { fetcher?: typeof fetc
     const repeats = codeMode ? createCodeContinuationFilter(content, emit, { window: 200_000 }) : createContinuationFilter(content, emit)
     // Preserve main's handling of a short lead-in before a reopened wrapper.
     const reopened = createReopenedFenceFilter(hasOpenFence(content), repeats.push)
+    const continuationCall = input.activity?.start("Дописываю незавершённый ответ", "model", "malik.continue", { round: round + 1 })
     try {
       result = await (deps.lanes ? raceLanes : raceStrongFirst)({
         lanes: order,
@@ -1601,6 +1618,7 @@ export async function runMalikMax(input: MaxInput, deps: { fetcher?: typeof fetc
       repeats.end()
       consumed += generatedOutputTokens(result.usage, result.content)
       if (!codeMode && answerContainsCode(content)) { codeMode = true; fastMode = false }
+      input.activity?.finish(continuationCall, { addedCharacters: content.length - before.length }, result.interrupted ? "interrupted" : "completed")
       if (repeats.dropped || reopened.dropped) console.info("[MALIK_MAX] continuation repeats dropped", repeats.dropped + reopened.dropped)
       used.push(result.lane.id)
       usage = { previous: usage, continuation: result.usage }
@@ -1613,6 +1631,7 @@ export async function runMalikMax(input: MaxInput, deps: { fetcher?: typeof fetc
     } catch (error) {
       reopened.end()
       repeats.end()
+      input.activity?.finish(continuationCall, undefined, input.signal?.aborted ? "cancelled" : "failed", input.signal?.aborted ? "Генерация остановлена пользователем" : "Не удалось дописать ответ")
       if (input.signal?.aborted) throw error
       stopReason = "continuation-failed"
       break

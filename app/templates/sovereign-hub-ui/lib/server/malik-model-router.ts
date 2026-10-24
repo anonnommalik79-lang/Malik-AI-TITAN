@@ -13,6 +13,7 @@ import { providerFetch } from "@/lib/ai/providers/base"
 import { hasHiddenGeminiMedia, runHiddenGeminiMultimodal } from "@/lib/server/hidden-gemini-multimodal"
 import { resolveRequestEntitlement, type RequestEntitlement } from "@/lib/server/request-entitlement"
 import { analyzeMalikBrainV1 } from "@/lib/ai/brain-v1"
+import type { ExecutionReporter } from "@/lib/ai/chat-execution"
 
 export type HistoryMessage = { role: "user" | "assistant"; content: string }
 export type MalikAttachment = { kind?: string; mime?: string; base64?: string; url?: string; name?: string }
@@ -881,6 +882,7 @@ export async function runStrictMalikModel(input: {
   publicModelLabel?: string
   allowCatalog?: boolean
   onToken?: (chunk: string) => void
+  activity?: ExecutionReporter
   /** Honoured by the streaming engine (MAX and models picked by name). */
   signal?: AbortSignal
 }, options: { allowFallback?: boolean; continuationDepth?: number } = {}): Promise<StrictMalikResult> {
@@ -918,7 +920,7 @@ export async function runStrictMalikModel(input: {
     const result = await engine.runMalikMax({
       prompt: input.prompt, taskPrompt: input.taskPrompt, systemPrompt: input.systemPrompt, history: input.history, attachments: input.attachments,
       maxTokens: input.maxTokens, temperature: input.temperature, reasoningEffort: input.reasoningEffort, allowCatalog: input.allowCatalog,
-      onToken: input.onToken, signal: input.signal, publicLabel: model.label,
+      onToken: input.onToken, signal: input.signal, publicLabel: model.label, activity: input.activity,
     })
     return { ...result, selectedModelId: model.id }
   }
@@ -940,6 +942,7 @@ export async function runStrictMalikModel(input: {
       reasoningEffort: input.reasoningEffort,
       allowCatalog: input.allowCatalog,
       onToken: input.onToken,
+      activity: input.activity,
       signal: input.signal,
     }
     if (model.id === "malik-max") return engine.runMalikMax(engineInput)

@@ -709,21 +709,40 @@ await check("expert panel gets two independent reviews before synthesis, without
   const second = lane("fast-panel-b", { power: 88 })
   const weak = lane("fast-panel-weak", { power: 68 })
   const log = []
+  const { createExecutionReporter } = await import('../lib/ai/chat-execution.ts')
+  const activity = createExecutionReporter(() => {})
   const panel = await engine.runExpertPanel({
     lanes: [first, second, weak], call: { ...call, maxTokens: 3_000 },
-    totalMs: 35_000, codeMode: false, fetcher: makeFetcher(log),
+    totalMs: 35_000, codeMode: false, fetcher: makeFetcher(log), activity,
   })
   assert.ok(panel, "healthy elite panel should synthesize")
   assert.ok(log.filter((item) => item.name === "fast-panel-a").length >= 2)
   assert.ok(log.some((item) => item.name === "fast-panel-b"))
   assert.ok(!log.some((item) => item.name === "fast-panel-weak"))
   assert.match(JSON.stringify(log.at(-1).body), /INTERNAL CROSS-MODEL REVIEWS/)
+  const steps = activity.snapshot().steps
+  assert.deepEqual(steps.map(step => [step.tool, step.state]), [['malik.review','completed'],['malik.synthesis','completed']])
+  assert(steps.every(step => !step.output.includes('Ответ') && !step.output.includes('Independent assessment')))
+  assert(steps.every(step => JSON.parse(step.output).externalVerification === false), 'model agreement is not external verification')
 })
 
 await check("elite power includes GPT-6 only when the real model is configured", () => {
   assert.equal(engine.lanePower("gpt-6-astra"), 97)
   assert.ok(engine.lanePower("glm-5.3") >= 86)
   assert.ok(engine.lanePower("qwen/qwen3.5-397b-a17b:free") >= 86)
+})
+
+await check('expert receipts close on fallback and cancellation without publishing internal drafts', async () => {
+  const {createExecutionReporter}=await import('../lib/ai/chat-execution.ts')
+  const failed=createExecutionReporter(()=>{})
+  const fallback=await engine.runExpertPanel({lanes:[lane('missing-panel-one',{power:95}),lane('missing-panel-two',{power:92})],call:{...call,maxTokens:3000},totalMs:35000,codeMode:false,fetcher:makeFetcher([]),activity:failed})
+  assert.equal(fallback,null);assert.deepEqual(failed.snapshot().steps.map(step=>step.state),['failed'])
+  const controller=new AbortController(),cancelled=createExecutionReporter(()=>{})
+  await assert.rejects(engine.runExpertPanel({lanes:[lane('cancel-panel-one',{power:95}),lane('cancel-panel-two',{power:92})],call:{...call,maxTokens:3000},totalMs:35000,codeMode:false,signal:controller.signal,activity:cancelled,fetcher:async()=>{controller.abort();throw new DOMException('stopped','AbortError')}}),{name:'AbortError'})
+  assert.deepEqual(cancelled.snapshot().steps.map(step=>step.state),['cancelled'])
+  const skipped=createExecutionReporter(()=>{})
+  await engine.runExpertPanel({lanes:[lane('single-elite',{power:95})],call,totalMs:35000,codeMode:false,activity:skipped})
+  assert.equal(skipped.snapshot().steps.length,0,'no phantom review stage when the panel is not run')
 })
 
 console.log(`\n${count - failures}/${count} checks passed`)
