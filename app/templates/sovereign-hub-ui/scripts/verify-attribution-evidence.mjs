@@ -45,6 +45,16 @@ assert.equal(pass(factQuestion, "Её основателем был Сергей
 assert.equal(pass(foundedQuestion, "Организация была основана в 1974 году.").withheld, false)
 assert.equal(pass(factQuestion, "Её основателем был Анвар Халиуллин.").withheld, true)
 assert.equal(pass(factQuestion, "Её основателем был Сергей Антипов. Он погиб в 1994 году.").withheld, true)
+const conflictingSourcePages = [
+  { url: "https://one.example/story", title: "Группировка", snippet: "Анвар Халиуллин не был основателем группы. Её создал Сергей Антипов в 1974 году." },
+  { url: "https://two.example/story", title: "История группировки", snippet: "Анвар Халиуллин не был главой группы. Основателем был Сергей Антипов в 1974 году." },
+]
+assert.equal(pass(factQuestion, "Основателем был Анвар Халиуллин.", conflictingSourcePages).withheld, true, "A negated statement is not support")
+const dateForDifferentPerson = [
+  { url: "https://history-one.example/group", title: "История группировки", snippet: "Сергей Антипов основал группировку в 1974 году. Другой её участник был убит в 1994 году." },
+  { url: "https://history-two.example/group", title: "История и даты", snippet: "В 1974 году Сергей Антипов создал банду. Другой руководитель погиб в 1994 году." },
+]
+assert.equal(pass(factQuestion, "Сергей Антипов погиб в 1994 году.", dateForDifferentPerson).withheld, true, "A nearby death date of another person must not be reassigned")
 assert.equal(pass(foundedQuestion, "Организация была основана в 1988 году.").withheld, true)
 assert.equal(pass(foundedQuestion, "Организация появилась в конце 1980-х.").withheld, true)
 assert.equal(pass(factQuestion, "Создателем был некий Халиуллин.").withheld, true)
