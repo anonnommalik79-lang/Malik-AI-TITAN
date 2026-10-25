@@ -409,7 +409,6 @@ export function AutonomousCompany({ username, accountId, plan, onOpenBilling, on
   }, [])
 
   const applyTemplate = useCallback((template: BusinessTemplate) => {
-    if (!requirePro()) return
     setActiveTemplate(template)
     setInstruction(templateInstruction(template))
     setInstructionOpen(true)
@@ -420,10 +419,9 @@ export function AutonomousCompany({ username, accountId, plan, onOpenBilling, on
     if (template.requirements) setRequirements(template.requirements)
     textareaRef.current?.focus()
     textareaRef.current?.scrollIntoView({ behavior: "smooth", block: "center" })
-  }, [requirePro])
+  }, [])
 
   const startCustom = useCallback(() => {
-    if (!requirePro()) return
     setActiveTemplate(null)
     setInstruction("")
     setPrompt("")
@@ -433,7 +431,7 @@ export function AutonomousCompany({ username, accountId, plan, onOpenBilling, on
     setRequirements("")
     textareaRef.current?.focus()
     textareaRef.current?.scrollIntoView({ behavior: "smooth", block: "center" })
-  }, [requirePro])
+  }, [])
 
   const patchStep = useCallback((id: string, patch: Partial<Step> | ((step: Step) => Partial<Step>)) => {
     setSteps((current) => current.map((step) => (step.agent.id === id
@@ -687,7 +685,7 @@ export function AutonomousCompany({ username, accountId, plan, onOpenBilling, on
           <p className={styles.heroLead}>Одна идея → исследование → продукт → клиенты → продажи.</p>
 
           <div className={styles.heroMeta}>
-            <span>{proAccess ? modelLabel : "Malik PRO"}</span><i /><span>8 AI-агентов</span><i /><span>Google Gemini</span>
+            <span>{proAccess ? modelLabel : "MalikAI Plus"}</span><i /><span>8 AI-агентов</span><i /><span>Google Gemini</span>
           </div>
           {!proAccess && (
             <button
@@ -695,7 +693,7 @@ export function AutonomousCompany({ username, accountId, plan, onOpenBilling, on
               onClick={() => setUpgradeOpen(true)}
               className="mt-3 inline-flex h-8 items-center rounded-full border border-white/15 bg-white/[0.04] px-3 text-[11px] font-semibold text-white/75 transition hover:border-white/30 hover:text-white"
             >
-              Malik PRO · требуется для запуска
+              MalikAI Plus · требуется для запуска
             </button>
           )}
           {proAccess && gemini && (
@@ -767,7 +765,7 @@ export function AutonomousCompany({ username, accountId, plan, onOpenBilling, on
                     type="button"
                     className={styles.modelSelect}
                     data-business-model-icon="gemini"
-                    onClick={() => { if (!requirePro()) return; setOpenMenu(openMenu === "model" ? null : "model") }}
+                    onClick={() => { setOpenMenu(openMenu === "model" ? null : "model") }}
                     aria-haspopup="listbox"
                     aria-expanded={openMenu === "model"}
                   >
@@ -784,7 +782,7 @@ export function AutonomousCompany({ username, accountId, plan, onOpenBilling, on
                         type="button"
                         role="option"
                         aria-selected={modelId === AUTO_MODEL}
-                        onClick={() => { if (!requirePro()) return; setModelId(AUTO_MODEL); setOpenMenu(null) }}
+                        onClick={() => { setModelId(AUTO_MODEL); setOpenMenu(null) }}
                       >
                         Gemini · Авто
                       </button>
@@ -794,7 +792,7 @@ export function AutonomousCompany({ username, accountId, plan, onOpenBilling, on
                           type="button"
                           role="option"
                           aria-selected={id === modelId}
-                          onClick={() => { if (!requirePro()) return; setModelId(id); setOpenMenu(null) }}
+                          onClick={() => { setModelId(id); setOpenMenu(null) }}
                         >
                           {geminiName(id)}
                         </button>
@@ -803,10 +801,10 @@ export function AutonomousCompany({ username, accountId, plan, onOpenBilling, on
                   )}
                 </div>
 
-                <ControlMenu id="market" label="Рынок" value={market} icon={Globe} options={MARKETS} open={openMenu === "market"} onToggle={() => { if (!requirePro()) return; setOpenMenu(openMenu === "market" ? null : "market") }} onPick={(value) => { if (!requirePro()) return; setMarket(value); setOpenMenu(null) }} />
-                <ControlMenu id="country" label="Страна" value={country} icon={MapPin} options={COUNTRIES} open={openMenu === "country"} onToggle={() => { if (!requirePro()) return; setOpenMenu(openMenu === "country" ? null : "country") }} onPick={(value) => { if (!requirePro()) return; setCountry(value); setOpenMenu(null) }} />
-                <ControlMenu id="budget" label="Бюджет" value={budget} icon={DollarSign} options={BUDGETS} open={openMenu === "budget"} onToggle={() => { if (!requirePro()) return; setOpenMenu(openMenu === "budget" ? null : "budget") }} onPick={(value) => { if (!requirePro()) return; setBudget(value); setOpenMenu(null) }} />
-                <ControlMenu id="req" label="Особые требования" value={requirements} icon={SlidersHorizontal} freeform open={openMenu === "req"} onToggle={() => { if (!requirePro()) return; setOpenMenu(openMenu === "req" ? null : "req") }} onPick={(value) => { if (!requirePro()) return; setRequirements(value); setOpenMenu(null) }} />
+                <ControlMenu id="market" label="Рынок" value={market} icon={Globe} options={MARKETS} open={openMenu === "market"} onToggle={() => { setOpenMenu(openMenu === "market" ? null : "market") }} onPick={(value) => { setMarket(value); setOpenMenu(null) }} />
+                <ControlMenu id="country" label="Страна" value={country} icon={MapPin} options={COUNTRIES} open={openMenu === "country"} onToggle={() => { setOpenMenu(openMenu === "country" ? null : "country") }} onPick={(value) => { setCountry(value); setOpenMenu(null) }} />
+                <ControlMenu id="budget" label="Бюджет" value={budget} icon={DollarSign} options={BUDGETS} open={openMenu === "budget"} onToggle={() => { setOpenMenu(openMenu === "budget" ? null : "budget") }} onPick={(value) => { setBudget(value); setOpenMenu(null) }} />
+                <ControlMenu id="req" label="Особые требования" value={requirements} icon={SlidersHorizontal} freeform open={openMenu === "req"} onToggle={() => { setOpenMenu(openMenu === "req" ? null : "req") }} onPick={(value) => { setRequirements(value); setOpenMenu(null) }} />
 
                 <span className={styles.spacer} />
                 <button type="button" className={styles.send} onClick={() => void run()} disabled={!prompt.trim()} aria-label="Запустить Autonomous Company">
@@ -1068,24 +1066,24 @@ export function AutonomousCompany({ username, accountId, plan, onOpenBilling, on
           className="fixed inset-0 z-[180] grid place-items-center bg-black/80 p-4 backdrop-blur-sm"
           role="dialog"
           aria-modal="true"
-          aria-label="Malik PRO required"
+          aria-label="MalikAI Plus required"
           onMouseDown={(event) => { if (event.target === event.currentTarget) setUpgradeOpen(false) }}
         >
           <section className="w-full max-w-[430px] rounded-[24px] border border-white/12 bg-[#111112] p-6 text-left shadow-[0_30px_100px_rgba(0,0,0,.75)]">
             <div className="mb-5 grid h-11 w-11 place-items-center rounded-xl border border-white/10 bg-white/[0.05]">
               <Briefcase className="h-5 w-5 text-white" />
             </div>
-            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/40">Malik PRO</p>
-            <h2 className="mt-2 text-xl font-semibold tracking-[-0.025em] text-white">«Бизнес под ключ» доступен в Malik PRO</h2>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/40">MalikAI Plus</p>
+            <h2 className="mt-2 text-xl font-semibold tracking-[-0.025em] text-white">«Бизнес под ключ» доступен в MalikAI Plus</h2>
             <p className="mt-3 text-sm leading-6 text-white/50">
-              Ты можешь открыть раздел, посмотреть шаблоны и написать идею. Запуск 8 AI-агентов, выбор бизнес-настроек, шаблоны и создание результата требуют Malik PRO.
+              Ты можешь открыть раздел, посмотреть шаблоны и написать идею. Запуск 8 AI-агентов, выбор бизнес-настроек, шаблоны и создание результата требуют MalikAI Plus.
             </p>
             <div className="mt-6 grid grid-cols-2 gap-2">
               <button type="button" onClick={() => setUpgradeOpen(false)} className="h-11 rounded-xl border border-white/10 text-sm font-medium text-white/70 hover:bg-white/[0.05]">
                 Не сейчас
               </button>
               <button type="button" onClick={() => { setUpgradeOpen(false); onOpenBilling() }} className="h-11 rounded-xl bg-white text-sm font-semibold text-black hover:bg-zinc-200">
-                Приобрести Malik PRO
+                Приобрести MalikAI Plus
               </button>
             </div>
           </section>

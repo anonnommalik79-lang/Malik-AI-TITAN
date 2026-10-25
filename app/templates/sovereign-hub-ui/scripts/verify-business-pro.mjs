@@ -16,11 +16,11 @@ assert.doesNotMatch(/business-autonomous[^\n]+/.exec(sidebar)?.[0] || "", /requi
 assert.match(dashboard, /<AutonomousCompany[\s\S]{0,280}plan=\{currentPlan\}[\s\S]{0,280}onOpenBilling/)
 assert.match(company, /const proAccess = hasMalikProAccess\(plan\)/)
 assert.match(company, /if \(!requirePro\(\)\) return[\s\S]{0,120}const brief = prompt\.trim\(\)/, "Run must be blocked client-side")
-assert.match(company, /Приобрести Malik PRO/)
+assert.match(company, /Приобрести MalikAI Plus/)
 assert.match(company, /Ты можешь открыть раздел, посмотреть шаблоны и написать идею/)
 assert.match(company, /if \(!proAccess\) \{[\s\S]{0,100}setGemini\(null\)/, "Free preview must not ping Gemini")
-assert.match(company, /applyTemplate[\s\S]{0,140}if \(!requirePro\(\)\) return/)
-assert.match(company, /startCustom[\s\S]{0,140}if \(!requirePro\(\)\) return/)
+assert.doesNotMatch(company, /applyTemplate[\s\S]{0,140}if \(!requirePro\(\)\) return/)
+assert.doesNotMatch(company, /startCustom[\s\S]{0,140}if \(!requirePro\(\)\) return/)
 
 for (const [name, code] of [["agent", agent], ["autonomous", autonomous], ["build", build], ["gemini", gemini]]) {
   assert.match(code, /hasMalikProAccess/)

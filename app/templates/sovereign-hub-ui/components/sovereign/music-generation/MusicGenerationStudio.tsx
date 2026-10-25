@@ -2,6 +2,9 @@
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ChangeEvent } from "react"
 import { analyzeMusicPrompt, compileMusicBrief } from "@/lib/media/music-intent"
+import { hasMalikProAccess } from "@/lib/ai/malik-models"
+import type { AIPlan } from "@/lib/ai/types"
+import { PlusUpgradePrompt } from "../PlusUpgradePrompt"
 import "./music-generation.css"
 
 type GenreId = "phonk" | "trap" | "hiphop" | "lofi" | "edm" | "other"
@@ -229,7 +232,7 @@ const IconBolt = () => <svg {...stroke} aria-hidden="true"><path d="m3 7 4 4 5-7
 const IconBack = () => <svg {...stroke} aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg>
 const IconSpinner = () => <svg {...stroke} className="mm-spin" aria-hidden="true"><path d="M21 12a9 9 0 1 1-6.2-8.6" /></svg>
 
-export function MusicGenerationStudio({ username }: { username?: string }) {
+export function MusicGenerationStudio({ username, plan = "free", onOpenBilling }: { username?: string; plan?: AIPlan; onOpenBilling?: () => void }) {
   const [genreId, setGenreId] = useState<GenreId>("other")
   const [prompt, setPrompt] = useState("")
   const [lyrics, setLyrics] = useState("")
@@ -252,6 +255,8 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
   /** The real length of the loaded audio file, once the browser has read its header. */
   const [audioDuration, setAudioDuration] = useState(0)
   const [notice, setNotice] = useState("")
+  const [upgradeOpen, setUpgradeOpen] = useState(false)
+  const proAccess = hasMalikProAccess(plan)
   const [lastSubmitFailed, setLastSubmitFailed] = useState(false)
   const [config, setConfig] = useState<MusicConfig | null>(null)
   const [history, setHistory] = useState<MusicHistoryItem[]>([])
@@ -501,6 +506,11 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
   }
 
   const submitGeneration = async (override?: Partial<MusicHistoryItem>) => {
+    if (!proAccess) {
+      pendingVariantsRef.current = 0
+      setUpgradeOpen(true)
+      return
+    }
     if (generating) return
 
     const nextGenreId = override?.genreId || genreId
@@ -1135,7 +1145,7 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
                 </div>
               </div>
 
-              <button className="mm-generate" type="button" onClick={() => startGeneration()} disabled={generating || (!musicUnlimited && config?.limits.remaining === 0)}>
+              <button className="mm-generate" type="button" onClick={() => startGeneration()} disabled={generating || (proAccess && !musicUnlimited && config?.limits.remaining === 0)}>
                 {generating ? <IconSpinner /> : <IconPlay />}
                 <span>{generateLabel}</span>
               </button>
@@ -1267,7 +1277,7 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
           <IconBox /><span>{modelName}</span><small>{providerName}</small>
         </div>
 
-        <button className="mm-generate" type="button" onClick={() => startGeneration()} disabled={generating || (!musicUnlimited && config?.limits.remaining === 0)}>
+        <button className="mm-generate" type="button" onClick={() => startGeneration()} disabled={generating || (proAccess && !musicUnlimited && config?.limits.remaining === 0)}>
           {generating ? <IconSpinner /> : <IconPlay />}
           <span>{generateLabel}</span>
         </button>
@@ -1307,6 +1317,7 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
       </div>
 
       <div className={"mm-toast" + (toast ? " is-show" : "")} role="status">{toast}</div>
+      {upgradeOpen && !proAccess && <PlusUpgradePrompt feature="Создание музыкальных треков" onClose={() => setUpgradeOpen(false)} onUpgrade={() => { setUpgradeOpen(false); onOpenBilling?.() }} />}
     </section>
   )
 }
