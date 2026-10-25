@@ -358,6 +358,50 @@ await check("every key of every provider becomes a lane, strongest first", async
   }
 })
 
+await check("optional DSH DeepSeek gateway is opt-in, secure and testable", async () => {
+  const saved = { ...process.env }
+  const build = () => engine.buildMaxLanes({ prompt: "Explain DeepSeek", codeMode: false, fastMode: false, needsVision: false })
+  try {
+    Object.assign(process.env, {
+      MALIK_DSH_GATEWAY_ENABLED: "false",
+      MALIK_DSH_GATEWAY_BASE_URL: "https://bridge.example.test/v1",
+      MALIK_DSH_GATEWAY_API_KEY: "unit-test-only",
+      MALIK_DSH_GATEWAY_MODEL: "deepseek-v4.1-flash",
+    })
+    const disabled = await build()
+    assert.ok(!disabled.some((item) => item.provider === "dsh-free-gateway"), "default-disabled gateway may never consume requests")
+    process.env.MALIK_DSH_GATEWAY_ENABLED = "true"
+    const enabled = await build()
+    const bridge = enabled.find((item) => item.provider === "dsh-free-gateway")
+    assert.ok(bridge, "configured opt-in bridge should join MalikLLM MAX")
+    assert.equal(bridge.providerModel, "deepseek-v4.1-flash")
+    assert.equal(bridge.direct.url, "https://bridge.example.test/v1/chat/completions")
+    let captured = null
+    const reply = await engine.raceLanes({
+      lanes: [bridge], call, onToken: () => {}, minFlush: 1, ...raceTiming,
+      fetcher: async (url, init) => {
+        captured = { url, headers: init.headers, body: JSON.parse(init.body) }
+        return makeFetcher()(new URL("/fast-bridge-test", url).href, init)
+      },
+    })
+    assert.match(reply.content, /Fast lane wins/)
+    assert.equal(captured.url, "https://bridge.example.test/v1/chat/completions")
+    assert.equal(captured.headers.authorization, "Bearer unit-test-only")
+    assert.equal(captured.body.model, "deepseek-v4.1-flash")
+    assert.equal(captured.body.stream, true)
+    process.env.MALIK_DSH_GATEWAY_BASE_URL = "http://public.example.test/v1"
+    assert.ok(!(await build()).some((item) => item.provider === "dsh-free-gateway"), "remote HTTP must be refused")
+    process.env.MALIK_DSH_GATEWAY_BASE_URL = "https://name:password@bridge.example.test/v1"
+    assert.ok(!(await build()).some((item) => item.provider === "dsh-free-gateway"), "embedded credentials must be refused")
+    process.env.MALIK_DSH_GATEWAY_BASE_URL = "https://bridge.example.test/v1"
+    process.env.MALIK_DSH_GATEWAY_MODEL = ""
+    assert.ok(!(await build()).some((item) => item.provider === "dsh-free-gateway"), "model ID must be verified and explicitly selected")
+  } finally {
+    for (const key of Object.keys(process.env)) if (!(key in saved)) delete process.env[key]
+    Object.assign(process.env, saved)
+  }
+})
+
 await check("streams are parsed line by line for all three protocols", () => {
   assert.equal(engine.parseStreamLine("openai", openaiChunk("hi")).text, "hi")
   assert.equal(engine.parseStreamLine("openai", 'data: {"choices":[{"delta":{"reasoning_content":"x"}}]}').activity, true)
