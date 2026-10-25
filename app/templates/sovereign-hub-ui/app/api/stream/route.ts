@@ -1,4 +1,5 @@
 import { resolveRequestEntitlement } from "@/lib/server/request-entitlement"
+import { addressChatResponse } from "@/lib/server/account-addressing"
 import { withFounderRequestAudit } from "@/lib/server/founder-request-audit"
 import { layoutFixedChatBody } from "@/lib/ai/keyboard-layout"
 import { GET as originalGET, POST as originalPOST } from "./route-impl"
@@ -214,19 +215,24 @@ function withLayoutFixed(request: Request, body: any): { request: Request; body:
   }
 }
 
+async function addressedChatPOST(request: Request) {
+  const response = await originalPOST(request)
+  return addressChatResponse(response, await resolveRequestEntitlement(request))
+}
+
 async function handlePOST(incoming: Request) {
   let body: any
   try {
     body = await incoming.clone().json()
   } catch {
-    return originalPOST(incoming)
+    return addressedChatPOST(incoming)
   }
   const fixed = withLayoutFixed(incoming, body)
   const request = fixed.request
   body = fixed.body
 
   if (extractPrompt(body).trim().toLowerCase() !== MALIK_ADMIN_COMMAND) {
-    return originalPOST(request)
+    return addressedChatPOST(request)
   }
 
   try {

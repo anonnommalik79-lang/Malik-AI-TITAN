@@ -9,6 +9,7 @@ import {
   resolveStrictMalikSelection,
 } from "@/lib/server/malik-model-router"
 import { resolveRequestEntitlement } from "@/lib/server/request-entitlement"
+import { addressChatResponse } from "@/lib/server/account-addressing"
 import { malikIdentityAnswer, withVerifiedOwnerChatContext } from "@/lib/server/malik-owner-context"
 import { getDailyTextTokenQuota } from "@/lib/server/daily-text-token-quota"
 import { reserveWorkQuota, refundWorkQuota, WorkQuotaError, type WorkQuotaReceipt } from "@/lib/server/work-quota"
@@ -18,7 +19,12 @@ import { chatComputeOperation } from "@/lib/malik-compute/policies"
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
-export const POST = withFounderRequestAudit(withCompute(handlePOST, async (request) => { const body = await request.clone().json().catch(() => ({})); return parsePluginCommandFromBody(body) ? "plugin" : chatComputeOperation(request) }), "chat")
+export const POST = withFounderRequestAudit(withCompute(addressedHandlePOST, async (request) => { const body = await request.clone().json().catch(() => ({})); return parsePluginCommandFromBody(body) ? "plugin" : chatComputeOperation(request) }), "chat")
+
+async function addressedHandlePOST(request: Request) {
+  const response = await handlePOST(request)
+  return addressChatResponse(response, await resolveRequestEntitlement(request))
+}
 
 async function handlePOST(request: Request) {
   const body = await request.json().catch(() => ({}))
