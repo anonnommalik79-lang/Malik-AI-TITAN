@@ -53,7 +53,13 @@ function verdict(text: string): MalikAgiResult["criticalVerdict"] {
 
 export async function runMalikAgiCli(
   goal: string,
-  deps: { model: AgentModel; build: AgentBuilder; now?: () => number },
+  deps: {
+    model: AgentModel
+    build: AgentBuilder
+    now?: () => number
+    onStageStarted?: (role: MalikAgiRole) => void
+    onStage?: (stage: AgentStage) => void
+  },
 ): Promise<MalikAgiResult> {
   const normalized = clip(goal, 4_000)
   if (normalized.length < 20) throw new Error("AGI_GOAL_TOO_SHORT")
@@ -62,16 +68,22 @@ export async function runMalikAgiCli(
   const startedAt = new Date(startedMs).toISOString()
   const stages: AgentStage[] = []
   let evidence: BuildEvidence | null = null
+  const started = (role: MalikAgiRole) => { try { deps.onStageStarted?.(role) } catch { /* Telemetry must never break the mission. */ } }
+  const completed = (stage: AgentStage) => {
+    stages.push(stage)
+    try { deps.onStage?.(stage) } catch { /* Telemetry must never break the mission. */ }
+  }
 
   const read = async (role: "analyst" | "architect" | "verifier", context: string) => {
+    started(role)
     const start = now()
     try {
       const report = clip(await deps.model(role, [SYSTEM[role], "", "USER GOAL:", normalized, "", context].join("\n")), 12_000)
       if (report.length < 40) throw new Error("AGI_AGENT_EMPTY_REPORT")
-      stages.push({ role, status: "done", durationMs: Math.max(0, now() - start), report })
+      completed({ role, status: "done", durationMs: Math.max(0, now() - start), report })
       return report
     } catch (error) {
-      stages.push({ role, status: "failed", durationMs: Math.max(0, now() - start), report: errorText(error) })
+      completed({ role, status: "failed", durationMs: Math.max(0, now() - start), report: errorText(error) })
       return null
     }
   }
@@ -82,17 +94,18 @@ export async function runMalikAgiCli(
   const architect = await read("architect", `ANALYST FINDINGS:\n${analyst}\n\nReturn a runnable CLI architecture with explicit tests.`)
   if (!architect) return finish("failed", "unknown", "Architecture agent failed; no build was attempted.")
 
+  started("builder")
   const buildStart = now()
   try {
     evidence = await deps.build({ originalGoal: normalized, design: architect, analysis: analyst })
     if (!evidence || !Array.isArray(evidence.files)) throw new Error("AGI_INVALID_EXECUTOR_RECEIPT")
-    const ok = evidence.staticCheck === "pass" && evidence.unitCheck === "pass"
-    stages.push({
+    const ok = evidence.files.length > 0 && evidence.staticCheck === "pass" && evidence.unitCheck === "pass"
+    completed({
       role: "builder", status: ok ? "done" : "blocked", durationMs: Math.max(0, now() - buildStart),
       report: `Project: ${clip(evidence.projectId, 80)}; files: ${evidence.files.length}; static: ${evidence.staticCheck}; node --test: ${evidence.unitCheck}. ${evidence.details.slice(0, 4).join("; ")}`,
     })
   } catch (error) {
-    stages.push({ role: "builder", status: "failed", durationMs: Math.max(0, now() - buildStart), report: errorText(error) })
+    completed({ role: "builder", status: "failed", durationMs: Math.max(0, now() - buildStart), report: errorText(error) })
     return finish("failed", "unknown", "Executor failed; do not claim files or tests exist.")
   }
 
@@ -112,7 +125,7 @@ export async function runMalikAgiCli(
     "If either check is not pass, verdict MUST be UNKNOWN or FAIL.",
   ].join("\n\n"))
   const checked = verify ? verdict(verify) : "unknown"
-  const verified = evidence.staticCheck === "pass" && evidence.unitCheck === "pass" && checked === "pass"
+  const verified = evidence.files.length > 0 && evidence.staticCheck === "pass" && evidence.unitCheck === "pass" && checked === "pass"
   return finish(verified ? "verified" : "needs_review", checked,
     verified
       ? "Both executor checks passed and the independent reviewer accepted the result; broader correctness and production security are not guaranteed."
