@@ -6,12 +6,16 @@ on:
       - "app/templates/sovereign-hub-ui/lib/agi/**"
       - "app/templates/sovereign-hub-ui/app/api/agi/**"
       - "app/templates/sovereign-hub-ui/scripts/verify-malik-agi.mjs"
+      - "app/templates/sovereign-hub-ui/components/agi/**"
+      - "app/templates/sovereign-hub-ui/app/agi/**"
       - ".github/workflows/malik-agi-proof.yml"
   push:
     paths:
       - "app/templates/sovereign-hub-ui/lib/agi/**"
       - "app/templates/sovereign-hub-ui/app/api/agi/**"
       - "app/templates/sovereign-hub-ui/scripts/verify-malik-agi.mjs"
+      - "app/templates/sovereign-hub-ui/components/agi/**"
+      - "app/templates/sovereign-hub-ui/app/agi/**"
       - ".github/workflows/malik-agi-proof.yml"
 
 jobs:
