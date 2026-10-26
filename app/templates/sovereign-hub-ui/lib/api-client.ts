@@ -152,10 +152,18 @@ export async function apiFetch<T>(
   const started = Date.now()
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), timeoutMs)
+  const parentSignal = init.signal
+  const abortFromParent = () => controller.abort(parentSignal?.reason)
+  if (parentSignal?.aborted) abortFromParent()
+  else parentSignal?.addEventListener("abort", abortFromParent, { once: true })
 
   try {
-    const response = await clientFetchWithTimeout(path, {
+    if (controller.signal.aborted) throw controller.signal.reason || new DOMException("Cancelled", "AbortError")
+    // One controller owns fetch AND body consumption. A nested header-only
+    // helper removes its parent listener before response.json() can finish.
+    const response = await fetch(buildApiUrl(path), {
       ...init,
+      credentials: init.credentials || "same-origin",
       cache: init.cache || "no-store",
       signal: controller.signal,
       headers: {
@@ -163,7 +171,7 @@ export async function apiFetch<T>(
         ...(init.body ? { "content-type": "application/json" } : {}),
         ...(init.headers || {}),
       },
-    }, timeoutMs)
+    })
 
     let payload: any = null
     const contentType = response.headers.get("content-type") || ""
@@ -192,10 +200,11 @@ export async function apiFetch<T>(
       ok: false,
       status: 0,
       latencyMs: Date.now() - started,
-      error: normalizeErrorMessage(error),
+      error: parentSignal?.aborted ? "Запрос отменён." : normalizeErrorMessage(error),
     }
   } finally {
     clearTimeout(timeout)
+    parentSignal?.removeEventListener("abort", abortFromParent)
   }
 }
 

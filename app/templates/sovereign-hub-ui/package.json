@@ -6,6 +6,11 @@
     "node": ">=20 <23"
   },
   "scripts": {
+    "test:client-cancellation": "node --test scripts/verify-client-cancellation.mjs",
+    "test:founder-overview-access": "node --test scripts/verify-founder-overview-access.mjs",
+    "test:client-cancellation-browser": "node scripts/verify-client-cancellation-browser.mjs",
+    "audit:sidebar-live": "node scripts/audit-sidebar-live.mjs",
+    "test:full-system-audit": "npm run test:client-cancellation && npm run test:founder-overview-access && npm run test:release-core",
     "test:project-passports": "node --test scripts/verify-project-passports.mjs",
     "test:selfbuild": "node --test scripts/verify-selfbuild.mjs",
     "test:claim-ledger": "node --test scripts/verify-claim-ledger.mjs",

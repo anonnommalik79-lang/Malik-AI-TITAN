@@ -70,8 +70,11 @@ export async function osFetch<T>(path: string, init: RequestInit & { json?: unkn
   const controller = new AbortController()
   const timer = window.setTimeout(() => controller.abort(), init.timeoutMs || 30_000)
   const signal = init.signal
-  signal?.addEventListener("abort", () => controller.abort(), { once: true })
+  const abortFromParent = () => controller.abort(signal?.reason)
+  if (signal?.aborted) abortFromParent()
+  else signal?.addEventListener("abort", abortFromParent, { once: true })
   try {
+    if (controller.signal.aborted) throw controller.signal.reason || new DOMException("Cancelled", "AbortError")
     const response = await fetch(path, {
       ...init,
       body: init.json === undefined ? init.body : JSON.stringify(init.json),
@@ -81,6 +84,7 @@ export async function osFetch<T>(path: string, init: RequestInit & { json?: unkn
       credentials: "same-origin",
     })
     const data = await response.json().catch(() => null)
+    if (controller.signal.aborted) throw controller.signal.reason || new DOMException("Cancelled", "AbortError")
     if (!response.ok || !data || data.ok === false) {
       const message = typeof data?.error === "string" && data.error.length < 300 && !/load failed|failed to fetch/i.test(data.error)
         ? data.error
@@ -89,10 +93,12 @@ export async function osFetch<T>(path: string, init: RequestInit & { json?: unkn
     }
     return { ok: true, data: data as T }
   } catch (error) {
+    if (signal?.aborted) return { ok: false, status: 0, code: "CANCELLED", message: "Запрос отменён.", action: "none" }
     const human = humanizeError(error, init.context || "general")
     return { ok: false, status: 0, code: human.code, message: human.message, action: human.action }
   } finally {
     window.clearTimeout(timer)
+    signal?.removeEventListener("abort", abortFromParent)
   }
 }
 

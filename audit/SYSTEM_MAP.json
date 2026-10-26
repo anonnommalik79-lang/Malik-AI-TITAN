@@ -1,0 +1,3639 @@
+{
+  "generatedAt": "2026-10-26T17:42:35.879Z",
+  "scope": "source-inventory-not-runtime-proof",
+  "sidebar": [
+    {
+      "group": "MAIN_ACTIONS",
+      "id": "new",
+      "label": "Новый чат",
+      "action": "new"
+    },
+    {
+      "group": "MAIN_ACTIONS",
+      "id": "voice",
+      "label": "Голосовой режим",
+      "action": "voice"
+    },
+    {
+      "group": "MAIN_ACTIONS",
+      "id": "library",
+      "label": "Библиотека",
+      "view": "templates"
+    },
+    {
+      "group": "MAIN_ACTIONS",
+      "id": "projects",
+      "label": "Проекты",
+      "view": "projects",
+      "badge": "PRO",
+      "requiresPro": true
+    },
+    {
+      "group": "MAIN_ACTIONS",
+      "id": "tasks",
+      "label": "Задачи",
+      "action": "tasks"
+    },
+    {
+      "group": "CREATE_ACTIONS",
+      "id": "business-autonomous",
+      "label": "Бизнес под ключ",
+      "view": "business-command-center",
+      "badge": "PRO"
+    },
+    {
+      "group": "CREATE_ACTIONS",
+      "id": "work",
+      "label": "Malik Work",
+      "action": "work",
+      "badge": "NEW"
+    },
+    {
+      "group": "CREATE_ACTIONS",
+      "id": "shorts",
+      "label": "Malik Shorts",
+      "href": "/shorts",
+      "badge": "BETA"
+    },
+    {
+      "group": "CREATE_ACTIONS",
+      "id": "websites",
+      "label": "Сайты",
+      "view": "website-generation"
+    },
+    {
+      "group": "CREATE_ACTIONS",
+      "id": "video-generation",
+      "label": "Генерация видео",
+      "view": "video-generation"
+    },
+    {
+      "group": "CREATE_ACTIONS",
+      "id": "music-generation",
+      "label": "Создать трек",
+      "view": "music-generation",
+      "badge": "PRO",
+      "requiresPro": true
+    },
+    {
+      "group": "CREATE_ACTIONS",
+      "id": "presentation-generation",
+      "label": "Презентации",
+      "view": "presentation-generation"
+    },
+    {
+      "group": "CREATE_ACTIONS",
+      "id": "photo-generation",
+      "label": "Генерация изображений",
+      "view": "photo-generation"
+    },
+    {
+      "group": "TOOL_ACTIONS",
+      "id": "plugins",
+      "label": "Плагины",
+      "view": "features"
+    },
+    {
+      "group": "TOOL_ACTIONS",
+      "id": "compute",
+      "label": "Compute",
+      "view": "compute"
+    },
+    {
+      "group": "TOOL_ACTIONS",
+      "id": "translate",
+      "label": "Переводчик",
+      "action": "translate"
+    },
+    {
+      "group": "TOOL_ACTIONS",
+      "id": "data",
+      "label": "Анализ данных",
+      "action": "data"
+    }
+  ],
+  "routes": [
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/admin/grant-plan/route.ts",
+      "route": "/api/admin/grant-plan",
+      "type": "api",
+      "methods": [
+        "POST"
+      ],
+      "imports": [
+        "@/lib/ai/types",
+        "@/lib/server/admin",
+        "@/lib/server/billing-store"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/admin/limits/route.ts",
+      "route": "/api/admin/limits",
+      "type": "api",
+      "methods": [
+        "GET"
+      ],
+      "imports": [
+        "@/lib/ai/usage-limits",
+        "@/lib/server/admin"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/admin/stats/route.ts",
+      "route": "/api/admin/stats",
+      "type": "api",
+      "methods": [
+        "GET"
+      ],
+      "imports": [
+        "@/lib/server/admin",
+        "@/lib/server/runtime-store"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/admin/users/route.ts",
+      "route": "/api/admin/users",
+      "type": "api",
+      "methods": [
+        "GET"
+      ],
+      "imports": [
+        "@/lib/server/admin"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/ai/brain/route.ts",
+      "route": "/api/ai/brain",
+      "type": "api",
+      "methods": [],
+      "imports": [
+        "@/lib/ai/brain",
+        "@/lib/ai/types",
+        "@/lib/server/request-entitlement",
+        "@/lib/server/founder-request-audit"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/ai/capabilities/route.ts",
+      "route": "/api/ai/capabilities",
+      "type": "api",
+      "methods": [
+        "GET"
+      ],
+      "imports": [
+        "@/lib/ai/capabilities"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/ai/capability/route.ts",
+      "route": "/api/ai/capability",
+      "type": "api",
+      "methods": [
+        "GET",
+        "POST",
+        "OPTIONS"
+      ],
+      "imports": [
+        "@/lib/ai/free-mode",
+        "@/lib/ai/capabilities",
+        "@/lib/ai/router",
+        "@/lib/ai/types",
+        "@/lib/brand-provider-map",
+        "@/lib/server/request-entitlement"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/ai/chat/route.ts",
+      "route": "/api/ai/chat",
+      "type": "api",
+      "methods": [
+        "GET"
+      ],
+      "imports": [
+        "@/lib/malik-god-router",
+        "@/lib/ai/malik-models",
+        "@/lib/server/founder-request-audit",
+        "@/lib/server/plugin-runtime",
+        "@/lib/server/plugin-model-answer",
+        "@/lib/server/malik-model-router",
+        "@/lib/server/request-entitlement",
+        "@/lib/server/account-addressing",
+        "@/lib/server/malik-owner-context",
+        "@/lib/server/daily-text-token-quota",
+        "@/lib/server/work-quota",
+        "@/lib/malik-compute/runtime",
+        "@/lib/malik-compute/policies"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/ai/code/route.ts",
+      "route": "/api/ai/code",
+      "type": "api",
+      "methods": [],
+      "imports": [
+        "@/lib/server/mode-ai-handler",
+        "@/lib/malik-compute/runtime"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/ai/computer/planner/route.ts",
+      "route": "/api/ai/computer/planner",
+      "type": "api",
+      "methods": [
+        "POST"
+      ],
+      "imports": [
+        "@/lib/server/malik-coder-orchestrator"
+      ],
+      "envNames": [
+        "MALIK_COMPUTER_USE_TOKEN"
+      ]
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/ai/computer/route.ts",
+      "route": "/api/ai/computer",
+      "type": "api",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "imports": [
+        "@/lib/server/computer-use-runtime",
+        "@/lib/server/request-entitlement",
+        "@/lib/ai/computer-use"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/ai/embed/route.ts",
+      "route": "/api/ai/embed",
+      "type": "api",
+      "methods": [
+        "POST"
+      ],
+      "imports": [
+        "@/lib/ai/providers/bedrock-embedding-provider",
+        "@/lib/ai/safety"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/ai/execute/route.ts",
+      "route": "/api/ai/execute",
+      "type": "api",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "imports": [
+        "@/lib/server/code-execution-runtime",
+        "@/lib/server/request-entitlement"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/ai/health/route.ts",
+      "route": "/api/ai/health",
+      "type": "api",
+      "methods": [
+        "GET"
+      ],
+      "imports": [
+        "@/lib/ai/status"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/ai/history/route.ts",
+      "route": "/api/ai/history",
+      "type": "api",
+      "methods": [
+        "GET"
+      ],
+      "imports": [
+        "@/lib/server/runtime-store",
+        "@/lib/server/request-entitlement"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/ai/image/credits/route.ts",
+      "route": "/api/ai/image/credits",
+      "type": "api",
+      "methods": [
+        "GET"
+      ],
+      "imports": [
+        "@/lib/media/limits",
+        "@/lib/media/request"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/ai/image/route.ts",
+      "route": "/api/ai/image",
+      "type": "api",
+      "methods": [],
+      "imports": [
+        "@/lib/media/generate-photo-route",
+        "@/lib/malik-compute/runtime"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/ai/image/understand/route.ts",
+      "route": "/api/ai/image/understand",
+      "type": "api",
+      "methods": [
+        "POST"
+      ],
+      "imports": [
+        "@/lib/media/visual-prompt"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/ai/max/status/route.ts",
+      "route": "/api/ai/max/status",
+      "type": "api",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "imports": [
+        "@/lib/server/malik-max-engine",
+        "@/lib/server/request-entitlement"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/ai/project/artifacts/[id]/download/route.ts",
+      "route": "/api/ai/project/artifacts/[id]/download",
+      "type": "api",
+      "methods": [
+        "GET"
+      ],
+      "imports": [
+        "@/lib/business/project-zip",
+        "@/lib/server/project-artifact-store",
+        "@/lib/server/request-entitlement",
+        "@/lib/server/render-bandwidth"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/ai/project/route.ts",
+      "route": "/api/ai/project",
+      "type": "api",
+      "methods": [
+        "POST"
+      ],
+      "imports": [
+        "@/lib/ai/project-builder",
+        "@/lib/ai/safety",
+        "@/lib/server/malik-model-router",
+        "@/lib/server/project-artifact-store",
+        "@/lib/server/request-entitlement"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/ai/providers/route.ts",
+      "route": "/api/ai/providers",
+      "type": "api",
+      "methods": [
+        "GET"
+      ],
+      "imports": [
+        "@/lib/provider-status"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/ai/scale/status/route.ts",
+      "route": "/api/ai/scale/status",
+      "type": "api",
+      "methods": [
+        "GET"
+      ],
+      "imports": [
+        "@/lib/ai/database",
+        "@/lib/provider-status"
+      ],
+      "envNames": [
+        "REDIS_URL",
+        "S3_BUCKET",
+        "STORAGE_BUCKET",
+        "R2_BUCKET"
+      ]
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/ai/status/route.ts",
+      "route": "/api/ai/status",
+      "type": "api",
+      "methods": [
+        "GET"
+      ],
+      "imports": [
+        "@/lib/ai/status",
+        "@/lib/proof/public-proof"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/ai/superpowers/route.ts",
+      "route": "/api/ai/superpowers",
+      "type": "api",
+      "methods": [
+        "GET",
+        "POST",
+        "OPTIONS"
+      ],
+      "imports": [
+        "@/lib/ai/superpowers",
+        "@/lib/ai/types"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/ai/usage/route.ts",
+      "route": "/api/ai/usage",
+      "type": "api",
+      "methods": [
+        "GET"
+      ],
+      "imports": [
+        "@/lib/ai/types",
+        "@/lib/ai/usage-limits",
+        "@/lib/ai/usage",
+        "@/lib/malik-compute/identity",
+        "@/lib/server/daily-text-token-quota",
+        "@/lib/server/request-entitlement"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/ai/verify/route.ts",
+      "route": "/api/ai/verify",
+      "type": "api",
+      "methods": [
+        "POST",
+        "GET"
+      ],
+      "imports": [
+        "@/lib/ai/fact-audit",
+        "@/lib/ai/claim-ledger",
+        "@/lib/malik-god-router",
+        "@/lib/server/request-safety",
+        "@/lib/server/request-entitlement"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/ai/video/file/route.ts",
+      "route": "/api/ai/video/file",
+      "type": "api",
+      "methods": [
+        "GET"
+      ],
+      "imports": [],
+      "envNames": [
+        "MALIK_VIDEO_RENDER_BANDWIDTH_GUARD",
+        "GOOGLE_VEO_API_KEY",
+        "VEO_API_KEY",
+        "GEMINI_API_KEY",
+        "GOOGLE_API_KEY"
+      ]
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/ai/video/route.ts",
+      "route": "/api/ai/video",
+      "type": "api",
+      "methods": [],
+      "imports": [
+        "@/lib/brand-provider-map",
+        "@/lib/ai/jobs",
+        "@/lib/ai/providers/base",
+        "@/lib/malik-compute/runtime"
+      ],
+      "envNames": [
+        "AWS_BEARER_TOKEN_BEDROCK",
+        "BEDROCK_API_KEY",
+        "AWS_BEDROCK_API_KEY",
+        "BEDROCK_REGION",
+        "AWS_BEDROCK_REGION",
+        "AWS_REGION",
+        "VIDEO_STATUS_TIMEOUT_MS",
+        "RUNWAYML_API_SECRET",
+        "RUNWAY_API_KEY",
+        "LUMA_API_KEY",
+        "FAL_KEY",
+        "FAL_API_KEY",
+        "GOOGLE_VEO_API_KEY",
+        "VEO_API_KEY"
+      ]
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/ai/video/status/route.ts",
+      "route": "/api/ai/video/status",
+      "type": "api",
+      "methods": [],
+      "imports": [
+        "@/lib/brand-provider-map",
+        "@/lib/ai/jobs",
+        "@/lib/ai/providers/base",
+        "@/lib/malik-compute/runtime"
+      ],
+      "envNames": [
+        "GOOGLE_VEO_API_KEY",
+        "VEO_API_KEY",
+        "GEMINI_API_KEY",
+        "GOOGLE_API_KEY",
+        "MALIK_VIDEO_RENDER_BANDWIDTH_GUARD",
+        "VIDEO_STATUS_TIMEOUT_MS",
+        "RUNWAYML_API_SECRET",
+        "RUNWAY_API_KEY",
+        "LUMA_API_KEY",
+        "FAL_KEY",
+        "FAL_API_KEY"
+      ]
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/attachments/import-url/route.ts",
+      "route": "/api/attachments/import-url",
+      "type": "api",
+      "methods": [
+        "POST"
+      ],
+      "imports": [
+        "@/lib/server/request-entitlement"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/attachments/share-target/route.ts",
+      "route": "/api/attachments/share-target",
+      "type": "api",
+      "methods": [
+        "GET"
+      ],
+      "imports": [
+        "@/lib/server/request-entitlement",
+        "@/lib/server/share-target-store"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/auth/logout/route.ts",
+      "route": "/api/auth/logout",
+      "type": "api",
+      "methods": [
+        "POST"
+      ],
+      "imports": [],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/auth/profile/route.ts",
+      "route": "/api/auth/profile",
+      "type": "api",
+      "methods": [
+        "POST"
+      ],
+      "imports": [
+        "@/lib/auth/admin-policy",
+        "@/lib/auth/server"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/auth/status/route.ts",
+      "route": "/api/auth/status",
+      "type": "api",
+      "methods": [
+        "GET"
+      ],
+      "imports": [
+        "@/lib/auth/admin-policy",
+        "@/lib/auth/server"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/automations/route.ts",
+      "route": "/api/automations",
+      "type": "api",
+      "methods": [
+        "GET",
+        "POST",
+        "PATCH",
+        "DELETE"
+      ],
+      "imports": [
+        "@/lib/server/scheduled-tasks",
+        "@/lib/server/request-entitlement"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/automations/run/route.ts",
+      "route": "/api/automations/run",
+      "type": "api",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "imports": [
+        "@/lib/ai/malik-models",
+        "@/lib/malik-god-router",
+        "@/lib/server/scheduled-tasks"
+      ],
+      "envNames": [
+        "MALIK_SCHEDULER_SECRET"
+      ]
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/aws/translate/route.ts",
+      "route": "/api/aws/translate",
+      "type": "api",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "imports": [
+        "@/lib/aws/translate"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/aws/tts/route.ts",
+      "route": "/api/aws/tts",
+      "type": "api",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "imports": [
+        "@/lib/aws/polly"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/billing/admin/approve/route.ts",
+      "route": "/api/billing/admin/approve",
+      "type": "api",
+      "methods": [
+        "POST"
+      ],
+      "imports": [
+        "@/lib/server/admin",
+        "@/lib/server/billing-store"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/billing/checkout/route.ts",
+      "route": "/api/billing/checkout",
+      "type": "api",
+      "methods": [
+        "POST"
+      ],
+      "imports": [
+        "@/lib/server/billing-store",
+        "@/lib/auth/server"
+      ],
+      "envNames": [
+        "MALIK_PAYMENT_WALLET_ADDRESS",
+        "MALIK_TELEGRAM_USERNAME"
+      ]
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/billing/plans/route.ts",
+      "route": "/api/billing/plans",
+      "type": "api",
+      "methods": [
+        "GET"
+      ],
+      "imports": [
+        "@/lib/server/runtime-store"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/billing/verify/route.ts",
+      "route": "/api/billing/verify",
+      "type": "api",
+      "methods": [
+        "POST"
+      ],
+      "imports": [
+        "@/lib/server/billing-store",
+        "@/lib/auth/server"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/business/agent/route.ts",
+      "route": "/api/business/agent",
+      "type": "api",
+      "methods": [
+        "POST"
+      ],
+      "imports": [
+        "@/lib/business/autonomous",
+        "@/lib/business/modes",
+        "@/lib/business/orchestration",
+        "@/lib/business/gemini-engine",
+        "@/lib/ai/usage",
+        "@/lib/limits/rate-limit",
+        "@/lib/limits/user-plan",
+        "@/lib/server/request-entitlement",
+        "@/lib/ai/malik-models"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/business/ai/route.ts",
+      "route": "/api/business/ai",
+      "type": "api",
+      "methods": [
+        "POST"
+      ],
+      "imports": [
+        "@/lib/ai/brain",
+        "@/lib/server/request-entitlement"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/business/autonomous/route.ts",
+      "route": "/api/business/autonomous",
+      "type": "api",
+      "methods": [
+        "POST"
+      ],
+      "imports": [
+        "@/lib/ai/malik-models",
+        "@/lib/limits/rate-limit",
+        "@/lib/limits/user-plan",
+        "@/lib/server/malik-model-router",
+        "@/lib/server/request-entitlement"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/business/build-project/route.ts",
+      "route": "/api/business/build-project",
+      "type": "api",
+      "methods": [
+        "POST"
+      ],
+      "imports": [
+        "@/lib/server/malik-model-router",
+        "@/lib/server/request-entitlement",
+        "@/lib/ai/malik-models"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/business/deploy/route.ts",
+      "route": "/api/business/deploy",
+      "type": "api",
+      "methods": [
+        "POST"
+      ],
+      "imports": [
+        "@/lib/server/request-entitlement"
+      ],
+      "envNames": [
+        "VERCEL_TEAM_ID",
+        "VERCEL_TOKEN"
+      ]
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/business/deploy-project/route.ts",
+      "route": "/api/business/deploy-project",
+      "type": "api",
+      "methods": [
+        "POST",
+        "GET"
+      ],
+      "imports": [
+        "@/lib/server/request-entitlement"
+      ],
+      "envNames": [
+        "VERCEL_TEAM_ID",
+        "VERCEL_TOKEN"
+      ]
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/business/gemini-check/route.ts",
+      "route": "/api/business/gemini-check",
+      "type": "api",
+      "methods": [
+        "GET"
+      ],
+      "imports": [
+        "@/lib/business/gemini-engine",
+        "@/lib/server/request-entitlement",
+        "@/lib/ai/malik-models"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/business/leads/route.ts",
+      "route": "/api/business/leads",
+      "type": "api",
+      "methods": [
+        "POST",
+        "GET",
+        "PATCH"
+      ],
+      "imports": [
+        "@/lib/server/admin"
+      ],
+      "envNames": [
+        "SUPABASE_URL",
+        "SUPABASE_SERVICE_ROLE_KEY",
+        "BUSINESS_LEADS_WEBHOOK_URL"
+      ]
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/business/modes/route.ts",
+      "route": "/api/business/modes",
+      "type": "api",
+      "methods": [
+        "GET"
+      ],
+      "imports": [
+        "@/lib/business/modes",
+        "@/lib/business/sections"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/business/run/route.ts",
+      "route": "/api/business/run",
+      "type": "api",
+      "methods": [
+        "POST"
+      ],
+      "imports": [
+        "@/lib/server/run-business"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/business/telegram/webhook/route.ts",
+      "route": "/api/business/telegram/webhook",
+      "type": "api",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "imports": [],
+      "envNames": [
+        "TELEGRAM_BUSINESS_BOT_TOKEN",
+        "TELEGRAM_BUSINESS_WEBHOOK_SECRET",
+        "SUPABASE_URL",
+        "SUPABASE_SERVICE_ROLE_KEY"
+      ]
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/business/whatsapp/webhook/route.ts",
+      "route": "/api/business/whatsapp/webhook",
+      "type": "api",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "imports": [],
+      "envNames": [
+        "WHATSAPP_VERIFY_TOKEN",
+        "WHATSAPP_APP_SECRET",
+        "WHATSAPP_ACCESS_TOKEN",
+        "WHATSAPP_PHONE_NUMBER_ID",
+        "WHATSAPP_GRAPH_VERSION",
+        "SUPABASE_URL",
+        "SUPABASE_SERVICE_ROLE_KEY"
+      ]
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/buy/route.ts",
+      "route": "/api/buy",
+      "type": "api",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "imports": [],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/chat/attachment/route.ts",
+      "route": "/api/chat/attachment",
+      "type": "api",
+      "methods": [
+        "POST"
+      ],
+      "imports": [
+        "@/lib/server/request-entitlement",
+        "@/lib/server/request-safety",
+        "@/lib/uploads/validate-file",
+        "@/lib/uploads/storage"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/chat/feedback/route.ts",
+      "route": "/api/chat/feedback",
+      "type": "api",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "imports": [
+        "@/lib/server/request-entitlement",
+        "@/lib/server/request-frequency",
+        "@/lib/server/answer-feedback"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/chat/reference-images/route.ts",
+      "route": "/api/chat/reference-images",
+      "type": "api",
+      "methods": [
+        "GET"
+      ],
+      "imports": [
+        "@/lib/ai/reference-visual-policy",
+        "@/lib/media/reference-catalog",
+        "@/lib/media/provider-reference-photos",
+        "@/lib/ai/visual-context"
+      ],
+      "envNames": [
+        "UNSPLASH_ACCESS_KEY"
+      ]
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/chat/reference-photo/route.ts",
+      "route": "/api/chat/reference-photo",
+      "type": "api",
+      "methods": [
+        "GET"
+      ],
+      "imports": [
+        "@/lib/media/reference-photo-ticket"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/chat/state/route.ts",
+      "route": "/api/chat/state",
+      "type": "api",
+      "methods": [
+        "GET",
+        "PUT"
+      ],
+      "imports": [
+        "@/lib/server/request-entitlement",
+        "@/lib/server/request-safety",
+        "@/lib/server/account-chat-state"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/codex/apply/route.ts",
+      "route": "/api/codex/apply",
+      "type": "api",
+      "methods": [
+        "POST"
+      ],
+      "imports": [],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/codex/providers/route.ts",
+      "route": "/api/codex/providers",
+      "type": "api",
+      "methods": [
+        "GET"
+      ],
+      "imports": [
+        "@/lib/server/admin",
+        "@/lib/provider-status"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/codex/run/route.ts",
+      "route": "/api/codex/run",
+      "type": "api",
+      "methods": [
+        "POST"
+      ],
+      "imports": [],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/compute/route.ts",
+      "route": "/api/compute",
+      "type": "api",
+      "methods": [
+        "GET"
+      ],
+      "imports": [
+        "@/lib/malik-compute/identity",
+        "@/lib/malik-compute/runtime"
+      ],
+      "envNames": [
+        "MALIK_COMPUTE_DATA_DIR"
+      ]
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/env-check/route.ts",
+      "route": "/api/env-check",
+      "type": "api",
+      "methods": [
+        "GET"
+      ],
+      "imports": [
+        "@/lib/server/admin",
+        "@/lib/provider-status"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/founder/access/route.ts",
+      "route": "/api/founder/access",
+      "type": "api",
+      "methods": [
+        "GET"
+      ],
+      "imports": [
+        "@/lib/auth/server",
+        "@/lib/auth/admin-policy"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/founder/activity/route.ts",
+      "route": "/api/founder/activity",
+      "type": "api",
+      "methods": [
+        "GET"
+      ],
+      "imports": [
+        "@/lib/auth/server",
+        "@/lib/server/founder-viewer-verification",
+        "@/lib/server/request-safety",
+        "@/lib/server/founder-message-log"
+      ],
+      "envNames": [
+        "WORKOS_API_KEY"
+      ]
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/founder/messages/route.ts",
+      "route": "/api/founder/messages",
+      "type": "api",
+      "methods": [
+        "GET"
+      ],
+      "imports": [
+        "@/lib/auth/server",
+        "@/lib/server/founder-viewer-verification",
+        "@/lib/server/founder-message-log"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/founder/overview/route.ts",
+      "route": "/api/founder/overview",
+      "type": "api",
+      "methods": [
+        "GET"
+      ],
+      "imports": [
+        "@/lib/auth/server",
+        "@/lib/auth/admin-policy",
+        "@/lib/ai/usage",
+        "@/lib/server/usage-persistence",
+        "@/lib/server/request-safety"
+      ],
+      "envNames": [
+        "WORKOS_API_KEY"
+      ]
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/founder/storage-health/route.ts",
+      "route": "/api/founder/storage-health",
+      "type": "api",
+      "methods": [
+        "GET"
+      ],
+      "imports": [
+        "@/lib/auth/server",
+        "@/lib/server/founder-viewer-verification",
+        "@/lib/server/founder-message-log"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/generate/route.ts",
+      "route": "/api/generate",
+      "type": "api",
+      "methods": [
+        "GET",
+        "OPTIONS"
+      ],
+      "imports": [
+        "@/lib/generation-route",
+        "@/lib/server/media-availability",
+        "@/lib/server/request-entitlement",
+        "@/lib/malik-compute/runtime",
+        "@/lib/malik-compute/policies"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/generate/video/route.ts",
+      "route": "/api/generate/video",
+      "type": "api",
+      "methods": [
+        "GET"
+      ],
+      "imports": [
+        "@/lib/ai/video/god-prompt-compiler",
+        "@/lib/ai/video/aws-nova-reel",
+        "@/lib/server/media-availability",
+        "@/lib/server/request-entitlement",
+        "@/lib/malik-compute/runtime"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/generate/video/status/route.ts",
+      "route": "/api/generate/video/status",
+      "type": "api",
+      "methods": [],
+      "imports": [
+        "@/lib/ai/video/aws-nova-reel",
+        "@/lib/malik-compute/runtime"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/generate/website/route.ts",
+      "route": "/api/generate/website",
+      "type": "api",
+      "methods": [],
+      "imports": [
+        "@/lib/ai/router",
+        "@/lib/malik-compute/runtime",
+        "@/lib/malik-compute/policies",
+        "@/lib/sites/forge/index",
+        "@/lib/sites/generate-site-route",
+        "@/lib/website/design-quality"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/generate/[kind]/route.ts",
+      "route": "/api/generate/[kind]",
+      "type": "api",
+      "methods": [
+        "GET",
+        "HEAD",
+        "OPTIONS"
+      ],
+      "imports": [
+        "@/lib/generation-route",
+        "@/lib/media/generate-photo-route",
+        "@/lib/sites/generate-site-route",
+        "@/lib/server/request-safety",
+        "@/lib/server/request-entitlement",
+        "@/lib/server/media-availability",
+        "@/lib/malik-compute/runtime",
+        "@/lib/malik-compute/policies"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/health/auth/route.ts",
+      "route": "/api/health/auth",
+      "type": "api",
+      "methods": [
+        "GET"
+      ],
+      "imports": [
+        "@/lib/auth/server"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/health/image-providers/route.ts",
+      "route": "/api/health/image-providers",
+      "type": "api",
+      "methods": [
+        "GET"
+      ],
+      "imports": [
+        "@/lib/media/config",
+        "@/lib/media/providers/pollinations",
+        "@/lib/media/providers/stability"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/health/media-providers/route.ts",
+      "route": "/api/health/media-providers",
+      "type": "api",
+      "methods": [
+        "GET"
+      ],
+      "imports": [
+        "@/lib/media/health"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/health/pollo/route.ts",
+      "route": "/api/health/pollo",
+      "type": "api",
+      "methods": [
+        "GET"
+      ],
+      "imports": [
+        "@/lib/media/config",
+        "@/lib/media/providers/pollo"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/health/providers/route.ts",
+      "route": "/api/health/providers",
+      "type": "api",
+      "methods": [
+        "GET"
+      ],
+      "imports": [
+        "@/lib/ai/provider-status"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/health/route.ts",
+      "route": "/api/health",
+      "type": "api",
+      "methods": [
+        "GET"
+      ],
+      "imports": [],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/health/stability/route.ts",
+      "route": "/api/health/stability",
+      "type": "api",
+      "methods": [
+        "GET"
+      ],
+      "imports": [
+        "@/lib/media/providers/stability"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/instagram/callback/route.ts",
+      "route": "/api/instagram/callback",
+      "type": "api",
+      "methods": [
+        "GET"
+      ],
+      "imports": [
+        "@/lib/instagram/client",
+        "@/lib/instagram/store",
+        "@/lib/server/request-entitlement"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/instagram/connect/route.ts",
+      "route": "/api/instagram/connect",
+      "type": "api",
+      "methods": [
+        "GET"
+      ],
+      "imports": [
+        "@/lib/instagram/client",
+        "@/lib/instagram/store",
+        "@/lib/server/request-entitlement"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/instagram/publish/route.ts",
+      "route": "/api/instagram/publish",
+      "type": "api",
+      "methods": [
+        "POST",
+        "GET"
+      ],
+      "imports": [
+        "@/lib/instagram/client",
+        "@/lib/instagram/store",
+        "@/lib/server/request-safety",
+        "@/lib/server/request-entitlement"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/instagram/route.ts",
+      "route": "/api/instagram",
+      "type": "api",
+      "methods": [
+        "GET",
+        "DELETE"
+      ],
+      "imports": [
+        "@/lib/instagram/client",
+        "@/lib/instagram/store",
+        "@/lib/server/request-entitlement"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/internal/code-health/route.ts",
+      "route": "/api/internal/code-health",
+      "type": "api",
+      "methods": [
+        "GET"
+      ],
+      "imports": [
+        "@/lib/ai/malik-models",
+        "@/lib/server/malik-model-router",
+        "@/lib/server/malik-coder-orchestrator"
+      ],
+      "envNames": [
+        "MALIK_MODEL_HEALTH_SECRET"
+      ]
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/internal/website-worker/route.ts",
+      "route": "/api/internal/website-worker",
+      "type": "api",
+      "methods": [
+        "POST"
+      ],
+      "imports": [
+        "@/lib/website/engine/runner"
+      ],
+      "envNames": [
+        "WEBSITE_WORKER_TOKEN",
+        "WEBSITE_UNATTENDED_ENABLED"
+      ]
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/logout/route.ts",
+      "route": "/api/logout",
+      "type": "api",
+      "methods": [
+        "POST"
+      ],
+      "imports": [],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/malik-god/diag/route.ts",
+      "route": "/api/malik-god/diag",
+      "type": "api",
+      "methods": [
+        "GET"
+      ],
+      "imports": [
+        "@/lib/malik-god-router"
+      ],
+      "envNames": [
+        "GITHUB_TOKEN",
+        "GITHUB_MODELS_TOKEN",
+        "GITHUB_MODEL",
+        "OPENROUTER_API_KEY",
+        "DEEPSEEK_API_KEY",
+        "SERPER_API_KEY",
+        "TAVILY_API_KEY",
+        "BRAVE_SEARCH_API_KEY",
+        "MALIK_GOD_PROVIDER_CHAIN"
+      ]
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/malik-research/route.ts",
+      "route": "/api/malik-research",
+      "type": "api",
+      "methods": [],
+      "imports": [
+        "@/lib/malik-compute/runtime"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/mcp/route.ts",
+      "route": "/api/mcp",
+      "type": "api",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "imports": [
+        "@/lib/server/mcp-runtime",
+        "@/lib/server/request-entitlement"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/media/asset/[id]/route.ts",
+      "route": "/api/media/asset/[id]",
+      "type": "api",
+      "methods": [
+        "GET",
+        "HEAD"
+      ],
+      "imports": [
+        "@/lib/media/asset-store",
+        "@/lib/server/render-bandwidth"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/media/image/route.ts",
+      "route": "/api/media/image",
+      "type": "api",
+      "methods": [],
+      "imports": [
+        "@/lib/media/generate-photo-route",
+        "@/lib/malik-compute/runtime"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/media/image/templates/route.ts",
+      "route": "/api/media/image/templates",
+      "type": "api",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "imports": [
+        "@/lib/media/image-templates",
+        "@/lib/media/image-postprocess",
+        "@/lib/media/image-router",
+        "@/lib/storage/cloud-upload",
+        "@/lib/server/request-safety",
+        "@/lib/server/request-entitlement"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/media/library/route.ts",
+      "route": "/api/media/library",
+      "type": "api",
+      "methods": [
+        "GET"
+      ],
+      "imports": [
+        "@/lib/server/request-entitlement",
+        "@/lib/storage/cloud-upload"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/media/music/download/route.ts",
+      "route": "/api/media/music/download",
+      "type": "api",
+      "methods": [
+        "GET"
+      ],
+      "imports": [
+        "@/lib/media/request",
+        "@/lib/server/deapi-music",
+        "@/lib/server/music-job-ownership",
+        "@/lib/os/media-reference"
+      ],
+      "envNames": [
+        "NEXT_PUBLIC_APP_URL",
+        "MALIK_PUBLIC_ORIGIN"
+      ]
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/media/music/file/route.ts",
+      "route": "/api/media/music/file",
+      "type": "api",
+      "methods": [
+        "GET"
+      ],
+      "imports": [
+        "@/lib/media/deapi-music",
+        "@/lib/media/request",
+        "@/lib/server/music-job-ownership",
+        "@/lib/os/media-reference"
+      ],
+      "envNames": [
+        "NEXT_PUBLIC_APP_URL",
+        "MALIK_PUBLIC_ORIGIN"
+      ]
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/media/music/route.ts",
+      "route": "/api/media/music",
+      "type": "api",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "imports": [
+        "@/lib/media/request",
+        "@/lib/media/music-intent",
+        "@/lib/os/media-reference",
+        "@/lib/server/deapi-music",
+        "@/lib/server/music-lyrics",
+        "@/lib/server/music-job-ownership",
+        "@/lib/server/music-account-quota"
+      ],
+      "envNames": [
+        "NEXT_PUBLIC_APP_URL",
+        "MALIK_PUBLIC_ORIGIN"
+      ]
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/media/music/status/route.ts",
+      "route": "/api/media/music/status",
+      "type": "api",
+      "methods": [
+        "GET"
+      ],
+      "imports": [
+        "@/lib/media/request",
+        "@/lib/server/deapi-music",
+        "@/lib/server/music-job-ownership",
+        "@/lib/os/media-reference"
+      ],
+      "envNames": [
+        "NEXT_PUBLIC_APP_URL",
+        "MALIK_PUBLIC_ORIGIN"
+      ]
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/media/status/route.ts",
+      "route": "/api/media/status",
+      "type": "api",
+      "methods": [
+        "GET"
+      ],
+      "imports": [
+        "@/lib/server/admin",
+        "@/lib/provider-status"
+      ],
+      "envNames": [
+        "REDIS_URL",
+        "S3_BUCKET",
+        "STORAGE_BUCKET",
+        "R2_BUCKET"
+      ]
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/media/video/brand-source/route.ts",
+      "route": "/api/media/video/brand-source",
+      "type": "api",
+      "methods": [
+        "GET"
+      ],
+      "imports": [
+        "@/lib/media/request",
+        "@/lib/media/jobs",
+        "@/lib/os/media-reference"
+      ],
+      "envNames": [
+        "NEXT_PUBLIC_APP_URL",
+        "MALIK_PUBLIC_ORIGIN",
+        "MALIK_VIDEO_BRANDING_ALLOWED_HOSTS"
+      ]
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/media/video/cancel/route.ts",
+      "route": "/api/media/video/cancel",
+      "type": "api",
+      "methods": [
+        "POST"
+      ],
+      "imports": [
+        "@/lib/media/limits",
+        "@/lib/media/jobs",
+        "@/lib/media/request"
+      ],
+      "envNames": [
+        "DASHSCOPE_BASE_URL",
+        "DASHSCOPE_API_KEY"
+      ]
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/media/video/file/route.ts",
+      "route": "/api/media/video/file",
+      "type": "api",
+      "methods": [
+        "GET",
+        "HEAD"
+      ],
+      "imports": [
+        "@/lib/media/request",
+        "@/lib/media/video-router"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/media/video/h3-content/route.ts",
+      "route": "/api/media/video/h3-content",
+      "type": "api",
+      "methods": [
+        "GET"
+      ],
+      "imports": [
+        "@/lib/media/providers/malik-h3"
+      ],
+      "envNames": [
+        "MALIK_VIDEO_RENDER_BANDWIDTH_GUARD"
+      ]
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/media/video/models/route.ts",
+      "route": "/api/media/video/models",
+      "type": "api",
+      "methods": [
+        "GET"
+      ],
+      "imports": [
+        "@/lib/media/providers/free-video",
+        "@/lib/media/providers/malik-h3",
+        "@/lib/media/providers/titan-video",
+        "@/lib/media/types",
+        "@/lib/media/request",
+        "@/lib/ai/malik-models"
+      ],
+      "envNames": [
+        "RUNWAY_VIDEO_EDIT_MODEL"
+      ]
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/media/video/route.ts",
+      "route": "/api/media/video",
+      "type": "api",
+      "methods": [],
+      "imports": [
+        "@/lib/media/config",
+        "@/lib/media/limits",
+        "@/lib/media/request",
+        "@/lib/ai/malik-models",
+        "@/lib/media/video-router",
+        "@/lib/os/store",
+        "@/lib/os/media-reference",
+        "@/lib/media/jobs",
+        "@/lib/media/types",
+        "@/lib/server/video-account-quota",
+        "@/lib/malik-compute/runtime"
+      ],
+      "envNames": [
+        "NEXT_PUBLIC_APP_URL",
+        "MALIK_PUBLIC_ORIGIN",
+        "RUNWAY_API_KEY",
+        "RUNWAYML_API_SECRET",
+        "RUNWAY_VIDEO_EDIT_MODEL"
+      ]
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/media/video/source/route.ts",
+      "route": "/api/media/video/source",
+      "type": "api",
+      "methods": [
+        "POST"
+      ],
+      "imports": [
+        "@/lib/media/request",
+        "@/lib/ai/malik-models"
+      ],
+      "envNames": [
+        "MAX_UPLOAD_IMAGE_MB",
+        "MAX_UPLOAD_VIDEO_MB",
+        "MAGIC_HOUR_BASE_URL",
+        "MAGIC_HOUR_API_KEY",
+        "RUNWAYML_API_SECRET",
+        "RUNWAY_API_KEY"
+      ]
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/media/video/status/route.ts",
+      "route": "/api/media/video/status",
+      "type": "api",
+      "methods": [],
+      "imports": [
+        "@/lib/media/request",
+        "@/lib/media/video-router",
+        "@/lib/media/types",
+        "@/lib/malik-compute/runtime"
+      ],
+      "envNames": [
+        "MALIK_VIDEO_RENDER_BANDWIDTH_GUARD",
+        "NEXT_PUBLIC_APP_URL",
+        "MALIK_PUBLIC_ORIGIN"
+      ]
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/mobile-home-exact/route.ts",
+      "route": "/api/mobile-home-exact",
+      "type": "api",
+      "methods": [
+        "GET"
+      ],
+      "imports": [],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/os/artifacts/route.ts",
+      "route": "/api/os/artifacts",
+      "type": "api",
+      "methods": [
+        "GET"
+      ],
+      "imports": [
+        "@/lib/os/library",
+        "@/lib/os/http",
+        "@/lib/os/store",
+        "@/lib/os/types"
+      ],
+      "envNames": [
+        "BEDROCK_EMBEDDING_MODEL_ID"
+      ]
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/os/artifacts/[id]/continue/route.ts",
+      "route": "/api/os/artifacts/[id]/continue",
+      "type": "api",
+      "methods": [
+        "POST"
+      ],
+      "imports": [
+        "@/lib/os/actions",
+        "@/lib/os/failures",
+        "@/lib/os/http",
+        "@/lib/os/runtime",
+        "@/lib/server/request-safety"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/os/artifacts/[id]/diff/route.ts",
+      "route": "/api/os/artifacts/[id]/diff",
+      "type": "api",
+      "methods": [
+        "GET"
+      ],
+      "imports": [
+        "@/lib/os/diff",
+        "@/lib/os/failures",
+        "@/lib/os/http",
+        "@/lib/os/store"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/os/artifacts/[id]/economics/route.ts",
+      "route": "/api/os/artifacts/[id]/economics",
+      "type": "api",
+      "methods": [
+        "POST"
+      ],
+      "imports": [
+        "@/lib/business/unit-economics",
+        "@/lib/os/failures",
+        "@/lib/os/http",
+        "@/lib/os/store",
+        "@/lib/os/types",
+        "@/lib/server/request-safety"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/os/artifacts/[id]/edit/route.ts",
+      "route": "/api/os/artifacts/[id]/edit",
+      "type": "api",
+      "methods": [
+        "POST"
+      ],
+      "imports": [
+        "@/lib/os/actions",
+        "@/lib/os/failures",
+        "@/lib/os/http",
+        "@/lib/os/runtime",
+        "@/lib/server/request-safety"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/os/artifacts/[id]/export/route.ts",
+      "route": "/api/os/artifacts/[id]/export",
+      "type": "api",
+      "methods": [
+        "GET"
+      ],
+      "imports": [
+        "@/lib/os/http",
+        "@/lib/os/store",
+        "@/lib/server/request-frequency",
+        "@/lib/presentations/deck",
+        "@/lib/presentations/pptx",
+        "@/lib/work/documents/export",
+        "@/lib/work/documents/formats",
+        "@/lib/work/documents/http",
+        "@/lib/work/documents/zip",
+        "@/lib/work/documents/assets"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/os/artifacts/[id]/restore/route.ts",
+      "route": "/api/os/artifacts/[id]/restore",
+      "type": "api",
+      "methods": [
+        "POST"
+      ],
+      "imports": [
+        "@/lib/os/actions",
+        "@/lib/os/failures",
+        "@/lib/os/http",
+        "@/lib/os/store",
+        "@/lib/server/request-safety"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/os/artifacts/[id]/route.ts",
+      "route": "/api/os/artifacts/[id]",
+      "type": "api",
+      "methods": [
+        "GET"
+      ],
+      "imports": [
+        "@/lib/os/failures",
+        "@/lib/os/http",
+        "@/lib/os/library",
+        "@/lib/os/store",
+        "@/lib/server/render-bandwidth"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/os/data/route.ts",
+      "route": "/api/os/data",
+      "type": "api",
+      "methods": [
+        "POST"
+      ],
+      "imports": [
+        "@/lib/os/actions",
+        "@/lib/os/failures",
+        "@/lib/os/http",
+        "@/lib/os/runtime",
+        "@/lib/os/store",
+        "@/lib/server/request-safety"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/os/flows/route.ts",
+      "route": "/api/os/flows",
+      "type": "api",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "imports": [
+        "@/lib/work/orchestrator",
+        "@/lib/work/repository-plan",
+        "@/lib/os/executor",
+        "@/lib/os/failures",
+        "@/lib/os/http",
+        "@/lib/os/runtime",
+        "@/lib/os/store",
+        "@/lib/server/request-safety"
+      ],
+      "envNames": [
+        "MALIK_DEMO_MODE"
+      ]
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/os/flows/[id]/cancel/route.ts",
+      "route": "/api/os/flows/[id]/cancel",
+      "type": "api",
+      "methods": [
+        "POST"
+      ],
+      "imports": [
+        "@/lib/os/executor",
+        "@/lib/os/failures",
+        "@/lib/os/http",
+        "@/lib/os/store"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/os/flows/[id]/events/route.ts",
+      "route": "/api/os/flows/[id]/events",
+      "type": "api",
+      "methods": [
+        "GET"
+      ],
+      "imports": [
+        "@/lib/os/events",
+        "@/lib/server/request-frequency",
+        "@/lib/os/executor",
+        "@/lib/os/http",
+        "@/lib/os/store",
+        "@/lib/os/failures",
+        "@/lib/os/types"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/os/flows/[id]/retry/route.ts",
+      "route": "/api/os/flows/[id]/retry",
+      "type": "api",
+      "methods": [
+        "POST"
+      ],
+      "imports": [
+        "@/lib/os/executor",
+        "@/lib/os/failures",
+        "@/lib/os/http",
+        "@/lib/os/runtime",
+        "@/lib/server/request-safety"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/os/flows/[id]/route.ts",
+      "route": "/api/os/flows/[id]",
+      "type": "api",
+      "methods": [
+        "GET"
+      ],
+      "imports": [
+        "@/lib/os/executor",
+        "@/lib/os/failures",
+        "@/lib/os/http",
+        "@/lib/os/store"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/os/health/route.ts",
+      "route": "/api/os/health",
+      "type": "api",
+      "methods": [
+        "GET"
+      ],
+      "imports": [
+        "@/lib/os/health",
+        "@/lib/os/http"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/os/perf/route.ts",
+      "route": "/api/os/perf",
+      "type": "api",
+      "methods": [
+        "GET"
+      ],
+      "imports": [
+        "@/lib/os/http",
+        "@/lib/os/perf"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/os/plugins/route.ts",
+      "route": "/api/os/plugins",
+      "type": "api",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "imports": [
+        "@/lib/os/failures",
+        "@/lib/os/http",
+        "@/lib/os/plugin-actions",
+        "@/lib/server/request-safety"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/os/plugins/run/route.ts",
+      "route": "/api/os/plugins/run",
+      "type": "api",
+      "methods": [
+        "POST"
+      ],
+      "imports": [
+        "@/components/sovereign/features/plugin-registry",
+        "@/lib/os/failures",
+        "@/lib/os/http",
+        "@/lib/os/plugin-actions",
+        "@/lib/os/store",
+        "@/lib/server/request-safety"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/os/projects/route.ts",
+      "route": "/api/os/projects",
+      "type": "api",
+      "methods": [
+        "GET"
+      ],
+      "imports": [
+        "@/lib/os/http",
+        "@/lib/os/store"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/os/projects/[id]/audio-artifacts/route.ts",
+      "route": "/api/os/projects/[id]/audio-artifacts",
+      "type": "api",
+      "methods": [
+        "POST"
+      ],
+      "imports": [
+        "@/lib/server/deapi-music",
+        "@/lib/server/music-job-ownership",
+        "@/lib/os/failures",
+        "@/lib/os/http",
+        "@/lib/os/media-reference",
+        "@/lib/os/store",
+        "@/lib/os/types",
+        "@/lib/server/request-safety"
+      ],
+      "envNames": [
+        "NEXT_PUBLIC_APP_URL",
+        "MALIK_PUBLIC_ORIGIN"
+      ]
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/os/projects/[id]/route.ts",
+      "route": "/api/os/projects/[id]",
+      "type": "api",
+      "methods": [
+        "GET",
+        "PATCH"
+      ],
+      "imports": [
+        "@/lib/os/failures",
+        "@/lib/os/http",
+        "@/lib/os/store",
+        "@/lib/server/request-safety"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/os/projects/[id]/translations/route.ts",
+      "route": "/api/os/projects/[id]/translations",
+      "type": "api",
+      "methods": [
+        "POST"
+      ],
+      "imports": [
+        "@/lib/os/failures",
+        "@/lib/os/http",
+        "@/lib/os/store",
+        "@/lib/server/request-safety"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/os/projects/[id]/video-artifacts/route.ts",
+      "route": "/api/os/projects/[id]/video-artifacts",
+      "type": "api",
+      "methods": [
+        "POST"
+      ],
+      "imports": [
+        "@/lib/media/jobs",
+        "@/lib/media/video-router",
+        "@/lib/os/failures",
+        "@/lib/os/http",
+        "@/lib/os/media-reference",
+        "@/lib/os/store",
+        "@/lib/os/types",
+        "@/lib/server/request-safety"
+      ],
+      "envNames": [
+        "NEXT_PUBLIC_APP_URL",
+        "MALIK_PUBLIC_ORIGIN"
+      ]
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/os/tools/route.ts",
+      "route": "/api/os/tools",
+      "type": "api",
+      "methods": [
+        "GET"
+      ],
+      "imports": [
+        "@/lib/os/http",
+        "@/lib/os/tools/registry"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/plugins/connect/route.ts",
+      "route": "/api/plugins/connect",
+      "type": "api",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "imports": [
+        "@/components/sovereign/features/plugin-registry",
+        "@/lib/public-origin",
+        "@/lib/server/plugin-pipes"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/plugins/status/route.ts",
+      "route": "/api/plugins/status",
+      "type": "api",
+      "methods": [
+        "GET"
+      ],
+      "imports": [
+        "@/components/sovereign/features/plugin-registry",
+        "@/lib/server/plugin-pipes"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/presentations/export/route.ts",
+      "route": "/api/presentations/export",
+      "type": "api",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "imports": [
+        "@/lib/presentations/deck",
+        "@/lib/presentations/pptx",
+        "@/lib/server/pptx-assets",
+        "@/lib/server/request-safety",
+        "@/lib/server/request-entitlement",
+        "@/lib/server/render-bandwidth"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/presentations/photos/route.ts",
+      "route": "/api/presentations/photos",
+      "type": "api",
+      "methods": [
+        "POST"
+      ],
+      "imports": [
+        "@/lib/server/presentation-photos",
+        "@/lib/server/request-safety",
+        "@/lib/server/request-entitlement"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/presentations/route.ts",
+      "route": "/api/presentations",
+      "type": "api",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "imports": [
+        "@/lib/ai/malik-models",
+        "@/lib/presentations/deck",
+        "@/lib/presentations/types",
+        "@/lib/presentations/deck",
+        "@/lib/presentations/prompts",
+        "@/lib/server/presentation-engine",
+        "@/lib/server/presentation-quota",
+        "@/lib/server/request-safety",
+        "@/lib/server/request-entitlement",
+        "@/lib/server/malik-model-router"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/projects/save/route.ts",
+      "route": "/api/projects/save",
+      "type": "api",
+      "methods": [
+        "POST"
+      ],
+      "imports": [
+        "@/lib/ai/database"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/save/route.ts",
+      "route": "/api/save",
+      "type": "api",
+      "methods": [],
+      "imports": [],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/share/route.ts",
+      "route": "/api/share",
+      "type": "api",
+      "methods": [
+        "POST"
+      ],
+      "imports": [
+        "@/lib/server/request-entitlement",
+        "@/lib/server/request-safety",
+        "@/lib/server/request-frequency",
+        "@/lib/server/shared-answers",
+        "@/lib/share/contract",
+        "@/lib/share/messages"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/share/[id]/route.ts",
+      "route": "/api/share/[id]",
+      "type": "api",
+      "methods": [
+        "PATCH",
+        "DELETE"
+      ],
+      "imports": [
+        "@/lib/server/request-entitlement",
+        "@/lib/server/request-safety",
+        "@/lib/server/request-frequency",
+        "@/lib/server/shared-answers",
+        "@/lib/share/contract",
+        "@/lib/share/messages"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/shorts/analytics/route.ts",
+      "route": "/api/shorts/analytics",
+      "type": "api",
+      "methods": [
+        "GET"
+      ],
+      "imports": [
+        "@/lib/auth/server",
+        "@/lib/shorts/server"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/shorts/author/route.ts",
+      "route": "/api/shorts/author",
+      "type": "api",
+      "methods": [
+        "GET"
+      ],
+      "imports": [
+        "@/lib/auth/server",
+        "@/lib/shorts/server",
+        "@/lib/shorts/feed-row",
+        "@/lib/shorts/tiktok-identity",
+        "@/lib/youtube/contracts"
+      ],
+      "envNames": [
+        "YOUTUBE_API_KEY",
+        "GOOGLE_YOUTUBE_API_KEY"
+      ]
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/shorts/comments/route.ts",
+      "route": "/api/shorts/comments",
+      "type": "api",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "imports": [
+        "@/lib/auth/server",
+        "@/lib/shorts/server",
+        "@/lib/shorts/youtube-unified",
+        "@/lib/shorts/youtube-public-comments",
+        "@/lib/youtube/client",
+        "@/lib/youtube/http",
+        "@/lib/youtube/store",
+        "@/lib/youtube/resources",
+        "@/lib/youtube/contracts",
+        "@/lib/youtube/contracts"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/shorts/feed/route.ts",
+      "route": "/api/shorts/feed",
+      "type": "api",
+      "methods": [
+        "GET"
+      ],
+      "imports": [
+        "@/lib/auth/server",
+        "@/lib/shorts/server",
+        "@/lib/shorts/feed-rotation",
+        "@/lib/shorts/metrics",
+        "@/lib/shorts/feed-history",
+        "@/lib/shorts/tiktok-identity",
+        "@/lib/shorts/tiktok",
+        "@/lib/shorts/types"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/shorts/following/route.ts",
+      "route": "/api/shorts/following",
+      "type": "api",
+      "methods": [
+        "GET"
+      ],
+      "imports": [
+        "@/lib/auth/server",
+        "@/lib/shorts/server"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/shorts/history/route.ts",
+      "route": "/api/shorts/history",
+      "type": "api",
+      "methods": [
+        "GET",
+        "POST",
+        "DELETE"
+      ],
+      "imports": [
+        "@/lib/youtube/http",
+        "@/lib/youtube/store",
+        "@/lib/youtube/resources",
+        "@/lib/youtube/contracts",
+        "@/lib/youtube/errors",
+        "@/lib/youtube/quota"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/shorts/interactions/route.ts",
+      "route": "/api/shorts/interactions",
+      "type": "api",
+      "methods": [
+        "POST"
+      ],
+      "imports": [
+        "@/lib/auth/server",
+        "@/lib/shorts/server",
+        "@/lib/shorts/youtube-unified",
+        "@/lib/shorts/types",
+        "@/lib/youtube/client",
+        "@/lib/youtube/http",
+        "@/lib/youtube/resources",
+        "@/lib/youtube/contracts"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/shorts/library/route.ts",
+      "route": "/api/shorts/library",
+      "type": "api",
+      "methods": [
+        "GET"
+      ],
+      "imports": [
+        "@/lib/auth/server",
+        "@/lib/shorts/server",
+        "@/lib/shorts/feed-row"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/shorts/live/route.ts",
+      "route": "/api/shorts/live",
+      "type": "api",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "imports": [
+        "@/lib/auth/server",
+        "@/lib/shorts/server"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/shorts/live/segments/route.ts",
+      "route": "/api/shorts/live/segments",
+      "type": "api",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "imports": [
+        "@/lib/auth/server",
+        "@/lib/shorts/server",
+        "@/lib/shorts/storage"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/shorts/me/route.ts",
+      "route": "/api/shorts/me",
+      "type": "api",
+      "methods": [
+        "GET"
+      ],
+      "imports": [
+        "@/lib/auth/server",
+        "@/lib/shorts/server"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/shorts/notifications/route.ts",
+      "route": "/api/shorts/notifications",
+      "type": "api",
+      "methods": [
+        "GET",
+        "PATCH"
+      ],
+      "imports": [
+        "@/lib/auth/server",
+        "@/lib/shorts/server"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/shorts/posts/route.ts",
+      "route": "/api/shorts/posts",
+      "type": "api",
+      "methods": [
+        "POST"
+      ],
+      "imports": [
+        "@/lib/auth/server",
+        "@/lib/shorts/server",
+        "@/lib/shorts/storage"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/shorts/profile/route.ts",
+      "route": "/api/shorts/profile",
+      "type": "api",
+      "methods": [
+        "GET",
+        "PATCH"
+      ],
+      "imports": [
+        "@/lib/auth/server",
+        "@/lib/shorts/server",
+        "@/lib/shorts/feed-row",
+        "@/lib/shorts/tiktok-identity"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/shorts/providers/route.ts",
+      "route": "/api/shorts/providers",
+      "type": "api",
+      "methods": [
+        "GET"
+      ],
+      "imports": [
+        "@/lib/auth/server",
+        "@/lib/shorts/provider-accounts"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/shorts/report/route.ts",
+      "route": "/api/shorts/report",
+      "type": "api",
+      "methods": [
+        "POST"
+      ],
+      "imports": [
+        "@/lib/auth/server",
+        "@/lib/shorts/server"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/shorts/tiktok/poster/route.ts",
+      "route": "/api/shorts/tiktok/poster",
+      "type": "api",
+      "methods": [
+        "GET"
+      ],
+      "imports": [
+        "@/lib/shorts/tiktok-poster"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/shorts/upload/route.ts",
+      "route": "/api/shorts/upload",
+      "type": "api",
+      "methods": [
+        "POST"
+      ],
+      "imports": [
+        "@/lib/auth/server",
+        "@/lib/shorts/storage",
+        "@/lib/shorts/server"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/sites/publish/route.ts",
+      "route": "/api/sites/publish",
+      "type": "api",
+      "methods": [
+        "POST"
+      ],
+      "imports": [
+        "@/lib/server/request-entitlement",
+        "@/lib/server/request-safety",
+        "@/lib/server/request-frequency",
+        "@/lib/server/published-sites",
+        "@/lib/sites/forge/publish",
+        "@/lib/public-origin"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/sites/publish/[id]/route.ts",
+      "route": "/api/sites/publish/[id]",
+      "type": "api",
+      "methods": [
+        "DELETE"
+      ],
+      "imports": [
+        "@/lib/server/request-entitlement",
+        "@/lib/server/request-frequency",
+        "@/lib/server/published-sites",
+        "@/lib/sites/forge/publish"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/stream/background/route.ts",
+      "route": "/api/stream/background",
+      "type": "api",
+      "methods": [
+        "POST"
+      ],
+      "imports": [
+        "@/lib/server/request-entitlement",
+        "@/lib/ai/chat-execution",
+        "@/lib/ai/chat-stream-contract",
+        "@/lib/server/background-chat-turns",
+        "@/lib/server/turn-cancellation"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/stream/background/[turnId]/route.ts",
+      "route": "/api/stream/background/[turnId]",
+      "type": "api",
+      "methods": [
+        "GET",
+        "DELETE"
+      ],
+      "imports": [
+        "@/lib/server/background-chat-turns",
+        "@/lib/server/request-entitlement",
+        "@/lib/server/request-frequency",
+        "@/lib/server/turn-cancellation"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/stream/route.ts",
+      "route": "/api/stream",
+      "type": "api",
+      "methods": [
+        "GET"
+      ],
+      "imports": [
+        "@/lib/server/request-entitlement",
+        "@/lib/server/account-addressing",
+        "@/lib/server/founder-request-audit",
+        "@/lib/ai/keyboard-layout"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/taxi/agent/route.ts",
+      "route": "/api/taxi/agent",
+      "type": "api",
+      "methods": [
+        "POST"
+      ],
+      "imports": [
+        "@/lib/ai/malik-models",
+        "@/lib/server/malik-model-router",
+        "@/lib/server/uber-rides"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/taxi/places/route.ts",
+      "route": "/api/taxi/places",
+      "type": "api",
+      "methods": [
+        "GET"
+      ],
+      "imports": [
+        "@/lib/taxi/place-kind",
+        "@/lib/server/uber-rides"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/taxi/uber/callback/route.ts",
+      "route": "/api/taxi/uber/callback",
+      "type": "api",
+      "methods": [
+        "GET"
+      ],
+      "imports": [
+        "@/lib/public-origin",
+        "@/lib/server/uber-rides"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/taxi/uber/connect/route.ts",
+      "route": "/api/taxi/uber/connect",
+      "type": "api",
+      "methods": [
+        "GET"
+      ],
+      "imports": [
+        "@/lib/public-origin",
+        "@/lib/server/uber-rides"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/taxi/uber/estimate/route.ts",
+      "route": "/api/taxi/uber/estimate",
+      "type": "api",
+      "methods": [
+        "POST"
+      ],
+      "imports": [
+        "@/lib/server/uber-rides"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/taxi/uber/handoff/route.ts",
+      "route": "/api/taxi/uber/handoff",
+      "type": "api",
+      "methods": [
+        "POST"
+      ],
+      "imports": [
+        "@/lib/server/uber-rides"
+      ],
+      "envNames": [
+        "UBER_CLIENT_ID"
+      ]
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/taxi/uber/request/route.ts",
+      "route": "/api/taxi/uber/request",
+      "type": "api",
+      "methods": [
+        "POST",
+        "GET",
+        "DELETE"
+      ],
+      "imports": [
+        "@/lib/server/uber-rides"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/taxi/uber/status/route.ts",
+      "route": "/api/taxi/uber/status",
+      "type": "api",
+      "methods": [
+        "GET",
+        "DELETE"
+      ],
+      "imports": [
+        "@/lib/server/uber-rides"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/templates/route.ts",
+      "route": "/api/templates",
+      "type": "api",
+      "methods": [
+        "GET"
+      ],
+      "imports": [],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/tiktok/callback/route.ts",
+      "route": "/api/tiktok/callback",
+      "type": "api",
+      "methods": [
+        "GET"
+      ],
+      "imports": [
+        "@/lib/auth/server",
+        "@/lib/shorts/server",
+        "@/lib/shorts/tiktok"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/tiktok/connect/route.ts",
+      "route": "/api/tiktok/connect",
+      "type": "api",
+      "methods": [
+        "GET"
+      ],
+      "imports": [
+        "@/lib/auth/server",
+        "@/lib/shorts/server"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/tiktok/status/route.ts",
+      "route": "/api/tiktok/status",
+      "type": "api",
+      "methods": [
+        "GET"
+      ],
+      "imports": [
+        "@/lib/auth/server",
+        "@/lib/shorts/server",
+        "@/lib/shorts/tiktok"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/tiktok/sync/route.ts",
+      "route": "/api/tiktok/sync",
+      "type": "api",
+      "methods": [
+        "POST"
+      ],
+      "imports": [
+        "@/lib/auth/server",
+        "@/lib/shorts/server",
+        "@/lib/shorts/tiktok"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/transcribe/route.ts",
+      "route": "/api/transcribe",
+      "type": "api",
+      "methods": [
+        "GET"
+      ],
+      "imports": [
+        "@/lib/transcribe/voice-router",
+        "@/lib/voice/usage",
+        "@/lib/server/request-entitlement",
+        "@/lib/malik-compute/runtime"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/translator/route.ts",
+      "route": "/api/translator",
+      "type": "api",
+      "methods": [],
+      "imports": [
+        "@/lib/malik-compute/runtime",
+        "@/lib/translator/languages"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/uploads/route.ts",
+      "route": "/api/uploads",
+      "type": "api",
+      "methods": [
+        "POST",
+        "GET"
+      ],
+      "imports": [
+        "@/lib/uploads/validate-file",
+        "@/lib/uploads/storage",
+        "@/lib/server/request-entitlement",
+        "@/lib/limits/rate-limit"
+      ],
+      "envNames": [
+        "MAX_UPLOAD_IMAGE_MB",
+        "MAX_UPLOAD_VIDEO_MB"
+      ]
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/voice/deepgram-token/route.ts",
+      "route": "/api/voice/deepgram-token",
+      "type": "api",
+      "methods": [
+        "GET"
+      ],
+      "imports": [
+        "@/lib/auth/server"
+      ],
+      "envNames": [
+        "DEEPGRAM_VOICE_API_KEY",
+        "DEEPGRAM_API_KEY"
+      ]
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/voice/gemini-live-check/route.ts",
+      "route": "/api/voice/gemini-live-check",
+      "type": "api",
+      "methods": [
+        "GET"
+      ],
+      "imports": [
+        "@/lib/server/gemini-live-token",
+        "@/lib/voice/gemini-live-setup",
+        "@/lib/voice/voice-language"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/voice/gemini-live-token/route.ts",
+      "route": "/api/voice/gemini-live-token",
+      "type": "api",
+      "methods": [
+        "GET"
+      ],
+      "imports": [
+        "@/lib/server/gemini-live-token",
+        "@/lib/voice/gemini-live-setup",
+        "@/lib/server/request-entitlement",
+        "@/lib/voice/usage"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/voice/live-search/route.ts",
+      "route": "/api/voice/live-search",
+      "type": "api",
+      "methods": [
+        "POST"
+      ],
+      "imports": [
+        "@/lib/server/request-entitlement",
+        "@/lib/voice/web-search"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/voice/tts/route.ts",
+      "route": "/api/voice/tts",
+      "type": "api",
+      "methods": [],
+      "imports": [
+        "@/lib/malik-compute/runtime",
+        "@/lib/server/render-bandwidth"
+      ],
+      "envNames": [
+        "VOICE_TTS_TIMEOUT_MS",
+        "VOICE_TTS_COOLDOWN_MS",
+        "VOICE_RENDER_MAX_AUDIO_BYTES"
+      ]
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/voice/turn/route.ts",
+      "route": "/api/voice/turn",
+      "type": "api",
+      "methods": [],
+      "imports": [
+        "@/lib/voice/voice-llm-router",
+        "@/lib/voice/voice-llm-stream",
+        "@/lib/voice/web-search",
+        "@/lib/voice/speech-vocabulary",
+        "@/lib/voice/voice-language",
+        "@/lib/voice/spoken-intent",
+        "@/lib/voice/conversation",
+        "@/lib/voice/conversation",
+        "@/lib/auth/server",
+        "@/lib/server/founder-request-audit",
+        "@/lib/malik-compute/runtime"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/voice/usage/route.ts",
+      "route": "/api/voice/usage",
+      "type": "api",
+      "methods": [
+        "GET",
+        "POST"
+      ],
+      "imports": [
+        "@/lib/server/request-entitlement",
+        "@/lib/voice/usage"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/website/projects/route.ts",
+      "route": "/api/website/projects",
+      "type": "api",
+      "methods": [],
+      "imports": [
+        "@/lib/website/engine/http"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/website/projects/[id]/route.ts",
+      "route": "/api/website/projects/[id]",
+      "type": "api",
+      "methods": [],
+      "imports": [
+        "@/lib/website/engine/http"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/work/code/route.ts",
+      "route": "/api/work/code",
+      "type": "api",
+      "methods": [
+        "POST"
+      ],
+      "imports": [
+        "@/lib/server/request-entitlement",
+        "@/lib/server/request-frequency",
+        "@/lib/work/code/files",
+        "@/lib/work/code/diagnostics",
+        "@/lib/work/code/preview",
+        "@/lib/work/code/zip-read",
+        "@/lib/work/code/status",
+        "@/lib/auth/guest-origin"
+      ],
+      "envNames": [
+        "NODE_ENV",
+        "RENDER"
+      ]
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/work/export/route.ts",
+      "route": "/api/work/export",
+      "type": "api",
+      "methods": [
+        "POST"
+      ],
+      "imports": [
+        "@/lib/server/request-entitlement",
+        "@/lib/server/request-safety",
+        "@/lib/server/request-frequency",
+        "@/lib/work/documents/export",
+        "@/lib/work/documents/formats",
+        "@/lib/work/documents/http"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/work/github/route.ts",
+      "route": "/api/work/github",
+      "type": "api",
+      "methods": [
+        "POST"
+      ],
+      "imports": [
+        "@/lib/os/http",
+        "@/lib/server/request-frequency",
+        "@/lib/server/request-safety",
+        "@/lib/work/github"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/work/limits/route.ts",
+      "route": "/api/work/limits",
+      "type": "api",
+      "methods": [
+        "GET"
+      ],
+      "imports": [
+        "@/lib/server/request-entitlement",
+        "@/lib/server/work-quota"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/work/petroleum/snapshots/route.ts",
+      "route": "/api/work/petroleum/snapshots",
+      "type": "api",
+      "methods": [
+        "POST",
+        "GET",
+        "DELETE"
+      ],
+      "imports": [
+        "@/lib/os/http",
+        "@/lib/server/request-safety",
+        "@/lib/server/request-frequency",
+        "@/lib/work/activity-log",
+        "@/lib/work/petroleum/field-schema",
+        "@/lib/work/petroleum/snapshots"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/work/skills/route.ts",
+      "route": "/api/work/skills",
+      "type": "api",
+      "methods": [
+        "GET"
+      ],
+      "imports": [
+        "@/lib/os/http",
+        "@/lib/server/request-frequency",
+        "@/lib/work/skills/registry"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/work/skills/run/route.ts",
+      "route": "/api/work/skills/run",
+      "type": "api",
+      "methods": [
+        "POST"
+      ],
+      "imports": [
+        "@/lib/work/petroleum/schema",
+        "@/lib/work/petroleum/engine",
+        "@/lib/work/petroleum/field-report",
+        "@/lib/work/petroleum/field",
+        "@/lib/work/petroleum/report",
+        "@/lib/os/http",
+        "@/lib/server/request-safety",
+        "@/lib/server/request-frequency",
+        "@/lib/work/math/schema",
+        "@/lib/work/math/engine",
+        "@/lib/work/documents/formats",
+        "@/lib/work/documents/export",
+        "@/lib/work/documents/http",
+        "@/lib/work/activity-log"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/youtube/callback/route.ts",
+      "route": "/api/youtube/callback",
+      "type": "api",
+      "methods": [
+        "GET"
+      ],
+      "imports": [
+        "@/lib/youtube/http",
+        "@/lib/youtube/client",
+        "@/lib/youtube/security",
+        "@/lib/youtube/store",
+        "@/lib/youtube/contracts",
+        "@/lib/youtube/resources",
+        "@/lib/youtube/errors"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/youtube/connect/route.ts",
+      "route": "/api/youtube/connect",
+      "type": "api",
+      "methods": [
+        "GET"
+      ],
+      "imports": [
+        "@/lib/youtube/http",
+        "@/lib/youtube/client",
+        "@/lib/youtube/security",
+        "@/lib/youtube/store",
+        "@/lib/youtube/contracts",
+        "@/lib/youtube/quota"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/api/youtube/[...path]/route.ts",
+      "route": "/api/youtube/[...path]",
+      "type": "api",
+      "methods": [],
+      "imports": [
+        "@/lib/youtube/http",
+        "@/lib/youtube/client",
+        "@/lib/youtube/store",
+        "@/lib/youtube/security",
+        "@/lib/youtube/errors",
+        "@/lib/youtube/contracts",
+        "@/lib/youtube/resources",
+        "@/lib/youtube/client",
+        "@/lib/youtube/quota"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/auth/page.tsx",
+      "route": "/auth",
+      "type": "page",
+      "methods": [],
+      "imports": [
+        "@/components/sovereign/SovereignVideoAuth",
+        "@/components/sovereign/PublicClientRedirect",
+        "@/lib/auth/server"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/benchmarks/page.tsx",
+      "route": "/benchmarks",
+      "type": "page",
+      "methods": [],
+      "imports": [
+        "@/components/public/PublicPageShell",
+        "@/components/public/ProofWidgets"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/business/dashboard/page.tsx",
+      "route": "/business/dashboard",
+      "type": "page",
+      "methods": [],
+      "imports": [
+        "@/components/sovereign/business/BusinessDashboardClient",
+        "@/lib/auth/server",
+        "@/lib/auth/admin-policy"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/business/page.tsx",
+      "route": "/business",
+      "type": "page",
+      "methods": [],
+      "imports": [
+        "@/components/sovereign/business/BusinessClient"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/callback/route.ts",
+      "route": "/callback",
+      "type": "api",
+      "methods": [
+        "GET"
+      ],
+      "imports": [
+        "@/lib/auth/server",
+        "@/lib/public-origin"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/capabilities/page.tsx",
+      "route": "/capabilities",
+      "type": "page",
+      "methods": [],
+      "imports": [
+        "@/components/public/ProofWidgets",
+        "@/components/sovereign/capabilities",
+        "@/lib/ai/safety"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/clone/page.tsx",
+      "route": "/clone",
+      "type": "page",
+      "methods": [],
+      "imports": [],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/compute/page.tsx",
+      "route": "/compute",
+      "type": "page",
+      "methods": [],
+      "imports": [
+        "@/components/sovereign/dashboard",
+        "@/components/sovereign/AccountChatPersistence",
+        "@/lib/auth/server"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/connection/route.ts",
+      "route": "/connection",
+      "type": "api",
+      "methods": [
+        "GET"
+      ],
+      "imports": [
+        "@/lib/auth/guest-origin"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/contact/page.tsx",
+      "route": "/contact",
+      "type": "page",
+      "methods": [],
+      "imports": [
+        "@/components/public/PublicPageShell",
+        "@/components/public/ProofWidgets",
+        "@/lib/proof/public-proof"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/dashboard/page.tsx",
+      "route": "/dashboard",
+      "type": "page",
+      "methods": [],
+      "imports": [
+        "@/components/sovereign/dashboard",
+        "@/components/sovereign/AccountChatPersistence",
+        "@/lib/auth/server",
+        "@/lib/auth/entry-target"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/demo/page.tsx",
+      "route": "/demo",
+      "type": "page",
+      "methods": [],
+      "imports": [
+        "@/components/public/LiveDemoCenter",
+        "@/components/public/PublicPageShell",
+        "@/components/public/ProofWidgets"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/founder/history/page.tsx",
+      "route": "/founder/history",
+      "type": "page",
+      "methods": [],
+      "imports": [
+        "@/lib/auth/server",
+        "@/lib/server/founder-viewer-verification"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/founder/page.tsx",
+      "route": "/founder",
+      "type": "page",
+      "methods": [],
+      "imports": [
+        "@/components/public/PublicPageShell",
+        "@/components/public/ProofWidgets",
+        "@/lib/ai/safety"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/guest/route.ts",
+      "route": "/guest",
+      "type": "api",
+      "methods": [
+        "GET"
+      ],
+      "imports": [
+        "@/lib/auth/guest-origin",
+        "@/lib/auth/entry-target"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/investors/page.tsx",
+      "route": "/investors",
+      "type": "page",
+      "methods": [],
+      "imports": [
+        "@/components/public/PublicPageShell",
+        "@/components/public/ProofWidgets",
+        "@/lib/ai/safety"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/media/page.tsx",
+      "route": "/media",
+      "type": "page",
+      "methods": [],
+      "imports": [
+        "@/components/public/PublicPageShell",
+        "@/components/public/ProofWidgets",
+        "@/lib/ai/safety",
+        "@/lib/proof/public-proof"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/page.tsx",
+      "route": "/",
+      "type": "page",
+      "methods": [],
+      "imports": [
+        "@/components/sovereign/PublicClientRedirect",
+        "@/lib/auth/server"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/press-kit/page.tsx",
+      "route": "/press-kit",
+      "type": "page",
+      "methods": [],
+      "imports": [
+        "@/components/public/PublicPageShell",
+        "@/components/public/ProofWidgets",
+        "@/lib/ai/safety",
+        "@/lib/proof/public-proof"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/research-lab/page.tsx",
+      "route": "/research-lab",
+      "type": "page",
+      "methods": [],
+      "imports": [],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/security/page.tsx",
+      "route": "/security",
+      "type": "page",
+      "methods": [],
+      "imports": [
+        "@/components/public/PublicPageShell",
+        "@/components/public/ProofWidgets",
+        "@/lib/ai/safety"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/share-target/route.ts",
+      "route": "/share-target",
+      "type": "api",
+      "methods": [
+        "POST"
+      ],
+      "imports": [
+        "@/lib/server/request-entitlement",
+        "@/lib/server/share-target-store"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/shorts/channel/[channelId]/page.tsx",
+      "route": "/shorts/channel/[channelId]",
+      "type": "page",
+      "methods": [],
+      "imports": [
+        "@/lib/youtube/contracts"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/shorts/history/page.tsx",
+      "route": "/shorts/history",
+      "type": "page",
+      "methods": [],
+      "imports": [],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/shorts/library/page.tsx",
+      "route": "/shorts/library",
+      "type": "page",
+      "methods": [],
+      "imports": [],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/shorts/live/room/page.tsx",
+      "route": "/shorts/live/room",
+      "type": "page",
+      "methods": [],
+      "imports": [
+        "@/components/sovereign/shorts/ShortsLiveRoom"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/shorts/page.tsx",
+      "route": "/shorts",
+      "type": "page",
+      "methods": [],
+      "imports": [
+        "@/components/sovereign/shorts/MalikShortsApp",
+        "@/components/sovereign/shorts/ShortsAuthorProfileOverlay"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/shorts/privacy/page.tsx",
+      "route": "/shorts/privacy",
+      "type": "page",
+      "methods": [],
+      "imports": [],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/shorts/youtube/[videoId]/page.tsx",
+      "route": "/shorts/youtube/[videoId]",
+      "type": "page",
+      "methods": [],
+      "imports": [
+        "@/lib/youtube/contracts"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/sign-in/route.ts",
+      "route": "/sign-in",
+      "type": "api",
+      "methods": [],
+      "imports": [
+        "@/lib/auth/server",
+        "@/lib/public-origin",
+        "@/lib/youtube/contracts",
+        "@/lib/auth/entry-target",
+        "@/lib/auth/canonical-sign-in"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/sign-out/route.ts",
+      "route": "/sign-out",
+      "type": "api",
+      "methods": [],
+      "imports": [
+        "@/lib/auth/server",
+        "@/lib/public-origin"
+      ],
+      "envNames": [
+        "WORKOS_COOKIE_DOMAIN",
+        "WORKOS_COOKIE_SAMESITE",
+        "NODE_ENV",
+        "WORKOS_COOKIE_NAME"
+      ]
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/site/[id]/route.ts",
+      "route": "/site/[id]",
+      "type": "api",
+      "methods": [
+        "GET"
+      ],
+      "imports": [
+        "@/lib/server/published-sites",
+        "@/lib/sites/forge/publish"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/status/page.tsx",
+      "route": "/status",
+      "type": "page",
+      "methods": [],
+      "imports": [
+        "@/components/public/PublicPageShell",
+        "@/components/public/ProofWidgets",
+        "@/lib/proof/public-proof"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/taxi/native/page.tsx",
+      "route": "/taxi/native",
+      "type": "page",
+      "methods": [],
+      "imports": [
+        "@/components/sovereign/taxi/UberTaxiStudio",
+        "@/lib/auth/server"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/taxi/page.tsx",
+      "route": "/taxi",
+      "type": "page",
+      "methods": [],
+      "imports": [
+        "@/components/sovereign/taxi/UberRealRideV1",
+        "@/lib/auth/server"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/translator/page.tsx",
+      "route": "/translator",
+      "type": "page",
+      "methods": [],
+      "imports": [
+        "@/components/translator/MalikTranslator"
+      ],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/visual-test/mobile/page.tsx",
+      "route": "/visual-test/mobile",
+      "type": "page",
+      "methods": [],
+      "imports": [],
+      "envNames": []
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/visual-test/presentations/page.tsx",
+      "route": "/visual-test/presentations",
+      "type": "page",
+      "methods": [],
+      "imports": [],
+      "envNames": [
+        "NODE_ENV",
+        "GITHUB_ACTIONS"
+      ]
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/visual-test/shorts/page.tsx",
+      "route": "/visual-test/shorts",
+      "type": "page",
+      "methods": [],
+      "imports": [
+        "@/components/sovereign/shorts/MalikShortsApp"
+      ],
+      "envNames": [
+        "NODE_ENV",
+        "MALIK_SHORTS_TEST_UI"
+      ]
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/visual-test/video/page.tsx",
+      "route": "/visual-test/video",
+      "type": "page",
+      "methods": [],
+      "imports": [],
+      "envNames": [
+        "GITHUB_ACTIONS"
+      ]
+    },
+    {
+      "file": "app/templates/sovereign-hub-ui/app/__visual/video/page.tsx",
+      "route": "/__visual/video",
+      "type": "page",
+      "methods": [],
+      "imports": [],
+      "envNames": [
+        "GITHUB_ACTIONS"
+      ]
+    }
+  ]
+}

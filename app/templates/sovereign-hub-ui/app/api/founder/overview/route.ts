@@ -5,6 +5,7 @@ import { getPersistedUsageOverview } from "@/lib/server/usage-persistence"
 import { fetchWithTimeout, requestSafetySnapshot } from "@/lib/server/request-safety"
 
 export const dynamic = "force-dynamic"
+const privateHeaders = { "Cache-Control": "private, no-store, max-age=0", Vary: "Cookie" }
 
 type WorkOSUser = {
   id?: string
@@ -93,7 +94,7 @@ function percent(value: number, total: number) {
 export async function GET() {
   const { user } = await getOptionalWorkOSAuth()
   if (!isVerifiedOwner(user)) {
-    return Response.json({ ok: false, error: "FOUNDER_ONLY" }, { status: 403 })
+    return Response.json({ ok: false, error: "FOUNDER_ONLY" }, { status: 403, headers: privateHeaders })
   }
 
   const usage = getUsageOverview()
@@ -203,8 +204,6 @@ export async function GET() {
     },
     warning: workosError || null,
   }, {
-    headers: {
-      "Cache-Control": "no-store, max-age=0",
-    },
+    headers: privateHeaders,
   })
 }

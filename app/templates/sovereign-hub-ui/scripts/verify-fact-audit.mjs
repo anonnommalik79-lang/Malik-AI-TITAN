@@ -382,8 +382,9 @@ check("the router audits every answer written from open pages", () => {
   // Card blocks are audited as their text (lib/ai/answer-cards.ts), like any other sentence.
   assert.match(router, /factAudit: auditGroundedAnswer\(answerCardsToText\(content\), sources, prompt, verified\.report, freshness\.needsSearch/)
   // Audit the final evidence-gated text on both paths, including an honest
-  // replacement when a draft contains an invented source citation.
-  assert.equal([...router.matchAll(/factAudit: auditGroundedAnswer\(answerCardsToText\(content\), sources, prompt, verified\.report, freshness\.needsSearch/g)].length, 2)
+  // replacement when a draft contains an invented source citation, and the
+  // direct deadline-rescue path added after this assertion was first written.
+  assert.equal([...router.matchAll(/factAudit: auditGroundedAnswer\(answerCardsToText\(content\), sources, prompt, verified\.report, freshness\.needsSearch/g)].length, 3)
   assert.match(router, /factAudit: answer\.factAudit \?\? null/)
 })
 
