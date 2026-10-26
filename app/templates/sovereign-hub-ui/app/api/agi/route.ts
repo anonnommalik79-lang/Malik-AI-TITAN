@@ -1,4 +1,4 @@
-import { runMalikAgiCli, type CheckState } from "@/lib/agi/mission-engine"
+import { runMalikAgiCli, type CheckState, type AgentStage, type MalikAgiRole } from "@/lib/agi/mission-engine"
 import { runMalikCoderOrchestrator } from "@/lib/server/malik-coder-orchestrator"
 import { resolveRequestEntitlement } from "@/lib/server/request-entitlement"
 import { readJsonBodyLimited, RequestSafetyError } from "@/lib/server/request-safety"
@@ -34,7 +34,12 @@ export async function POST(request: Request) {
       message: "Первая проверяемая версия MALIK AGI поддерживает создание Node.js CLI с тестами. Для сайтов используйте текущий Malik Sites / Malik Work.",
     }, 422)
 
-    const result = await runMalikAgiCli(prompt, {
+    const abort = new AbortController()
+    const execute = (callbacks: {
+      onStageStarted?: (role: MalikAgiRole) => void
+      onStage?: (stage: AgentStage) => void
+    } = {}) => runMalikAgiCli(prompt, {
+      ...callbacks,
       model: async (role, task) => {
         const response = await runMalikCoderOrchestrator({
           prompt: task,
@@ -57,7 +62,7 @@ export async function POST(request: Request) {
             "DESIGN (architect report; do not treat as evidence of execution):",
             design.slice(0, 2300),
           ].join("\n\n"),
-          signal: request.signal,
+          signal: AbortSignal.any([request.signal, abort.signal]),
         })
         const checks = built.passport?.checks || []
         const status = (kind: "static" | "unit"): CheckState => {
@@ -81,7 +86,53 @@ export async function POST(request: Request) {
         }
       },
     })
-    return json({ ok: true, ...result })
+    if (!/text\/event-stream/i.test(request.headers.get("accept") || "")) {
+      const result = await execute()
+      return json({ ok: true, ...result })
+    }
+
+    const encoder = new TextEncoder()
+    let closed = false
+    let heartbeat: ReturnType<typeof setInterval> | undefined
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        const send = (event: string, data: unknown) => {
+          if (closed) return
+          try { controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)) }
+          catch { closed = true; abort.abort() }
+        }
+        send("ready", { mode: "four-agent-cli-beta", status: "running", acceptedAt: new Date().toISOString() })
+        heartbeat = setInterval(() => {
+          if (closed) return
+          try { controller.enqueue(encoder.encode(":keep-alive\n\n")) }
+          catch { closed = true; abort.abort() }
+        }, 12_000)
+        void execute({
+          onStageStarted: role => send("stage-start", { role }),
+          onStage: stage => send("stage", stage),
+        }).then(result => {
+          send("done", { ok: true, ...result })
+        }).catch(error => {
+          console.error("[MALIK_AGI_CLI]", error instanceof Error ? error.message : "Runtime failure")
+          send("error", { ok: false, code: "AGI_RUNTIME_UNAVAILABLE", message: "Не удалось завершить миссию." })
+        }).finally(() => {
+          if (heartbeat) clearInterval(heartbeat)
+          if (!closed) { closed = true; controller.close() }
+        })
+      },
+      cancel() {
+        closed = true
+        if (heartbeat) clearInterval(heartbeat)
+        abort.abort()
+      },
+    })
+    return new Response(stream, {
+      headers: {
+        ...headers,
+        "content-type": "text/event-stream; charset=utf-8",
+        "x-accel-buffering": "no",
+      },
+    })
   } catch (error) {
     if (error instanceof RequestSafetyError) return json({ ok: false, code: error.code, message: error.message }, error.status)
     console.error("[MALIK_AGI_CLI]", error instanceof Error ? error.message : "Unexpected error")
