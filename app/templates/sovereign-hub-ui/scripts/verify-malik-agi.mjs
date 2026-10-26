@@ -86,3 +86,38 @@ test("short malformed goal is rejected before provider calls", async () => {
     /AGI_GOAL_TOO_SHORT/,
   )
 })
+
+test("real stage events are emitted only as steps start and complete", async () => {
+  const events = []
+  const run = await runMalikAgiCli(goal, {
+    model,
+    build: async () => fakeEvidence(),
+    onStageStarted: role => events.push("start:" + role),
+    onStage: stage => events.push("done:" + stage.role),
+  })
+  assert.equal(run.status, "verified")
+  assert.deepEqual(events, [
+    "start:analyst", "done:analyst",
+    "start:architect", "done:architect",
+    "start:builder", "done:builder",
+    "start:verifier", "done:verifier",
+  ])
+})
+
+test("no generated files means no verified build even when test receipts say pass", async () => {
+  const run = await runMalikAgiCli(goal, {
+    model,
+    build: async () => fakeEvidence({ files: [] }),
+  })
+  assert.equal(run.status, "needs_review")
+})
+
+test("telemetry callback failures cannot turn the mission into a failure", async () => {
+  const run = await runMalikAgiCli(goal, {
+    model,
+    build: async () => fakeEvidence(),
+    onStageStarted: () => { throw Error("UI disconnected") },
+    onStage: () => { throw Error("UI disconnected") },
+  })
+  assert.equal(run.status, "verified")
+})
