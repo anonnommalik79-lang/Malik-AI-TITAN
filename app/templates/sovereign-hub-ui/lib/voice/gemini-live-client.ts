@@ -1,6 +1,7 @@
 "use client"
 
 import { getVoiceAudioContext, readyVoiceAudio } from "./audio-playback"
+import { shouldSearchVoice } from "./search-intent"
 import {
   DEFAULT_LIVE_MODEL,
   LIVE_INPUT_RATE,
@@ -23,15 +24,6 @@ const MEMORY_TURNS = 12
  * when the model has not requested search_public_web itself.
  * Deliberately narrow: never browse for everyday conversation or private data.
  */
-function needsSpokenWebSearch(text: string) {
-  const value = String(text || "").toLocaleLowerCase().trim()
-  if (!value || /(?:не ищи|без интернета|don't search|without searching|іздеме)/i.test(value)) return false
-  // JS \b only recognizes ASCII word characters; never use it for Cyrillic.
-  const explicit = /(?:по[ий]щи|загугли|найди(?:те)?\s+(?:\p{L}+\s+){0,4}(?:новост\p{L}*|источник\p{L}*|информац\p{L}*)|search online|look up|интернеттен\s+тап|ізде\p{L}*)/iu
-  const fresh = /(?:новост\p{L}*|погод\p{L}*|прогноз\s+погоды|курс\s+(?:валют|доллара|евро|тенге)|latest news|breaking news|weather today|exchange rate|жаңалық\p{L}*|соңғы\s+жаңалық)/iu
-  return explicit.test(value) || fresh.test(value)
-}
-
 export type VoiceWebSource = { title: string; url: string; snippet?: string; provider?: string }
 
 type LiveCallbacks = {
@@ -262,6 +254,7 @@ export class GeminiLiveSession {
   private nativeSearchUsed = false
 
   private outputHead = 0
+  private playbackEpoch = 0
   private outputSources = new Set<AudioBufferSourceNode>()
   /** Loudness of the reply being played, per slice, on the page clock (ms). */
   private outputEnvelope: Array<{ start: number; end: number; rms: number }> = []
@@ -379,7 +372,7 @@ export class GeminiLiveSession {
    * the endpoint validates intent, enforces quotas and performs the search.
    */
   private queueSpokenSearch(question: string, socket: WebSocket, generation: number) {
-    if (!needsSpokenWebSearch(question) || this.nativeSearchUsed) return
+    if (!shouldSearchVoice(question) || this.nativeSearchUsed) return
     const query = question.replace(/\s+/g, " ").trim().slice(0, 280)
     if (!query || query === this.proactiveQuery) return
     this.cancelProactiveSearch()
@@ -640,6 +633,7 @@ export class GeminiLiveSession {
 
         if (server.interrupted) {
           this.cancelSearches()
+          this.cancelProactiveSearch()
           this.stopOutput()
           if (this.turnOutput) this.remember(true)
           this.callbacks.onInterrupted?.()
@@ -653,6 +647,9 @@ export class GeminiLiveSession {
           // A new question after an answer that never got its turnComplete.
           if (this.turnOutput) this.remember()
           if (!this.turnInput) {
+            // Results for an interrupted/previous question must never replace
+            // the answer to the user's next question on the same socket.
+            this.cancelProactiveSearch()
             // Repeated questions intentionally refresh the search.
             this.proactiveQuery = ""
             this.nativeSearchUsed = false
@@ -675,7 +672,10 @@ export class GeminiLiveSession {
           const mime = String(inline?.mimeType || inline?.mime_type || "")
           if (typeof data === "string" && data && /^audio\/pcm/i.test(mime)) {
             this.callbacks.onSpeaking?.()
-            void this.playPcm(data, sampleRate(mime))
+            // Malformed provider audio must not create an unhandled rejection.
+            void this.playPcm(data, sampleRate(mime)).catch(() => {
+              if (!this.disposed) this.stopOutput()
+            })
           }
         }
 
@@ -1304,8 +1304,12 @@ export class GeminiLiveSession {
   }
 
   private async playPcm(encoded: string, rate: number) {
+    const epoch = this.playbackEpoch
     const context = getVoiceAudioContext()
     if (!context || !await readyVoiceAudio(context)) return
+    // Resuming mobile audio is asynchronous. Barge-in, close or reconnect may
+    // have invalidated this chunk while resume() was pending.
+    if (this.disposed || epoch !== this.playbackEpoch) return
 
     const bytes = fromBase64(encoded)
     const frames = Math.floor(bytes.byteLength / 2)
@@ -1342,6 +1346,7 @@ export class GeminiLiveSession {
   }
 
   stopOutput() {
+    this.playbackEpoch += 1
     for (const source of this.outputSources) {
       try { source.stop(); source.disconnect() } catch {}
     }

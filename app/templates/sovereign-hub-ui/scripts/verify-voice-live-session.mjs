@@ -350,6 +350,53 @@ await check("voice greetings cannot spend provider web search quota", async () =
   browser.cleanup()
 })
 
+await check("current CEO questions use the same Live search policy as the server", async () => {
+  const { browser, session } = await connected({ language: "ru" })
+  try {
+    browser.sockets[0].deliver({ serverContent: { inputTranscription: { text: "Кто сейчас CEO NVIDIA?" } } })
+    await tick(780)
+    assert.equal(browser.searchRequests, 1)
+    assert.ok(browser.sockets[0].sent.some((raw) => raw.includes("WEB TOOL RESULT")))
+  } finally { session.close(); browser.cleanup() }
+})
+
+await check("a new non-web question cancels the old pending search timer", async () => {
+  const { browser, session } = await connected()
+  try {
+    const socket = browser.sockets[0]
+    socket.deliver({ serverContent: { inputTranscription: { text: "Последние новости NVIDIA" } } })
+    socket.deliver({ serverContent: { turnComplete: true } })
+    socket.deliver({ serverContent: { inputTranscription: { text: "Реши 17 * 23" } } })
+    await tick(780)
+    assert.equal(browser.searchRequests, 0)
+  } finally { session.close(); browser.cleanup() }
+})
+
+await check("interrupted in-flight search cannot inject an obsolete spoken answer", async () => {
+  const { browser, session } = await connected()
+  const originalFetch = globalThis.fetch
+  let release, signal
+  const blocked = new Promise((resolve) => { release = resolve })
+  try {
+    globalThis.fetch = async (url, options) => {
+      if (String(url).includes("/api/voice/live-search")) {
+        signal = options.signal
+        await blocked // Simulate a transport that ignores abort until it returns.
+      }
+      return originalFetch(url, options)
+    }
+    const socket = browser.sockets[0]
+    socket.deliver({ serverContent: { inputTranscription: { text: "Какая погода сегодня?" } } })
+    await tick(750)
+    assert.ok(signal, "search did not start")
+    socket.deliver({ serverContent: { interrupted: true } })
+    assert.equal(signal.aborted, true)
+    release()
+    await tick()
+    assert.ok(!socket.sent.some((raw) => raw.includes("WEB TOOL RESULT")))
+  } finally { release(); globalThis.fetch = originalFetch; session.close(); browser.cleanup() }
+})
+
 console.log("\nwhat reaches the model")
 
 await check("distant room audio is gated before it reaches Gemini", async () => {

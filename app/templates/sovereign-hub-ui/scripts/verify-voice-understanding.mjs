@@ -287,9 +287,7 @@ check("a reply in the wrong script is caught", () => {
 })
 
 // -------------------------------------------------------------------- search
-const search = await loadModule("lib/voice/web-search.ts", {
-  "../malik-research/search": "const searchVoiceWeb = async () => [];",
-})
+const search = load("lib/voice/search-intent.ts")
 const { voiceSearchReason } = search
 
 console.log("\nsearching the web when the question needs it")
@@ -340,7 +338,7 @@ check("a failed search still produces an answer", async () => {
 })
 
 check("word edges in the search rules are Cyrillic-safe", () => {
-  const source = codeOf("lib/voice/web-search.ts")
+  const source = codeOf("lib/voice/search-intent.ts")
   assert.ok(!source.includes("\\b"), "\\b never matches beside Cyrillic")
 })
 

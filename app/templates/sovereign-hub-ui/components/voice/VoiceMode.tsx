@@ -17,6 +17,7 @@ import { askAgainPhrase, chooseTranscript, conversationHint, shouldAskAgain } fr
 import { fuseTranscripts } from "@/lib/voice/rover"
 import { takeSentence } from "@/lib/voice/voice-llm-stream"
 import { PauseTracker } from "@/lib/voice/dsp"
+import { requestVoiceMicrophone } from "@/lib/voice/microphone"
 import { GeminiLiveSession, type VoiceWebSource } from "@/lib/voice/gemini-live-client"
 import { detectSpokenLanguageDetailed } from "@/lib/voice/voice-language"
 import { languageLabel } from "@/lib/translator/languages"
@@ -1012,7 +1013,8 @@ export function VoiceMode({ onClose, onSubmit, onConversation }: {
       }
       if (supported?.voiceIsolation) audioConstraints.voiceIsolation = true
 
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraints })
+      const stream = await requestVoiceMicrophone(navigator.mediaDevices, audioConstraints,
+        () => mountedRef.current && !closingRef.current && micRequestRef.current === requestId)
       for (const track of stream.getAudioTracks()) {
         try { track.contentHint = "speech" } catch {}
       }
@@ -1020,9 +1022,13 @@ export function VoiceMode({ onClose, onSubmit, onConversation }: {
         stream.getTracks().forEach((track) => track.stop())
         return
       }
+      // Register ownership before constructing Web Audio: if Safari rejects
+      // AudioContext/analyser setup, the failure path must release the stream.
+      microphoneRef.current = stream
       const VoiceAudioContext = window.AudioContext || (window as VoiceWindow).webkitAudioContext
       if (!VoiceAudioContext) throw new Error("AudioContext unavailable")
       const context = new VoiceAudioContext()
+      audioContextRef.current = context
       const analyser = context.createAnalyser()
       analyser.fftSize = 512
       analyser.smoothingTimeConstant = .92
@@ -1075,13 +1081,16 @@ export function VoiceMode({ onClose, onSubmit, onConversation }: {
       startAudioLoop(analyser)
       startSpeech()
       void startStreaming(stream, context)
-    } catch {
+    } catch (error) {
+      if (!mountedRef.current || closingRef.current || micRequestRef.current !== requestId) return
+      await stopMicrophone()
       setMicActive(false)
       micActiveRef.current = false
       energyRef.current = .055
-      setMicError("Разреши Malik AI доступ к микрофону в браузере.")
-      setTitle("Разреши доступ к микрофону")
-      setSubtitle("Или включи демо — живой туман продолжит двигаться")
+      const denied = error instanceof DOMException && ["NotAllowedError", "SecurityError"].includes(error.name)
+      setMicError(denied ? "Разреши Malik AI доступ к микрофону в браузере." : "Не удалось подключить микрофон. Проверь устройство и повтори подключение.")
+      setTitle(denied ? "Разреши доступ к микрофону" : "Микрофон недоступен")
+      setSubtitle(denied ? "Или включи демо — живой туман продолжит двигаться" : "Закрой другие приложения, использующие микрофон, и повтори")
     }
   }, [ensureGeminiLive, startAudioLoop, startRecorder, startSpeech, startStreaming, stopMicrophone])
 
