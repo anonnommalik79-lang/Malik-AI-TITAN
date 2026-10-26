@@ -47,7 +47,7 @@ export function creativeBrief(prompt: string, projectId: string): CreativeBrief 
     constraints: [
       "No universal purple-gradient SaaS template, fake trust logos, repeated generic feature cards or meaningless statistic counters. A user explicitly asking for a conventional layout takes precedence.",
       "Write concrete subject-specific copy and consistent demo data. One signature interaction should feel finished before adding more decorative effects.",
-      "Motion communicates hierarchy/state: enter/exit, a deliberate reveal or an original visual scene. No scroll hijack, custom-cursor dependency or motion-only navigation.",
+      "Motion tells the story: entrances, scroll-driven chapters and an original visual scene. No scroll hijack, custom-cursor dependency or motion-only navigation.",
       "Mobile is a composition, not a scaled desktop screenshot: readable type, wrapped labels, touch controls, no horizontal document scrolling.",
       "Heavy effects run in the visitor's browser, never in Render. Images/video stay on verified external CDNs; source ZIP contains metadata/credits, not media bytes.",
     ],

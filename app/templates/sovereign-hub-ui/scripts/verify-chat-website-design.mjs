@@ -31,7 +31,8 @@ for(const [prompt,profile] of [
 for(const prompt of ['Привет','Объясни как создать сайт','Напиши статью про сайт','Создай фото для сайта','Сделай презентацию PPTX для сайта','Не создавай сайт','Исправь сайт'])test('no accidental website authoring: '+prompt,()=>assert.equal(chatArtDirection(prompt),null))
 test('explicit media/motion opt-outs and optional video are honoured',()=>{
  const none=chatArtDirection('Создай сайт отеля без фото и анимаций');assert.equal(none.mediaQueries.length,0);assert.equal(none.noMotion,true)
- const photos=chatArtDirection('Создай сайт одежды');assert.ok(photos.mediaQueries.every(q=>q.kind==='image'))
+ const photos=chatArtDirection('Создай сайт одежды');assert.equal(photos.mediaQueries.filter(q=>q.kind==='video').length,1,'a cinematic page opens on footage')
+ const stills=chatArtDirection('Создай сайт одежды без видео');assert.ok(stills.mediaQueries.every(q=>q.kind==='image'))
  const video=chatArtDirection('Создай сайт отеля с видео');assert.equal(video.mediaQueries.filter(q=>q.kind==='video').length,1)
  const product=chatArtDirection('Build a 3D design platform website');assert.equal(product.mediaQueries.length,0)
 })

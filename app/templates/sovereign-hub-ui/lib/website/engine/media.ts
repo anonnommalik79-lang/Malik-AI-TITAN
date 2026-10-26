@@ -49,11 +49,14 @@ async function verify(url: string, kind: Asset["kind"], signal: AbortSignal, fet
   } catch { return null }
 }
 
+// Queries are written in the user's language; the photo APIs search Cyrillic
+// well only when told which language it is.
+const cyrillic = (query: string) => /[а-яё]/iu.test(query)
 async function pexels(slot: Slot, signal: AbortSignal, fetcher: Fetcher, budget: Budget): Promise<Candidate[]> {
   const key = process.env.PEXELS_API_KEY
   if (!key) return []
   const endpoint = slot.kind === "video" ? "https://api.pexels.com/v1/videos/search" : "https://api.pexels.com/v1/search"
-  const result = await json(`${endpoint}?query=${encodeURIComponent(slot.query)}&per_page=3&orientation=landscape`, { Authorization: key }, signal, fetcher, budget)
+  const result = await json(`${endpoint}?query=${encodeURIComponent(slot.query)}&per_page=3&orientation=landscape${cyrillic(slot.query) ? "&locale=ru-RU" : ""}`, { Authorization: key }, signal, fetcher, budget)
   if (slot.kind === "image") return (result.photos || []).slice(0, 3).flatMap((photo: { src?: { large2x?: string; large?: string }; url: string; photographer?: string; width: number; height: number }) => {
     const url = photo.src?.large2x || photo.src?.large
     return assetUrl(url) && assetUrl(photo.url) ? [{ slot: slot.slot, kind: "image" as const, url: url!, source: "pexels" as const, sourcePage: photo.url, credit: `Photo by ${plain(photo.photographer) || "Pexels contributor"} on Pexels`, license: "https://www.pexels.com/license/", width: photo.width, height: photo.height }] : []
@@ -98,7 +101,7 @@ async function nasa(slot: Slot, design: Design, signal: AbortSignal, fetcher: Fe
 async function unsplash(slot: Slot, signal: AbortSignal, fetcher: Fetcher, budget: Budget): Promise<Candidate[]> {
   if (slot.kind !== "image" || !process.env.UNSPLASH_ACCESS_KEY) return []
   const headers = { Authorization: `Client-ID ${process.env.UNSPLASH_ACCESS_KEY}`, "Accept-Version": "v1" }
-  const result = await json(`https://api.unsplash.com/search/photos?query=${encodeURIComponent(slot.query)}&per_page=3&orientation=landscape`, headers, signal, fetcher, budget)
+  const result = await json(`https://api.unsplash.com/search/photos?query=${encodeURIComponent(slot.query)}&per_page=3&orientation=landscape${cyrillic(slot.query) ? "&lang=ru" : ""}`, headers, signal, fetcher, budget)
   return (result.results || []).slice(0, 3).flatMap((photo: { urls?: { regular?: string }; links?: { html?: string; download_location?: string }; user?: { links?: { html?: string }; name?: string }; width: number; height: number }) => {
     if (!assetUrl(photo.urls?.regular) || !assetUrl(photo.links?.html) || !assetUrl(photo.links?.download_location) || !assetUrl(photo.user?.links?.html)) return []
     const page = new URL(photo.links!.html!), creator = new URL(photo.user!.links!.html!)

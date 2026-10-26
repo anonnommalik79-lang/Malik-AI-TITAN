@@ -85,6 +85,8 @@ export const GAME_AUTHOR_SYSTEM = [
   "- The exact theme the user asked for: characters, setting, enemies and names must match it, not a generic stand-in.",
   "- A clear core loop with rising difficulty across levels (speed, counts, new enemy types, patterns); win after the last level (api.nextLevel handles it) or endless with escalating waves when levels is 0.",
   "- Juice: api.sfx on every meaningful event, particles on hits and pickups, api.shake on damage/explosions, floating score text, brief invulnerability blink after losing a life, smooth acceleration.",
+  "- Variety: at least three distinct enemy or obstacle behaviours introduced across the levels, one pickup or power-up that changes how the player plays for a while, and a climax on the last level (a boss with a visible health bar, a final wave or a timed finale).",
+  "- Feel: a combo or streak multiplier shown with api.floatText, api.flash on level transitions and big hits, and anticipation before danger (a telegraph flash or wind-up before an enemy attacks).",
   "- Art: distinctive silhouettes with layered shapes and highlights, the theme palette (api.colors) with glow for important objects, readable contrast, subtle animation (bobbing, rotation, trails). No plain single rectangles for the hero.",
   "- Controls exactly as in the design's controls list; for pointer games use api.pointer; touch players have api.axis() from the joystick and action buttons.",
   "- An in-world HUD only for game-specific info (boss health bar, ammo, timer) — score, lives and level are already shown by the runtime.",

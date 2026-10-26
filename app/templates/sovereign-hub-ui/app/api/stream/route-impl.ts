@@ -1,5 +1,8 @@
 import { asPlainText, malikGodAnswer, malikRescueAnswer, gatherSourcesForPrompt, sourceContext, type PreparedLiveEvidence } from "@/lib/malik-god-router"
 import { chatAnswerDeadline, withinChatDeadline } from "@/lib/ai/chat-deadline"
+import { withSiteCinemaInAnswer } from "@/lib/website/cinema"
+import { auditSite, extractSiteDocument, replaceSiteDocument, siteDocumentIn, siteNeedsUpgrade, type SiteIssue } from "@/lib/website/site-audit"
+import { chatArtDirection } from "@/lib/website/chat-art-direction"
 import { canRetryChat } from "@/lib/ai/chat-stream-recovery"
 import { briefNeedsDeep } from "@/lib/ai/brief-quality"
 import { isCodeRequest } from "@/lib/ai/request-kind"
@@ -427,9 +430,71 @@ function shouldRunMalikCoder(selection: Awaited<ReturnType<typeof resolveStrictM
   return selection?.modelId === MALIK_CODER_MODEL_ID
 }
 
+/**
+ * A chat site whose first draft is broken or flat gets one upgrade pass: the
+ * model sees its own page and the audit's findings and returns the whole
+ * improved page. The upgrade is kept only when it is strictly better, and it
+ * is budgeted to land before the chat's hard deadline.
+ */
+async function upgradeChatSite(input: {
+  answer: string
+  body: any
+  prompt: string
+  allowCatalog: boolean
+  maxTokens?: number
+  startedAt: number
+  activity?: ExecutionReporter
+  signal?: AbortSignal
+  onProgress?: (progress: any) => void
+}): Promise<string> {
+  const direction = chatArtDirection(input.prompt)
+  if (!direction) return input.answer
+  const motion = !direction.noMotion
+  const draft = siteDocumentIn(input.answer)
+  const issues: SiteIssue[] = draft ? auditSite(draft.html, { motion }) : [{ code: "NO_DOCUMENT", severity: "critical", detail: "the answer contains no complete HTML document" }]
+  if (!siteNeedsUpgrade(issues)) return input.answer
+  const budget = chatAnswerDeadline({ code: true, deep: briefNeedsDeep(input.prompt) }).hardMs - 40_000 - (Date.now() - input.startedAt)
+  if (budget < 60_000) return input.answer
+  const ru = /[а-яё]/iu.test(input.prompt)
+  input.onProgress?.({ phase: "website-upgrade", text: ru ? "Проверяю сайт и дорабатываю слабые места" : "Reviewing the site and upgrading its weak spots" })
+  const step = input.activity?.start("Проверка и доработка сайта", "code", "malik.site-audit", { issues: issues.map((issue) => issue.code) })
+  try {
+    const { runMalikMax } = await import("@/lib/server/malik-max-engine")
+    const result = await runMalikMax({
+      prompt: [
+        `USER REQUEST:\n${input.prompt}`,
+        `AUDIT OF YOUR FIRST DRAFT — fix every point:\n${issues.map((issue) => `- ${issue.detail}`).join("\n")}`,
+        draft ? `FIRST DRAFT (index.html):\n\`\`\`html\n${draft.html}\n\`\`\`` : "",
+      ].filter(Boolean).join("\n\n"),
+      taskPrompt: input.prompt,
+      systemPrompt: [
+        chatWebsiteInstruction(input.body),
+        "SITE UPGRADE PASS — reply with the complete improved index.html in one ```html block and nothing else. Fix every audit point, keep everything that already works, and raise the craft: the recipe's signature scenes, MALIK Cinema attributes, real visuals, finished copy. Never return a shorter or partial page.",
+      ].join("\n\n"),
+      maxTokens: input.maxTokens,
+      reasoningEffort: "medium",
+      allowCatalog: input.allowCatalog,
+      signal: AbortSignal.any([...(input.signal ? [input.signal] : []), AbortSignal.timeout(Math.min(170_000, budget))]),
+      wallMs: Math.min(150_000, budget - 15_000),
+    })
+    const html = extractSiteDocument(result.content)
+    const after = html ? auditSite(html, { motion }) : null
+    const better = Boolean(after) && !after!.some((issue) => issue.severity === "critical") && after!.length < issues.length
+      && (!draft || html.length >= draft.html.length * 0.8)
+    input.activity?.finish(step, { before: issues.length, after: after?.length ?? null, accepted: better }, better ? "completed" : "failed", better ? undefined : "Доработка не лучше черновика — оставлен первый вариант")
+    if (!better) return input.answer
+    return draft ? replaceSiteDocument(input.answer, html) : `${input.answer.trim()}\n\n\`\`\`html\n${html}\n\`\`\``
+  } catch (error) {
+    input.signal?.throwIfAborted()
+    input.activity?.finish(step, undefined, "failed", error instanceof Error ? error.message : String(error))
+    return input.answer
+  }
+}
+
 async function runSelectedAnswer(
   ...args: [...Parameters<typeof runSelectedAnswerUnchecked>,RequestEntitlement?]
 ) {
+  const startedAt=Date.now()
   const [initialBody, selection, onProgress, maxOutputTokens, originalOnToken, activity, signal,,serverOwner] = args
   let body = initialBody
   const originalPrompt = coderPrompt(body), freshness = classifyFreshness(originalPrompt)
@@ -632,6 +697,10 @@ async function runSelectedAnswer(
   return { ...answer, content: needsLaneEvidence ? finalizeFreshAnswer(verified.content, freshness, preparedEvidence?.sources || [], answer.sources) : verified.content, accuracy: verified.report }
   }
   let answer=await runCurrent()
+  // A chat site's first draft is audited; a broken or flat one gets one upgrade pass.
+  if(authoredWebsite&&!("incomplete" in answer&&answer.incomplete?.reason==="time"))answer={...answer,content:await upgradeChatSite({answer:answer.content,body,prompt:originalPrompt,allowCatalog:Boolean(selection&&hasMalikProAccess(selection.entitlement.plan)),maxTokens:maxOutputTokens,startedAt,activity,signal,onProgress})}
+  // A site the model wrote (or finished after «Продолжить») gets the MALIK Cinema motion runtime.
+  if(authoredWebsite||isContinueRequest(originalPrompt))answer={...answer,content:withSiteCinemaInAnswer(answer.content)}
   if(validateText&&!ranToolLane&&!/petroleum|site-forge|game-studio|analyst|plugin|unavailable|safety|evidence-gate/.test(answer.provider)&&!("incomplete" in answer&&answer.incomplete)){
     const first=validateConversationAnswer(intent,answer.content,source?.content||intent.source?.content)
     answer={...answer,content:first.content}

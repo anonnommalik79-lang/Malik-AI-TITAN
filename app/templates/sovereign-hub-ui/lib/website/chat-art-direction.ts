@@ -7,6 +7,15 @@ export function websiteNeedsPackagedBuild(prompt: string) {
     || /(?<![\p{L}\p{N}])(?:react|next\.?js|vue|nuxt|angular|svelte|typescript|php|laravel|django|flask|node\.?js|express|vite|astro|backend|бэкенд|бекенд|database|full[- ]?stack|репозитор\p{L}*|github)(?![\p{L}\p{N}])/iu.test(prompt)
 }
 
+// Command, site and style words around the subject of a site request.
+const NOT_SUBJECT = /(?<![\p{L}\p{N}])(?:созда\p{L}*|сдела\p{L}*|напиш\p{L}*|разработа\p{L}*|сгенериру\p{L}*|собери|построй|нуж[енно]\p{L}*|хочу|мне|пожалуйста|сайт\p{L}*|лендинг\p{L}*|веб\p{L}*|страниц\p{L}*|одностраничн\p{L}*|landing|website|web|site|page|build|create|make|design|для|про|об?|со?|и|в|на|как|у|по|под|без|a|an|the|for|with|without|no|and|of|about|like|красив\p{L}*|крут\p{L}*|современн\p{L}*|стильн\p{L}*|преми\p{L}*|лучш\p{L}*|бог\p{L}*|уровн\p{L}*|жестк\p{L}*|анимац\p{L}*|переход\p{L}*|эффект\p{L}*|видео|фото\p{L}*|картин\p{L}*|изображен\p{L}*|качеств\p{L}*|apple|эппл|эпл|beautiful|modern|premium|stunning|animated|animations?|videos?|photos?|images?|quality)(?![\p{L}\p{N}])/giu
+
+/** What a site is about, in the user's own words, for the photo search. */
+export function siteSubject(prompt: string) {
+  return prompt.replace(/https?:\/\/\S+/g, " ").replace(NOT_SUBJECT, " ").replace(/[^\p{L}\p{N}\s-]/gu, " ")
+    .split(/\s+/).filter((word) => word.length > 1).slice(0, 5).join(" ")
+}
+
 /** Design decisions, never rendered HTML. The selected model remains the author. */
 export function chatArtDirection(prompt: string) {
   const primary = primaryNonMediaArtifact(prompt)
@@ -43,6 +52,11 @@ export function chatArtDirection(prompt: string) {
     composition = "Lead with the actual product/category and a clear merchandising hierarchy. Use distinct editorial and catalogue rhythms, not three repeated benefit cards."
     interaction = "Search/filter/sort meaningful local sample data, product detail, variant state and working cart totals; honest demo checkout."
     // An unspecified store is not permission to choose unrelated stock products.
+  } else {
+    // Any other subject (a car showroom, a gym, a clinic…) is searched in the
+    // user's own words: a premium page without one real photograph is not one.
+    const subject = siteSubject(prompt)
+    if (subject) queries = /[а-яё]/iu.test(subject) ? [subject, `${subject} крупный план`, `${subject} люди`] : [subject, `${subject} close up detail`, `${subject} people lifestyle`]
   }
   // A fictional/extreme setting changes provenance, not just the colour of
   // an ordinary Earth venue. Never pass unrelated resort stock as its photo.
@@ -55,6 +69,8 @@ export function chatArtDirection(prompt: string) {
   if (noMedia || offline) queries = []
   const slots = queries.map((query, index) => ({ slot: index ? `detail-${index}` : "hero", kind: "image" as const, query }))
   const mediaQueries: Array<{ slot: string; kind: "image" | "video"; query: string }> = [...slots]
-  if (video && queries.length) mediaQueries.push({ slot: "motion", kind: "video", query: queries[0] })
+  // A cinematic page opens on moving footage unless the person ruled out video or motion.
+  const noVideo = /без\s+видео|(?:no|without)\s+video/iu.test(prompt)
+  if (queries.length && (video || !noMotion && !noVideo)) mediaQueries.push({ slot: "motion", kind: "video", query: queries[0] })
   return { profile, composition, interaction, noMedia, noMotion, offline, spaceSetting, mediaQueries }
 }
