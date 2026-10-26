@@ -40,7 +40,9 @@ export function chatStreamTimings(body: Record<string, unknown>): ChatStreamTimi
   const prompt = String(body.originalQuestion || body.question || body.prompt || "")
   const largeBrief = briefNeedsDeep(prompt)
   // Silence detection remains unchanged, so a dead server still fails quickly.
-  const firstTextMs = retryable ? chatAnswerDeadline({ code: true, deep: largeBrief }).hardMs + 60_000 : 14 * 60_000
+  // A game says nothing until it is built and has run: wait past the server's game deadline.
+  const game = /(?<!\p{L})(?:игр\p{L}*|game\p{L}*|ойын\p{L}*)(?!\p{L})/iu.test(prompt)
+  const firstTextMs = retryable ? chatAnswerDeadline({ code: true, deep: largeBrief, game }).hardMs + 60_000 : 14 * 60_000
   return {
     firstTextMs,
     // Three missed heartbeats and then some; a large prompt gets more slack

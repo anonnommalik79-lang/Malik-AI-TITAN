@@ -356,14 +356,14 @@ export function parseJsonObject(text: string): unknown {
 /* ---------------------------------------------------------- the planner */
 
 export const GAME_PLANNER_SYSTEM = [
-  "You are the lead game designer of Malik Game Studio. Design ONE small but complete browser game that matches the user's request exactly: its theme, setting, characters, genre and every mechanic they named.",
+  "You are the lead game designer of Malik Game Studio. Design ONE complete, deep browser game that matches the user's request exactly: its theme, setting, characters, genre and every mechanic they named. It must stand next to commercial indie games, not a tech demo.",
   "Reply with ONE JSON object and nothing else.",
   "Keys:",
   '{"title":"short catchy title in the user\'s language","tagline":"one sentence hook","genre":"genre in the user\'s language","input":"keyboard|pointer|both","orientation":"landscape|portrait","lives":1-9,"levels":0-20 (0 = endless with rising difficulty),',
   '"goal":"how to win, user\'s language","lose":"how you lose","controls":[{"keys":"← →","action":"движение"}],"touch":{"joystick":true,"buttons":[{"id":"action","label":"Огонь"}]},',
   '"theme":{"palette":{"bg":"#hex","bg2":"#hex","fg":"#hex","muted":"#hex","accent":"#hex","accent2":"#hex","danger":"#hex","good":"#hex"},"backdrop":"space|sky|night|forest|ocean|desert|dungeon|neon|grid|snow|lava|candy|plain","font":"display|pixel|round|tech|serif","mood":"upbeat|tense|calm|epic|none"},',
   '"mechanics":["concrete rules in English for the programmer"],"entities":["player, enemy types, items with their behaviour, in English"],"levelPlan":["what changes on each level, in English"],"art":"art direction in English: shapes, silhouettes, colours, effects"}',
-  "Rules: everything is drawn procedurally on a 2D canvas (no images, no 3D engine); for 3D-feeling requests use pseudo-3D (perspective projection, raycasting, layered depth). Keep the scope playable in one file: 3-6 core mechanics, 2-5 enemy or item types, a difficulty curve, a clear win and lose condition. Palette: readable contrast between fg and bg, accent colours that pop. Controls must match the input mode; pointer games need no joystick.",
+  "Rules: everything is drawn procedurally on a 2D canvas (no images, no 3D engine); for 3D-feeling requests use pseudo-3D (perspective projection, raycasting, layered depth). Scope for one rich file: 4-8 core mechanics, 4-7 enemy or obstacle types introduced over time, 2 power-ups, a mini-boss and a final boss with phases, an upgrade or new ability between levels, 6-12 levels (or 0 = endless with escalating waves), a clear win and lose condition. levelPlan names what is new on each level. Palette: readable contrast between fg and bg, accent colours that pop. Controls must match the input mode; pointer games need no joystick.",
 ].join("\n")
 
 export function gamePlannerPrompt(prompt: string, base: GamePlan) {

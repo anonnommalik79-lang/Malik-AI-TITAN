@@ -59,7 +59,13 @@ export type GamePlan = {
   lose: string
   controls: GameControl[]
   touch: { joystick: boolean; buttons: TouchButton[] }
-  theme: { palette: GamePalette; backdrop: GameBackdrop; font: GameFont; mood: GameMood }
+  theme: {
+    palette: GamePalette; backdrop: GameBackdrop; font: GameFont; mood: GameMood
+    /** Art style from lib/games/recipe.ts; the runtime presets post-processing from fx. */
+    style?: import("./recipe").GameStyle
+    fx?: import("./recipe").GameFx
+    ambient?: string
+  }
   /** Rules, enemies and levels in plain words, written for the programmer model. */
   mechanics: string[]
   entities: string[]
@@ -85,6 +91,6 @@ export type GameResult = {
   html: string
   qa: GameQa
   /** Model calls spent: plan, writing, continuations of a cut reply, repairs. */
-  calls: { plan: boolean; author: number; continuations: number; repairs: number }
+  calls: { plan: boolean; author: number; continuations: number; repairs: number; polish: number }
   ok: boolean
 }

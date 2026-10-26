@@ -11,6 +11,7 @@ import { gameLocale } from "./plan"
  */
 
 const MODEL_EXCEPTIONS = new Set(["malik-oil-1tb", "malik-coder-32b"])
+const GAME_POLISH_WINDOW_MS = 6 * 60_000
 
 export type GameTurnResult = { content: string; result: GameResult | null; mode: "new" | "edit"; failed?: string }
 
@@ -21,6 +22,7 @@ const PROGRESS: Record<GameStage, Record<GameLocale, string>> = {
   check: { ru: "Проверяю синтаксис и безопасность кода", kk: "Синтаксис пен қауіпсіздікті тексеремін", en: "Checking syntax and safety" },
   run: { ru: "Запускаю игру в изолированной песочнице: 600 кадров с управлением", kk: "Ойынды оқшауланған құмсалғышта іске қосамын", en: "Running the game in an isolated sandbox: 600 frames with input" },
   repair: { ru: "Исправляю найденные при прогоне ошибки", kk: "Табылған қателерді түзетемін", en: "Fixing what the run found" },
+  polish: { ru: "Игра работает — добавляю глубину: врагов, боссов, бонусы и эффекты", kk: "Ойын жұмыс істейді — тереңдік қосамын: жаулар, бастықтар, бонустар", en: "The game runs — adding depth: enemies, bosses, power-ups and effects" },
   page: { ru: "Собираю страницу игры", kk: "Ойын бетін жинаймын", en: "Building the game page" },
 }
 
@@ -55,6 +57,8 @@ export async function runGameStudioTurn(input: {
       model,
       smoke: (plan, logic, signal) => smokeRunGame(plan, logic, { signal }),
       signal: input.signal,
+      // A polish pass may start only while there is room left in the chat's game deadline.
+      polishUntil: Date.now() + GAME_POLISH_WINDOW_MS,
       ...(turn.kind === "edit" ? { base: { plan: turn.plan, logic: turn.logic, version: turn.version } } : {}),
       onStage: (stage, detail) => {
         const text = PROGRESS[stage][locale]

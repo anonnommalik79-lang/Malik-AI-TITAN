@@ -269,7 +269,9 @@ test("plan → a reply cut by the length limit → continuation → checks → r
   assert.equal(result.logic.trim(), SHOOTER.trim())
   assert.equal(result.qa.run.status, "pass")
   assert.equal(result.qa.run.reactsToInput, true)
-  assert.deepEqual([...new Set(stages)], ["plan", "code", "continue", "check", "run", "page"])
+  assert.deepEqual([...new Set(stages)], ["plan", "code", "continue", "check", "run", "polish", "page"])
+  assert.equal(result.calls.polish, 1, "a small fixture game is held to the recipe once")
+  assert.equal(result.plan.theme.style && typeof result.plan.theme.fx, "object", "the art style and its post-processing are on the plan")
   assert.match(calls[2].prompt, /THE FILE ENDS WITH/)
   assert.ok(calls.every((call) => call.taskPrompt && /game/.test(call.taskPrompt)), "the engine runs these as code tasks")
   // The page carries everything and reads back.
@@ -278,6 +280,30 @@ test("plan → a reply cut by the length limit → continuation → checks → r
   const back = readGamePage(result.html)
   assert.equal(back.plan.title, "Звёздный рой")
   assert.equal(back.logic.trim(), SHOOTER.trim())
+})
+
+test("a game that runs but is flat gets one polish pass, kept only when it still runs and is richer", async () => {
+  const richer = SHOOTER + "\nfunction finish(api) { api.hitstop(0.05); api.punch(0.05); api.slowmo(0.4, 0.5); api.trail('shot', 0, 0); api.combo(); api.tween(S, { cool: 0 }, 0.2); api.boss('Матка роя', 1); return { type: 'shield' } }\n"
+  const { model, calls } = fakeModel((input, n) => n === 1 ? "{}" : n === 2 ? wrap(SHOOTER) : wrap(richer))
+  const stages = []
+  const result = await buildGame({ prompt: "сделай космическую игру", model, smoke: (plan, logic) => smokeRunGame(plan, logic), onStage: (stage) => stages.push(stage) })
+  assert.equal(result.ok, true)
+  assert.equal(result.calls.polish, 1)
+  assert.ok(stages.includes("polish"))
+  assert.match(calls[2].prompt, /review against the recipe found it flat/)
+  assert.match(calls[2].prompt, /GAME RECIPE/)
+  assert.match(result.logic, /api\.boss\('Матка роя', 1\)/, "the richer version is delivered")
+
+  const worse = "MalikGame.define({ update(dt, api) {}, draw(ctx, api) { api.draw.rect(0, 0, 10, 10) } })"
+  const second = fakeModel((input, n) => n === 1 ? "{}" : n === 2 ? wrap(SHOOTER) : wrap(worse))
+  const kept = await buildGame({ prompt: "сделай космическую игру", model: second.model, smoke: (plan, logic) => smokeRunGame(plan, logic) })
+  assert.equal(kept.logic.trim(), SHOOTER.trim(), "a polish that is not better never replaces a working game")
+  const edit = fakeModel((input, n) => wrap(SHOOTER))
+  const edited = await buildGame({ prompt: "сделай быстрее", model: edit.model, smoke: (plan, logic) => smokeRunGame(plan, logic), base: { plan: result.plan, logic: SHOOTER } })
+  assert.equal(edited.calls.polish, 0, "a change the person asked for is not rewritten by a polish pass")
+  const late = fakeModel((input, n) => n === 1 ? "{}" : wrap(SHOOTER))
+  const rushed = await buildGame({ prompt: "сделай космическую игру", model: late.model, smoke: (plan, logic) => smokeRunGame(plan, logic), polishUntil: Date.now() - 1 })
+  assert.equal(rushed.calls.polish, 0, "no polish once the chat's time is spent")
 })
 
 test("a crash found in the run goes back to the model with its line; the fixed file is delivered", async () => {
@@ -327,6 +353,79 @@ test("the page keeps the logic inside its script and the plan inert", () => {
     assert.ok(GAME_API_REFERENCE.includes(`.${name}(`), name)
     assert.ok(GAME_RUNTIME_JS.includes(`${name}: function`), name)
   }
+})
+
+test("runtime v2: hit-stop, slow motion, tweens, combos, light and post-processing work on the core", () => {
+  const sandbox = {}
+  new Function(GAME_RUNTIME_JS).call(sandbox)
+  const M = sandbox.MalikGame
+  const fakeCtx = () => new Proxy({ canvas: { width: 1920, height: 1080 } }, {
+    get(target, key) {
+      if (key in target) return target[key]
+      if (key === "createRadialGradient" || key === "createLinearGradient") return () => ({ addColorStop() {} })
+      if (key === "createImageData") return (w, h) => ({ data: new Uint8ClampedArray(w * h * 4) })
+      if (key === "measureText") return () => ({ width: 10 })
+      return typeof key === "string" ? (target[key] = () => {}) : undefined
+    },
+    set(target, key, value) { target[key] = value; return true },
+  })
+  const seen = { updates: 0, dt: 0 }
+  const obj = { x: 0 }
+  const game = {
+    start(api) { api.ambient("snow", 1); api.boss("Босс", 1); api.tween(obj, { x: 100 }, 0.5, { ease: "outBack" }) },
+    update(dt, api) { seen.updates += 1; seen.dt = dt; api.trail("hero", api.time * 10, 0) },
+    draw(ctx, api) { api.light(10, 10, 60, "#ff3355", 1) },
+  }
+  const fx = { darkness: 0.7, bloom: 0.5, vignette: 0.4, scanlines: 0.3, grain: 0.1 }
+  for (const makeCanvas of [undefined, (w, h) => ({ width: w, height: h, getContext: () => fakeCtx() })]) {
+    seen.updates = 0
+    obj.x = 0
+    const core = M.createCore({ plan: { levels: 3, theme: { fx } }, game, makeCanvas })
+    const api = core.api
+    core.setup(); core.play()
+    assert.deepEqual({ ...api.fx }, fx, "the art style's preset is applied")
+    const ctx = fakeCtx()
+    for (let i = 0; i < 40; i++) { core.step(1 / 60); core.render(ctx) }
+    assert.ok(Math.abs(obj.x - 100) < 0.001, `tween reached its target (${obj.x})`)
+    const before = seen.updates
+    api.hitstop(0.1)
+    for (let i = 0; i < 3; i++) core.step(1 / 60)
+    assert.equal(seen.updates, before, "a hit-stop freezes the game's update")
+    for (let i = 0; i < 6; i++) core.step(1 / 60)
+    assert.ok(seen.updates > before, "and the game resumes after it")
+    api.slowmo(0.5, 0.3)
+    core.step(1 / 60)
+    assert.ok(Math.abs(seen.dt - 1 / 120) < 1e-9, "slow motion scales the game's dt")
+    let multiplier = 1
+    for (let i = 0; i < 5; i++) multiplier = api.combo()
+    assert.equal(multiplier, 2, "five hits in a row double the score")
+    for (let i = 0; i < 200; i++) core.step(1 / 60)
+    assert.equal(api.combo(), 1, "the combo runs out when the hits stop")
+    api.punch(0.08); api.boss(null)
+    assert.doesNotThrow(() => { for (let i = 0; i < 5; i++) { core.step(1 / 60); core.render(ctx) } })
+    assert.equal(core.error, null)
+  }
+  for (const name of ["hitstop", "slowmo", "punch", "tween", "trail", "light", "ambient", "boss", "combo", "comboReset", "anim", "follow"]) {
+    assert.ok(GAME_API_REFERENCE.includes(`api.${name}(`), `the model is told about api.${name}`)
+    assert.ok(GAME_RUNTIME_JS.includes(`api.${name} = function`), `api.${name} exists`)
+  }
+})
+
+test("every game gets its own art style; the recipe holds it to depth and feel", () => {
+  const { gameStyleFor, gameRecipeText, auditGameLogic, gameNeedsPolish } = load("lib/games/recipe.ts")
+  assert.equal(gameStyleFor("Создай хоррор игру в подземелье").style, "dark")
+  assert.equal(gameStyleFor("Сделай пиксельный платформер").style, "pixel")
+  assert.match(gameStyleFor("Создай космический шутер").style, /neon|synthwave|pixel/)
+  assert.match(gameStyleFor("Игра про котиков на ферме").style, /toon|painterly/)
+  assert.equal(gameStyleFor("Создай хоррор игру").fx.darkness > 0, true)
+  const styles = new Set(["игра про пиратов", "гонки по городу", "игра про рыцаря и дракона", "игра змейка", "игра для детей про животных", "танковый бой", "игра про ниндзя", "морской бой"].map((p) => gameStyleFor("Создай " + p).style))
+  assert.ok(styles.size >= 3, [...styles].join(","))
+  const plan = { ...PLAN, levels: 6, theme: { ...PLAN.theme, style: "dark", fx: gameStyleFor("хоррор").fx, ambient: "embers" } }
+  const recipe = gameRecipeText("хоррор", plan)
+  for (const piece of [/ART STYLE — Dark atmosphere/, /api\.light\(x, y, radius, color\)/, /api\.ambient\("embers", 1\)/, /at least 4 enemy or obstacle types/, /final boss/, /api\.hitstop/, /600–900 lines/]) assert.match(recipe, piece)
+  const flat = auditGameLogic(SHOOTER, plan).map((issue) => issue.code)
+  for (const code of ["NO_BOSS", "NO_LIGHTS"]) assert.ok(flat.includes(code), code)
+  assert.equal(gameNeedsPolish(auditGameLogic(SHOOTER, plan)), true)
 })
 
 test("the chat answer says how to play and what was really checked; history keeps one line", async () => {

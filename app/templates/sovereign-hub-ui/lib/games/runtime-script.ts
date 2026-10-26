@@ -236,6 +236,17 @@ export const GAME_RUNTIME_JS = String.raw`(function (root) {
     var pointer = { x: W / 2, y: H / 2, wx: W / 2, wy: H / 2, down: false, pressed: false, released: false };
     var fx = [], texts = [];
     var shake = { t: 0, power: 0 }, flash = { t: 0, max: 1, color: "#ffffff" };
+    // Game feel and finish: time control, tweens, trails, light, weather and
+    // post-processing. The page supplies offscreen canvases; the server's
+    // smoke test has none, so the canvas-only passes simply skip there.
+    var timeScale = 1, slowT = 0, freezeT = 0, punch = { t: 0, max: 1, amount: 0 };
+    var tweens = [], trails = {}, lights = [], ambient = { kind: "", density: 0, parts: [] };
+    var post = { bloom: 0, vignette: 0, scanlines: 0, grain: 0, darkness: 0 };
+    var themeFx = theme.fx || {};
+    for (var fxKey in post) if (typeof themeFx[fxKey] === "number") post[fxKey] = Math.max(0, Math.min(1, themeFx[fxKey]));
+    var combo = { n: 0, t: 0, best: 0 }, boss = null;
+    var makeCanvas = options.makeCanvas || null, layers = {};
+    var slowFrames = 0, lastRender = 0;
     var backdropKind = theme.backdrop || "plain";
     var paintBackdrop = createBackdrop(backdropKind, colors, W, H);
     var g = null, started = false, setupDone = false, clock = 0;
@@ -310,7 +321,7 @@ export const GAME_RUNTIME_JS = String.raw`(function (root) {
       if (api.state !== "playing") return;
       if (totalLevels && api.level >= totalLevels) { api.win(); return; }
       api.level += 1;
-      fx.length = 0; texts.length = 0;
+      fx.length = 0; texts.length = 0; tweens.length = 0; trails = {}; boss = null; timeScale = 1; slowT = 0; freezeT = 0;
       emit("level", api.level);
       api.sfx("power");
       call("start", api.level);
@@ -341,6 +352,251 @@ export const GAME_RUNTIME_JS = String.raw`(function (root) {
       return { x: W / 2 + (x - (cam.x || 0)) * s, y: (cam.horizon !== undefined ? cam.horizon : H / 2) + (y - (cam.y || 0)) * s, scale: s };
     };
     api.screen = function (fn) { if (!g) return; g.save(); var m = baseTransform(); g.setTransform(m[0], m[1], m[2], m[3], m[4], m[5]); try { fn(g); } finally { g.restore(); } };
+
+    /* ------------------------------------------------- feel and finish */
+
+    var EASE = {
+      linear: function (t) { return t; },
+      inQuad: function (t) { return t * t; },
+      outQuad: function (t) { return t * (2 - t); },
+      inOutQuad: function (t) { return t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t; },
+      outCubic: function (t) { var u = t - 1; return u * u * u + 1; },
+      outBack: function (t) { var c = 1.70158, u = t - 1; return 1 + (c + 1) * u * u * u + c * u * u; },
+      outElastic: function (t) { return t === 0 || t === 1 ? t : Math.pow(2, -10 * t) * Math.sin((t * 10 - 0.75) * 2.0944) + 1; },
+      outBounce: function (t) {
+        if (t < 1 / 2.75) return 7.5625 * t * t;
+        if (t < 2 / 2.75) { t -= 1.5 / 2.75; return 7.5625 * t * t + 0.75; }
+        if (t < 2.5 / 2.75) { t -= 2.25 / 2.75; return 7.5625 * t * t + 0.9375; }
+        t -= 2.625 / 2.75; return 7.5625 * t * t + 0.984375;
+      }
+    };
+    function unit(v) { return Math.max(0, Math.min(1, Number(v) || 0)); }
+    api.ease = EASE;
+    api.fx = post;
+    api.hitstop = function (seconds) { freezeT = Math.max(freezeT, Math.min(0.25, Number(seconds) || 0.06)); };
+    api.slowmo = function (factor, seconds) { timeScale = Math.max(0.05, Math.min(1, Number(factor) || 0.4)); slowT = Math.max(slowT, Math.min(3, Number(seconds) || 0.6)); };
+    api.punch = function (amount, seconds) { punch.amount = Math.max(-0.3, Math.min(0.3, Number(amount) || 0.06)); punch.t = punch.max = Number(seconds) || 0.18; };
+    api.tween = function (target, props, duration, opt) {
+      if (!target || !props) return;
+      opt = opt || {};
+      if (tweens.length > 200) tweens.shift();
+      tweens.push({ target: target, to: props, from: null, t: 0, d: Math.max(0.01, Number(duration) || 0.3), delay: Number(opt.delay) || 0, ease: EASE[opt.ease] || (typeof opt.ease === "function" ? opt.ease : EASE.outCubic), done: opt.onDone || null });
+    };
+    api.trail = function (key, x, y, opt) {
+      opt = opt || {};
+      var tr = trails[key] || (trails[key] = { pts: [], color: colors.accent, width: 6, life: 0.35 });
+      if (opt.color) tr.color = opt.color;
+      if (opt.width) tr.width = opt.width;
+      if (opt.life) tr.life = opt.life;
+      tr.pts.push({ x: x, y: y, age: 0 });
+      if (tr.pts.length > 48) tr.pts.shift();
+    };
+    api.light = function (x, y, radius, color, intensity) { if (lights.length < 64) lights.push({ x: x, y: y, r: Number(radius) || 120, color: color || null, i: intensity === undefined ? 1 : unit(intensity) }); };
+    api.ambient = function (kind, density) { ambient.kind = String(kind || ""); ambient.density = density === undefined ? 1 : Math.max(0, Math.min(2, Number(density) || 0)); ambient.parts = []; };
+    api.boss = function (name, fraction) { boss = name === null || name === false ? null : { name: String(name || "").slice(0, 40), hp: unit(fraction) }; };
+    api.combo = function (add) {
+      combo.n += add === undefined ? 1 : Number(add) || 0;
+      combo.t = 2.6;
+      if (combo.n > combo.best) combo.best = combo.n;
+      return 1 + Math.floor(combo.n / 5);
+    };
+    api.comboReset = function () { combo.n = 0; combo.t = 0; };
+    api.anim = function (frames, fps, offset) { if (!frames || !frames.length) return undefined; return frames[Math.floor((api.time + (Number(offset) || 0)) * (Number(fps) || 8)) % frames.length]; };
+    api.follow = function (target, opt) {
+      if (!target) return;
+      opt = opt || {};
+      var cam = api.camera, k = opt.lerp === undefined ? 0.12 : unit(opt.lerp), f = 1 - Math.pow(1 - k, (api.dt || 1 / 60) * 60);
+      var tx = target.x - W / 2 + (opt.offsetX || 0) + (opt.lead ? (target.vx || 0) * opt.lead : 0);
+      var ty = target.y - H / 2 + (opt.offsetY || 0) + (opt.lead ? (target.vy || 0) * opt.lead : 0);
+      cam.x = (cam.x || 0) + (tx - (cam.x || 0)) * f;
+      cam.y = (cam.y || 0) + (ty - (cam.y || 0)) * f;
+      var b = opt.bounds;
+      if (b) { cam.x = Math.max(b.x, Math.min(b.x + b.w - W, cam.x)); cam.y = Math.max(b.y, Math.min(b.y + b.h - H, cam.y)); }
+    };
+
+    function stepTweens(dt) {
+      for (var k = tweens.length - 1; k >= 0; k--) {
+        var tw = tweens[k];
+        if (tw.delay > 0) { tw.delay -= dt; continue; }
+        if (!tw.from) { tw.from = {}; for (var p in tw.to) tw.from[p] = Number(tw.target[p]) || 0; }
+        tw.t += dt;
+        var e = tw.ease(Math.min(1, tw.t / tw.d));
+        for (var q in tw.to) tw.target[q] = tw.from[q] + (Number(tw.to[q]) - tw.from[q]) * e;
+        if (tw.t >= tw.d) { tweens.splice(k, 1); if (tw.done) { try { tw.done(); } catch (err) { fail(err, "tween"); } } }
+      }
+    }
+    function stepTrails(dt) {
+      for (var key in trails) {
+        var tr = trails[key];
+        for (var k = tr.pts.length - 1; k >= 0; k--) { tr.pts[k].age += dt; if (tr.pts[k].age > tr.life) tr.pts.splice(k, 1); }
+        if (!tr.pts.length) delete trails[key];
+      }
+    }
+    function drawTrails() {
+      for (var key in trails) {
+        var tr = trails[key], pts = tr.pts;
+        g.lineCap = "round";
+        for (var k = 1; k < pts.length; k++) {
+          var fade = 1 - pts[k].age / tr.life;
+          g.globalAlpha = Math.max(0, fade) * 0.85;
+          g.strokeStyle = tr.color;
+          g.lineWidth = Math.max(0.5, tr.width * fade);
+          g.beginPath(); g.moveTo(pts[k - 1].x, pts[k - 1].y); g.lineTo(pts[k].x, pts[k].y); g.stroke();
+        }
+      }
+      g.globalAlpha = 1;
+    }
+    var AMBIENT = { snow: 90, rain: 150, embers: 60, dust: 45, stars: 80, bubbles: 40, leaves: 30 };
+    function spawnAmbient(top) {
+      var kind = ambient.kind;
+      var p = { x: Math.random() * W, y: top ? -10 : Math.random() * H, s: Math.random(), a: Math.random() * 6.283 };
+      if (kind === "embers" || kind === "bubbles") p.y = top ? H + 10 : p.y;
+      return p;
+    }
+    function stepAmbient(dt) {
+      var want = Math.round((AMBIENT[ambient.kind] || 0) * ambient.density);
+      var parts = ambient.parts;
+      while (parts.length < want) parts.push(spawnAmbient(parts.length > want / 2));
+      if (parts.length > want) parts.length = want;
+      for (var k = 0; k < parts.length; k++) {
+        var p = parts[k], kind = ambient.kind;
+        p.a += dt * (0.6 + p.s);
+        if (kind === "snow") { p.y += (25 + 45 * p.s) * dt; p.x += Math.sin(p.a) * 18 * dt; }
+        else if (kind === "rain") { p.y += (520 + 300 * p.s) * dt; p.x -= 90 * dt; }
+        else if (kind === "embers") { p.y -= (30 + 60 * p.s) * dt; p.x += Math.sin(p.a * 1.7) * 20 * dt; }
+        else if (kind === "bubbles") { p.y -= (20 + 40 * p.s) * dt; p.x += Math.sin(p.a) * 12 * dt; }
+        else if (kind === "leaves") { p.y += (30 + 40 * p.s) * dt; p.x += Math.sin(p.a) * 40 * dt; }
+        else if (kind === "dust") { p.y += Math.sin(p.a) * 6 * dt; p.x += (6 + 10 * p.s) * dt; }
+        if (p.y > H + 20 || p.y < -20 || p.x < -20 || p.x > W + 20) parts[k] = spawnAmbient(true);
+      }
+    }
+    function drawAmbient() {
+      var parts = ambient.parts, kind = ambient.kind;
+      if (!parts.length) return;
+      for (var k = 0; k < parts.length; k++) {
+        var p = parts[k];
+        if (kind === "rain") { g.globalAlpha = 0.35; g.strokeStyle = colors.muted; g.lineWidth = 1; g.beginPath(); g.moveTo(p.x, p.y); g.lineTo(p.x - 4, p.y + 14); g.stroke(); continue; }
+        if (kind === "stars") { g.globalAlpha = 0.25 + 0.6 * Math.abs(Math.sin(p.a * 2)); g.fillStyle = colors.fg; g.fillRect(p.x, p.y, 1.5 + p.s, 1.5 + p.s); continue; }
+        g.globalAlpha = kind === "embers" ? 0.5 + 0.5 * Math.abs(Math.sin(p.a * 3)) : kind === "dust" ? 0.25 : 0.7;
+        g.fillStyle = kind === "embers" ? (p.s > 0.5 ? colors.accent : colors.danger) : kind === "leaves" ? colors.accent2 : colors.fg;
+        g.beginPath();
+        if (kind === "bubbles") { g.strokeStyle = colors.fg; g.lineWidth = 1; g.arc(p.x, p.y, 2 + 4 * p.s, 0, 6.283); g.stroke(); }
+        else if (kind === "leaves") { g.ellipse(p.x, p.y, 4 + 3 * p.s, 2, p.a, 0, 6.283); g.fill(); }
+        else { g.arc(p.x, p.y, kind === "dust" ? 1 + p.s : 1.2 + 1.8 * p.s, 0, 6.283); g.fill(); }
+      }
+      g.globalAlpha = 1;
+    }
+    function layer(name, w, h, build) {
+      if (!makeCanvas) return null;
+      var c = layers[name];
+      if (!c || c.width !== w || c.height !== h) {
+        try { c = layers[name] = makeCanvas(w, h); if (build) build(c); } catch (e) { makeCanvas = null; return null; }
+      }
+      return c;
+    }
+    function toScreen(x, y) {
+      var cam = api.camera, z = (cam.zoom || 1);
+      return { x: (x - (cam.x || 0) - W / 2) * z + W / 2, y: (y - (cam.y || 0) - H / 2) * z + H / 2, z: z };
+    }
+    // Post-processing, in screen space after the world: light, bloom, vignette, scanlines, grain.
+    function drawPost(ctx) {
+      // Darkness only falls where the game lights something: a game that
+      // never calls api.light() is never left black.
+      if (post.darkness > 0 && lights.length) {
+        var dark = layer("light", W, H);
+        if (dark) {
+          var d = dark.getContext("2d");
+          d.globalCompositeOperation = "source-over";
+          d.clearRect(0, 0, W, H);
+          d.fillStyle = "rgba(0,0,0," + post.darkness + ")";
+          d.fillRect(0, 0, W, H);
+          d.globalCompositeOperation = "destination-out";
+          for (var k = 0; k < lights.length; k++) {
+            var l = lights[k], s = toScreen(l.x, l.y), r = l.r * s.z;
+            var cut = d.createRadialGradient(s.x, s.y, 0, s.x, s.y, r);
+            cut.addColorStop(0, "rgba(0,0,0," + l.i + ")");
+            cut.addColorStop(1, "rgba(0,0,0,0)");
+            d.fillStyle = cut;
+            d.fillRect(s.x - r, s.y - r, r * 2, r * 2);
+          }
+          ctx.drawImage(dark, 0, 0, W, H);
+        }
+      }
+      if (lights.length) {
+        ctx.globalCompositeOperation = "lighter";
+        for (var j = 0; j < lights.length; j++) {
+          var lt = lights[j];
+          if (!lt.color) continue;
+          var p = toScreen(lt.x, lt.y), rr = lt.r * p.z * 0.8;
+          var glow = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, rr);
+          glow.addColorStop(0, rgba(lt.color, 0.22 * lt.i));
+          glow.addColorStop(1, rgba(lt.color, 0));
+          ctx.fillStyle = glow;
+          ctx.fillRect(p.x - rr, p.y - rr, rr * 2, rr * 2);
+        }
+        ctx.globalCompositeOperation = "source-over";
+      }
+      if (post.bloom > 0 && ctx.canvas && "filter" in ctx) {
+        var sw = Math.max(1, Math.round(W / 4)), sh = Math.max(1, Math.round(H / 4));
+        var small = layer("bloom", sw, sh);
+        if (small) {
+          var b = small.getContext("2d");
+          b.clearRect(0, 0, sw, sh);
+          b.filter = "blur(3px) brightness(1.15)";
+          b.drawImage(ctx.canvas, 0, 0, sw, sh);
+          b.filter = "none";
+          ctx.globalCompositeOperation = "lighter";
+          ctx.globalAlpha = post.bloom * 0.45;
+          ctx.drawImage(small, 0, 0, W, H);
+          ctx.globalAlpha = 1;
+          ctx.globalCompositeOperation = "source-over";
+        }
+      }
+      if (post.vignette > 0) {
+        var v = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.35, W / 2, H / 2, Math.max(W, H) * 0.75);
+        v.addColorStop(0, "rgba(0,0,0,0)");
+        v.addColorStop(1, "rgba(0,0,0," + (post.vignette * 0.7) + ")");
+        ctx.fillStyle = v;
+        ctx.fillRect(0, 0, W, H);
+      }
+      if (post.scanlines > 0) {
+        var scan = layer("scan", 2, 3, function (c) { var x = c.getContext("2d"); x.fillStyle = "rgba(0,0,0,1)"; x.fillRect(0, 2, 2, 1); });
+        if (scan) { ctx.globalAlpha = post.scanlines * 0.35; ctx.fillStyle = ctx.createPattern(scan, "repeat"); ctx.fillRect(0, 0, W, H); ctx.globalAlpha = 1; }
+      }
+      if (post.grain > 0) {
+        var noise = layer("grain", 128, 128, function (c) {
+          var x = c.getContext("2d"), img = x.createImageData(128, 128);
+          for (var n = 0; n < img.data.length; n += 4) { var v2 = Math.random() * 255; img.data[n] = img.data[n + 1] = img.data[n + 2] = v2; img.data[n + 3] = 255; }
+          x.putImageData(img, 0, 0);
+        });
+        if (noise) {
+          ctx.save();
+          ctx.globalAlpha = post.grain * 0.12;
+          ctx.globalCompositeOperation = "overlay";
+          ctx.translate(-Math.random() * 128, -Math.random() * 128);
+          ctx.fillStyle = ctx.createPattern(noise, "repeat");
+          ctx.fillRect(0, 0, W + 128, H + 128);
+          ctx.restore();
+        }
+      }
+    }
+    // Boss health and the combo meter sit on the screen above the post-processing.
+    function drawOverlay(ctx) {
+      if (boss) {
+        var bw = Math.min(W * 0.56, 560), bx = (W - bw) / 2, by = 54;
+        api.draw.text(boss.name, W / 2, by - 8, { size: 15, color: colors.fg, align: "center", baseline: "bottom", weight: 700, stroke: "rgba(0,0,0,0.6)" });
+        ctx.fillStyle = "rgba(0,0,0,0.55)"; ctx.fillRect(bx - 2, by - 2, bw + 4, 14);
+        ctx.fillStyle = colors.danger; ctx.fillRect(bx, by, bw * boss.hp, 10);
+        ctx.fillStyle = "rgba(255,255,255,0.25)"; ctx.fillRect(bx, by, bw * boss.hp, 3);
+      }
+      if (combo.n >= 2 && combo.t > 0) {
+        var label = (plan.locale === "en" ? "COMBO" : "КОМБО") + " ×" + (1 + Math.floor(combo.n / 5)), cy = boss ? 92 : 64;
+        var pop = 1 + Math.max(0, combo.t - 2.4) * 1.5;
+        api.draw.text(label, W - 24, cy, { size: Math.round(20 * pop), color: colors.accent, align: "right", weight: 800, stroke: "rgba(0,0,0,0.6)" });
+        api.draw.text(String(combo.n), W - 24, cy + 22, { size: 13, color: colors.fg, align: "right", weight: 700, stroke: "rgba(0,0,0,0.6)" });
+        ctx.fillStyle = colors.accent; ctx.fillRect(W - 24 - 90 * (combo.t / 2.6), cy + 30, 90 * (combo.t / 2.6), 3);
+      }
+    }
 
     api.draw = {
       rect: function (x, y, w, h, color) { g.fillStyle = color || colors.fg; g.fillRect(x, y, w, h); },
@@ -448,6 +704,7 @@ export const GAME_RUNTIME_JS = String.raw`(function (root) {
         api.score = 0; api.lives = startLives; api.level = 1; api.time = 0; api.frame = 0; api.status = "";
         api.camera.x = 0; api.camera.y = 0; api.camera.zoom = 1; api.data = {};
         fx.length = 0; texts.length = 0; hit = {}; rawHit = {}; core.error = null;
+        tweens.length = 0; trails = {}; boss = null; combo.n = 0; combo.t = 0; timeScale = 1; slowT = 0; freezeT = 0; punch.t = 0;
         api.state = "playing"; started = true;
         emit("score", 0); emit("lives", api.lives); emit("level", 1); emit("status", ""); emit("state", "playing");
         call("start", 1);
@@ -462,9 +719,21 @@ export const GAME_RUNTIME_JS = String.raw`(function (root) {
         pointer.wx = (pointer.x - W / 2) / zoom + W / 2 + (cam.x || 0);
         pointer.wy = (pointer.y - H / 2) / zoom + H / 2 + (cam.y || 0);
         if (api.state === "playing") {
-          api.time += dt; api.frame += 1;
-          call("update", dt);
+          if (slowT > 0) { slowT -= dt; if (slowT <= 0) timeScale = 1; }
+          if (combo.t > 0) { combo.t -= dt; if (combo.t <= 0) combo.n = 0; }
+          // A hit-stop freezes the world for a few frames; effects keep moving.
+          if (freezeT > 0) freezeT -= dt;
+          else {
+            var gameDt = dt * timeScale;
+            api.dt = gameDt;
+            api.time += gameDt; api.frame += 1;
+            call("update", gameDt);
+            stepTweens(gameDt);
+          }
         }
+        if (punch.t > 0) punch.t -= dt;
+        stepAmbient(dt);
+        stepTrails(dt);
         if (api.state === "playing" || api.state === "over" || api.state === "won") updateEffects(dt);
         hit = {}; rawHit = {}; pointer.pressed = false; pointer.released = false;
       },
@@ -477,12 +746,23 @@ export const GAME_RUNTIME_JS = String.raw`(function (root) {
           ctx.save();
           if (shake.t > 0) ctx.translate((Math.random() * 2 - 1) * shake.power, (Math.random() * 2 - 1) * shake.power);
           var cam = api.camera;
-          if (cam.zoom && cam.zoom !== 1) { ctx.translate(W / 2, H / 2); ctx.scale(cam.zoom, cam.zoom); ctx.translate(-W / 2, -H / 2); }
+          var zoom = (cam.zoom || 1) * (punch.t > 0 ? 1 + punch.amount * (punch.t / punch.max) : 1);
+          if (zoom !== 1) { ctx.translate(W / 2, H / 2); ctx.scale(zoom, zoom); ctx.translate(-W / 2, -H / 2); }
           ctx.translate(-(cam.x || 0), -(cam.y || 0));
           if (api.state !== "error") call("draw");
+          drawTrails();
           drawEffects();
           ctx.restore();
+          drawAmbient();
+          // Heavy passes step back on a device that cannot keep up.
+          var now = typeof performance !== "undefined" && performance.now ? performance.now() : 0;
+          if (now && lastRender) slowFrames = now - lastRender > 26 ? slowFrames + 1 : Math.max(0, slowFrames - 1);
+          lastRender = now;
+          if (slowFrames > 90) { post.bloom = 0; post.grain = 0; slowFrames = 0; }
+          drawPost(ctx);
+          drawOverlay(ctx);
         }
+        lights.length = 0;
         if (flash.t > 0) { ctx.globalAlpha = Math.max(0, flash.t / flash.max) * 0.45; ctx.fillStyle = flash.color; ctx.fillRect(0, 0, W, H); ctx.globalAlpha = 1; }
         ctx.restore();
       }
@@ -543,13 +823,22 @@ export const GAME_RUNTIME_JS = String.raw`(function (root) {
       if (timer) { clearInterval(timer); timer = null; }
       if (!on || !mood || mood === "none" || !unlock()) return;
       var notes = SCALES[mood] || SCALES.upbeat, base = ROOT[mood] || 220, beat = mood === "calm" ? 0.34 : mood === "epic" ? 0.27 : 0.2;
+      // A four-chord progression under the melody, a bass line and a light kit.
+      var PROGRESSIONS = { upbeat: [0, 9, 5, 7], tense: [0, 8, 5, 7], calm: [0, 5, 9, 7], epic: [0, 8, 3, 10] };
+      var chords = PROGRESSIONS[mood] || PROGRESSIONS.upbeat;
       nextAt = ac.currentTime + 0.06;
       timer = setInterval(function () {
         if (muted || !ac) return;
         while (nextAt < ac.currentTime + 0.3) {
-          var n = notes[step % notes.length], delay = Math.max(0, nextAt - ac.currentTime);
-          tone(base * Math.pow(2, n / 12), 0, beat * 0.9, "triangle", 0.03, delay);
-          if (step % 4 === 0) tone(base / 2, 0, beat * 1.8, "sine", 0.045, delay);
+          var shift = chords[Math.floor(step / 8) % chords.length], delay = Math.max(0, nextAt - ac.currentTime);
+          var n = notes[step % notes.length] + shift;
+          tone(base * Math.pow(2, n / 12), 0, beat * 0.9, "triangle", 0.028, delay);
+          if (step % 2 === 0) tone(base / 2 * Math.pow(2, shift / 12), 0, beat * 1.6, "sine", 0.05, delay);
+          if (mood !== "calm") {
+            if (step % 4 === 0) tone(120, 45, 0.16, "sine", 0.12, delay);
+            if (step % 4 === 2) noise(0.09, 0.07, 3200, delay);
+            if (step % 2 === 1) noise(0.03, 0.03, 9000, delay);
+          }
           step++; nextAt += beat;
         }
       }, 100);
@@ -599,9 +888,12 @@ export const GAME_RUNTIME_JS = String.raw`(function (root) {
     root.addEventListener("error", function (event) { if (!M.definition) showError({ message: String(event.message || L.noGame), where: "load" }); });
     if (!game || !ctx) { showError({ message: L.noGame, where: "load" }); return; }
 
+    // Pixel-art games keep hard pixel edges when the canvas is scaled.
+    if (plan.theme && plan.theme.style === "pixel") { canvas.style.imageRendering = "pixelated"; ctx.imageSmoothingEnabled = false; }
     var core = createCore({
       plan: plan, game: game, best: Number(store.get("best") || 0) || 0,
       baseTransform: function () { return [ratio, 0, 0, ratio, 0, 0]; },
+      makeCanvas: function (w, h) { var c = doc.createElement("canvas"); c.width = w; c.height = h; return c; },
       events: {
         score: function (v) { setText("hud-score", v); },
         lives: function (v) { setText("hud-lives", v > 9 ? "❤ × " + v : new Array(v + 1).join("❤")); },

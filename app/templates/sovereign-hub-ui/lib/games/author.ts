@@ -1,5 +1,6 @@
 import { createContinuationFilter } from "@/lib/ai/continuation-overlap"
 import type { GamePlan } from "./types"
+import { gameRecipeText } from "./recipe"
 
 /**
  * What the programmer model is told, and how its reply becomes one file.
@@ -32,6 +33,7 @@ INPUT: api.key(name) held · api.pressed(name) this frame only. Names: "left","r
 CAMERA: api.camera = {x, y, zoom} — set it each frame to scroll; draw() works in world coordinates. api.screen(ctx => …) draws in fixed screen space.
 FEEL: api.sfx(name): "shoot","laser","hit","explode","coin","pickup","jump","power","hurt","win","lose","click","select","bounce","step","engine".
   api.particles(x, y, {count, color (string or array), speed, life, size, gravity, angle, spread, square}) · api.shake(power, seconds) · api.flash(color, seconds) · api.floatText(text, x, y, color?, size?).
+FINISH (what makes it feel premium — use them): api.hitstop(seconds ≤ 0.25) freezes the world for impact frames · api.slowmo(factor, seconds) for big moments · api.punch(amount, seconds) camera zoom pulse · api.tween(obj, {x:…, scale:…}, seconds, {ease, delay, onDone}) with api.ease.linear|inQuad|outQuad|inOutQuad|outCubic|outBack|outElastic|outBounce · api.trail(key, x, y, {color, width, life}) once per frame per fast object · api.light(x, y, radius, color?, intensity?) from draw() — lights cut through api.fx.darkness and add coloured glow · api.ambient("snow"|"rain"|"embers"|"dust"|"stars"|"bubbles"|"leaves", density 0..2) weather layer · api.boss(name, hp 0..1) shows a boss bar, api.boss(null) hides it · api.combo() → multiplier (1 + combo/5), the runtime shows the combo meter; api.comboReset() on damage · api.anim(frames, fps, offset?) current frame of a list · api.follow(target{x,y,vx?,vy?}, {lerp, lead, offsetX, offsetY, bounds:{x,y,w,h}}) smooth camera · api.fx = {bloom, vignette, scanlines, grain, darkness} (0..1, preset by the art style).
 DRAW HELPERS (use ctx directly too): api.draw.rect(x,y,w,h,color) · .roundRect(x,y,w,h,r,fill,stroke?,width?) · .circle(x,y,r,color) · .ring(x,y,r,color,width) · .line(x1,y1,x2,y2,color,width) · .poly([x0,y0,x1,y1,...] or [{x,y}], fill, stroke?, width?) · .text(str,x,y,{size,color,align,baseline,weight,shadow,stroke}) · .glow(color,blur) / .noGlow() · .gradient(x,y,w,h,c1,c2,horizontal?) · .radial(x,y,r,inner,outer?) · .pixels(["..##..",".#..#."], {"#":"#fff"}, x, y, scale, flip?) · .star(x,y,outer,inner,points,color) · .bar(x,y,w,h,0..1,color,back?).
 MATH: api.rand(a,b) · api.randi(a,b) · api.pick(list) · api.chance(p) · api.clamp · api.lerp · api.approach(v,target,step) · api.dist(ax,ay,bx,by) · api.angle(ax,ay,bx,by) · api.wrap(v,a,b) · api.overlap(a,b) (boxes {x,y,w,h}, x,y = top-left) · api.circle(a,b) (circles {x,y,r}) · api.inside(px,py,box) · api.rgba(hex, alpha) · api.mix(hex1, hex2, t).
 PSEUDO-3D: api.project(x, y, z, {x, y, z, fov, horizon}) → {x, y, scale} or null when behind the camera.
@@ -78,7 +80,7 @@ export const GAME_AUTHOR_SYSTEM = [
   "- Plain modern JavaScript (ES2020). No import/export, no require, no external files, images, fonts or URLs. Draw everything procedurally on the canvas: gradients, shapes, glow, pixel sprites via api.draw.pixels.",
   "- Never use fetch, XMLHttpRequest, WebSocket, eval, new Function, setTimeout, setInterval, requestAnimationFrame, localStorage, document, window, parent, top, globalThis, constructor, __proto__, Proxy or Reflect. Timers: count with dt in update(). Persistence: the runtime keeps the best score.",
   "- Keep all mutable game state in one top-level object (e.g. const S = {...}) and rebuild it in start(api, level). Do not reset api.score or api.lives yourself.",
-  "- Every function you call must exist. No TODO, no placeholders, no 'rest omitted'. Finish the whole file — at most about 650 lines, so it always fits.",
+  "- Every function you call must exist. No TODO, no placeholders, no 'rest omitted'. Finish the whole file — 600 to 950 lines; the reply is continued automatically if it is cut, so never shorten the game to fit.",
   "- Bound every array (remove dead or off-screen objects; cap counts). Use dt for all motion and timers. Guard against NaN.",
   "",
   "QUALITY BAR (this is what makes it feel like a real game):",
@@ -89,7 +91,8 @@ export const GAME_AUTHOR_SYSTEM = [
   "- Feel: a combo or streak multiplier shown with api.floatText, api.flash on level transitions and big hits, and anticipation before danger (a telegraph flash or wind-up before an enemy attacks).",
   "- Art: distinctive silhouettes with layered shapes and highlights, the theme palette (api.colors) with glow for important objects, readable contrast, subtle animation (bobbing, rotation, trails). No plain single rectangles for the hero.",
   "- Controls exactly as in the design's controls list; for pointer games use api.pointer; touch players have api.axis() from the joystick and action buttons.",
-  "- An in-world HUD only for game-specific info (boss health bar, ammo, timer) — score, lives and level are already shown by the runtime.",
+  "- An in-world HUD only for game-specific info (ammo, timer) — score, lives, level, the boss bar (api.boss) and the combo meter (api.combo) are already drawn by the runtime.",
+  "- This game's own art style, depth and feel bar come with the request (GAME RECIPE). Follow it.",
   "",
   "FORMAT EXAMPLE (shape only):",
   EXAMPLE,
@@ -101,7 +104,30 @@ export function gameAuthorPrompt(request: string, plan: GamePlan) {
     "",
     `GAME DESIGN (JSON):\n${JSON.stringify({ title: plan.title, genre: plan.genre, input: plan.input, size: `${plan.width}x${plan.height}`, lives: plan.lives, levels: plan.levels, goal: plan.goal, lose: plan.lose, controls: plan.controls, touch: plan.touch, theme: plan.theme, mechanics: plan.mechanics, entities: plan.entities, levelPlan: plan.levelPlan, art: plan.art }, null, 1)}`,
     "",
+    `GAME RECIPE:\n${gameRecipeText(request, plan)}`,
+    "",
     `In-game text (status lines, labels) in ${plan.locale === "ru" ? "Russian" : plan.locale === "kk" ? "Kazakh" : "English"}. Write the complete game.js now.`,
+  ].join("\n")
+}
+
+/** A game that runs but is flat: the same programmer raises it to the bar, keeping what works. */
+export function gamePolishPrompt(request: string, plan: GamePlan, logic: string, issues: string[]) {
+  return [
+    `USER REQUEST:\n${String(request || "").slice(0, 3000)}`,
+    "",
+    `GAME DESIGN: ${plan.genre}, "${plan.title}", input ${plan.input}, levels ${plan.levels}.`,
+    "",
+    `GAME RECIPE:\n${gameRecipeText(request, plan)}`,
+    "",
+    "The game runs, but a review against the recipe found it flat. Raise it — keep every mechanic, control and level that works, and add what is missing:",
+    ...issues.slice(0, 10).map((issue) => `- ${issue}`),
+    "",
+    "CURRENT game.js:",
+    LOGIC_START,
+    logic.slice(0, 60_000),
+    LOGIC_END,
+    "",
+    "Return the complete improved game.js in the same file format — longer and richer, never shorter.",
   ].join("\n")
 }
 

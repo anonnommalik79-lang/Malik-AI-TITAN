@@ -1176,7 +1176,10 @@ function liveSseResponse(
             undefined,
             entitlement,
           )
-      const deadline = chatAnswerDeadline({ code: isCodeRequest(coderPrompt(body)), deep: briefNeedsDeep(coderPrompt(body)), site: Boolean(chatArtDirection(coderPrompt(body))) })
+      const deadline = chatAnswerDeadline({
+        code: isCodeRequest(coderPrompt(body)), deep: briefNeedsDeep(coderPrompt(body)), site: Boolean(chatArtDirection(coderPrompt(body))),
+        game: Boolean(gameStudioTurn(coderPrompt(body), { messages: body?.messages || body?.history, attachments: body?.attachments })),
+      })
       const settledAnswer = isProjectBuildRequest(body) || !canRetryChat(body) ? answerPromise : withinChatDeadline(answerPromise, deadline, startedAt, {
         wrote: () => streamedAny,
         stop: () => { writer = "rescue"; mainRun.abort() },

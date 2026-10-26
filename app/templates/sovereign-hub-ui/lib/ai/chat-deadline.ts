@@ -16,11 +16,13 @@
  */
 export type ChatAnswerDeadline = { rescueAtMs: number; rescueMs: number; hardMs: number }
 
-export function chatAnswerDeadline(kind: { code: boolean; deep: boolean; site?: boolean }): ChatAnswerDeadline {
+export function chatAnswerDeadline(kind: { code: boolean; deep: boolean; site?: boolean; game?: boolean }): ChatAnswerDeadline {
   // The MAX engine's own wall clock for this kind of request
   // (maxResponseWallMs), plus room for search and planning before it starts.
   const engineMs = kind.code ? (kind.deep ? 300_000 : 240_000) : kind.deep ? 160_000 : 115_000
-  const rescueAtMs = engineMs + 50_000
+  // A game is built, run, repaired and polished before its first word reaches
+  // the chat: silence is normal there, and a text rescue would replace a game.
+  const rescueAtMs = kind.game ? 14 * 60_000 : engineMs + 50_000
   const rescueMs = 75_000
   // A website streams its first draft early, then may get an upgrade pass:
   // that second pass needs room before the answer is closed as written.

@@ -1,6 +1,7 @@
 import {
-  GAME_AUTHOR_SYSTEM, extractLogic, gameAuthorPrompt, gameContinuePrompt, gameEditPrompt, gameRepairPrompt, joinContinuation, wholeLines,
+  GAME_AUTHOR_SYSTEM, extractLogic, gameAuthorPrompt, gameContinuePrompt, gameEditPrompt, gamePolishPrompt, gameRepairPrompt, joinContinuation, wholeLines,
 } from "./author"
+import { auditGameLogic, gameNeedsPolish, withGameStyle } from "./recipe"
 import { buildGameHtml } from "./page"
 import { gamePassport } from "./passport"
 import { GAME_PLANNER_SYSTEM, fallbackGamePlan, gameLocale, gamePlannerPrompt, mergeGamePlan, parseJsonObject } from "./plan"
@@ -9,16 +10,17 @@ import { smokeProblems, type SmokeOutcome } from "./smoke-harness"
 import type { GamePlan, GameQa, GameResult } from "./types"
 
 /**
- * USER REQUEST → PLAN → WRITE → (CONTINUE a cut reply) → CHECK → RUN → FIX → PAGE.
+ * USER REQUEST → PLAN → WRITE → (CONTINUE a cut reply) → CHECK → RUN → FIX → POLISH → PAGE.
  *
- * Bounded everywhere: at most four continuations of one reply and two repair
- * rounds; a repair that does not reduce the problems ends the loop; the best
+ * Bounded everywhere: at most four continuations of one reply, two repair
+ * rounds and one polish pass; a repair that does not reduce the problems ends
+ * the loop; a polish is kept only when it still runs and is richer; the best
  * version seen is the one delivered, with whatever is still wrong said plainly.
  */
 
 export type GameModel = (input: { system: string; prompt: string; taskPrompt: string; maxTokens: number; temperature: number; signal?: AbortSignal }) => Promise<string | null>
 export type GameSmoke = (plan: GamePlan, logic: string, signal?: AbortSignal) => Promise<SmokeOutcome>
-export type GameStage = "plan" | "code" | "continue" | "check" | "run" | "repair" | "page"
+export type GameStage = "plan" | "code" | "continue" | "check" | "run" | "repair" | "polish" | "page"
 
 export class GameStudioError extends Error {
   constructor(public code: "MODEL_UNAVAILABLE" | "NO_CODE", message: string) { super(message) }
@@ -37,10 +39,12 @@ export async function buildGame(input: {
   signal?: AbortSignal
   /** An existing game to change, with the person's instruction. */
   base?: { plan: GamePlan; logic: string; version?: number }
+  /** No polish pass starts after this time (ms epoch): the chat answer must land. */
+  polishUntil?: number
   onStage?: (stage: GameStage, detail?: { round?: number; of?: number; problems?: number }) => void
 }): Promise<GameResult> {
   const stage = input.onStage || (() => {})
-  const calls = { plan: false, author: 0, continuations: 0, repairs: 0 }
+  const calls = { plan: false, author: 0, continuations: 0, repairs: 0, polish: 0 }
   const ask = async (system: string, prompt: string, maxTokens: number, temperature: number) => {
     input.signal?.throwIfAborted()
     try {
@@ -62,7 +66,8 @@ export async function buildGame(input: {
     const reply = await ask(GAME_PLANNER_SYSTEM, gamePlannerPrompt(input.prompt, fallback), 2200, 0.6)
     const raw = reply ? parseJsonObject(reply) : null
     calls.plan = Boolean(raw)
-    plan = mergeGamePlan(raw, fallback)
+    // The art style (and its post-processing preset) is chosen here, not by the model.
+    plan = withGameStyle(mergeGamePlan(raw, fallback), input.prompt)
   }
 
   // 2. The code, continued until its end marker arrives.
@@ -137,6 +142,19 @@ export async function buildGame(input: {
     // A repair that does not reduce the problems will not converge: stop here.
     if (!better) break
     current = next
+  }
+
+  // 4. A game that runs but is flat gets one polish pass against the recipe.
+  const flat = best.problems.length ? [] : auditGameLogic(best.logic, plan)
+  if (!input.base && gameNeedsPolish(flat) && (!input.polishUntil || Date.now() < input.polishUntil)) {
+    stage("polish", { problems: flat.length })
+    const polished = await write(gamePolishPrompt(input.prompt, plan, best.logic, flat.map((issue) => issue.detail)), 0.35)
+    calls.polish += 1
+    if (polished) {
+      const next = await check(polished)
+      // Kept only when it still passes every check and is measurably richer.
+      if (!next.problems.length && rank(next) <= rank(best) && auditGameLogic(next.logic, plan).length < flat.length) best = next
+    }
   }
 
   stage("page")
