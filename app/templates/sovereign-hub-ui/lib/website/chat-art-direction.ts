@@ -28,6 +28,7 @@ export function chatArtDirection(prompt: string) {
   let profile = "adaptive", composition = "Invent a composition from the exact brief. Choose hierarchy, negative space, subject imagery and a useful interaction before coding; not an interchangeable SaaS card template."
   let interaction = "One complete subject-specific explorer, comparison or detail interaction with keyboard/touch support; ordinary navigation works without animation."
   let queries: string[] = []
+  const subject = siteSubject(prompt)
   if (/недвижим|вилл|real\s*estate|propert|villas?|luxury\s+homes?/iu.test(prompt)) {
     profile = "property-cinematic"
     composition = "Architecture-led opening: dominant architectural photograph, restrained typography over a readable scrim, warm framed or full-bleed composition; the search bar is a real control, not decoration. Follow with unequal property/editorial sections, not a generic feature grid."
@@ -55,8 +56,7 @@ export function chatArtDirection(prompt: string) {
   } else {
     // Any other subject (a car showroom, a gym, a clinic…) is searched in the
     // user's own words: a premium page without one real photograph is not one.
-    const subject = siteSubject(prompt)
-    if (subject) queries = /[а-яё]/iu.test(subject) ? [subject, `${subject} крупный план`, `${subject} люди`] : [subject, `${subject} close up detail`, `${subject} people lifestyle`]
+    if (subject) queries = [subject]
   }
   // A fictional/extreme setting changes provenance, not just the colour of
   // an ordinary Earth venue. Never pass unrelated resort stock as its photo.
@@ -65,6 +65,14 @@ export function chatArtDirection(prompt: string) {
     const mars = /mars|martian|марс/iu.test(prompt)
     queries = [mars ? "NASA Mars planet landscape scientific photograph" : "NASA Moon lunar surface Apollo photograph", "space habitat interior architectural concept visualization"]
     composition += " This is a space/concept project: clearly distinguish scientific imagery and architectural concepts from photographs of a real operating venue."
+  }
+  // A deep page needs a photograph for every few chapters, all of the same subject.
+  if (queries.length && !spaceSetting && subject) {
+    const variants = /[а-яё]/iu.test(subject) ? ["", "крупный план", "интерьер", "люди", "детали", "атмосфера вечер"] : ["", "close up detail", "interior", "people lifestyle", "texture detail", "evening atmosphere"]
+    for (const variant of variants) {
+      const query = variant ? `${subject} ${variant}` : subject
+      if (queries.length < 6 && !queries.includes(query)) queries.push(query)
+    }
   }
   if (noMedia || offline) queries = []
   const slots = queries.map((query, index) => ({ slot: index ? `detail-${index}` : "hero", kind: "image" as const, query }))

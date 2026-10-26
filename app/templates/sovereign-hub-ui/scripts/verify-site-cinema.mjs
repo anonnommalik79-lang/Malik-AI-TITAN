@@ -37,7 +37,7 @@ test("the runtime is valid JavaScript and holds its safety promises", () => {
   assert.match(out, /setTimeout\(function\(\)\{if\(!window\.__malikCinema\)document\.documentElement\.classList\.remove\("mc-js"\)\},2500\)/, "a runtime that never starts reveals everything")
   assert.match(out, /@media \(prefers-reduced-motion:reduce\)\{html\.mc-js \[data-reveal\][^}]*opacity:1!important/)
   assert.match(out, /@media print\{/)
-  assert.ok(Buffer.byteLength(out) - Buffer.byteLength(page("<p data-split=scrub>a b c</p>")) < 24_000, "small enough to ship with every site")
+  assert.ok(Buffer.byteLength(out) - Buffer.byteLength(page("<p data-split=scrub>a b c</p>")) < 40_000, "small enough to ship with every site")
 })
 
 test("fragments, plain pages and other code are left alone", () => {
@@ -60,7 +60,7 @@ test("every complete html document in an answer is upgraded, prose and other fil
 })
 
 test("the model is told to use the runtime and to compose like a flagship product page", async () => {
-  for (const name of ["data-reveal", "data-split=\\\"scrub\\\"", "data-scene", "data-stage", "data-scrub-inset", "data-scrub-range", "0 1 1 0", "data-autoplay", "data-gallery", "data-nav", "mc-scrolled"]) {
+  for (const name of ["data-loader", "data-loader-count", "data-shader", "data-marquee", "data-cursor-text", "data-smooth", "data-split=\\\"lines\\\"", "data-scramble", "data-bg", "data-kenburns", "data-grain", "data-skew", "data-reveal", "data-split=\\\"scrub\\\"", "data-scene", "data-stage", "data-scrub-inset", "data-scrub-range", "0 1 1 0", "data-autoplay", "data-gallery", "data-nav", "mc-scrolled"]) {
     assert.ok(SITE_CINEMA_CONTRACT.includes(name.replace(/\\/g, "")), name)
   }
   assert.match(SITE_CINEMA_CONTRACT, /Do NOT write IntersectionObserver/)
@@ -79,7 +79,7 @@ test("any subject gets real photos and footage searched in the user's words", ()
   assert.equal(siteSubject("Build a premium website for a dental clinic"), "dental clinic")
   const car = chatArtDirection("Создай сайт автосалона BMW")
   assert.equal(car.profile, "adaptive")
-  assert.deepEqual(car.mediaQueries.map((q) => q.kind), ["image", "image", "image", "video"])
+  assert.deepEqual(car.mediaQueries.map((q) => q.kind), ["image", "image", "image", "image", "image", "image", "video"], "six photographs and one film for a deep page")
   assert.equal(car.mediaQueries[0].query, "автосалона BMW")
   assert.equal(chatArtDirection("Создай сайт автосалона без фото").mediaQueries.length, 0)
   assert.ok(chatArtDirection("Создай сайт автосалона без видео").mediaQueries.every((q) => q.kind === "image"))
@@ -125,11 +125,13 @@ test("every brief gets its own recipe — never one template for all sites", () 
   assert.match(cinemaRecipe("Создай сайт кофейни").direction, /earth|gallery|obsidian/)
 })
 
+const copy = (n) => Array.from({ length: n }, (_, i) => `слово${i}`).join(" ")
 const good = (extra = "") => `<!doctype html><html><head><meta name="viewport" content="width=device-width"></head><body>
 <header data-nav><a href="#a">A</a></header>
 <section id="a" data-reveal><h1 data-split>T</h1><img src="https://images.unsplash.com/x" alt=""></section>
 <section data-scene="260"><div data-stage><img data-scrub-inset="14 0" data-scrub-radius="30 0" src="https://images.unsplash.com/y" alt=""></div></section>
 <section data-reveal><p data-split="scrub">Words</p></section><section data-stagger="90"><div data-reveal>1</div></section><section data-gallery id="g"></section>
+${Array.from({ length: 6 }, (_, i) => `<section data-reveal><h2>Глава ${i}</h2><p>${copy(170)}</p><img src="https://images.unsplash.com/z${i}" alt=""></section>`).join("\n")}
 ${extra}<script>document.title = "ok"</script></body></html>`
 
 test("a finished cinematic site passes the audit; broken and flat drafts are caught", () => {
@@ -143,7 +145,7 @@ test("a finished cinematic site passes the audit; broken and flat drafts are cau
   assert.ok(auditSite(good('<img src="images/hero.jpg">'), { motion: true }).some((i) => i.code === "LOCAL_IMAGES"))
   const flat = "<!doctype html><html><head><meta name=viewport content=x></head><body><section>a</section></body></html>"
   const flatIssues = auditSite(flat, { motion: true }).map((i) => i.code)
-  for (const code of ["FEW_CHAPTERS", "NO_VISUALS", "FLAT_MOTION", "NO_SCENE"]) assert.ok(flatIssues.includes(code), code)
+  for (const code of ["FEW_CHAPTERS", "THIN_COPY", "FEW_VISUALS", "FLAT_MOTION", "NO_SCENE"]) assert.ok(flatIssues.includes(code), code)
   assert.ok(!auditSite(flat, { motion: false }).some((i) => i.code === "FLAT_MOTION"), "a no-motion request is not asked for motion")
   assert.equal(siteNeedsUpgrade([]), false)
   assert.equal(siteNeedsUpgrade([{ code: "NO_SCENE", severity: "quality", detail: "" }]), false, "one small gap is not worth a second full pass")
@@ -165,8 +167,64 @@ test("the upgraded page replaces exactly the old document in the answer", () => 
 test("the chat route audits each site and upgrades a weak draft once, within the deadline", () => {
   const route = fs.readFileSync("app/api/stream/route-impl.ts", "utf8")
   assert.match(route, /if\(authoredWebsite&&!\("incomplete" in answer&&answer\.incomplete\?\.reason==="time"\)\)answer=\{\.\.\.answer,content:await upgradeChatSite\(/)
-  assert.match(route, /const budget = chatAnswerDeadline\(\{ code: true, deep: briefNeedsDeep\(input\.prompt\) \}\)\.hardMs - 40_000 - \(Date\.now\(\) - input\.startedAt\)/)
+  assert.match(route, /const budget = chatAnswerDeadline\(\{ code: true, deep: briefNeedsDeep\(input\.prompt\), site: true \}\)\.hardMs - 40_000 - \(Date\.now\(\) - input\.startedAt\)/)
+  assert.match(route, /site: Boolean\(chatArtDirection\(coderPrompt\(body\)\)\)/, "a site gets the longer deadline its upgrade pass needs")
   assert.match(route, /if \(!better\) return input\.answer/, "a worse upgrade never replaces the first draft")
   const order = route.indexOf("await upgradeChatSite(") < route.indexOf("content:withSiteCinemaInAnswer(answer.content)")
   assert.ok(order, "the audit sees the model's page before the runtime is appended")
+})
+
+test("recipe v2: tokens with Cyrillic-safe fonts, studio techniques and depth", () => {
+  const ru = cinemaRecipe("Создай сайт кофейни в Алматы").text
+  const en = cinemaRecipe("Build a website for a coffee roastery").text
+  for (const text of [ru, en]) {
+    assert.match(text, /:root\{--bg:#[0-9a-f]{6};--surface:#[0-9a-f]{6};--text:#[0-9a-f]{6};--muted:#[0-9a-f]{6};--accent:#[0-9a-f]{6};--mc-accent:#[0-9a-f]{6};--display:'[^']+'/)
+    assert.match(text, /https:\/\/fonts\.googleapis\.com\/css2\?family=/)
+    assert.match(text, /Studio techniques for this site \(use every one\): .+;.+;.+;.+;/)
+    assert.match(text, /10–14 chapters/)
+    assert.match(text, /at least 1,200 words/)
+    assert.match(text, /fetchpriority="high"/)
+  }
+  const cyrillicFaces = /family=(?:Manrope|Unbounded|Inter|Montserrat|Cormorant\+Garamond|Playfair\+Display|Prata|Golos\+Text|Onest|Russo\+One|Rubik|IBM\+Plex\+Sans|Exo\+2|JetBrains\+Mono|Lora|Forum|Jost|IBM\+Plex\+Mono)\b/
+  for (const prompt of ["Создай сайт автосалона", "Создай сайт кофейни", "Сделай лендинг фитнес клуба", "Создай сайт AI стартапа", "Создай сайт архитектурного бюро", "Создай сайт школы танцев", "Сайт ювелирного магазина", "Создай сайт клиники"]) {
+    const families = [...cinemaRecipe(prompt).text.matchAll(/family=([^:&]+)/g)].map((m) => m[0])
+    assert.ok(families.length >= 1)
+    for (const family of families) assert.match(family, cyrillicFaces, `${prompt}: ${family} must have Cyrillic`)
+  }
+  const offline = cinemaRecipe("Создай сайт кофейни", { offline: true }).text
+  assert.doesNotMatch(offline, /fonts\.googleapis/, "an offline site loads no remote fonts")
+  const chapters = cinemaRecipe("Создай сайт автосалона").text.match(/Chapter order: (.+)/)[1].split(" → ")
+  assert.ok(chapters.length >= 14, `${chapters.length} steps from nav to footer`)
+})
+
+test("photographs are fetched sharp and footage in Full HD", async () => {
+  const previous = process.env.PEXELS_API_KEY
+  process.env.PEXELS_API_KEY = "test-key"
+  try {
+    const result = await discoverAssets({ direction: "adaptive", mediaQueries: [{ slot: "hero", kind: "image", query: "car" }, { slot: "motion", kind: "video", query: "car" }] }, undefined, async (url, init) => {
+      const href = String(url)
+      if (init?.method === "HEAD") return new Response(null, { headers: { "content-type": href.includes("videos.pexels") ? "video/mp4" : "image/jpeg", "content-length": "500000" } })
+      if (href.includes("/videos/search")) return Response.json({ videos: [{ url: "https://www.pexels.com/video/1/", image: "https://images.pexels.com/videos/1/poster.jpeg", user: { name: "A" }, video_files: [640, 1280, 1920, 3840].map((width) => ({ file_type: "video/mp4", width, height: width / 16 * 9, link: `https://videos.pexels.com/video-files/1/${width}.mp4` })) }] })
+      if (href.includes("api.pexels.com/v1/search")) return Response.json({ photos: [{ url: "https://www.pexels.com/photo/1/", photographer: "B", width: 6000, height: 4000, src: { original: "https://images.pexels.com/photos/1/pexels-photo-1.jpeg", large2x: "https://images.pexels.com/photos/1/pexels-photo-1.jpeg?w=940&dpr=2" } }] })
+      return Response.json({})
+    })
+    const image = result.assets.find((asset) => asset.kind === "image")
+    const video = result.assets.find((asset) => asset.kind === "video")
+    assert.match(image.url, /pexels-photo-1\.jpeg\?auto=compress&cs=tinysrgb&w=2400$/)
+    assert.match(video.url, /\/1920\.mp4$/, "Full HD, not the 4K original or a 640px preview")
+  } finally {
+    if (previous === undefined) delete process.env.PEXELS_API_KEY
+    else process.env.PEXELS_API_KEY = previous
+  }
+})
+
+test("runtime v2 carries the studio techniques it promises", () => {
+  const runtime = runtimeOf(withSiteCinema(page("<div data-loader><span data-loader-count>0</span></div>")))
+  for (const piece of ["aurora:", "mesh:", "liquid:", "getContext(\"webgl\"", "data-loader-count", "mc-loaded", "mc-cursor", "data-marquee", "data-smooth", "passive: false", "data-bg", "data-skew", "GLYPHS", "splitLines", "fonts.ready"]) {
+    assert.ok(runtime.includes(piece), piece)
+  }
+  assert.match(runtime, /setTimeout\(finishLoad, 5000\)/, "a preloader can never trap the page")
+  assert.match(runtime, /if \(!reduce && !coarse && \(root\.hasAttribute\("data-smooth"\)/, "inertia scrolling never on touch or reduced motion")
+  const doc = withSiteCinema(page("<div data-loader>x</div>"))
+  assert.match(doc, /html:not\(\.mc-js\) \[data-loader\]\{display:none!important\}/, "no JavaScript, no loader")
 })

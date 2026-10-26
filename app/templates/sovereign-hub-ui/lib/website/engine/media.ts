@@ -52,17 +52,21 @@ async function verify(url: string, kind: Asset["kind"], signal: AbortSignal, fet
 // Queries are written in the user's language; the photo APIs search Cyrillic
 // well only when told which language it is.
 const cyrillic = (query: string) => /[а-яё]/iu.test(query)
+// Photographs are fetched at this width: sharp edge to edge on a large display.
+const SHARP_WIDTH = 2400
 async function pexels(slot: Slot, signal: AbortSignal, fetcher: Fetcher, budget: Budget): Promise<Candidate[]> {
   const key = process.env.PEXELS_API_KEY
   if (!key) return []
   const endpoint = slot.kind === "video" ? "https://api.pexels.com/v1/videos/search" : "https://api.pexels.com/v1/search"
   const result = await json(`${endpoint}?query=${encodeURIComponent(slot.query)}&per_page=3&orientation=landscape${cyrillic(slot.query) ? "&locale=ru-RU" : ""}`, { Authorization: key }, signal, fetcher, budget)
-  if (slot.kind === "image") return (result.photos || []).slice(0, 3).flatMap((photo: { src?: { large2x?: string; large?: string }; url: string; photographer?: string; width: number; height: number }) => {
-    const url = photo.src?.large2x || photo.src?.large
+  if (slot.kind === "image") return (result.photos || []).slice(0, 3).flatMap((photo: { src?: { original?: string; large2x?: string; large?: string }; url: string; photographer?: string; width: number; height: number }) => {
+    // Full-bleed on a large screen needs the original resized on the CDN, not the 940px preview.
+    const url = photo.src?.original ? `${photo.src.original}?auto=compress&cs=tinysrgb&w=${SHARP_WIDTH}` : photo.src?.large2x || photo.src?.large
     return assetUrl(url) && assetUrl(photo.url) ? [{ slot: slot.slot, kind: "image" as const, url: url!, source: "pexels" as const, sourcePage: photo.url, credit: `Photo by ${plain(photo.photographer) || "Pexels contributor"} on Pexels`, license: "https://www.pexels.com/license/", width: photo.width, height: photo.height }] : []
   })
   return (result.videos || []).slice(0, 3).flatMap((video: { video_files?: Array<{ file_type: string; width: number; height: number; link: string }>; url: string; image?: string; user?: { name?: string } }) => {
-    const file = video.video_files?.filter(f => f.file_type === "video/mp4" && f.width >= 640 && f.width <= 1920 && assetUrl(f.link)).sort((a, b) => Math.abs(a.width - 1280) - Math.abs(b.width - 1280))[0]
+    // Full HD reads as filmed on a large screen; 4K files are too heavy for a background.
+    const file = video.video_files?.filter(f => f.file_type === "video/mp4" && f.width >= 960 && f.width <= 2560 && assetUrl(f.link)).sort((a, b) => Math.abs(a.width - 1920) - Math.abs(b.width - 1920))[0]
     return file && assetUrl(video.url) ? [{ slot: slot.slot, kind: "video" as const, url: file.link, poster: assetUrl(video.image)?.href, source: "pexels" as const, sourcePage: video.url, credit: `Video by ${plain(video.user?.name) || "Pexels contributor"} on Pexels`, license: "https://www.pexels.com/license/", width: file.width, height: file.height }] : []
   })
 }
@@ -102,11 +106,13 @@ async function unsplash(slot: Slot, signal: AbortSignal, fetcher: Fetcher, budge
   if (slot.kind !== "image" || !process.env.UNSPLASH_ACCESS_KEY) return []
   const headers = { Authorization: `Client-ID ${process.env.UNSPLASH_ACCESS_KEY}`, "Accept-Version": "v1" }
   const result = await json(`https://api.unsplash.com/search/photos?query=${encodeURIComponent(slot.query)}&per_page=3&orientation=landscape${cyrillic(slot.query) ? "&lang=ru" : ""}`, headers, signal, fetcher, budget)
-  return (result.results || []).slice(0, 3).flatMap((photo: { urls?: { regular?: string }; links?: { html?: string; download_location?: string }; user?: { links?: { html?: string }; name?: string }; width: number; height: number }) => {
+  return (result.results || []).slice(0, 3).flatMap((photo: { urls?: { raw?: string; regular?: string }; links?: { html?: string; download_location?: string }; user?: { links?: { html?: string }; name?: string }; width: number; height: number }) => {
     if (!assetUrl(photo.urls?.regular) || !assetUrl(photo.links?.html) || !assetUrl(photo.links?.download_location) || !assetUrl(photo.user?.links?.html)) return []
     const page = new URL(photo.links!.html!), creator = new URL(photo.user!.links!.html!)
     for (const url of [page, creator]) { url.searchParams.set("utm_source", "malik_ai"); url.searchParams.set("utm_medium", "referral") }
-    return [{ slot: slot.slot, kind: "image" as const, url: photo.urls!.regular!, source: "unsplash" as const, sourcePage: page.href, creatorUrl: creator.href, credit: `Photo by ${plain(photo.user?.name) || "Unsplash contributor"} on Unsplash`, license: "https://unsplash.com/license", width: photo.width, height: photo.height, tracking: { url: photo.links!.download_location!, headers } }]
+    // The 1080px "regular" size is soft on a full-bleed hero; the raw URL resizes on the CDN.
+    const sharp = assetUrl(photo.urls?.raw) ? `${photo.urls!.raw}${photo.urls!.raw!.includes("?") ? "&" : "?"}w=${SHARP_WIDTH}&q=82&auto=format&fit=max` : ""
+    return [{ slot: slot.slot, kind: "image" as const, url: sharp && assetUrl(sharp) ? sharp : photo.urls!.regular!, source: "unsplash" as const, sourcePage: page.href, creatorUrl: creator.href, credit: `Photo by ${plain(photo.user?.name) || "Unsplash contributor"} on Unsplash`, license: "https://unsplash.com/license", width: photo.width, height: photo.height, tracking: { url: photo.links!.download_location!, headers } }]
   })
 }
 export function commonsLicense(raw: unknown) {
@@ -120,7 +126,7 @@ export function commonsLicense(raw: unknown) {
 }
 async function commons(slot: Slot, signal: AbortSignal, fetcher: Fetcher, budget: Budget): Promise<Candidate[]> {
   const url = new URL("https://commons.wikimedia.org/w/api.php")
-  const params = { action: "query", format: "json", formatversion: "2", generator: "search", gsrsearch: `${slot.query} filetype:${slot.kind === "image" ? "bitmap" : "video"}`, gsrnamespace: "6", gsrlimit: "3", prop: "imageinfo", iiprop: "url|size|mime|extmetadata", iiurlwidth: "1600", iiextmetadatafilter: "Artist|LicenseShortName|LicenseUrl|Restrictions" }
+  const params = { action: "query", format: "json", formatversion: "2", generator: "search", gsrsearch: `${slot.query} filetype:${slot.kind === "image" ? "bitmap" : "video"}`, gsrnamespace: "6", gsrlimit: "3", prop: "imageinfo", iiprop: "url|size|mime|extmetadata", iiurlwidth: String(SHARP_WIDTH), iiextmetadatafilter: "Artist|LicenseShortName|LicenseUrl|Restrictions" }
   for (const [name, value] of Object.entries(params)) url.searchParams.set(name, value)
   const result = await json(url.href, { "User-Agent": "MalikAI-WebsiteEngine/1.1 (https://malikaiworld.world; attributed media discovery)" }, signal, fetcher, budget)
   return (result.query?.pages || []).slice(0, 3).flatMap((page: { imageinfo?: Array<{ mime: string; size: number; width: number; height: number; thumbwidth?: number; thumbheight?: number; url: string; thumburl?: string; descriptionurl: string; extmetadata?: Record<string, { value?: string }> }> }) => {

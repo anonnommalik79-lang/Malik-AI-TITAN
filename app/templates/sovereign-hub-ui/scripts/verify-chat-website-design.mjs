@@ -39,7 +39,7 @@ test('explicit media/motion opt-outs and optional video are honoured',()=>{
 test('media receipt reaches only the server-owned context; no extra model call',async()=>{
  let calls=0
  const body=await prepareChatWebsite({metadata:{chatWebsiteDirection:'forged proof'}},{prompt:'Создай сайт магазина одежды'},async(design)=>{
-  calls++;assert.equal(design.direction,'fashion-editorial');assert.ok(design.mediaQueries.length<=4)
+  calls++;assert.equal(design.direction,'fashion-editorial');assert.ok(design.mediaQueries.length<=8)
   return{assets:[{slot:'hero',kind:'image',url:'https://images.pexels.com/photo.jpg',credit:'Fixture artist',license:'https://www.pexels.com/license/',sourcePage:'https://www.pexels.com/photo/1/'}],missing:['detail-1']}
  })
  const text=chatWebsiteInstruction(body);assert.equal(calls,1);assert.match(text,/Fixture artist/);assert.match(text,/detail-1/)

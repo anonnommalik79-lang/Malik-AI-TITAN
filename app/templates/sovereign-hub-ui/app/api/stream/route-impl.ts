@@ -453,7 +453,7 @@ async function upgradeChatSite(input: {
   const draft = siteDocumentIn(input.answer)
   const issues: SiteIssue[] = draft ? auditSite(draft.html, { motion }) : [{ code: "NO_DOCUMENT", severity: "critical", detail: "the answer contains no complete HTML document" }]
   if (!siteNeedsUpgrade(issues)) return input.answer
-  const budget = chatAnswerDeadline({ code: true, deep: briefNeedsDeep(input.prompt) }).hardMs - 40_000 - (Date.now() - input.startedAt)
+  const budget = chatAnswerDeadline({ code: true, deep: briefNeedsDeep(input.prompt), site: true }).hardMs - 40_000 - (Date.now() - input.startedAt)
   if (budget < 60_000) return input.answer
   const ru = /[а-яё]/iu.test(input.prompt)
   input.onProgress?.({ phase: "website-upgrade", text: ru ? "Проверяю сайт и дорабатываю слабые места" : "Reviewing the site and upgrading its weak spots" })
@@ -1176,7 +1176,7 @@ function liveSseResponse(
             undefined,
             entitlement,
           )
-      const deadline = chatAnswerDeadline({ code: isCodeRequest(coderPrompt(body)), deep: briefNeedsDeep(coderPrompt(body)) })
+      const deadline = chatAnswerDeadline({ code: isCodeRequest(coderPrompt(body)), deep: briefNeedsDeep(coderPrompt(body)), site: Boolean(chatArtDirection(coderPrompt(body))) })
       const settledAnswer = isProjectBuildRequest(body) || !canRetryChat(body) ? answerPromise : withinChatDeadline(answerPromise, deadline, startedAt, {
         wrote: () => streamedAny,
         stop: () => { writer = "rescue"; mainRun.abort() },

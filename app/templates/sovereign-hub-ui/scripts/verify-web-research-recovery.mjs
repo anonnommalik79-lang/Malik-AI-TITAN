@@ -152,7 +152,7 @@ try {
     ...load("lib/ai/chat-deadline.ts"),
     canRetryChat: load("lib/ai/chat-stream-recovery.ts").canRetryChat,
     briefNeedsDeep: load("lib/ai/brief-quality.ts").briefNeedsDeep,
-    isCodeRequest: () => false, hasMalikProAccess: () => false,
+    isCodeRequest: () => false, hasMalikProAccess: () => false, chatArtDirection: () => null,
     malikRescueAnswer: async () => { throw new Error("rescue is not expected in these checks") },
   })
   await check("SSE delivers done while history and usage writes are still pending", async () => {

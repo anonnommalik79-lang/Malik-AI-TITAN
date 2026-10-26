@@ -35,7 +35,7 @@ export function extractSiteDocument(reply: string): string {
   return bare ? bare.trim() : ""
 }
 
-const CINEMA = /\sdata-(?:reveal|split|scene|scrub-[a-z]+|parallax|count|nav|progress|gallery|tilt|magnetic|autoplay)\b/gi
+const CINEMA = /\sdata-(?:reveal|split|scene|scrub-[a-z]+|parallax|count|nav|progress|gallery|tilt|magnetic|autoplay|marquee|cursor|loader|bg|skew|grain|shader|smooth|scramble|kenburns)\b/gi
 
 export function auditSite(html: string, options: { motion: boolean }): SiteIssue[] {
   const issues: SiteIssue[] = []
@@ -64,8 +64,12 @@ export function auditSite(html: string, options: { motion: boolean }): SiteIssue
   const badImages = [...doc.matchAll(/<img\b[^>]*\ssrc\s*=\s*["']([^"']*)["']/gi)].map((m) => m[1]).filter((src) => !/^(?:https:\/\/|data:image\/)/i.test(src))
   if (badImages.length) add("LOCAL_IMAGES", "quality", `images point at files that do not exist in a single-file site: ${badImages.slice(0, 3).join(", ")}`)
 
-  if ((doc.match(/<section\b/gi) || []).length < 5) add("FEW_CHAPTERS", "quality", "fewer than five <section> chapters — the page is too short for a flagship site")
-  if (!/<(?:img|video|canvas|svg|picture)\b/i.test(doc)) add("NO_VISUALS", "quality", "no image, video, canvas or SVG visual at all")
+  const chapters = (doc.match(/<section\b/gi) || []).length
+  if (chapters < 8) add("FEW_CHAPTERS", "quality", `only ${chapters} <section> chapters — a flagship site needs 10–14`)
+  const words = visible.split(/\s+/).filter((word) => /[\p{L}\p{N}]{2,}/u.test(word)).length
+  if (words < 900) add("THIN_COPY", "quality", `only about ${words} words of copy — write at least 1,200 words of specific, finished text`)
+  const visuals = (doc.match(/<(?:img|video|canvas|picture)\b/gi) || []).length + (doc.match(/<svg\b[^>]*\bviewBox/gi) || []).length
+  if (visuals < 4) add("FEW_VISUALS", "quality", `only ${visuals} images, videos or drawn visuals — use every verified photo and video, large`)
   if (options.motion) {
     const cinema = (doc.match(CINEMA) || []).length
     if (cinema < 8) add("FLAT_MOTION", "quality", `only ${cinema} MALIK Cinema attributes — reveals, split headings, a nav and a scene are expected`)
