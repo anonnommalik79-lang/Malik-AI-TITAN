@@ -1,0 +1,30 @@
+name: Malik AGI proof beta
+
+on:
+  pull_request:
+    paths:
+      - "app/templates/sovereign-hub-ui/lib/agi/**"
+      - "app/templates/sovereign-hub-ui/app/api/agi/**"
+      - "app/templates/sovereign-hub-ui/scripts/verify-malik-agi.mjs"
+      - ".github/workflows/malik-agi-proof.yml"
+  push:
+    paths:
+      - "app/templates/sovereign-hub-ui/lib/agi/**"
+      - "app/templates/sovereign-hub-ui/app/api/agi/**"
+      - "app/templates/sovereign-hub-ui/scripts/verify-malik-agi.mjs"
+      - ".github/workflows/malik-agi-proof.yml"
+
+jobs:
+  mission-proof:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    defaults:
+      run:
+        working-directory: app/templates/sovereign-hub-ui
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Verify four-agent state machine and evidence gates
+        run: node --experimental-strip-types --no-warnings --test scripts/verify-malik-agi.mjs
