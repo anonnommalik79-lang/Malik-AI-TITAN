@@ -1518,7 +1518,12 @@ export async function runMalikMax(input: MaxInput, deps: { fetcher?: typeof fetc
   // Small talk remains quick. Substantive requests consult 2-3 strong models
   // independently, then one strong model synthesizes their assessments.
   // Injected/single-model lanes keep their existing deterministic behavior.
-  const panel = !resumed && !input.wallMs && !deps.lanes && !fastMode && budget >= 2_500
+  // A large code deliverable skips the panel: its synthesis is not streamed,
+  // and on a whole game or app it used most of the wall clock before the first
+  // line (59 lines in 237 s, then «по лимиту времени»). It streams from the
+  // strongest lane instead, and unfinished code is carried on automatically.
+  const largeCode = codeMode && budget >= 6_000
+  const panel = !resumed && !input.wallMs && !deps.lanes && !fastMode && !largeCode && budget >= 2_500
     ? await runExpertPanel({
         lanes, call: base, totalMs: Math.max(0, timeLeft() - 17_000),
         codeMode, fetcher: deps.fetcher, signal: input.signal, activity: input.activity,

@@ -272,4 +272,73 @@ await check("deadlines fit inside each other and inside the browser's wait", asy
   assert.match(fs.readFileSync("lib/malik-god-router.ts", "utf8"), /export async function malikRescueAnswer[\s\S]{0,4000}gateAttributionAnswer/, "the rescue keeps the attribution gate")
 })
 
+// Regression: a three.js game stopped after 59 lines in 237 s with «Ответ не
+// завершён: сервер остановил генерацию по лимиту времени … Нажмите
+// «Продолжить»». Large code now streams from the first second, and an
+// unfinished answer is carried on by the next model in the same message.
+function continueUnfinishedWith(engine) {
+  const source = fs.readFileSync("app/api/stream/route-impl.ts", "utf8")
+  const ast = ts.createSourceFile("route-impl.ts", source, ts.ScriptTarget.Latest, true)
+  const wanted = new Set(["AUTO_CONTINUE_ROUNDS", "CONTINUE_SYSTEM", "continueUnfinished"])
+  const picked = ast.statements.filter((node) => ts.isFunctionDeclaration(node) && wanted.has(node.name?.text)
+    || ts.isVariableStatement(node) && node.declarationList.declarations.some((d) => wanted.has(d.name.getText(ast))))
+  const code = picked.map((node) => node.getText(ast)).join("\n").replace('await import("@/lib/server/malik-max-engine")', "await __engine()")
+  const js = ts.transpileModule(code, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText
+  const { resumeText } = load("lib/ai/answer-completion.ts")
+  return new Function("__engine", "chatAnswerDeadline", "isCodeRequest", "briefNeedsDeep", "chatArtDirection", "resumeText", `${js}\nreturn continueUnfinished`)(
+    async () => ({ runMalikMax: engine }), chatAnswerDeadline, () => true, () => false, () => null, resumeText)
+}
+const unfinished = { content: "```js\nconst a = 1\n", incomplete: { reason: "time", openFence: true } }
+
+await check("an unfinished answer is carried on in the same message — no «Продолжить», no repeated text", async () => {
+  const calls = [], shown = []
+  const carry = continueUnfinishedWith(async (input) => {
+    calls.push(input)
+    input.onToken?.(input.resumeFrom)
+    input.onToken?.("\nconst b = 2\n```")
+    return { content: input.resumeFrom + "\nconst b = 2\n```", provider: "lane-2", model: "m", latencyMs: 1 }
+  })
+  const result = await carry(unfinished, { prompt: "Создай игру на three.js", allowCatalog: true, onToken: (chunk) => shown.push(chunk), startedAt: Date.now() })
+  assert.equal(result.content, "```js\nconst a = 1\nconst b = 2\n```")
+  assert.equal(result.incomplete, undefined, "no «Ответ не завершён» note")
+  assert.deepEqual(shown, ["\nconst b = 2\n```"], "the text already on screen is not sent again")
+  assert.equal(calls.length, 1)
+  assert.equal(calls[0].resumeFrom, unfinished.content.trimEnd(), "it resumes from exactly what was written")
+  assert.ok(calls[0].wallMs <= 300_000 && calls[0].wallMs > 60_000)
+  assert.match(calls[0].systemPrompt, /Never restart, never repeat/)
+})
+
+await check("carrying on is bounded: rounds, progress, time, allowance and the person's stop", async () => {
+  let rounds = 0
+  const endless = continueUnfinishedWith(async (input) => { rounds += 1; return { content: input.resumeFrom + "x".repeat(400), incomplete: { reason: "time" } } })
+  const long = await endless(unfinished, { prompt: "игра", allowCatalog: false, startedAt: Date.now() })
+  assert.equal(rounds, 4, "at most four rounds")
+  assert.equal(long.incomplete.reason, "time", "the note stays honest when every round is spent")
+  let stuck = 0
+  const flat = continueUnfinishedWith(async (input) => { stuck += 1; return { content: input.resumeFrom + "x", incomplete: { reason: "time" } } })
+  await flat(unfinished, { prompt: "игра", allowCatalog: false, startedAt: Date.now() })
+  assert.equal(stuck, 1, "a round that adds nothing ends the carrying on")
+  let none = 0
+  const never = continueUnfinishedWith(async () => { none += 1; return { content: "" } })
+  await never(unfinished, { prompt: "игра", allowCatalog: false, startedAt: Date.now() - 60 * 60_000 })
+  await never(unfinished, { prompt: "игра", allowCatalog: false, maxOutputTokens: 100, startedAt: Date.now() })
+  assert.equal(none, 0, "no round once the deadline or the account allowance is spent")
+  const stop = new AbortController()
+  const aborting = continueUnfinishedWith(async () => { stop.abort(); throw Object.assign(new Error("stopped"), { name: "AbortError" }) })
+  await assert.rejects(aborting(unfinished, { prompt: "игра", allowCatalog: false, signal: stop.signal, startedAt: Date.now() }))
+  const failing = continueUnfinishedWith(async () => { throw new Error("all lanes down") })
+  assert.equal((await failing(unfinished, { prompt: "игра", allowCatalog: false, startedAt: Date.now() })).content, unfinished.content, "a failed round keeps what was written")
+})
+
+await check("large code streams from the first second; code answers get room to be carried on", async () => {
+  const engine = fs.readFileSync("lib/server/malik-max-engine.ts", "utf8")
+  assert.match(engine, /const largeCode = codeMode && budget >= 6_000/)
+  assert.match(engine, /const panel = !resumed && !input\.wallMs && !deps\.lanes && !fastMode && !largeCode && budget >= 2_500/)
+  const code = chatAnswerDeadline({ code: true, deep: false })
+  assert.ok(code.hardMs - code.rescueAtMs >= 420_000, "several continuation rounds fit before the hard deadline")
+  const route = fs.readFileSync("app/api/stream/route-impl.ts", "utf8")
+  assert.match(route, /const carried=await continueUnfinished\(/)
+  assert.match(route, /onToken:streamedLive\?streamToken:undefined/, "a continuation streams only after a live first pass")
+})
+
 console.log(`\n${checks}/${checks} chat liveness checks passed`)

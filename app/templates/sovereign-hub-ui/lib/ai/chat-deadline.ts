@@ -25,8 +25,11 @@ export function chatAnswerDeadline(kind: { code: boolean; deep: boolean; site?: 
   const rescueAtMs = kind.game ? 14 * 60_000 : engineMs + 50_000
   const rescueMs = 75_000
   // A website streams its first draft early, then may get an upgrade pass:
-  // that second pass needs room before the answer is closed as written.
-  return { rescueAtMs, rescueMs, hardMs: rescueAtMs + rescueMs + 45_000 + (kind.site ? 150_000 : 0) }
+  // that second pass needs room before the answer is closed as written. An
+  // answer still being written is carried on by the next model (route-impl
+  // continueUnfinished); a whole program needs several such rounds.
+  const carryOn = kind.code ? 420_000 : 120_000
+  return { rescueAtMs, rescueMs, hardMs: rescueAtMs + rescueMs + 45_000 + carryOn + (kind.site ? 150_000 : 0) }
 }
 
 function settleBy<T>(promise: Promise<T>, at: number): Promise<{ done: true; value: T } | { done: false }> {
