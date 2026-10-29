@@ -33,6 +33,9 @@ import { checkPromptLength, checkUsageLimit } from "@/lib/limits/rate-limit"
 import { resolveUserTier } from "@/lib/limits/user-plan"
 import { resolveRequestEntitlement } from "@/lib/server/request-entitlement"
 import { hasMalikProAccess } from "@/lib/ai/malik-models"
+import { BusinessInputError, readBusinessBody } from "@/lib/business/request-body"
+import { getPublicOrigin } from "@/lib/public-origin"
+import { getRenderAccessOrigin } from "@/lib/auth/guest-origin"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -76,9 +79,9 @@ type Body = {
   language?: "ru" | "kk" | "en"
 }
 
-const clean = (value: unknown, max: number) => String(value || "").replace(/\u0000/g, "").trim().slice(0, max)
+const clean = (value: unknown, max: number) => String(value || "").replaceAll(String.fromCharCode(0), "").trim().slice(0, max)
 
-const MODEL_ID = /^[a-z0-9][a-z0-9.\-]{2,80}$/
+const MODEL_ID = /^[a-z0-9][a-z0-9.-]{2,80}$/
 
 function priorFrom(list: Body["previous"]): PriorStep[] {
   if (!Array.isArray(list)) return []
@@ -86,7 +89,9 @@ function priorFrom(list: Body["previous"]): PriorStep[] {
   const out: PriorStep[] = []
   for (const item of list.slice(0, AUTONOMOUS_AGENTS.length)) {
     const agent = AUTONOMOUS_AGENTS.find((candidate) => candidate.id === item?.agentId)
-    const content = clean(item?.content, 20_000)
+    // Keep the handover at the end of a long generated document. Prompt
+    // builders compact context later, while preserving each company state.
+    const content = clean(item?.content, 80_000)
     if (!agent || !content || seen.has(agent.id)) continue
     seen.add(agent.id)
     out.push({ agent, content })
@@ -118,7 +123,19 @@ function ownerMessage(error: GeminiEngineError, keys: string[]) {
 }
 
 export async function POST(request: Request) {
-  const body = (await request.json().catch(() => ({}))) as Body
+  const origin = request.headers.get("origin")
+  // Render can expose an internal request.url; only configured public origins
+  // and the actual request origin are trusted, never arbitrary forwarded hosts.
+  const origins = new Set([new URL(request.url).origin, getPublicOrigin(), getRenderAccessOrigin()].filter(Boolean))
+  if ((origin && !origins.has(origin)) || request.headers.get("sec-fetch-site") === "cross-site") {
+    return Response.json({ ok: false, code: "FORBIDDEN_ORIGIN", message: "Откройте Malik AI и повторите запрос." }, { status: 403 })
+  }
+  let body: Body
+  try { body = await readBusinessBody(request) as Body }
+  catch (error) {
+    const failure = error instanceof BusinessInputError ? error : new BusinessInputError("INVALID_BODY", "Не удалось прочитать запрос.")
+    return Response.json({ ok: false, code: failure.code, message: failure.message }, { status: failure.status, headers: { "cache-control": "private, no-store" } })
+  }
   const kind: Kind = body.kind === "summary" || body.kind === "stress" ? body.kind : "agent"
   const agent = AUTONOMOUS_AGENTS.find((item) => item.id === body.agentId)
   if (kind === "agent" && !agent) {
@@ -205,19 +222,23 @@ export async function POST(request: Request) {
   const stageLabel = kind === "agent" && agent ? `${agent.name} · ${agent.role}` : kind === "summary" ? SUMMARY_STAGE.title : STRESS_TEST.title
   const encoder = new TextEncoder()
   const keys = geminiKeys()
+  const execution = new AbortController()
+  const stopExecution = () => execution.abort()
+  if (request.signal.aborted) stopExecution()
+  else request.signal.addEventListener("abort", stopExecution, { once: true })
 
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
       let closed = false
       const send = (event: string, data: unknown) => {
         if (closed) return
-        try { controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)) } catch { closed = true }
+        try { controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)) } catch { closed = true; stopExecution() }
       }
       // Gemini can think for a while before the first word; proxies that see
       // no bytes for a minute close the connection.
       const heartbeat = setInterval(() => {
         if (closed) return
-        try { controller.enqueue(encoder.encode(": keep-alive\n\n")) } catch { closed = true }
+        try { controller.enqueue(encoder.encode(": keep-alive\n\n")) } catch { closed = true; stopExecution() }
       }, 15_000)
 
       const forward = (event: GeminiEvent) => {
@@ -239,7 +260,7 @@ export async function POST(request: Request) {
           maxOutputTokens: budget,
           search: kind === "agent" && agent?.id === "research",
           preferredModel: preferred,
-          signal: request.signal,
+          signal: execution.signal,
           onEvent: forward,
         })
 
@@ -262,12 +283,17 @@ export async function POST(request: Request) {
           }
         }
 
+        if (result.finishReason === "MAX_TOKENS") {
+          throw new GeminiEngineError("EMPTY", "Ответ агента остался незавершённым после продолжения. Нажми «Продолжить»; готовые этапы сохранены.")
+        }
+
         let content = modeId ? ensureAutonomousCompanyState(modeId, result.content) : result.content
         let quality = modeId ? businessOutputQuality(modeId, content) : { ok: content.length > 200 }
 
         if (!quality.ok) {
           send("reset", { reason: "quality" })
           result = await ask(businessRetryPrompt(prompt, "reason" in quality ? quality.reason : undefined))
+          if (result.finishReason === "MAX_TOKENS") throw new GeminiEngineError("EMPTY", "Проверка качества получила незавершённый документ. Нажми «Продолжить».")
           content = modeId ? ensureAutonomousCompanyState(modeId, result.content) : result.content
           quality = modeId ? businessOutputQuality(modeId, content) : { ok: content.length > 200 }
           if (!quality.ok) {
@@ -302,16 +328,19 @@ export async function POST(request: Request) {
         }
       } finally {
         clearInterval(heartbeat)
+        request.signal.removeEventListener("abort", stopExecution)
         closed = true
         try { controller.close() } catch { /* already closed */ }
       }
     },
+    cancel() { stopExecution() },
   })
 
   return new Response(stream, {
     headers: {
       "content-type": "text/event-stream; charset=utf-8",
-      "cache-control": "no-cache, no-transform",
+      "cache-control": "private, no-store, no-transform",
+      vary: "Cookie",
       "x-accel-buffering": "no",
       connection: "keep-alive",
     },

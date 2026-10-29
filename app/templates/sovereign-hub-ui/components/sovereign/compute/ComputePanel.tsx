@@ -1,12 +1,13 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import {
   AudioLines, Bot, Clock3, Cpu, Film, ImageIcon, Info, MessageSquare,
   Plug, RefreshCw, Search, ShieldCheck,
 } from "lucide-react"
 import { COMPUTE_WEIGHTS, MAX_AGENT_COMPUTE, MAX_AGENT_RETRIES, MAX_AGENT_STEPS } from "@/lib/malik-compute/config"
 import type { ComputeAdminStats, ComputeOperation, ComputePageData } from "@/lib/malik-compute/types"
+import { fetchComputePage } from "@/lib/malik-compute/client"
 import styles from "./compute.module.css"
 
 const categories = [
@@ -59,32 +60,40 @@ export default function ComputePanel() {
   const [error, setError] = useState("")
   const [view, setView] = useState<"balance" | "admin">("balance")
 
-  const refresh = useCallback((signal?: AbortSignal) =>
-    fetch("/api/compute", { cache: "no-store", credentials: "same-origin", signal }).then((response) => {
-      if (!response.ok) throw new Error("Compute unavailable")
-      return response.json() as Promise<ComputePageData>
-    }).then((next) => {
-      if (!signal?.aborted) {
+  const refreshRef = useRef<AbortController | null>(null)
+  const refresh = useCallback(() => {
+    refreshRef.current?.abort()
+    const controller = new AbortController()
+    refreshRef.current = controller
+    const timer = window.setTimeout(() => controller.abort(), 12_000)
+    return fetchComputePage(controller.signal).then((next) => {
+      if (refreshRef.current === controller && !controller.signal.aborted) {
         setData(next)
         setError("")
         if (!next.admin) setView("balance")
       }
-    }).catch(() => {
-      if (!signal?.aborted) {
-        setData(null)
-        setError("Не удалось загрузить Compute. Проверьте вход в аккаунт и попробуйте ещё раз.")
+    }).catch((failure: unknown) => {
+      if (refreshRef.current === controller) {
+        setError(controller.signal.aborted ? "Обновление Compute заняло слишком много времени. Попробуйте ещё раз."
+          : failure instanceof Error ? failure.message : "Не удалось обновить Compute.")
       }
     }).finally(() => {
-      if (!signal?.aborted) setLoading(false)
-    }), [])
+      window.clearTimeout(timer)
+      if (refreshRef.current === controller) { refreshRef.current = null; setLoading(false) }
+    })
+  }, [])
 
   useEffect(() => {
-    const controller = new AbortController()
-    void refresh(controller.signal)
-    const update = () => { if (document.visibilityState === "visible") void refresh(controller.signal) }
+    void refresh()
+    const update = () => { if (document.visibilityState === "visible") void refresh() }
     const timer = window.setInterval(update, 15000)
     window.addEventListener("focus", update)
-    return () => { controller.abort(); window.clearInterval(timer); window.removeEventListener("focus", update) }
+    return () => {
+      const current = refreshRef.current
+      refreshRef.current = null
+      current?.abort()
+      window.clearInterval(timer); window.removeEventListener("focus", update)
+    }
   }, [refresh])
 
   const balance = data?.balance

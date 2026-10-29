@@ -7957,6 +7957,7 @@ const shouldShowMobilePreviewButton =
     if (activeView === "business-command-center") {
       return (
         <AutonomousCompany
+          key={workOSUser?.id || "guest-business"}
           username={username}
           accountId={workOSUser?.id}
           plan={currentPlan}

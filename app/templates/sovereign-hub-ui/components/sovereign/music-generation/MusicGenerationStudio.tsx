@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ChangeEvent } from "react"
 import { analyzeMusicPrompt, compileMusicBrief } from "@/lib/media/music-intent"
+import { fetchMusicStatus, musicAudioUrl } from "@/lib/media/music-client"
 import "./music-generation.css"
 
 type GenreId = "phonk" | "trap" | "hiphop" | "lofi" | "edm" | "other"
@@ -266,6 +267,7 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
   const toastTimerRef = useRef<number | undefined>(undefined)
   /** How many more variants of the current request are still to be sent. */
   const pendingVariantsRef = useRef(0)
+  const variantTimerRef = useRef<number | undefined>(undefined)
   /**
    * Hands over the next variant once the current one is finished.
    *
@@ -278,7 +280,7 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
   const queueNextVariant = () => {
     if (pendingVariantsRef.current <= 0) return
     pendingVariantsRef.current -= 1
-    window.setTimeout(() => submitRef.current?.(), 400)
+    variantTimerRef.current = window.setTimeout(() => submitRef.current?.(), 400)
   }
 
   const genre = GENRES.find((item) => item.id === genreId) || GENRES[0]
@@ -384,14 +386,11 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
     if (!activeRequestId) return
     let cancelled = false
     let timer: number | undefined
+    const controller = new AbortController()
 
     const poll = async () => {
       try {
-        const response = await fetch(
-          "/api/media/music/status?requestId=" + encodeURIComponent(activeRequestId),
-          { method: "GET", cache: "no-store" },
-        )
-        const data = await response.json().catch(() => null)
+        const { response, data } = await fetchMusicStatus(activeRequestId, { signal: controller.signal })
         if (cancelled) return
 
         if (!response.ok) {
@@ -412,7 +411,7 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
         }
 
         if ((data?.status === "ready" || data?.status === "done") && data?.resultUrl) {
-          const resultUrl = String(data.resultUrl)
+          const resultUrl = musicAudioUrl(data.resultUrl)
           setHistory((rows) => rows.map((item) =>
             item.requestId === activeRequestId
               ? {
@@ -435,7 +434,7 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
           return
         }
 
-        if (data?.status === "failed") {
+        if (data?.status === "failed" || data?.status === "error") {
           setHistory((rows) => rows.map((item) =>
             item.requestId === activeRequestId
               ? { ...item, status: "failed", error: String(data?.error || "Генерация не завершилась.") }
@@ -453,7 +452,7 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
         const nextStatus: JobStatus = data?.status === "queued" ? "queued" : "processing"
         setHistory((rows) => rows.map((item) =>
           item.requestId === activeRequestId
-            ? { ...item, status: nextStatus, progress: Number(data?.progress || item.progress || 0) }
+            ? { ...item, status: nextStatus, progress: Number.isFinite(data?.progress) ? Math.max(0, Math.min(99, Number(data?.progress))) : item.progress || 0 }
             : item,
         ))
         setGenerating(true)
@@ -475,6 +474,7 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
     poll()
     return () => {
       cancelled = true
+      controller.abort()
       if (timer) window.clearTimeout(timer)
     }
   }, [activeRequestId])
@@ -588,7 +588,7 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
       setLastSubmitFailed(false)
 
       const immediateUrl = data.status === "ready" && typeof data.resultUrl === "string"
-        ? String(data.resultUrl) : ""
+        ? musicAudioUrl(data.resultUrl) : ""
       const item: MusicHistoryItem = {
         requestId: String(data.requestId),
         title: historyTitle(nextPrompt, nextGenre),
@@ -674,7 +674,8 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
       return
     }
     if (audio.paused) {
-      await audio.play().catch(() => undefined)
+      try { await audio.play() }
+      catch { setNotice("Не удалось воспроизвести трек. Проверьте звук в браузере или скачайте аудио.") }
       setPlaying(!audio.paused)
     } else {
       audio.pause()
@@ -725,7 +726,8 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
       return
     }
     const anchor = document.createElement("a")
-    anchor.href = source.resultUrl || source.downloadUrl || ("/api/media/music/download?requestId=" + encodeURIComponent(source.requestId))
+    anchor.href = musicAudioUrl(source.downloadUrl) || musicAudioUrl(source.resultUrl) || ("/api/media/music/download?requestId=" + encodeURIComponent(source.requestId))
+    anchor.download = (source.title || "malik-track").replace(/[\\/:*?"<>|]/g, "-").slice(0, 100) + ".mp3"
     anchor.rel = "noopener"
     document.body.appendChild(anchor)
     anchor.click()
@@ -765,6 +767,9 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
 
   useEffect(() => () => {
     if (toastTimerRef.current) window.clearTimeout(toastTimerRef.current)
+    if (variantTimerRef.current) window.clearTimeout(variantTimerRef.current)
+    pendingVariantsRef.current = 0
+    submitRef.current = null
   }, [])
 
   // The two switches are one choice with two faces: a track either has vocals

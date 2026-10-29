@@ -6,7 +6,6 @@ import {
   Briefcase,
   CircleHelp,
   Clapperboard,
-  Cpu,
   Crown,
   Database,
   Eye,
@@ -135,7 +134,6 @@ const CREATE_ACTIONS: SidebarAction[] = [
 
 const TOOL_ACTIONS: SidebarAction[] = [
   { id: "plugins", label: "Плагины", icon: Plug, view: "features" },
-  { id: "compute", label: "Compute", icon: Cpu, view: "compute" },
   { id: "translate", label: "Переводчик", icon: Languages, action: "translate" },
   { id: "data", label: "Анализ данных", icon: BarChart3, action: "data" },
 ]

@@ -13,7 +13,8 @@
  */
 
 import { readFileSync, statSync } from "node:fs"
-import { fileURLToPath } from "node:url"
+import { fileURLToPath, pathToFileURL } from "node:url"
+import ts from "typescript"
 import { dirname, join } from "node:path"
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..")
@@ -46,10 +47,11 @@ const autonomous = read("lib/business/autonomous.ts")
 const types = read("lib/business/types.ts")
 const modes = read("lib/business/modes.ts")
 
-const declaredModeIds = new Set(
-  (types.match(/export type BusinessModeId =[\s\S]*?\n\n/)?.[0] || "")
-    .match(/"([a-z0-9-]+)"/g)?.map((s) => s.slice(1, -1)) || [],
-)
+const typeFile = ts.createSourceFile("types.ts", types, ts.ScriptTarget.Latest, true)
+const modeType = typeFile.statements.find((node) => ts.isTypeAliasDeclaration(node) && node.name.text === "BusinessModeId")
+const declaredModeIds = new Set(modeType && ts.isUnionTypeNode(modeType.type)
+  ? modeType.type.types.filter(ts.isLiteralTypeNode).map((node) => node.literal.text) : [])
+const company = await import(pathToFileURL(join(ROOT, "lib/business/autonomous.ts")).href)
 const agentModes = [...autonomous.matchAll(/^\s*mode: "([a-z0-9-]+)",$/gm)].map((m) => m[1])
 
 console.log("\nAgents")
@@ -127,27 +129,15 @@ check("the intro photograph is a real WebP", Boolean(hero) && hero.toString("asc
 console.log("\nPlaybooks")
 // Scoped to BUSINESS_TEMPLATES: the agents above it are also objects with an
 // `id`, and matching those made the whole section report on the wrong things.
-const templateSource = autonomous.slice(
-  autonomous.indexOf("export const BUSINESS_TEMPLATES"),
-  autonomous.indexOf("export function agentInput"),
-)
-const templateBlocks = [...templateSource.matchAll(/\{\n    id: "([a-z]+)",[\s\S]*?\n  \},/g)]
+const templateBlocks = company.BUSINESS_TEMPLATES
 check("every template has a playbook and metrics", templateBlocks.length === images.length
-  && templateBlocks.every((b) => b[0].includes("playbook: [") && b[0].includes("metrics: [")),
-  `${templateBlocks.length} blocks`)
-
-for (const block of templateBlocks) {
-  const id = block[1]
-  const playbook = (block[0].match(/playbook: \[([\s\S]*?)\n    \]/)?.[1] || "")
-  const metrics = (block[0].match(/metrics: \[([\s\S]*?)\n    \]/)?.[1] || "")
-  const lines = playbook.split("\n").filter((l) => l.trim().startsWith('"'))
-  const metricLines = metrics.split("\n").filter((l) => l.trim().startsWith('"'))
-  check(`${id}: playbook has real substance`, lines.length >= 6
-    && lines.every((l) => l.length > 60), `${lines.length} lines`)
-  check(`${id}: has metrics that decide the outcome`, metricLines.length >= 5, `${metricLines.length}`)
-  // Money amounts and percentages inside a playbook are invented facts: the
-  // currency and rate figures belong to the founder's real market, not to us.
-  const invented = (playbook + metrics).match(/\d[\d\s.,]*\s*(₸|тенге|руб|\$|%|процент)/gi)
+  && templateBlocks.every((item) => Array.isArray(item.playbook) && Array.isArray(item.metrics)),
+  `${templateBlocks.length} templates`)
+for (const template of templateBlocks) {
+  const { id, playbook, metrics } = template
+  check(`${id}: playbook has real substance`, playbook.length >= 6 && playbook.every((line) => line.length > 60), `${playbook.length} lines`)
+  check(`${id}: has metrics that decide the outcome`, metrics.length >= 5, `${metrics.length}`)
+  const invented = [...playbook, ...metrics].join("\n").match(/\d[\d\s.,]*\s*(₸|тенге|руб|\$|%|процент)/gi)
   check(`${id}: invents no figures`, !invented, invented ? invented.join(", ") : "")
 }
 
@@ -195,8 +185,7 @@ check("a failed stress test does not fail the run",
 // Imported rather than reimplemented: a budget test that checks a copy of the
 // function proves nothing about the one that ships. Needs a Node that strips
 // types (22.6+); older ones skip these rather than fail.
-const { stressTestInput } = await import(join(ROOT, "lib/business/autonomous.ts"))
-  .catch(() => ({ stressTestInput: null }))
+const { stressTestInput } = company
 
 if (stressTestInput) {
   const fake = Array.from({ length: 8 }, (_, i) => ({

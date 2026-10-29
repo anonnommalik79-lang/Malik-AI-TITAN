@@ -202,10 +202,12 @@ await check("expired reservations release balance and cannot charge late", () =>
   assert.equal(service.getComputeBalance("a").used, 0)
   assert.equal(service.getAdminStats().failedRequests, 1)
 })
-await check("real /compute route and shared sidebar navigation", () => {
+await check("compute accounting route remains; only Compute is removed from the menu", () => {
   const read = (file) => fs.readFileSync(path.join(root, file), "utf8")
   assert.match(read("app/compute/page.tsx"), /initialView="compute"/)
-  assert.match(read("components/sovereign/sidebar.tsx"), /label: "Compute", icon: Cpu, view: "compute"/)
+  assert.doesNotMatch(read("components/sovereign/sidebar.tsx"), /label: "Compute"/)
+  assert.match(read("components/sovereign/sidebar.tsx"), /label: "Создать трек"/)
+  assert.match(read("components/sovereign/sidebar.tsx"), /label: "Переводчик"/)
   assert.match(read("components/sovereign/dashboard.tsx"), /window.location.assign\("\/compute"\)/)
   assert.match(read("components/sovereign/compute/compute.module.css"), /@media \(max-width: 700px\)/)
 })

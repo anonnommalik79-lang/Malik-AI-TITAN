@@ -21,7 +21,10 @@ let nextError = null
 let videoResult = { ok: true, taskId: "test-video-1", status: "queued" }
 let videoStatus = { ok: true, taskId: "test-video-1", status: "completed", videoUrl: "https://example.invalid/video.mp4" }
 let researchResult = { answer: "Verified research", sources: [{ title: "Test", url: "https://example.invalid" }], cached: false }
+const afterCallbacks = []
 const stubs = {
+  // Next.js supplies request-scoped after(); plain Node has no request scope.
+  "next/server": { ...nativeRequire("next/server"), after: (callback) => { afterCallbacks.push(callback) } },
   // `server-only` is a marker package that throws the moment it is required
   // outside a React Server Component. A module in this graph started importing
   // it and took the whole suite down with it; the marker carries no behaviour,
@@ -82,7 +85,11 @@ function load(file) {
 }
 
 let checks = 0
-async function check(name, run) { await run(); checks++; console.log("PASS " + name) }
+async function check(name, run) {
+  await run()
+  for (const callback of afterCallbacks.splice(0)) await callback()
+  checks++; console.log("PASS " + name)
+}
 const request = (pathname = "/api/stream", body = {}, signal) => new Request("https://malik.example" + pathname, {
   method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), signal,
 })
@@ -341,7 +348,15 @@ try {
     // withCompute now lives. A route counts as metered if it wraps its own
     // handler or delegates to a sibling that does - what must never happen is a
     // POST that reaches a provider without passing through the meter.
-    const metered = (file) => /export const POST = withCompute\(/.test(file)
+    const metered = (file) => {
+      const source = ts.createSourceFile("route.ts", file, ts.ScriptTarget.Latest, true)
+      const wrapped = (node) => ts.isCallExpression(node) && (
+        node.expression.getText(source) === "withCompute"
+        || (node.expression.getText(source) === "withFounderRequestAudit" && node.arguments[0] && wrapped(node.arguments[0]))
+      )
+      return source.statements.some((node) => ts.isVariableStatement(node)
+        && node.declarationList.declarations.some((item) => item.name.getText(source) === "POST" && item.initializer && wrapped(item.initializer)))
+    }
     for (const endpoint of ["stream", "ai/chat", "ai/code", "ai/image", "malik-research", "generate", "generate/[kind]", "generate/video", "media/image", "media/video", "voice/turn", "voice/tts", "transcribe", "translator"]) {
       const dir = path.join(root, "app/api", endpoint)
       const file = fs.readFileSync(path.join(dir, "route.ts"), "utf8")

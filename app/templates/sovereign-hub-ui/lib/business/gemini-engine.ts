@@ -128,7 +128,7 @@ export const DEFAULT_GEMINI_MODELS = [
   "gemini-flash-lite-latest",
 ] as const
 
-const MODEL_ID = /^[a-z0-9][a-z0-9.\-]{2,80}$/
+const MODEL_ID = /^[a-z0-9][a-z0-9.-]{2,80}$/
 
 function envValue(env: Env, name: string) {
   const value = env[name]
@@ -203,6 +203,7 @@ export function resetGeminiEngineState() {
 }
 
 async function listModels(base: string, key: GeminiKey, fetchImpl: typeof fetch, signal?: AbortSignal): Promise<Set<string> | null> {
+  if (signal?.aborted) return null
   const cached = discovery.get(key.source)
   if (cached && Date.now() - cached.at < DISCOVERY_TTL_MS) return cached.models
   const controller = new AbortController()
@@ -293,7 +294,7 @@ function retryDelayFrom(payload: any, header: string | null): number | undefined
 
 /** Google's message, trimmed, with anything shaped like a key removed. */
 function safeDetail(message: string) {
-  return message.replace(/AIza[0-9A-Za-z_\-]{10,}/g, "[key]").replace(/key=[^&\s]+/g, "key=[key]").slice(0, 300)
+  return message.replace(/AIza[0-9A-Za-z_-]{10,}/g, "[key]").replace(/key=[^&\s]+/g, "key=[key]").slice(0, 300)
 }
 
 export function classifyGeminiFailure(status: number, payload: any, header: string | null, sent: { thinking: boolean; search: boolean; level?: boolean }): Classified {
@@ -492,6 +493,7 @@ function requestBody(input: GeminiRunInput, maxOutputTokens: number, thinking: b
  * One answer from Gemini, streamed, with every key and model as a backup.
  */
 export async function runGemini(input: GeminiRunInput): Promise<GeminiResult> {
+  if (input.signal?.aborted) throw new GeminiEngineError("ABORTED", "Остановлено.")
   const env = input.env || process.env
   const fetchImpl = input.fetchImpl || fetch
   const started = Date.now()

@@ -90,8 +90,10 @@ function thoughtTitle(text: string) {
 
 function sleep(ms: number, signal: AbortSignal) {
   return new Promise<void>((resolve) => {
-    const timer = window.setTimeout(resolve, ms)
-    signal.addEventListener("abort", () => { window.clearTimeout(timer); resolve() }, { once: true })
+    if (signal.aborted) { resolve(); return }
+    const finish = () => { window.clearTimeout(timer); signal.removeEventListener("abort", finish); resolve() }
+    const timer = window.setTimeout(finish, ms)
+    signal.addEventListener("abort", finish, { once: true })
   })
 }
 
@@ -298,11 +300,10 @@ export function AutonomousCompany({ username, accountId, plan, onOpenBilling, on
   }, [proAccess])
 
   const abortRef = useRef<AbortController | null>(null)
+  const stressAbortRef = useRef<AbortController | null>(null)
   const runningRef = useRef(false)
   const stepsRef = useRef<Step[]>([])
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
-
-  useEffect(() => { stepsRef.current = steps }, [steps])
 
   // Resume only stages already completed, scoped to this logged-in account.
   // Checkpoints are local to the browser and never consume Render RAM.
@@ -341,7 +342,7 @@ export function AutonomousCompany({ username, accountId, plan, onOpenBilling, on
       .map((step) => ({ agentId: step.agent.id, content: step.content.slice(0, 45000) }))
     if (!complete.length) return
     const finalSummary = summary.state === "done" ? { state: "done", content: summary.content.slice(0, 50000) } : null
-    const signature = complete.map((step) => `${step.agentId}:${step.content.length}`).join("|") + ":" + (finalSummary?.content.length || 0)
+    const signature = JSON.stringify({ brief: prompt.trim(), instruction, market, country, budget, requirements, steps: complete, summary: finalSummary })
     if (checkpointSignatureRef.current === signature) return
     checkpointSignatureRef.current = signature
     try {
@@ -394,7 +395,10 @@ export function AutonomousCompany({ username, accountId, plan, onOpenBilling, on
     ].join(" ").toLowerCase().includes(needle))
   }, [category, query])
 
-  useEffect(() => () => { abortRef.current?.abort() }, [])
+  useEffect(() => () => {
+    abortRef.current?.abort(); stressAbortRef.current?.abort()
+    abortRef.current = null; stressAbortRef.current = null; runningRef.current = false
+  }, [])
 
   useEffect(() => {
     if (!openMenu) return
@@ -436,9 +440,11 @@ export function AutonomousCompany({ username, accountId, plan, onOpenBilling, on
   }, [requirePro])
 
   const patchStep = useCallback((id: string, patch: Partial<Step> | ((step: Step) => Partial<Step>)) => {
-    setSteps((current) => current.map((step) => (step.agent.id === id
+    const next = stepsRef.current.map((step) => (step.agent.id === id
       ? { ...step, ...(typeof patch === "function" ? patch(step) : patch) }
-      : step)))
+      : step))
+    stepsRef.current = next
+    setSteps(next)
   }, [])
 
   const companyBody = useCallback(() => ({
@@ -464,6 +470,8 @@ export function AutonomousCompany({ username, accountId, plan, onOpenBilling, on
     if (!brief || runningRef.current) return
 
     const controller = new AbortController()
+    stressAbortRef.current?.abort()
+    setStressBusy(false)
     abortRef.current?.abort()
     abortRef.current = controller
     runningRef.current = true
@@ -505,6 +513,7 @@ export function AutonomousCompany({ username, accountId, plan, onOpenBilling, on
           const result = await streamAgent({ ...body, kind: "agent", agentId: agent.id, previous: done }, {
             signal: controller.signal,
             onEvent: (event) => {
+              if (controller.signal.aborted || abortRef.current !== controller) return
               if (event.type === "model") patchStep(agent.id, { model: event.label })
               else if (event.type === "thought") patchStep(agent.id, (step) => ({ thoughts: [...(step.thoughts || []), thoughtTitle(event.text)].filter(Boolean).slice(-4) }))
               else if (event.type === "delta") patchStep(agent.id, (step) => ({ content: step.content + event.text }))
@@ -512,6 +521,7 @@ export function AutonomousCompany({ username, accountId, plan, onOpenBilling, on
               else if (event.type === "sources") patchStep(agent.id, { sources: event.items })
             },
           })
+          if (controller.signal.aborted || abortRef.current !== controller) break
           done.push({ agentId: agent.id, content: result.content })
           patchStep(agent.id, {
             state: "done",
@@ -559,12 +569,14 @@ export function AutonomousCompany({ username, accountId, plan, onOpenBilling, on
         const result = await streamAgent({ ...body, kind: "summary", previous: done }, {
           signal: controller.signal,
           onEvent: (event) => {
+            if (controller.signal.aborted || abortRef.current !== controller) return
             if (event.type === "delta") setSummary((current) => ({ ...current, content: current.content + event.text }))
             else if (event.type === "reset") setSummary((current) => ({ ...current, content: "" }))
             else if (event.type === "model") setSummary((current) => ({ ...current, model: event.label }))
             else if (event.type === "thought") setSummary((current) => ({ ...current, thoughts: [...(current.thoughts || []), thoughtTitle(event.text)].filter(Boolean).slice(-3) }))
           },
         })
+        if (controller.signal.aborted || abortRef.current !== controller) return
         setSummary({ state: "done", content: result.content, model: result.label, ms: result.ms || Date.now() - started })
       } catch (error) {
         if (!controller.signal.aborted) {
@@ -573,8 +585,7 @@ export function AutonomousCompany({ username, accountId, plan, onOpenBilling, on
       }
     }
 
-    runningRef.current = false
-    setRunning(false)
+    if (abortRef.current === controller) { runningRef.current = false; setRunning(false) }
   }, [checkpointKey, companyBody, patchStep, prompt, requirePro])
 
   const runStressTest = useCallback(async () => {
@@ -582,7 +593,10 @@ export function AutonomousCompany({ username, accountId, plan, onOpenBilling, on
     const done = steps
       .filter((step) => step.state === "done" && step.content)
       .map((step) => ({ agentId: step.agent.id, content: step.content }))
-    if (!done.length || stressBusy) return
+    if (!done.length || stressBusy || runningRef.current) return
+    const controller = new AbortController()
+    stressAbortRef.current?.abort()
+    stressAbortRef.current = controller
 
     setStressBusy(true)
     setStressError(null)
@@ -590,35 +604,45 @@ export function AutonomousCompany({ username, accountId, plan, onOpenBilling, on
 
     try {
       const result = await streamAgent({ ...companyBody(), kind: "stress", previous: done }, {
+        signal: controller.signal,
         onEvent: (event) => {
+          if (controller.signal.aborted || stressAbortRef.current !== controller) return
           if (event.type === "delta") setStress((current) => current + event.text)
           else if (event.type === "reset") setStress("")
         },
       })
+      if (controller.signal.aborted || stressAbortRef.current !== controller) return
       setStress(result.content)
     } catch (error) {
-      setStressError(error instanceof Error ? error.message : "Не удалось выполнить проверку")
+      if (!controller.signal.aborted && stressAbortRef.current === controller) setStressError(error instanceof Error ? error.message : "Не удалось выполнить проверку")
     } finally {
-      setStressBusy(false)
+      if (stressAbortRef.current === controller) { stressAbortRef.current = null; setStressBusy(false) }
     }
   }, [companyBody, steps, stressBusy, requirePro])
 
   const stop = useCallback(() => {
     abortRef.current?.abort()
+    stressAbortRef.current?.abort()
+    setStressBusy(false)
     runningRef.current = false
     setRunning(false)
-    setSteps((current) => current.map((step) => (step.state === "running"
+    const stopped: Step[] = stepsRef.current.map((step) => (step.state === "running"
       ? { ...step, state: "failed", error: "Остановлено. «Продолжить» начнёт этого агента заново.", waitUntil: undefined }
-      : step)))
+      : step))
+    stepsRef.current = stopped
+    setSteps(stopped)
     setSummary((current) => (current.state === "running" ? { state: "idle", content: "" } : current))
     setRunError("Запуск остановлен.")
   }, [])
 
   const restart = useCallback(() => {
     abortRef.current?.abort()
+    stressAbortRef.current?.abort()
+    setStressBusy(false)
     runningRef.current = false
     setRunning(false)
     setSteps([])
+    stepsRef.current = []
     checkpointSignatureRef.current = ""
     try { if (checkpointKey) localStorage.removeItem(checkpointKey) } catch {}
     setRunError(null)

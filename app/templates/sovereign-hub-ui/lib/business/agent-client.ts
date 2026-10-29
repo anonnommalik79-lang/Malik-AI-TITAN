@@ -69,6 +69,7 @@ export function createSseParser(onMessage: (event: string, data: string) => void
   return {
     push(chunk: string) {
       buffer += chunk
+      if (buffer.length > 1_000_000) throw new AgentStreamError("RESPONSE_TOO_LARGE", "Ответ превысил допустимый размер. Сократи задание.")
       let index: number
       while ((index = buffer.search(/\r?\n\r?\n/)) >= 0) {
         const block = buffer.slice(0, index)
@@ -87,11 +88,15 @@ export async function streamAgent(
   request: AgentRequest,
   options: { signal?: AbortSignal; onEvent?: (event: AgentStreamEvent) => void; stallMs?: number; fetchImpl?: typeof fetch },
 ): Promise<AgentDone> {
+  if (options.signal?.aborted) throw new AgentStreamError("ABORTED", "Остановлено.")
   const controller = new AbortController()
   const onAbort = () => controller.abort()
   options.signal?.addEventListener("abort", onAbort, { once: true })
   let stalled = false
   let timer: ReturnType<typeof setTimeout> | undefined
+  let reader: ReadableStreamDefaultReader<Uint8Array> | undefined
+  const cancelReader = () => { void reader?.cancel().catch(() => {}) }
+  controller.signal.addEventListener("abort", cancelReader, { once: true })
   const arm = () => {
     if (timer) clearTimeout(timer)
     timer = setTimeout(() => { stalled = true; controller.abort() }, options.stallMs ?? 150_000)
@@ -116,9 +121,17 @@ export async function streamAgent(
     }
 
     const parser = createSseParser((event, raw) => {
+      if (outcome.done || outcome.failure) return
       let data: any
       try { data = JSON.parse(raw) } catch { return }
-      if (event === "done") outcome.done = data as AgentDone
+      if (!data || typeof data !== "object" || Array.isArray(data)) return
+      if (event === "done") {
+        if (typeof data.content !== "string" || !data.content.trim()) {
+          throw new AgentStreamError("EMPTY", "Модель не вернула документ. Нажми «Продолжить».")
+        }
+        if (data.content.length > 500_000) throw new AgentStreamError("RESPONSE_TOO_LARGE", "Документ слишком большой.")
+        outcome.done = data as AgentDone
+      }
       else if (event === "error") outcome.failure = new AgentStreamError(String(data.code || "ERROR"), String(data.message || "Ошибка"), Number(data.retryAfterMs) || undefined, Array.isArray(data.trail) ? data.trail : undefined)
       else if (event === "ready") options.onEvent?.({ type: "ready", label: String(data.label || "") })
       else if (event === "model") options.onEvent?.({ type: "model", model: String(data.model || ""), label: String(data.label || data.model || "") })
@@ -128,13 +141,15 @@ export async function streamAgent(
       else if (event === "sources") options.onEvent?.({ type: "sources", items: Array.isArray(data.items) ? data.items : [] })
     })
 
-    const reader = response.body.getReader()
+    reader = response.body.getReader()
+    if (controller.signal.aborted) cancelReader()
     const decoder = new TextDecoder()
     while (true) {
       const { value, done: finished } = await reader.read()
       if (finished) break
       arm()
       parser.push(decoder.decode(value, { stream: true }))
+      if (outcome.done || outcome.failure) break
     }
     parser.push(decoder.decode())
     parser.end()
@@ -146,9 +161,14 @@ export async function streamAgent(
   } finally {
     if (timer) clearTimeout(timer)
     options.signal?.removeEventListener("abort", onAbort)
+    controller.signal.removeEventListener("abort", cancelReader)
+    cancelReader()
+    try { reader?.releaseLock() } catch { /* An aborted transport may still hold its read. */ }
   }
 
   if (outcome.failure) throw outcome.failure
+  if (!outcome.done && options.signal?.aborted) throw new AgentStreamError("ABORTED", "Остановлено.")
+  if (!outcome.done && stalled) throw new AgentStreamError("TIMEOUT", "Связь с сервером прервалась: ответа не было слишком долго.")
   if (!outcome.done) throw new AgentStreamError("INCOMPLETE", "Ответ оборвался до конца. Нажми «Продолжить».")
   return outcome.done
 }
