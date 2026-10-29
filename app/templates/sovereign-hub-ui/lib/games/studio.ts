@@ -2,6 +2,7 @@ import {
   GAME_AUTHOR_SYSTEM, extractLogic, gameAuthorPrompt, gameContinuePrompt, gameEditPrompt, gamePolishPrompt, gameRepairPrompt, joinContinuation, wholeLines,
 } from "./author"
 import { auditGameLogic, gameNeedsPolish, withGameStyle } from "./recipe"
+import { GAME_AUTHOR_SYSTEM_3D, audit3dLogic, game3dAuthorPrompt, game3dPolishPrompt } from "./author-3d"
 import { buildGameHtml } from "./page"
 import { gamePassport } from "./passport"
 import { GAME_PLANNER_SYSTEM, fallbackGamePlan, gameLocale, gamePlannerPrompt, mergeGamePlan, parseJsonObject } from "./plan"
@@ -44,6 +45,9 @@ export async function buildGame(input: {
   onStage?: (stage: GameStage, detail?: { round?: number; of?: number; problems?: number }) => void
 }): Promise<GameResult> {
   const stage = input.onStage || (() => {})
+  // The engine is known once the plan exists; every prompt, check and run follows it.
+  const engine = () => (plan?.engine === "3d" ? "3d" : "2d") as "2d" | "3d"
+  const system = () => engine() === "3d" ? GAME_AUTHOR_SYSTEM_3D : GAME_AUTHOR_SYSTEM
   const calls = { plan: false, author: 0, continuations: 0, repairs: 0, polish: 0 }
   const ask = async (system: string, prompt: string, maxTokens: number, temperature: number) => {
     input.signal?.throwIfAborted()
@@ -67,19 +71,21 @@ export async function buildGame(input: {
     const raw = reply ? parseJsonObject(reply) : null
     calls.plan = Boolean(raw)
     // The art style (and its post-processing preset) is chosen here, not by the model.
-    plan = withGameStyle(mergeGamePlan(raw, fallback), input.prompt)
+    const merged = mergeGamePlan(raw, fallback)
+    // 2D games get an art style with its post-processing; a 3D game's look comes from its sky, materials and lights.
+    plan = merged.engine === "3d" ? merged : withGameStyle(merged, input.prompt)
   }
 
   // 2. The code, continued until its end marker arrives.
   const write = async (prompt: string, temperature: number) => {
-    const reply = await ask(GAME_AUTHOR_SYSTEM, prompt, 16_000, temperature)
+    const reply = await ask(system(), prompt, 16_000, temperature)
     calls.author += 1
     if (!reply) return null
     let { code, complete } = extractLogic(reply)
     for (let round = 1; !complete && round <= MAX_CONTINUATIONS && code.trim(); round += 1) {
       stage("continue", { round, of: MAX_CONTINUATIONS })
       const kept = wholeLines(code)
-      const more = await ask(GAME_AUTHOR_SYSTEM, gameContinuePrompt(kept), 12_000, 0.2)
+      const more = await ask(system(), gameContinuePrompt(kept), 12_000, 0.2)
       calls.continuations += 1
       if (!more) break
       const joined = joinContinuation(kept, more)
@@ -93,7 +99,7 @@ export async function buildGame(input: {
   }
 
   stage("code")
-  const first = await write(input.base ? gameEditPrompt(input.prompt, plan, input.base.logic) : gameAuthorPrompt(input.prompt, plan), input.base ? 0.25 : 0.45)
+  const first = await write(input.base ? gameEditPrompt(input.prompt, plan, input.base.logic) : plan.engine === "3d" ? game3dAuthorPrompt(input.prompt, plan) : gameAuthorPrompt(input.prompt, plan), input.base ? 0.25 : 0.45)
   if (!first) {
     if (input.base) throw new GameStudioError("MODEL_UNAVAILABLE", "The model did not answer the change request")
     throw new GameStudioError("MODEL_UNAVAILABLE", "The model did not write the game")
@@ -103,7 +109,7 @@ export async function buildGame(input: {
     stage("check")
     const checkedAt = new Date().toISOString()
     let runMs: number | undefined
-    const report = staticGameReport(logic)
+    const report = staticGameReport(logic, engine())
     const qa: GameQa = { syntax: report.syntax, policy: report.policy, contract: report.contract, run: { status: "not_run", details: [] } }
     let problems = [...report.problems]
     if (!problems.length && input.smoke) {
@@ -111,7 +117,7 @@ export async function buildGame(input: {
       const runStarted = Date.now()
       const outcome = await input.smoke(plan, logic, input.signal)
       runMs = Date.now() - runStarted
-      const found = smokeProblems(outcome)
+      const found = smokeProblems(outcome, engine())
       const active = outcome.active || outcome.idle
       qa.run = outcome.notRun
         ? { status: "not_run", details: [String(outcome.stage || "not run")] }
@@ -145,15 +151,17 @@ export async function buildGame(input: {
   }
 
   // 4. A game that runs but is flat gets one polish pass against the recipe.
-  const flat = best.problems.length ? [] : auditGameLogic(best.logic, plan)
+  const audit = (logic: string) => engine() === "3d" ? audit3dLogic(logic, plan) : auditGameLogic(logic, plan)
+  const flat = best.problems.length ? [] : audit(best.logic)
   if (!input.base && gameNeedsPolish(flat) && (!input.polishUntil || Date.now() < input.polishUntil)) {
     stage("polish", { problems: flat.length })
-    const polished = await write(gamePolishPrompt(input.prompt, plan, best.logic, flat.map((issue) => issue.detail)), 0.35)
+    const issues = flat.map((issue) => issue.detail)
+    const polished = await write(engine() === "3d" ? game3dPolishPrompt(input.prompt, plan, best.logic, issues) : gamePolishPrompt(input.prompt, plan, best.logic, issues), 0.35)
     calls.polish += 1
     if (polished) {
       const next = await check(polished)
       // Kept only when it still passes every check and is measurably richer.
-      if (!next.problems.length && rank(next) <= rank(best) && auditGameLogic(next.logic, plan).length < flat.length) best = next
+      if (!next.problems.length && rank(next) <= rank(best) && audit(next.logic).length < flat.length) best = next
     }
   }
 

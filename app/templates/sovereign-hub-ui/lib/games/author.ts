@@ -1,6 +1,7 @@
 import { createContinuationFilter } from "@/lib/ai/continuation-overlap"
 import type { GamePlan } from "./types"
 import { gameRecipeText } from "./recipe"
+import { skillGuides } from "./skills"
 
 /**
  * What the programmer model is told, and how its reply becomes one file.
@@ -106,6 +107,8 @@ export function gameAuthorPrompt(request: string, plan: GamePlan) {
     "",
     `GAME RECIPE:\n${gameRecipeText(request, plan)}`,
     "",
+    `SKILLS FOR THIS GAME:\n${skillGuides(plan)}`,
+    "",
     `In-game text (status lines, labels) in ${plan.locale === "ru" ? "Russian" : plan.locale === "kk" ? "Kazakh" : "English"}. Write the complete game.js now.`,
   ].join("\n")
 }
@@ -151,6 +154,8 @@ export function gameRepairPrompt(request: string, plan: GamePlan, logic: string,
     `USER REQUEST:\n${String(request || "").slice(0, 3000)}`,
     "",
     `GAME DESIGN: ${plan.genre}, "${plan.title}", input ${plan.input}, levels ${plan.levels}.`,
+    "",
+    `REPAIR SKILL:\n${skillGuides(plan, "repair")}`,
     "",
     "The game was checked by running it. Fix EVERY problem below (they are real: syntax errors, forbidden APIs, crashes with line numbers, or controls with no effect):",
     ...problems.slice(0, 12).map((problem) => `- ${problem}`),

@@ -96,7 +96,7 @@ export function checkPolicy(code: string): GameCheck {
   return { status: details.length ? "fail" : "pass", details }
 }
 
-export function checkContract(code: string): GameCheck {
+export function checkContract(code: string, engine: "2d" | "3d" = "2d"): GameCheck {
   const source = ts.createSourceFile("game.js", code, ts.ScriptTarget.ES2020, true, ts.ScriptKind.JS)
   let calls = 0
   let names: Set<string> | null = null
@@ -113,19 +113,20 @@ export function checkContract(code: string): GameCheck {
   }
   visit(source)
   const details: string[] = []
-  if (!calls) details.push("MalikGame.define({ setup, start, update, draw }) is never called")
+  if (!calls) details.push(engine === "3d" ? "MalikGame.define({ setup, start, update }) is never called" : "MalikGame.define({ setup, start, update, draw }) is never called")
   if (calls > 1) details.push("MalikGame.define is called more than once; call it exactly once")
   const defined = names as Set<string> | null
-  if (defined) for (const required of ["update", "draw"]) if (!defined.has(required)) details.push(`MalikGame.define is missing ${required}(...)`)
+  // A 3D game builds its world in start() and three.js renders it: no draw().
+  if (defined) for (const required of engine === "3d" ? ["start", "update"] : ["update", "draw"]) if (!defined.has(required)) details.push(`MalikGame.define is missing ${required}(...)`)
   if (!defined && calls === 1 && !/\bupdate\b/u.test(code)) details.push("the game object has no update(dt, api)")
   if (code.length < 1500) details.push("game.js is too short to be a complete game")
   return { status: details.length ? "fail" : "pass", details }
 }
 
-export function staticGameReport(code: string): StaticReport {
+export function staticGameReport(code: string, engine: "2d" | "3d" = "2d"): StaticReport {
   const syntax = checkSyntax(code)
   // A file that does not parse cannot be judged further; the parser's errors come first.
   const policy = syntax.status === "pass" ? checkPolicy(code) : { status: "not_run" as const, details: [] }
-  const contract = syntax.status === "pass" ? checkContract(code) : { status: "not_run" as const, details: [] }
+  const contract = syntax.status === "pass" ? checkContract(code, engine) : { status: "not_run" as const, details: [] }
   return { syntax, policy, contract, problems: [...syntax.details, ...policy.details, ...contract.details] }
 }

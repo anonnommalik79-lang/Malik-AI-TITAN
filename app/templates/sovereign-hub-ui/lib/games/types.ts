@@ -42,8 +42,17 @@ export type GamePalette = {
 export type GameControl = { keys: string; action: string }
 export type TouchButton = { id: "action" | "action2"; label: string }
 
+export type GameEngine = "2d" | "3d"
+export type GameCamera = "first" | "third" | "chase" | "top"
+
 export type GamePlan = {
   version: 1
+  /** 2D canvas runtime or the three.js runtime (lib/games/engine.ts decides). */
+  engine?: GameEngine
+  /** 3D only: how the player sees the world. */
+  camera?: GameCamera
+  /** The game systems this design needs (lib/games/skills.ts): combat, npc, zone, world, vehicles... */
+  systems?: string[]
   title: string
   tagline: string
   locale: GameLocale

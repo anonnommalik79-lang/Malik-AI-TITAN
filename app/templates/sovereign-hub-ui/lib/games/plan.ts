@@ -3,6 +3,8 @@ import {
   type GameBackdrop, type GameControl, type GameFont, type GameInput, type GameLocale, type GameMood, type GamePalette, type GamePlan, type TouchButton,
 } from "./types"
 
+import { fallback3dPlan, gameProfile } from "./engine"
+
 /**
  * The game's design: what the model is asked for, the defaults that stand in
  * when it does not answer, and the checks every value passes before it
@@ -237,6 +239,8 @@ export function titleFromPrompt(prompt: string) {
 
 /** A coherent playable plan without the model: the floor every game stands on. */
 export function fallbackGamePlan(prompt: string, locale: GameLocale = gameLocale(prompt)): GamePlan {
+  const profile = gameProfile(prompt)
+  if (profile.engine === "3d") return fallback3dPlan(prompt, locale, profile, titleFromPrompt(prompt) || undefined)
   const genre = pickGenre(prompt)
   const word = (key: WordKey) => WORDS[key][locale]
   const keysLabel = (keys: string) => locale === "en" ? keys.replace("Пробел", "Space").replace("мышь", "mouse").replace("клик", "click").replace("касание", "tap").replace("потянуть и отпустить", "drag and release").replace("клик по двум соседним", "click two neighbours") : locale === "kk" ? keys.replace("Пробел", "Бос орын").replace("мышь", "тінтуір").replace("клик", "басу").replace("касание", "түрту") : keys
@@ -256,6 +260,8 @@ export function fallbackGamePlan(prompt: string, locale: GameLocale = gameLocale
     goal: genre.goal[locale],
     lose: locale === "en" ? "The run ends when you lose your last life." : locale === "kk" ? "Соңғы өміріңіз біткенде ойын аяқталады." : "Игра заканчивается, когда кончаются жизни.",
     controls,
+    engine: "2d",
+    systems: [...profile.systems],
     touch: { joystick: genre.joystick, buttons: genre.buttons.map(([id, key]) => ({ id, label: word(key) })) },
     theme: { palette: { ...genre.palette }, backdrop: genre.backdrop, font: genre.font, mood: genre.mood },
     mechanics: [...genre.mechanics],
@@ -294,8 +300,10 @@ export function mergeGamePlan(raw: unknown, base: GamePlan): GamePlan {
   const palette = (theme.palette && typeof theme.palette === "object" ? theme.palette : {}) as Record<string, any>
   const mergedPalette = Object.fromEntries(Object.entries(base.theme.palette).map(([key, color]) => [key, HEX.test(String(palette[key] || "")) ? String(palette[key]).toLowerCase() : color])) as GamePalette
   const portrait = value.orientation === "portrait" || (Number(value.height) > Number(value.width))
-  const width = value.orientation || value.width ? (portrait ? 540 : 960) : base.width
-  const height = value.orientation || value.width ? (portrait ? 960 : 540) : base.height
+  // Engine, camera and systems are decided by lib/games/engine.ts, not by the model; a 3D view fills the screen.
+  const is3d = base.engine === "3d"
+  const width = !is3d && (value.orientation || value.width) ? (portrait ? 540 : 960) : base.width
+  const height = !is3d && (value.orientation || value.width) ? (portrait ? 960 : 540) : base.height
   const controls = (Array.isArray(value.controls) ? value.controls : [])
     .map((item: any) => ({ keys: clean(item?.keys, 40), action: clean(item?.action, 48) }))
     .filter((item: GameControl) => item.keys && item.action)
@@ -308,6 +316,9 @@ export function mergeGamePlan(raw: unknown, base: GamePlan): GamePlan {
   const levels = whole(value.levels, 0, 20, base.levels)
   return {
     version: 1,
+    ...(base.engine ? { engine: base.engine } : {}),
+    ...(base.camera ? { camera: base.camera } : {}),
+    ...(base.systems ? { systems: [...base.systems] } : {}),
     title: clean(value.title, 48) || base.title,
     tagline: clean(value.tagline, 140) || base.tagline,
     locale: base.locale,
@@ -372,5 +383,9 @@ export function gamePlannerPrompt(prompt: string, base: GamePlan) {
     "",
     `LANGUAGE for title, tagline, genre, goal, lose, controls and touch labels: ${base.locale === "ru" ? "Russian" : base.locale === "kk" ? "Kazakh" : "English"}.`,
     `A starting point you may change completely if the request asks for something else:\n${JSON.stringify({ genre: base.genre, input: base.input, orientation: base.height > base.width ? "portrait" : "landscape", lives: base.lives, levels: base.levels, controls: base.controls.slice(0, -2), theme: base.theme, mechanics: base.mechanics })}`,
+    ...(base.engine === "3d" ? [
+      "",
+      `ENGINE: this game runs on the Malik 3D runtime (three.js) with a ${base.camera} camera — ignore the 2D canvas rule. Design a 3D world: mechanics, entities and levelPlan describe the map, the hero, enemies and how each level changes. Systems available and required here: ${(base.systems || []).join(", ")}. If the request names an existing game, reproduce its core mechanics and genre structure with an original name, design and content.`,
+    ] : []),
   ].join("\n")
 }

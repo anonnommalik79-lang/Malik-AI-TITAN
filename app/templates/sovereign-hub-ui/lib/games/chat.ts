@@ -10,10 +10,11 @@ import type { GameLocale, GamePlan, GameResult } from "./types"
 type Message = { role?: string; content?: unknown }
 
 /** A game, named directly or by genre. «игрок», «игровой сайт» and «игрушка-антистресс» do not count. */
-const GAME_NOUN = /(?<!\p{L})(?:игр(?:а|у|ы|е|ой|ушк\p{L}*)|мини[- ]?игр\p{L}*|видеоигр\p{L}*|game|games|minigame|videogame|ойын\p{L}*|аркад\p{L}*|платформер\p{L}*|шутер\p{L}*|раннер\p{L}*|тетрис\p{L}*|змейк\p{L}*|арканоид\p{L}*|пакман\p{L}*|рогалик\p{L}*|tower\s*defen[cs]e|flappy\s*bird|pac-?man|snake\s+game|tetris|breakout|platformer|shooter|roguelike|match[- ]?3|три\s+в\s+ряд)(?!\p{L})/iu
+const GAME_NOUN = /(?<!\p{L})(?:игр(?:а|у|ы|е|ой|ушк\p{L}*)|мини[- ]?игр\p{L}*|видеоигр\p{L}*|game|games|minigame|videogame|ойын\p{L}*|аркад\p{L}*|платформер\p{L}*|шутер\p{L}*|раннер\p{L}*|тетрис\p{L}*|змейк\p{L}*|арканоид\p{L}*|пакман\p{L}*|рогалик\p{L}*|tower\s*defen[cs]e|flappy\s*bird|pac-?man|snake\s+game|tetris|breakout|platformer|shooter|roguelike|match[- ]?3|три\s+в\s+ряд|battle\s*royale|королевск\p{L}*\s+битв\p{L}*|pubg|пабг|fortnite|фортнайт|gta|гта|minecraft|майнкрафт\p{L}*|subway\s*surfers?|симулятор\p{L}*|simulator|гоночн\p{L}*|гонк\p{L}*|racing|хоррор\p{L}*|horror|fps|футбольн\p{L}*\s+матч\p{L}*)(?!\p{L})/iu
 const CREATE = /(?<!\p{L})(?:созда\p{L}*|сдела\p{L}*|сгенерир\p{L}*|разработа\p{L}*|напиши|напишите|запрограммир\p{L}*|закод\p{L}*|накод\p{L}*|собери|собрать|построй|запили|нужн\p{L}*|хочу|make|build|create|generate|code|write|develop|need|want|жаса\p{L}*|құр\p{L}*)(?!\p{L})/iu
 /** Engines and languages that are not a browser game: the coding model answers those itself. */
-const OTHER_STACK = /(?<![\p{L}\p{N}])(?:unity|unreal|godot|roblox|lua|pygame|python|питон\p{L}*|c#|c\+\+|java(?!script)|kotlin|swift|android|ios|xcode|game\s*maker|rpg\s*maker|construct\s*3|defold|love2d|scratch|скретч\p{L}*|minecraft\s+(?:мод|mod|plugin|плагин)|мод\p{L}*\s+для|react|vue|next\.?js|typescript|phaser|three\.?js|zip|репозитор\p{L}*|backend|бэкенд)(?![\p{L}\p{N}])/iu
+const OTHER_STACK = /(?<![\p{L}\p{N}])(?:unity|unreal|godot|roblox|lua|pygame|python|питон\p{L}*|c#|c\+\+|java(?!script)|kotlin|swift|android|ios|xcode|game\s*maker|rpg\s*maker|construct\s*3|defold|love2d|scratch|скретч\p{L}*|minecraft\s+(?:мод|mod|plugin|плагин)|мод\p{L}*\s+для|react|vue|next\.?js|typescript|phaser|babylon\p{L}*|zip|репозитор\p{L}*|backend|бэкенд)(?![\p{L}\p{N}])/iu
+const STORY = /(?<!\p{L})(?:сценари\p{L}*|рассказ\p{L}*|истори[юия]|стать\p{L}*|фильм\p{L}*|кино|книг\p{L}*|сериал\p{L}*|песн\p{L}*|стих\p{L}*|story|stories|screenplay|movie|article|poem)(?!\p{L})/iu
 const SITE = /(?<!\p{L})(?:сайт\p{L}*|лендинг\p{L}*|портал\p{L}*|website|web\s*site|landing|homepage|магазин\p{L}*|store|shop)(?!\p{L})/iu
 const QUESTION = /^\s*(?:как|сколько|почему|зачем|что такое|какой|какая|какие|где|можно ли|how|what|why|which|where|can you explain|қалай|қанша)(?!\p{L})/iu
 const NOT_BUILD = /(?<!\p{L})(?:проанализируй|оцени|объясни|расскажи|review|explain|analy[sz]e|переведи|translate|сыграем|поиграем|сыграть\s+со\s+мной|поиграть\s+со\s+мной|play\s+with\s+me|let'?s\s+play)(?!\p{L})/iu
@@ -39,6 +40,8 @@ export function isGameCreationRequest(prompt: string) {
   if (!text || text.length > 6000) return false
   if (/```|https?:\/\//iu.test(text) || OTHER_STACK.test(text) || NOT_BUILD.test(text) || QUESTION.test(text)) return false
   if (SITE.test(text)) return false
+  // «Напиши сценарий хоррора» is a story, not a game; genre words count only without one.
+  if (STORY.test(text) && !/(?<!\p{L})(?:игр\p{L}*|game\p{L}*|ойын\p{L}*)(?!\p{L})/iu.test(text)) return false
   return GAME_NOUN.test(text) && CREATE.test(text)
 }
 

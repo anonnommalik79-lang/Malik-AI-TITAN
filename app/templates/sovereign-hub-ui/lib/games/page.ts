@@ -1,4 +1,5 @@
 import { GAME_RUNTIME_JS } from "./runtime-script"
+import { GAME_RUNTIME_3D_JS, THREE_CDN } from "./runtime-3d"
 import { passportScriptJson, readPassport, type ProofPassport } from "@/lib/proof/passport"
 import type { GamePlan } from "./types"
 
@@ -90,7 +91,69 @@ kbd{font:inherit;font-size:${pixel ? "9px" : "12px"};padding:3px 8px;border-radi
 `.trim()
 }
 
+/** What a 3D page adds: a full-screen WebGL view, vitals, minimap, feed, crosshair and a touch look area. */
+function styles3d() {
+  return `
+#stage{background:#000}
+#view{position:absolute;inset:0}
+#view canvas{display:block;width:100%;height:100%;outline:none}
+.vitals{position:absolute;left:14px;bottom:max(14px,env(safe-area-inset-bottom));display:flex;flex-direction:column;gap:8px;align-items:flex-start;z-index:3}
+.bar{position:relative;width:240px;height:22px;border-radius:999px;background:rgba(0,0,0,.5);border:1px solid rgba(255,255,255,.18);overflow:hidden}
+.bar i{position:absolute;inset:0 auto 0 0;background:linear-gradient(90deg,var(--good),var(--accent2));transition:width .15s}
+.bar.low i{background:linear-gradient(90deg,var(--danger),#ff8a5c)}
+.bar span{position:relative;display:block;padding:0 10px;font-size:12px;line-height:22px;font-weight:700;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.6)}
+.pill.ammo{font-size:22px;font-weight:800;color:var(--accent)}
+.feed{position:absolute;right:14px;top:62px;margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:4px;align-items:flex-end;z-index:3;pointer-events:none}
+.feed li{padding:4px 10px;border-radius:8px;background:rgba(0,0,0,.45);font-size:13px}
+.minimap{position:absolute;right:14px;bottom:max(14px,env(safe-area-inset-bottom));width:150px;height:150px;border-radius:50%;z-index:3;pointer-events:none}
+.crosshair{position:absolute;left:50%;top:50%;width:22px;height:22px;margin:-11px 0 0 -11px;z-index:3;pointer-events:none;background:linear-gradient(#fff,#fff) center/2px 8px no-repeat,linear-gradient(#fff,#fff) center/8px 2px no-repeat;filter:drop-shadow(0 0 2px #000)}
+.crosshair::before{content:"";position:absolute;inset:0;border:2px solid rgba(255,255,255,.75);border-radius:50%}
+.flash{position:absolute;inset:0;pointer-events:none;opacity:0;z-index:2;transition:opacity .08s}
+.floats{position:absolute;inset:0;pointer-events:none;z-index:3}
+.floats b{position:absolute;transform:translate(-50%,-50%);font-size:18px;font-weight:800;text-shadow:0 2px 6px rgba(0,0,0,.7);white-space:nowrap}
+#hud{bottom:0}
+.look{pointer-events:auto;position:absolute;right:0;top:0;bottom:0;width:50%;touch-action:none}
+.panel .row button.on{background:var(--accent);color:#0b0b0f}
+@media (max-width:640px){.bar{width:170px}.minimap{width:110px;height:110px}.pill.ammo{font-size:18px}}
+`.trim()
+}
+
+function buildGame3dHtml(plan: GamePlan, logic: string, passport?: ProofPassport) {
+  const title = escapeHtml(plan.title)
+  const lang = plan.locale === "kk" ? "kk" : plan.locale === "ru" ? "ru" : "en"
+  return [
+    "<!doctype html>",
+    `<html lang="${lang}">`,
+    "<head>",
+    '<meta charset="utf-8">',
+    '<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover">',
+    `<title>${title}</title>`,
+    `<meta name="description" content="${escapeHtml(plan.tagline)}">`,
+    '<meta name="generator" content="Malik Game Studio 3D">',
+    '<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>',
+    `<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=${GOOGLE_FONT[plan.theme.font]}&display=swap">`,
+    `<style>${styles(plan)}\n${styles3d()}</style>`,
+    "</head>",
+    "<body>",
+    `<main id="stage" aria-label="${title}">`,
+    '<div id="view"></div>',
+    '<div id="hud" hidden></div>',
+    '<div id="ui"></div>',
+    '<div id="touch" hidden></div>',
+    "</main>",
+    `<script id="malik-game-plan" type="application/json">${jsonScript(plan)}</script>`,
+    ...(passport ? [`<script id="malik-proof-passport" type="application/json">${passportScriptJson(passport)}</script>`] : []),
+    `<script src="${THREE_CDN}" crossorigin="anonymous"></script>`,
+    `<script id="malik-game-runtime">${scriptSafe(GAME_RUNTIME_3D_JS)}</script>`,
+    `<script id="malik-game-logic">\n${scriptSafe(logic)}\n</script>`,
+    "<script>MalikGame.boot()</script>",
+    "</body>",
+    "</html>",
+  ].join("\n")
+}
+
 export function buildGameHtml(plan: GamePlan, logic: string, passport?: ProofPassport) {
+  if (plan.engine === "3d") return buildGame3dHtml(plan, logic, passport)
   const title = escapeHtml(plan.title)
   const lang = plan.locale === "kk" ? "kk" : plan.locale === "ru" ? "ru" : "en"
   return [

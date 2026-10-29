@@ -1082,7 +1082,8 @@ function CodeBlock({ language, filename, code, previewFiles, autoPreview = false
               key={"preview-" + previewKey}
               srcDoc={previewSrcDoc}
               title={"Предпросмотр " + (filename || "кода")}
-              sandbox="allow-scripts allow-forms allow-modals allow-popups"
+              // Pointer lock lets 3D games look with the mouse; still no same-origin access.
+              sandbox="allow-scripts allow-forms allow-modals allow-popups allow-pointer-lock"
             />
           </div>
           <div className="malik-md-live-preview__report" role="status" data-browser-check={browserCheck?.status || undefined}>

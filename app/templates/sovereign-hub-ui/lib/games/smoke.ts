@@ -1,8 +1,28 @@
 import "server-only"
 import { spawn, spawnSync, type ChildProcessWithoutNullStreams } from "node:child_process"
+import { readFileSync } from "node:fs"
+import path from "node:path"
 import { GAME_RUNTIME_JS } from "./runtime-script"
-import { SIMULATE_JS, combineRuns, smokePrelude, type SmokeOutcome, type SmokeRun } from "./smoke-harness"
+import { GAME_RUNTIME_3D_JS } from "./runtime-3d"
+import { SIMULATE_3D_JS, SIMULATE_JS, combineRuns, smokePrelude, type SmokeOutcome, type SmokeRun } from "./smoke-harness"
 import type { GamePlan } from "./types"
+
+/**
+ * A 3D game runs over the real three.js (node_modules/three, the same version
+ * the page loads from the CDN), evaluated inside the sandbox as plain script.
+ * Missing three.js means the run did not happen, never that the game passed.
+ */
+let threeScript: string | null | undefined
+function threeForSmoke() {
+  if (threeScript !== undefined) return threeScript
+  try {
+    const source = readFileSync(path.join(process.cwd(), "node_modules", "three", "build", "three.cjs"), "utf8")
+    threeScript = `var module = { exports: {} }; var exports = module.exports;\n${source}\n;var THREE = module.exports;`
+  } catch {
+    threeScript = null
+  }
+  return threeScript
+}
 
 /**
  * Runs a generated game for ten seconds of game time — twice, once without
@@ -38,7 +58,7 @@ process.stdin.on("end", () => {
     // A fresh sandbox per run: nothing the game kept from the first run leaks into the second.
     const context = vm.createContext(Object.create(null), { name: "malik-game-smoke-" + mode, codeGeneration: { strings: false, wasm: false } });
     const run = (code, filename, timeout) => new vm.Script(code, { filename }).runInContext(context, { timeout, breakOnSigint: false });
-    try { run(data.preludes[mode], "prelude.js", 800); run(data.runtime, "runtime.js", 1500); }
+    try { run(data.preludes[mode], "prelude.js", 800); if (data.three) run(data.three, "three.js", 6000); run(data.runtime, "runtime.js", 1500); }
     catch (e) { out(Object.assign({ ok: false, stage: "runtime" }, message(e))); return; }
     try { run(data.logic, "game.js", 1500); }
     catch (e) { out(Object.assign({ ok: false, stage: "load" }, message(e))); return; }
@@ -89,8 +109,10 @@ export async function smokeRunGame(plan: GamePlan, logic: string, options: { bud
 }
 
 function runChild(plan: GamePlan, logic: string, budgetMs: number, signal?: AbortSignal): Promise<SmokeOutcome> {
+  const three = plan.engine === "3d" ? threeForSmoke() : null
+  if (plan.engine === "3d" && !three) return Promise.resolve({ ok: false, stage: "three-missing", notRun: true })
   return new Promise((resolve) => {
-    const flags = [permissionFlagFor(), "--disallow-code-generation-from-strings", "--max-old-space-size=128", "--max-semi-space-size=16"].filter(Boolean) as string[]
+    const flags = [permissionFlagFor(), "--disallow-code-generation-from-strings", `--max-old-space-size=${three ? 320 : 128}`, "--max-semi-space-size=16"].filter(Boolean) as string[]
     let child: ChildProcessWithoutNullStreams
     try {
       child = spawn(process.execPath, [...flags, "-e", CHILD], { env: NO_ENV, stdio: ["pipe", "pipe", "pipe"], windowsHide: true })
@@ -124,6 +146,9 @@ function runChild(plan: GamePlan, logic: string, budgetMs: number, signal?: Abor
       catch { finish({ ok: false, stage: "crash", error: code === 134 || code === null ? "the game ran out of memory in the test run" : `the test process stopped (${code})` }) }
     })
     child.stdin.on("error", () => { /* the child may exit before reading everything */ })
-    child.stdin.end(JSON.stringify({ preludes: { idle: smokePrelude(plan, "idle"), active: smokePrelude(plan, "active") }, runtime: GAME_RUNTIME_JS, logic, simulate: SIMULATE_JS, budgetMs }))
+    child.stdin.end(JSON.stringify({
+      preludes: { idle: smokePrelude(plan, "idle"), active: smokePrelude(plan, "active") },
+      three, runtime: three ? GAME_RUNTIME_3D_JS : GAME_RUNTIME_JS, logic, simulate: three ? SIMULATE_3D_JS : SIMULATE_JS, budgetMs,
+    }))
   })
 }
