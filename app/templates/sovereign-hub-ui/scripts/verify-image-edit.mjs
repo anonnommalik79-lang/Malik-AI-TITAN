@@ -166,9 +166,8 @@ try {
 
   let generated = 0, charged = 0
   const handler = load('lib/media/generate-photo-route.ts', {
-    './asset-store': { mediaAssetExtension: () => 'png' },
     './image-display-preview': { createMalikImageDisplayPreview: async () => null },
-    './image-postprocess': { postProcessGeneratedImage: async ({ imageUrl }) => ({ imageUrl }) },
+    '@/lib/storage/cloud-upload': { isCloudStorageConfigured: () => false },
     './image-router': { routeImageGeneration: async (value) => { generated++; assert.ok(value.editSource); assert.equal(value.prompt, request.prompt); return { ok: true, provider: 'cloudflare', modelId: 'flux-klein-4b', imageUrl: 'data:image/png;base64,' + original.toString('base64') } } },
     './limits': { normalizeImageCreditSize: () => '1K', checkImageCreditLimit: async () => ({ ok: true, remaining: 10, daily: 10, cost: 1 }), recordImageCreditUsage: async () => { charged++; return { remaining: 9 } } },
     './providers/agnes-image': { agnesImageConfigured: () => true, generateWithAgnesImage: forbidden },
@@ -179,11 +178,14 @@ try {
   assert.equal(missing.status, 400)
   assert.equal(generated, 0)
   assert.equal(charged, 0)
-  const response = await post({ prompt: request.prompt, attachments: input.attachments })
+  const response = await post({ prompt: request.prompt, attachments: input.attachments, quality: 'draft' })
   assert.equal(response.status, 200)
   const payload = await response.json()
   assert.equal(payload.operation, 'edit')
   assert.equal(payload.originalPrompt, request.prompt)
+  assert.equal(payload.watermarked, true)
+  const marked = Buffer.from(payload.masterUrl.split(',')[1], 'base64')
+  assert.ok((await sharp(marked).metadata()).xmp.toString().includes('malik-ai-wordmark-v1'))
   assert.equal(charged, 1)
   console.log('PASS: edit intent, upload validation, original pixels in multipart, aspect ratio, exact lettering, no text-only fallback, API result and usage.')
 } finally { globalThis.fetch = savedFetch }

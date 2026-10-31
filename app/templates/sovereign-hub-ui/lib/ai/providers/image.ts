@@ -2,6 +2,8 @@
 import { providerOrder } from "../provider-order"
 import { awsBedrockProvider } from "./aws-bedrock"
 import { providerFetch } from "./base"
+import { finalizeImageResponse } from "@/lib/media/finalize-image-response"
+import { ImageWatermarkError } from "@/lib/media/malik-watermark"
 
 function configured(name: string) {
   return Boolean(process.env[name]?.trim())
@@ -338,8 +340,10 @@ export const imageProviderRouter: AIProvider = {
       const handler = handlers[provider]
       if (!handler || !isConfigured(provider)) continue
       try {
-        return await handler(input)
+        return await finalizeImageResponse(await handler(input))
       } catch (error) {
+        // Branding is delivery, not a reason to purchase another generation.
+        if (error instanceof ImageWatermarkError) throw error
         errors.push(`${provider}: ${error instanceof Error ? error.message : String(error)}`)
       }
     }

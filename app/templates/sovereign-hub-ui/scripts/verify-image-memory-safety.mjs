@@ -78,10 +78,10 @@ assert.match(route, /displayPreview\s*=\s*delivered\.buffer\?\.length[\s\S]*crea
 
 // Malik branding must survive downloads for generated photos and stay visible
 // over generated video players without exposing provider branding in the result.
-assert.match(watermark, /M4 53 46 11v42H4Z/, "watermark must use the exact official left triangle")
-assert.match(watermark, /M55 11h41L55 53V11Z/, "watermark must use the exact official right triangle")
-assert.match(watermark, /imageWidth \* 0\.06/, "image signature must be small")
-assert.match(post, /pipeline\.composite\(\[\{[\s\S]*createMalikImageWatermarkSvg\(finalWidth\)[\s\S]*gravity:\s*"southwest"/, "generated image bytes must contain the Malik watermark")
+assert.match(watermark, /<title>MALIK AI<\/title>/, "watermark must contain the exact uppercase wordmark")
+assert.match(watermark, /fill-opacity="0\.60"/, "signature opacity must be 60 percent")
+assert.match(watermark, /width \* 0\.025/, "signature must use proportional edge padding")
+assert.match(post, /await applyMalikImageWatermark\(pipeline, bytes\.buffer, metadata, finalWidth, finalHeight\)/, "generated image bytes must pass the shared server compositor")
 assert.match(videoStudio, /function MalikMediaWatermark/, "video results must render the Malik watermark")
 assert.match(videoStudio, /<svg viewBox="0 0 100 58"/, "video watermark must use an inline Malik logo so it cannot disappear")
 assert.match(videoStudio, /className="mv2__result-frame"[\s\S]*<MalikMediaWatermark \/>/, "desktop video watermark must be inside the fitted video frame")

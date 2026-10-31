@@ -14,12 +14,15 @@ const sourceRoute = read("app/api/media/video/brand-source/route.ts")
 
 for (const path of ["M4 53 46 11v42H4Z", "M55 11h41L55 53V11Z"]) {
   assert(icon.includes(path), "official logo path changed: " + path)
-  assert(photo.includes(path), "photo mark must use the official geometry")
   assert(studio.includes(path), "video preview mark must use the official geometry")
   assert(exportClient.includes(path), "video encoded frames must use the official geometry")
 }
-assert.match(photo, /imageWidth \* 0\.06/, "photo logo must remain small")
-assert.match(pipeline, /createMalikImageWatermarkSvg\(finalWidth\)[\s\S]{0,80}gravity: "southwest"/)
+// Generated photos use the explicitly requested uppercase wordmark. Video
+// geometry and encoding contracts above/below remain unchanged.
+assert.match(photo, /<title>MALIK AI<\/title>/, "photo mark must be the exact MALIK AI wordmark")
+assert.match(photo, /fill-opacity="0\.60"/, "photo opacity must be 60 percent")
+assert.match(photo, /left: width - marginX - markWidth/, "photo wordmark must be bottom-right")
+assert.match(pipeline, /await applyMalikImageWatermark\(pipeline, bytes\.buffer, metadata, finalWidth, finalHeight\)/)
 assert.doesNotMatch(photoRoute, /if \(directDelivery && \^https:/, "direct-provider photos must not bypass logo stamping")
 assert.match(work, /return persistBrandedWorkImage\(/, "Work photo results must be branded")
 assert.match(worker, /stamp_official_malik_icon\(source,/)

@@ -76,7 +76,7 @@ async function persistBrandedWorkImage(input: {
   const branded = await withMalikImageProcessingSlot(() =>
     postProcessGeneratedImage({ imageUrl: input.imageUrl, quality: "draft", effect: "off" }),
   )
-  if (!branded.buffer?.length) throw new Error("MALIK_IMAGE_BRANDING_UNAVAILABLE")
+  if (!branded.buffer?.length || !branded.watermarked) throw new Error("MALIK_IMAGE_BRANDING_UNAVAILABLE")
   if (!isCloudStorageConfigured()) throw new Error("MALIK_IMAGE_STORAGE_REQUIRED")
   const mime = branded.mime || "image/webp"
   const uploaded = await uploadMediaAsset({

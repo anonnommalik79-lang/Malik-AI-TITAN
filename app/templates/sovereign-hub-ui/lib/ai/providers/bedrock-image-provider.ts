@@ -1,4 +1,6 @@
 import type { AIRequest, AIResponse } from "../types"
+import { finalizeImageResponse } from "@/lib/media/finalize-image-response"
+import { ImageWatermarkError } from "@/lib/media/malik-watermark"
 import { bedrockLegacyImageModel, modelChainForMode } from "../config"
 import { bedrockConfigured, invokeBedrock } from "./bedrock-provider"
 
@@ -40,15 +42,16 @@ export async function generateBedrockImage(input: AIRequest): Promise<AIResponse
       )
       const base64 = result?.images?.[0]
       if (!base64) throw new Error("Bedrock returned no image")
-      return {
+      return await finalizeImageResponse({
         success: true,
         provider: "aws-bedrock",
         model,
         type: "image",
         output: { resultUrl: `data:image/png;base64,${base64}`, provider: "aws-bedrock", model },
         latencyMs: Date.now() - started,
-      }
+      })
     } catch (error) {
+      if (error instanceof ImageWatermarkError) throw error
       lastError = error instanceof Error ? error.message : lastError
     }
   }

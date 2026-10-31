@@ -155,12 +155,12 @@ def _strict_image_prompt(prompt: str) -> str:
 
 
 def _save_b64_image(encoded: str, provider: str) -> str:
-    filename = f"{provider}_{int(time.time())}_{uuid.uuid4().hex[:8]}.png"
-    (PHOTO_STORAGE_DIR / filename).write_bytes(base64.b64decode(encoded))
-    return f"/api/storage/photos/{filename}"
+    return _save_image_bytes(base64.b64decode(encoded), provider)
 
 
 def _save_image_bytes(content: bytes, provider: str, content_type: str = "image/png") -> str:
+    from app.ai.media_jobs.watermark import watermark_image_bytes
+    content, content_type = watermark_image_bytes(content)
     extension = ".jpg" if "jpeg" in content_type or "jpg" in content_type else ".webp" if "webp" in content_type else ".png"
     filename = f"{provider}_{int(time.time())}_{uuid.uuid4().hex[:10]}{extension}"
     (PHOTO_STORAGE_DIR / filename).write_bytes(content)
@@ -449,12 +449,33 @@ def generate_image(input_data: dict) -> dict:
     for fn in (_cloudflare_image, _openai_image, _aws_image):
         try:
             output = fn(input_data)
-            if output:
-                output["errors"] = errors
-                return output
         except Exception as exc:
+            if getattr(exc, "code", None) == "IMAGE_WATERMARK_FAILED":
+                raise
             errors.append({"provider": fn.__name__, "error": str(exc)[:500]})
-    return _pollinations_image(input_data, errors)
+            continue
+        if output:
+            output["errors"] = errors
+            return _finalize_image_output(output)
+    return _finalize_image_output(_pollinations_image(input_data, errors))
+
+
+def _finalize_image_output(output: dict) -> dict:
+    source = str(output.get("imageUrl") or output.get("resultUrl") or output.get("url") or "")
+    if source.startswith("/api/storage/photos/"):
+        # Local provider outputs have already been branded before storage.
+        return {**output, "watermarked": True}
+    if not source.startswith("https://"):
+        raise RuntimeError("IMAGE_WATERMARK_FAILED: unsupported generated image URL")
+    with requests.get(source, stream=True, timeout=(10, 20)) as response:
+        response.raise_for_status()
+        content = bytearray()
+        for chunk in response.iter_content(65536):
+            content.extend(chunk)
+            if len(content) > 24 * 1024 * 1024:
+                raise RuntimeError("IMAGE_WATERMARK_FAILED: source size exceeded")
+    url = _save_image_bytes(bytes(content), "malik_branded")
+    return {**output, "resultUrl": url, "url": url, "imageUrl": url, "mediaUrl": url, "watermarked": True}
 
 
 def generate_video(input_data: dict) -> dict:

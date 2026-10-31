@@ -551,11 +551,12 @@ export function ImageStudio({
   const download = async (item: Result) => {
     const url = item.master || item.url
     if (!url) return
-    const name = `malik-ai-${item.id.slice(0, 8)}.${/png/i.test(url) ? "png" : /jpe?g/i.test(url) ? "jpg" : "webp"}`
     try {
       const response = await fetch(url.split("#")[0])
       if (!response.ok) throw new Error("fetch")
       const blob = await response.blob()
+      const extension = blob.type.includes("jpeg") ? "jpg" : blob.type.includes("png") ? "png" : "webp"
+      const name = `malik-ai-${item.id.slice(0, 8)}.${extension}`
       const href = URL.createObjectURL(blob)
       const link = document.createElement("a")
       link.href = href
@@ -579,7 +580,8 @@ export function ImageStudio({
       const href = URL.createObjectURL(blob)
       const link = document.createElement("a")
       link.href = href
-      link.download = `malik-ai-${item.id.slice(0, 8)}-brand.png`
+      const extension = blob.type.includes("jpeg") ? "jpg" : blob.type.includes("png") ? "png" : "webp"
+      link.download = `malik-ai-${item.id.slice(0, 8)}-brand.${extension}`
       document.body.appendChild(link)
       link.click()
       link.remove()

@@ -18,6 +18,7 @@ import {
   resolveMalikImageQuality,
 } from "./image-quality-presets"
 import { postProcessGeneratedImage } from "./image-postprocess"
+import { ImageWatermarkError } from "./malik-watermark"
 import { DEFAULT_MALIK_IMAGE_EFFECT, resolveMalikImageEffect } from "./image-effects"
 import { enhanceImagePrompt } from "./image-prompt-enhancer"
 import { buildVisualPrompt } from "./visual-prompt"
@@ -342,19 +343,20 @@ export async function handleMalikPhotoGenerationRequest(request: Request) {
     }
 
     // Even when the provider supports zero-copy direct delivery, a raw CDN
-    // URL cannot contain the Malik AI icon. Brand the original-size pixels
+    // URL cannot contain the MALIK AI wordmark. Brand the original-size pixels
     // through the existing capacity-limited Sharp path (no model re-run).
     // Direct deliveries use native size to avoid expensive 8K upscaling on
     // the small Render instance; normal high-quality jobs are unchanged.
     // Always derive the visible preview from the FINAL delivery bytes. The same
-    // Sharp pass contains Malik Aura (when enabled) and the Malik AI logo +
-    // wordmark. Previously effect=off used the raw provider preview, which made
+    // Sharp pass contains Malik Aura (when enabled) and the MALIK AI wordmark.
+    // Previously effect=off used the raw provider preview, which made
     // the watermark disappear in chat even though the processed master had it.
     const delivered = await withMalikImageProcessingSlot(() =>
       postProcessGeneratedImage({ imageUrl: result.imageUrl, quality: directDelivery ? "draft" : quality, effect: directDelivery ? "off" : effect }),
     )
+    if (!delivered.buffer?.length || !delivered.watermarked) throw new ImageWatermarkError()
 
-    let displayPreview = delivered.buffer?.length
+    const displayPreview = delivered.buffer?.length
       ? await withMalikImageProcessingSlot(() =>
           createMalikImageDisplayPreview({
             buffer: delivered.buffer,
@@ -363,12 +365,6 @@ export async function handleMalikPhotoGenerationRequest(request: Request) {
           }),
         )
       : null
-
-    // Keep generation usable on a host where Sharp is temporarily unavailable.
-    // In that exceptional case we fall back to the provider frame.
-    if (!displayPreview) {
-      displayPreview = await createMalikImageDisplayPreview({ sourceUrl: result.imageUrl })
-    }
 
     await recordImageCreditUsage(user.userId, imageSize)
     const remaining = credit.plan === "owner"
@@ -422,11 +418,13 @@ export async function handleMalikPhotoGenerationRequest(request: Request) {
     // Render disks are ephemeral and are the wrong ownership boundary for chat
     // history. Durable account media belongs in object storage under
     // users/<account-hash>/..., while the browser only receives short URLs.
-    const imageUrl = storageUrl || delivered.imageUrl
+    // All public references, including the master download, must point to the
+    // finished pixels. Object-storage failure must not leak the raw provider URL.
+    const imageUrl = storageUrl || `data:${delivered.mime};base64,${delivered.buffer.toString("base64")}`
     const previewUrl = previewStorageUrl
 
     // No cloud bucket? Send the lightweight BRANDED derivative as the one-response
-    // browser seed. This makes logo + "Malik AI" visible in every photo result
+    // browser seed. This keeps "MALIK AI" visible in every photo result
     // even while durable object storage is unavailable.
     const browserCacheImageUrl =
       !storageUrl &&
@@ -438,7 +436,7 @@ export async function handleMalikPhotoGenerationRequest(request: Request) {
     const displayUrl = storageUrl
       ? displayImageReference(previewUrl, imageUrl)
       : (browserCacheImageUrl || imageUrl)
-    const publicMasterUrl = storageUrl || browserCacheImageUrl || imageUrl
+    const publicMasterUrl = imageUrl
 
     const resolvedModelId = result.modelId || requestedModelId
     const resolvedImageModel = resolvedModelId ? getMalikImageModel(resolvedModelId) : undefined
@@ -479,6 +477,7 @@ export async function handleMalikPhotoGenerationRequest(request: Request) {
       qualityFromPrompt: requested.fromPrompt,
       deliveryMs: delivered.elapsedMs,
       postProcessed: delivered.postProcessed,
+      watermarked: delivered.watermarked,
       upscaleApplied: delivered.upscaleApplied,
       processor: delivered.processor,
       effectId: delivered.effectId,
@@ -498,6 +497,9 @@ export async function handleMalikPhotoGenerationRequest(request: Request) {
       resetAt: credit.resetAt,
       plan: credit.plan,
     })
+  } catch (error) {
+    if (error instanceof ImageWatermarkError) return Response.json({ ok: false, status: "failed", error: error.code, publicError: error.message, retryable: true }, { status: 502, headers: { "Cache-Control": "no-store" } })
+    throw error
   } finally {
     releaseImageGenerationLock(user.userId, generationLock)
   }

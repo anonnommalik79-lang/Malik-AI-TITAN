@@ -1,5 +1,6 @@
 import "server-only"
 import { decodeDataUrl } from "./asset-store"
+import { hasMalikImageWatermark, MALIK_WATERMARK_XMP } from "./malik-watermark"
 
 /**
  * Chat cards do not need to decode an 8K/16K master just to show a 680px image.
@@ -97,6 +98,8 @@ export async function createMalikImageDisplayPreview(input: {
       failOn: "none",
       limitInputPixels: false,
     }).rotate()
+    const metadata = await pipeline.metadata()
+    if (hasMalikImageWatermark(metadata)) pipeline.withXmp(MALIK_WATERMARK_XMP)
 
     const resized = knownLongEdge > 0 && knownLongEdge <= MALIK_IMAGE_DISPLAY_PREVIEW_LONG_EDGE
       ? pipeline

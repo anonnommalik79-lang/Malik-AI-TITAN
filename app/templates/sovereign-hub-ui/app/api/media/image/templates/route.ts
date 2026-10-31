@@ -1,5 +1,7 @@
 import { findImageTemplate, IMAGE_TEMPLATES } from "@/lib/media/image-templates"
 import { sourceBytes } from "@/lib/media/image-postprocess"
+import { watermarkImageBytes } from "@/lib/media/malik-watermark"
+import { withMalikImageProcessingSlot } from "@/lib/media/image-processing-capacity"
 import { routeImageGeneration } from "@/lib/media/image-router"
 import { isCloudStorageConfigured, putSharedObject, readSharedJson, writeSharedJson } from "@/lib/storage/cloud-upload"
 import { readJsonBodyLimited, RequestSafetyError } from "@/lib/server/request-safety"
@@ -141,11 +143,14 @@ export async function POST(request: Request) {
     if (!source) return json({ ok: false, error: "Не удалось получить нарисованную обложку." }, 502)
 
     const sharp = (await import("sharp")).default
-    const buffer = await sharp(source.buffer, { failOn: "none" })
+    const buffer = await withMalikImageProcessingSlot(async () => {
+      const cropped = await sharp(source.buffer, { failOn: "none" })
       .rotate()
       .resize(1200, 900, { fit: "cover", position: "attention" })
       .webp({ quality: 82 })
       .toBuffer()
+      return (await watermarkImageBytes(cropped, "webp")).buffer
+    })
 
     const stored = await putSharedObject({
       key: `shared/image-templates/covers/${template.id}-${Date.now()}.webp`,

@@ -1,4 +1,4 @@
-import { awsBedrockProvider } from "@/lib/ai/providers/aws-bedrock"
+import { awsBedrockProvider, generateAwsBedrockImageSource } from "@/lib/ai/providers/aws-bedrock"
 import type { ImageAspectRatio, ImageMode } from "../types"
 
 function falKey() {
@@ -43,7 +43,7 @@ export async function generateAwsImage(input: {
   signal?: AbortSignal
 }): Promise<{ imageUrl: string; base64?: string }> {
   // AWS Bedrock Nova Canvas also receives exactly the same strict prompt.
-  const result = await awsBedrockProvider.generateImage({
+  const result = await generateAwsBedrockImageSource({
     prompt: input.prompt,
     task: "image",
     signal: input.signal,

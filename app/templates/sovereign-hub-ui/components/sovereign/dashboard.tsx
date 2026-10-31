@@ -7047,7 +7047,14 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
           mediaUrl = serverDurableUrl
           inlineFallbackUrl = ""
         } else {
-          let durableMediaUrl = await persistGeneratedImageReference(assistantMessage.generatedMedia.id, mediaUrl)
+          const masterSource = String(finalPayload?.masterUrl || mediaUrl)
+          let durableMediaUrl = await persistGeneratedImageReference(assistantMessage.generatedMedia.id, masterSource)
+          if (isStoredGeneratedImageUrl(durableMediaUrl) && mediaUrl !== masterSource) {
+            const previewReference = await persistGeneratedImageReference(`${assistantMessage.generatedMedia.id}-preview`, mediaUrl)
+            if (isStoredGeneratedImageUrl(previewReference)) {
+              durableMediaUrl = `${previewReference}#malik-master=${encodeURIComponent(durableMediaUrl)}`
+            }
+          }
 
           // If the server URL could not be copied but the provider included inline
           // bytes, persist those instead. This is still browser disk, not Render RAM.

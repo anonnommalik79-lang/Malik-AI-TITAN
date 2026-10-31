@@ -80,6 +80,7 @@
     "test:image-prompt": "node scripts/verify-image-prompt.mjs",
     "test:image-edit": "node scripts/verify-image-edit.mjs",
     "test:image-memory": "node scripts/verify-image-memory-safety.mjs",
+    "test:image-watermark": "node scripts/verify-image-watermark.mjs",
     "test:branding": "node scripts/verify-maliki-branding.mjs",
     "test:sites": "node scripts/verify-sites.mjs",
     "test:work-code": "node scripts/verify-work-code.mjs",

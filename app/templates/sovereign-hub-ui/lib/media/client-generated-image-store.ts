@@ -246,7 +246,12 @@ export async function persistGeneratedImageReference(id: string, url: string): P
 export async function resolveGeneratedImageUrl(url: string): Promise<string> {
   if (!isStoredGeneratedImageUrl(url)) return url
 
-  const id = decodeURIComponent(url.slice(URL_PREFIX.length))
+  // The small preview and full-resolution download are separate IDB entries.
+  // Keep the master reference on the displayed URL for the existing toolbar.
+  const marker = url.indexOf("#malik-master=")
+  const reference = marker < 0 ? url : url.slice(0, marker)
+  const fragment = marker < 0 ? "" : url.slice(marker)
+  const id = decodeURIComponent(reference.slice(URL_PREFIX.length))
   if (id.startsWith("acct:") && !id.startsWith(`acct:${currentAccountScope}:`)) {
     throw new Error("Это изображение принадлежит другому локальному аккаунту.")
   }
@@ -254,7 +259,7 @@ export async function resolveGeneratedImageUrl(url: string): Promise<string> {
   if (!value) throw new Error("Сохранённое изображение не найдено. Повторите генерацию.")
   const resolved = entryToDisplayUrl(value)
   if (!resolved) throw new Error("Сохранённое изображение не найдено. Повторите генерацию.")
-  return resolved
+  return resolved + fragment
 }
 
 /*

@@ -11,7 +11,7 @@ import { decodeDataUrl } from "./asset-store"
 import type { MalikImageDeliveryResolution, MalikImageQuality } from "./image-quality-presets"
 import { getMalikImageQualityProfile } from "./image-quality-presets"
 import { getMalikImageEffectProfile, type MalikImageEffectId } from "./image-effects"
-import { createMalikImageWatermarkSvg } from "./malik-watermark"
+import { applyMalikImageWatermark, hasMalikImageWatermark, ImageWatermarkError } from "./malik-watermark"
 
 const MAX_SOURCE_BYTES = 24 * 1024 * 1024
 const REMOTE_IMAGE_TIMEOUT_MS = 20_000
@@ -115,6 +115,7 @@ export type ImagePostProcessResult = {
   sourceWidth?: number
   sourceHeight?: number
   postProcessed: boolean
+  watermarked: true
   upscaleApplied: boolean
   processor: "sharp" | "passthrough"
   deliveryResolution: MalikImageDeliveryResolution
@@ -149,8 +150,9 @@ function applyConcurrency(sharp: typeof import("sharp")) {
 }
 
 export async function sourceBytes(imageUrl: string): Promise<{ buffer: Buffer; mime: string } | null> {
+  if (imageUrl.length > Math.ceil(MAX_SOURCE_BYTES * 4 / 3) + 1024) return null
   const inline = decodeDataUrl(imageUrl)
-  if (inline) return inline
+  if (inline) return inline.buffer.length <= MAX_SOURCE_BYTES ? inline : null
   if (!/^https:\/\//i.test(imageUrl)) return null
 
   const controller = new AbortController()
@@ -167,7 +169,20 @@ export async function sourceBytes(imageUrl: string): Promise<{ buffer: Buffer; m
     if (!mime.startsWith("image/")) return null
     const declared = Number(response.headers.get("content-length") || 0)
     if (declared > MAX_SOURCE_BYTES) return null
-    const bytes = Buffer.from(await response.arrayBuffer())
+    if (!response.body) return null
+    const reader = response.body.getReader()
+    const chunks: Buffer[] = []
+    let total = 0
+    try {
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        total += value.byteLength
+        if (total > MAX_SOURCE_BYTES) { await reader.cancel(); return null }
+        chunks.push(Buffer.from(value))
+      }
+    } finally { reader.releaseLock() }
+    const bytes = Buffer.concat(chunks, total)
     if (!bytes.length || bytes.length > MAX_SOURCE_BYTES) return null
     return { buffer: bytes, mime }
   } catch {
@@ -209,18 +224,7 @@ export async function postProcessGeneratedImage(input: {
   const effect = getMalikImageEffectProfile(input.effect || "off")
   const profile = getMalikImageQualityProfile(input.quality)
   const bytes = await sourceBytes(input.imageUrl)
-  if (!bytes) {
-    return {
-      imageUrl: input.imageUrl,
-      postProcessed: false,
-      upscaleApplied: false,
-      processor: "passthrough",
-      deliveryResolution: "native",
-      effectId: effect.id,
-      effectLabel: effect.label,
-      effectApplied: false,
-    }
-  }
+  if (!bytes) throw new ImageWatermarkError()
 
   try {
     const sharpModule = await import("sharp")
@@ -252,8 +256,16 @@ export async function postProcessGeneratedImage(input: {
     const upscaling = safeLongEdge > longEdge
     const finalLong = upscaling ? safeLongEdge : longEdge
 
-    // One pipeline, one decode, one encode. Everything below is a description of
-    // the work; libvips streams it in a single pass when toBuffer is awaited.
+    if (hasMalikImageWatermark(metadata) && !upscaling && effect.id === "off") {
+      return { imageUrl: input.imageUrl, buffer: bytes.buffer, mime: bytes.mime,
+        width: sourceWidth, height: sourceHeight, sourceWidth, sourceHeight,
+        postProcessed: true, watermarked: true, upscaleApplied: false, processor: "sharp",
+        deliveryResolution: deliveredTier(longEdge), effectId: effect.id,
+        effectLabel: effect.label, effectApplied: false, elapsedMs: Date.now() - startedAt }
+    }
+
+    // One main output pipeline/encode. The watermark separately samples only a
+    // small corner derivative; no second full-resolution raw frame is allocated.
     let pipeline = sharp(bytes.buffer, { animated: false, failOn: "none", limitInputPixels: inputPixelLimit }).rotate()
 
     if (upscaling) {
@@ -286,18 +298,11 @@ export async function postProcessGeneratedImage(input: {
       pipeline = pipeline.sharpen(Math.max(0.35, sharpenSigma))
     }
 
-    // Brand every processed master with the exact official small Malik AI icon.
-    // One Sharp pass; the mark is in the pixels and survives downloads.
     const finalWidth = landscape
       ? finalLong
       : Math.max(1, Math.round(finalLong * Math.max(0.01, aspect)))
-    if (finalWidth > 0) {
-      pipeline = pipeline.composite([{
-        input: createMalikImageWatermarkSvg(finalWidth),
-        gravity: "southwest",
-        blend: "over",
-      }])
-    }
+    const finalHeight = landscape ? Math.max(1, Math.round(finalLong / aspect)) : finalLong
+    pipeline = await applyMalikImageWatermark(pipeline, bytes.buffer, metadata, finalWidth, finalHeight)
 
     const heavy = finalLong > JPEG_ABOVE_LONG_EDGE
     let encoded
@@ -338,6 +343,7 @@ export async function postProcessGeneratedImage(input: {
       sourceWidth: sourceWidth || undefined,
       sourceHeight: sourceHeight || undefined,
       postProcessed: true,
+      watermarked: true,
       upscaleApplied: upscaling,
       processor: "sharp",
       deliveryResolution: deliveredTier(Math.max(info.width, info.height)),
@@ -347,21 +353,8 @@ export async function postProcessGeneratedImage(input: {
       elapsedMs: Date.now() - startedAt,
     }
   } catch {
-    // Native optional dependencies can be unavailable on a new platform. A
-    // post-processing failure must never throw away a successfully generated image.
-    return {
-      imageUrl: input.imageUrl,
-      buffer: bytes.buffer,
-      mime: bytes.mime,
-      postProcessed: false,
-      upscaleApplied: false,
-      processor: "passthrough",
-      deliveryResolution: "native",
-      effectId: effect.id,
-      effectLabel: effect.label,
-      effectApplied: false,
-      elapsedMs: Date.now() - startedAt,
-    }
+    // Never report an unbranded provider frame as a finished Malik AI image.
+    throw new ImageWatermarkError()
   }
 }
 

@@ -1,4 +1,5 @@
 import type { AIProvider, AIRequest, AIResponse } from "../types"
+import { finalizeImageResponse } from "@/lib/media/finalize-image-response"
 import { modelFor } from "../models"
 import { bedrockConfigured, invokeBedrock } from "./bedrock-provider"
 import { health, responseType } from "./base"
@@ -80,39 +81,7 @@ export const awsBedrockProvider: AIProvider = {
   },
 
   async generateImage(input) {
-    const started = Date.now()
-    try {
-      if (!configured()) throw new Error("missing AWS Bedrock credentials")
-      const model = modelFor("aws-bedrock", "image", input.model)
-      const result = await bedrockRequest(`/model/${encodeURIComponent(model)}/invoke`, {
-        taskType: "TEXT_IMAGE",
-        textToImageParams: { text: input.prompt },
-        imageGenerationConfig: {
-          numberOfImages: 1,
-          quality: "standard",
-          width: 1024,
-          height: 1024,
-          cfgScale: 8,
-          seed: Math.floor(Math.random() * 858_993_460),
-        },
-      }, input.signal)
-      const base64 = result?.images?.[0]
-      if (!base64) throw new Error("AWS Bedrock Nova Canvas returned no image")
-      return {
-        success: true,
-        provider: "aws-bedrock",
-        model,
-        type: "image",
-        output: {
-          resultUrl: `data:image/png;base64,${base64}`,
-          provider: "aws-bedrock",
-          model,
-        },
-        latencyMs: Date.now() - started,
-      }
-    } catch (error) {
-      throw new Error(bedrockError(error), { cause: error })
-    }
+    return finalizeImageResponse(await generateAwsBedrockImageSource(input))
   },
 
   async generateVideo() {
@@ -122,4 +91,21 @@ export const awsBedrockProvider: AIProvider = {
   async analyzeFile(input) {
     return this.sendMessage({ ...input, task: "file_analysis" })
   },
+}
+
+/** Internal provider pixels. Callers must finalize after their resize/effects. */
+export async function generateAwsBedrockImageSource(input: AIRequest): Promise<AIResponse> {
+  const started = Date.now()
+  try {
+    if (!configured()) throw new Error("missing AWS Bedrock credentials")
+    const model = modelFor("aws-bedrock", "image", input.model)
+    const result = await bedrockRequest(`/model/${encodeURIComponent(model)}/invoke`, {
+      taskType: "TEXT_IMAGE",
+      textToImageParams: { text: input.prompt },
+      imageGenerationConfig: { numberOfImages: 1, quality: "standard", width: 1024, height: 1024, cfgScale: 8, seed: Math.floor(Math.random() * 858_993_460) },
+    }, input.signal)
+    const base64 = result?.images?.[0]
+    if (!base64) throw new Error("AWS Bedrock Nova Canvas returned no image")
+    return { success: true, provider: "aws-bedrock", model, type: "image", output: { resultUrl: `data:image/png;base64,${base64}`, provider: "aws-bedrock", model }, latencyMs: Date.now() - started }
+  } catch (error) { throw new Error(bedrockError(error), { cause: error }) }
 }
