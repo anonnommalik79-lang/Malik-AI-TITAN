@@ -69,12 +69,13 @@ export function ChatBuildSteps({ kind, question, trace, live, content, tookMs }:
   const elapsed = live && trace ? Math.max(0, now - trace.startedAt) : total
   const failed = steps.at(-1)?.state === "failed"
   if (!live && steps.length <= 1 && total === undefined) return null
-  return <section className="malik-build" data-state={live ? "running" : failed ? "failed" : "done"} aria-label={live ? (edit ? copy.editing[kind] : copy.working[kind]) : copy.done[kind]}>
-    <header className="malik-build__head">
+  // Plain divs, not section/header: the app's phone sheets repaint every header (navy) and the first section on a page.
+  return <div role="region" className="malik-build" data-state={live ? "running" : failed ? "failed" : "done"} aria-label={live ? (edit ? copy.editing[kind] : copy.working[kind]) : copy.done[kind]}>
+    <div className="malik-build__head">
       <span className="malik-build__mark" aria-hidden="true">{live ? <Loader2 className="animate-spin" /> : <Check />}</span>
       <strong>{live ? (edit ? copy.editing[kind] : copy.working[kind]) : copy.steps}</strong>
       {elapsed !== undefined ? <time aria-live="off">{formatBuildSeconds(elapsed, english)}</time> : null}
-    </header>
+    </div>
     {steps.length > (live ? 0 : 1) ? <ol className="malik-build__steps" aria-live="polite">
       {steps.map((step, index) => {
         const current = step.state === "running"
@@ -93,7 +94,7 @@ export function ChatBuildSteps({ kind, question, trace, live, content, tookMs }:
       <span className="malik-build__icon" aria-hidden="true"><Check /></span>
       <span>{edit ? copy.edited[kind] : copy.done[kind]} {copy.total}: <b>{formatBuildSeconds(total, english)}</b></span>
     </p> : null}
-  </section>
+  </div>
 }
 
 /**
@@ -175,11 +176,11 @@ export function ChatBuildResult({ messageId, kind, question, files, primary, war
     ["Адаптивность", facts.responsive ? "ПК, планшет, телефон" : "Без мобильной вёрстки"],
     ["Статус", warnings ? "Готово, есть замечания" : "Готово"],
   ]
-  return <section className="malik-build-result" aria-label="Результат">
-    <header className="malik-build-result__head">
+  return <div role="region" className="malik-build-result" aria-label="Результат">
+    <div className="malik-build-result__head">
       <strong>Результат</strong>
       <span>{formatBuildBytes(facts.bytes)} · {ruCount(facts.lines, LINES)}</span>
-    </header>
+    </div>
     <div className="malik-build-result__body">
       <div className="malik-build-result__tree" role="tree" aria-label="Файлы">
         <div className="malik-build-result__folder" role="treeitem" aria-level={1} aria-expanded="true"><Folder aria-hidden="true" /><span>{folder}/</span></div>
@@ -203,5 +204,5 @@ export function ChatBuildResult({ messageId, kind, question, files, primary, war
       </button>
       <button type="button" onClick={download}><Download aria-hidden="true" />{files.length > 1 ? "Скачать ZIP" : "Скачать"}</button>
     </div>
-  </section>
+  </div>
 }

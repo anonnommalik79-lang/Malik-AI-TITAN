@@ -125,8 +125,9 @@ function PreviewWindow({ preview, variant }: { preview: BuildPreview; variant: "
     setZoom(ZOOMS[Math.max(0, Math.min(ZOOMS.length - 1, next))])
   }
 
-  return <aside className={`malik-build-preview is-${variant}`} aria-label="Live Preview" data-malik-build-preview={preview.id}>
-    <header className="malik-build-preview__bar">
+  // Plain divs, not aside/header/footer: the app's phone sheets repaint every header and resize every aside button.
+  return <div role="complementary" className={`malik-build-preview is-${variant}`} aria-label="Live Preview" data-malik-build-preview={preview.id}>
+    <div className="malik-build-preview__bar">
       <div className="malik-build-preview__title">
         <span className="malik-build-preview__mark" aria-hidden="true" />
         <strong>LIVE PREVIEW</strong>
@@ -137,7 +138,7 @@ function PreviewWindow({ preview, variant }: { preview: BuildPreview; variant: "
         <button type="button" onClick={openInTab} aria-label="Открыть в новой вкладке"><ExternalLink aria-hidden="true" /><span>Открыть</span></button>
         <button type="button" className="is-icon" onClick={() => closeBuildPreview()} aria-label="Закрыть предпросмотр"><X aria-hidden="true" /></button>
       </div>
-    </header>
+    </div>
     <div className="malik-build-preview__tools">
       <div className="malik-build-preview__devices" role="group" aria-label="Устройство">
         {([["desktop", Monitor, "Компьютер"], ["tablet", Tablet, "Планшет"], ["mobile", Smartphone, "Телефон"]] as const).map(([id, Icon, label]) => (
@@ -164,7 +165,7 @@ function PreviewWindow({ preview, variant }: { preview: BuildPreview; variant: "
         />
       </div> : null}
     </div>
-    <footer className="malik-build-preview__report" role="status" data-browser-check={check?.status || undefined}>
+    <div className="malik-build-preview__report" role="status" data-browser-check={check?.status || undefined}>
       <span>ОТЧЁТ</span>
       {check?.status === "running"
         ? <p>Проверено в вашем браузере: игра запущена{check.frames ? `, ${check.frames} кадров` : ""} без ошибок</p>
@@ -173,6 +174,6 @@ function PreviewWindow({ preview, variant }: { preview: BuildPreview; variant: "
           : check?.status === "booted"
             ? <p>Меню игры загрузилось · нажмите «Играть», чтобы проверить запуск</p>
             : <p>{preview.filename} · {ruCount(preview.lines, ["строка", "строки", "строк"])} · изолированный sandbox</p>}
-    </footer>
-  </aside>
+    </div>
+  </div>
 }

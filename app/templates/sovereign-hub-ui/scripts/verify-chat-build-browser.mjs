@@ -182,6 +182,14 @@ await check("on a phone the panel opens on request, over the whole screen", 390,
   await page.waitForSelector(".malik-build-result")
   await page.waitForTimeout(300)
   assert.equal(await page.locator(".malik-build-preview").count(), 0, "a phone is not covered by itself")
+  // The app's phone sheets paint every <header> navy: the build's surfaces stay one flat black.
+  const paint = await page.evaluate(() => [".malik-build", ".malik-build__head", ".malik-build-result", ".malik-build-result__head", ".malik-build-result__facts div"]
+    .map((selector) => [selector, getComputedStyle(document.querySelector(selector)).backgroundColor]))
+  for (const [selector, color] of paint) assert.ok(color === "rgb(0, 0, 0)" || color === "rgba(0, 0, 0, 0)", `${selector} is ${color}`)
+  const titles = await page.locator(".malik-build__title").evaluateAll((items) => items.map((el) => el.scrollHeight - el.clientHeight))
+  assert.ok(titles.every((hidden) => hidden <= 1), `step names are not cut off on a phone (${titles})`)
+  const buttons = await page.locator(".malik-build-result__actions button").evaluateAll((items) => items.map((el) => Math.round(el.getBoundingClientRect().height)))
+  assert.ok(buttons.every((height) => height >= 44), `buttons fit a thumb (${buttons})`)
   const overflow = await page.evaluate(() => document.querySelector("section").scrollWidth - document.querySelector("section").clientWidth)
   assert.ok(overflow <= 1, `no sideways scroll (${overflow}px)`)
   await shot("5-phone-result")
@@ -189,6 +197,8 @@ await check("on a phone the panel opens on request, over the whole screen", 390,
   await page.waitForSelector(".malik-build-preview")
   const box = await page.locator(".malik-build-preview").boundingBox()
   assert.deepEqual([box.x, box.y, box.width, box.height], [0, 0, 390, 860])
+  const bars = await page.evaluate(() => [".malik-build-preview", ".malik-build-preview__bar", ".malik-build-preview__report"].map((selector) => getComputedStyle(document.querySelector(selector)).backgroundColor))
+  assert.deepEqual(bars, ["rgb(0, 0, 0)", "rgb(0, 0, 0)", "rgb(0, 0, 0)"], "the preview's bars are black on a phone")
   await shot("6-phone-panel")
   await page.keyboard.press("Escape")
   assert.equal(await page.locator(".malik-build-preview").count(), 0, "Escape closes the full-screen preview")
