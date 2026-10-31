@@ -157,6 +157,7 @@ export function isContinueRequest(prompt: string) {
   const text = String(prompt || "").trim()
   if (!text || text.length > 400) return false
   if (Object.values(CONTINUE_PROMPT).some((item) => item.text === text)) return true
+  if (/^(?:please\s+(?:continue|go\s+on)|жалғастыра\s+бер(?:іңіз)?|жалғастыр(?:ыңыз)?\s*,?\s*өтінемін)[\s.!…]*$/iu.test(text)) return true
   return /^(?:продолжи(?:те)?|продолжай(?:те)?|продолжить|дальше|допиши(?:те)?|доделай|continue|go\s+on|keep\s+going|жалғастыр(?:ыңыз)?)(?:[\s,]+(?:пожалуйста|please|код|ответ|с\s+того\s+места|где\s+остановил\p{L}*))*[\s.!…]*$/iu.test(text)
 }
 

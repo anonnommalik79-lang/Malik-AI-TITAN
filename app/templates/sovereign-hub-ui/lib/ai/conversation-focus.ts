@@ -10,6 +10,7 @@
  */
 
 type Turn = { role?: unknown; content?: unknown }
+import { isContinueRequest } from "./answer-completion"
 
 const ACKNOWLEDGEMENT = /^(?:спасибо|спс|рахмет|благодарю|thanks|thank\s+you|thx|ок|окей|ok|okay|да|нет|ага|угу|yes|no|понятно|ясно|хорошо|отлично|супер|класс|круто|жақсы|иә|жоқ)[\s!.)]*$/iu
 const FOLLOW_START = /^(?:а|и|но|ну|так|тогда|ещё|еще|and|but|so|what\s+about|how\s+about|ал)(?![\p{L}])/iu
@@ -24,6 +25,8 @@ function ownSubject(text: string) {
 }
 /** «сделай это короче», «напиши про это стих»: work on the previous answer, not a question to look up. */
 const TRANSFORM = /^(?:(?:а|и|теперь|now|then)\s+)?(?:напиши|перепиши|сократи|сделай|переведи|исправь|дополни|продолжи|оформи|сочини|придумай|translate|rewrite|shorten|make)(?![\p{L}])/iu
+const CONTEXT_EDIT = /^(?:(?:а|и|теперь|now|then|please|енді)[,\s]+)*(?:лучше|проще|улучши|исправь\s+предыдущ|better|simpler|improve(?:\s+it)?|plain\s+text|no\s+table|жақсырақ\s+жаса|қарапайымырақ|алдыңғы\s+жауаб\p{L}*\s+түзет|қысқаша|тізімсіз|қазақша|орысша|ағылшынша)(?![\p{L}])/iu
+const PREFERENCE_ONLY = /^(?:(?:а|и|теперь|now|then|please|енді|в\s+этом\s+разговоре|for\s+this\s+chat|осы\s+әңгімеде)[,\s]+)*(?:(?:отвечай|ответь|пиши|answer|reply|respond)\s+)?(?:(?:по[- ]?|на\s+|in\s+))?(?:русск\p{L}*|казахск\p{L}*|английск\p{L}*|english|russian|kazakh|қазақша|орысша|ағылшынша|кратко|подробно|briefly|қысқаша|json\s+only)(?:[,\s]+(?:(?:и|and|және)\s+)?(?:кратко|подробно|подробнее|briefly|қысқаша|без\s+списков|without\s+(?:lists|bullets)|тізімсіз))*[.!?\s]*$/iu
 const QUESTION_WORD = /(?<![\p{L}])(?:почему|зачем|как|когда|где|откуда|сколько|кто|что|чем|какой|какая|какое|какие|why|how|when|where|who|what|which|неге|қалай|қашан|кім|не)(?![\p{L}])/iu
 
 function words(text: string) {
@@ -36,6 +39,7 @@ export function isContextDependent(prompt: string): boolean {
   if (!text || text.length > 140 || ACKNOWLEDGEMENT.test(text)) return false
   const count = words(text).length
   if (count > 10) return false
+  if (isContinueRequest(text) || CONTEXT_EDIT.test(text) || PREFERENCE_ONLY.test(text)) return true
   if (BARE.test(text)) return true
   if (FOLLOW_START.test(text)) return true
   if (ORDINAL_ONLY.test(text)) return true
@@ -56,7 +60,7 @@ function previousUserQuestions(prompt: string, history: unknown): string[] {
     if (!skippedCurrent && content === current) { skippedCurrent = true; continue }
     skippedCurrent = true
     asked.push(content.slice(0, 600))
-    if (asked.length >= 4) break
+    if (asked.length >= 64) break
   }
   return asked
 }
@@ -83,7 +87,7 @@ export function conversationFocus(prompt: string, history: unknown): Conversatio
   const earlier = previousUserQuestions(text, history)
   // In a chain («про второго президента» → «а третий?» → «а четвёртый?») the
   // subject comes from the last question that made sense on its own.
-  const anchor = earlier.find((question) => !isContextDependent(question)) || earlier[0] || ""
+  const anchor = earlier.find((question) => !ACKNOWLEDGEMENT.test(question) && !isContextDependent(question)) || earlier.find(question => !ACKNOWLEDGEMENT.test(question)) || ""
   if (!anchor) return plain
   const rest = strip(text)
   // «а третий?» / «а Tesla?» swaps one part of the earlier question, so the

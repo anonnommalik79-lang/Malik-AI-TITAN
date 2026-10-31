@@ -72,8 +72,9 @@ import { detectWorkScheduleIntent } from "@/lib/work/intent"
 import { createScheduledTask, scheduledTasksStatus } from "@/lib/server/scheduled-tasks"
 import { createExecutionReporter, type ExecutionReporter } from "@/lib/ai/chat-execution"
 import {conversationIntentInstruction,requiresChatDelivery,resolveConversationIntent} from "@/lib/ai/conversation-intent"
+import { conversationHistory, conversationHistorySource } from "@/lib/ai/conversation-history"
 import { domainPlanInstruction, domainRequiresPlainChat, resolveDomainPlan } from "@/lib/ai/domain-intelligence"
-import {conversationRepairInstruction,conversationValidationFailure,validateConversationAnswer} from "@/lib/ai/conversation-validation"
+import {conversationRepairInstruction,conversationValidationFailure,validateConversationAnswer,needsActionClaimValidation} from "@/lib/ai/conversation-validation"
 import {conversationSource,deliverConversationDocument,deliveryProblem} from "@/lib/server/conversation-delivery"
 import { prepareDocumentAssets } from "@/lib/server/document-assets"
 import { prepareChatWebsite, chatWebsiteInstruction } from "@/lib/server/chat-website-design"
@@ -237,11 +238,7 @@ function coderPrompt(body: any) {
 }
 
 function coderHistory(body: any) {
-  const messages = Array.isArray(body?.messages) ? body.messages : []
-  return messages
-    .filter((message: any) => (message?.role === "user" || message?.role === "assistant") && typeof message?.content === "string")
-    .slice(-10)
-    .map((message: any) => ({ role: message.role as "user" | "assistant", content: String(message.content) }))
+  return conversationHistory(body).map(({ role, content }) => ({ role, content }))
 }
 
 function isMalikAdminCommand(body: any) {
@@ -564,11 +561,11 @@ async function runSelectedAnswer(
   const originalOnToken=streamToken?(chunk:string)=>{streamedLive=true;streamToken(chunk)}:undefined
   let body = initialBody
   const originalPrompt = coderPrompt(body), freshness = classifyFreshness(originalPrompt)
-  const intent=resolveConversationIntent({prompt:originalPrompt,messages:body?.history||body?.messages,attachments:body?.attachments})
-  const domainPlan=resolveDomainPlan({prompt:originalPrompt,messages:body?.history||body?.messages,attachments:body?.attachments,intent})
+  const intent=resolveConversationIntent({prompt:originalPrompt,messages:conversationHistorySource(body),attachments:body?.attachments})
+  const domainPlan=resolveDomainPlan({prompt:originalPrompt,messages:conversationHistorySource(body),attachments:body?.attachments,intent})
   const owner=serverOwner||selection?.entitlement
   const fileFormat=intent.target==="document"?intent.requirements.format:undefined
-  const validateText=intent.target==="text"&&(intent.requirements.presentation==="json"||intent.action==="repair")&&!hasMalikAttachments(body?.attachments)&&!freshness.needsSearch&&!routePetroleum(originalPrompt,body?.selectedSkillId).domain&&!parsePluginCommand(originalPrompt)
+  const validateText=intent.target==="text"&&(intent.requirements.presentation==="json"||intent.action==="repair"||needsActionClaimValidation(originalPrompt))&&!hasMalikAttachments(body?.attachments)&&!freshness.needsSearch&&!routePetroleum(originalPrompt,body?.selectedSkillId).domain&&!parsePluginCommand(originalPrompt)
   const requestedCap=Number(body?.maxTokens)
   const plannedCap=validateText?analyzeMalikBrainV1({prompt:originalPrompt,historyLength:Array.isArray(body?.history)?body.history.length:0,requestedDepth:body?.responseDepth||body?.metadata?.responseDepth}).outputTokenTarget:fileFormat?12000:4000
   const validationCap=Math.min(maxOutputTokens||Number.POSITIVE_INFINITY,Number.isFinite(requestedCap)&&requestedCap>0?Math.max(1,Math.floor(requestedCap)):plannedCap)
@@ -1434,9 +1431,9 @@ async function handlePOST(request: Request) {
     })
   }
 
-  const requestIntent=resolveConversationIntent({prompt:coderPrompt(body),messages:body?.history||body?.messages,attachments:body?.attachments})
+  const requestIntent=resolveConversationIntent({prompt:coderPrompt(body),messages:conversationHistorySource(body),attachments:body?.attachments})
   body = { ...body, requestId: body?.requestId || request.headers.get("x-malik-background-turn-id") || undefined }
-  const requestDomain=resolveDomainPlan({prompt:coderPrompt(body),messages:body?.history||body?.messages,attachments:body?.attachments,intent:requestIntent})
+  const requestDomain=resolveDomainPlan({prompt:coderPrompt(body),messages:conversationHistorySource(body),attachments:body?.attachments,intent:requestIntent})
   if(requiresChatDelivery(requestIntent)||domainRequiresPlainChat(requestDomain))body={...body,isProjectRequest:false,forceCanvas:false,responseMode:"chat",isCodeRequest:false}
   const freshness = classifyFreshness(coderPrompt(body))
   console.info("[MALIK_FRESHNESS_INTENT]", { category: freshness.category, needsSearch: freshness.needsSearch })

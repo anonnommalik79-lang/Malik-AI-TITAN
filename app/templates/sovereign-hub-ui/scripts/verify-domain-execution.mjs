@@ -16,7 +16,8 @@ const empty = () => ""
 let calls, searches, classifierNeedsWeb, classifierFails, modelInputs
 const deps = {
   ...load("lib/server/chat-website-design.ts"),
-  ...domain, ...load("lib/ai/conversation-intent.ts"), ...load("lib/ai/conversation-focus.ts"),
+  ...domain, ...load("lib/ai/conversation-intent.ts"), ...load("lib/ai/conversation-focus.ts"), ...load("lib/ai/conversation-history.ts"),
+  ...load("lib/ai/attribution-evidence.ts"),
   ...load("lib/ai/freshness-intent.ts"), ...load("lib/ai/web-search-policy.ts"), ...load("lib/server/domain-planner.ts"),
   extractPrompt: b => b.prompt, conversationRepairInstruction: empty,
   detectMalikSuperpowers: () => [], superpowerOutputBudget: () => 1000,

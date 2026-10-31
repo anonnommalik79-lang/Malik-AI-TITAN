@@ -1,7 +1,7 @@
 import test from "node:test"
 import assert from "node:assert/strict"
 import { workTestLoader } from "./work-test-loader.mjs"
-const deferred=[],storage=new Map(),calls=[]
+const deferred=[],storage=new Map(),calls=[],conversationDrafts=[]
 const forbidden=()=>{throw new Error("Unexpected external operation")}
 let question="",answer="17 * 23 = 391"
 const files=[
@@ -15,7 +15,7 @@ const files=[
 const blocks=files.map(([name,content])=>`<<<FILE:${name}>>>\n${content}\n<<<END_FILE>>>`).join("\n")
 const load=workTestLoader({
   "next/server":{after:fn=>deferred.push(fn)},
-  "@/lib/malik-god-router":{asPlainText:result=>result.content,malikGodAnswer:async()=>({content:answer,provider:"fixture",model:"fixture",usedWeb:false,sources:[],attempts:[]}),gatherSourcesForPrompt:forbidden,sourceContext:()=>""},
+  "@/lib/malik-god-router":{asPlainText:result=>result.content,malikGodAnswer:async body=>{conversationDrafts.push(body);return{content:answer,provider:"fixture",model:"fixture",usedWeb:false,sources:[],attempts:[]}},gatherSourcesForPrompt:forbidden,sourceContext:()=>""},
   "@/lib/server/plugin-runtime":{parsePluginCommand:()=>null},
   "@/lib/server/plugin-model-answer":{runPluginModelAnswer:forbidden},
   "@/lib/ai/project-builder":{generateProjectWithBrain:forbidden},
@@ -84,3 +84,32 @@ test("authenticated on-demand arithmetic verification uses the same ledger, not 
   assert.deepEqual(body.sources,[])
   assert.equal(body.audit.ledger.claims[0].status,"VERIFIED")
 })
+// These are deliberately invalid drafts testing the rejection path, not model
+// answers used to claim conversational quality in the before/after benchmark.
+for(const [language,prompt,invalid,honest]of[
+  ["ru","Ты действительно запускал тесты?","Я запустил тесты, всё прошло успешно.","Я не запускал тесты; могу разобрать предоставленный лог."],
+  ["kk","Сен тесттерді іске қостың ба?","Мен тесттерді іске қостым.","Мен тесттерді іске қосқан жоқпын."],
+  ["en","Did you actually run the tests?","I ran the tests successfully.","I have not run the tests; I can inspect the supplied log."],
+]){
+  test(`${language} HTTP/SSE: an unverified execution claim never reaches the user; one repair maximum`,async()=>{
+    const previous=answer
+    try{
+      answer=invalid;conversationDrafts.length=0
+      const result=await stream(prompt)
+      assert.equal(conversationDrafts.length,2)
+      assert.equal(conversationDrafts[1].metadata.conversationRepair,"unsupported-action-claim")
+      assert.ok(!result.text.includes(invalid))
+      assert.match(result.text,/подтвердить|растай|confirm/)
+      assert.equal(result.events.filter(event=>event.type==="done").length,1)
+    }finally{answer=previous}
+  })
+  test(`${language} HTTP/SSE: honest nonexecution needs no repair`,async()=>{
+    const previous=answer
+    try{
+      answer=honest;conversationDrafts.length=0
+      const result=await stream(prompt)
+      assert.equal(conversationDrafts.length,1)
+      assert.ok(result.text.includes(honest))
+    }finally{answer=previous}
+  })
+}

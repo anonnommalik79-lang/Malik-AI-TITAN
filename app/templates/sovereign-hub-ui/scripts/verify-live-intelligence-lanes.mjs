@@ -9,6 +9,9 @@ const accuracy = load("lib/ai/accuracy/engine.ts"), gates = load("lib/ai/accurac
 const source = { title: "Next.js v99 TEST FIXTURE", url: "https://github.com/vercel/next.js/releases/tag/fixture-v99", domain: "github.com", snippet: "Stable software release TEST FIXTURE", publishedAt: new Date(Date.now() - 3600000).toISOString(), freshness: "recent", authority: "primary", checkedAt: new Date().toISOString() }
 let queries = [], modelInputs = [], fileInputs = [], godInputs = [], fail = false, fileKind = "answer", draft = "Current stable release [1].", checks = 0
 const deps = {
+  ...load("lib/ai/conversation-history.ts"),
+  ...load("lib/website/engine/intent.ts"),
+  ...load("lib/server/chat-website-design.ts"),
   ...freshness, ...evidence, ...accuracy, ...gates, ...brain,
   ...load("lib/ai/web-search-policy.ts"),
   ...load("lib/ai/conversation-intent.ts"),

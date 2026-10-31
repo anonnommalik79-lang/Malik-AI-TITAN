@@ -1,4 +1,6 @@
 import { asksAnalysis } from "@/lib/ai/analysis-shape"
+import { conversationHistory } from "./conversation-history"
+import { resolveConversationIntent } from "./conversation-intent"
 
 export function answerBudget(body: any, prompt: string, taskTarget: number) {
   const requested = Number(body?.maxTokens) || 0
@@ -23,7 +25,12 @@ export function answerBudget(body: any, prompt: string, taskTarget: number) {
 
   // A professional analysis (findings, tables, KPI blocks, scenarios, risks) must not be cut off midway.
   const analysisFloor = asksAnalysis(prompt) ? 7_000 : 0
-  const wanted = Math.max(requested, taskTarget, structuredFloor, analysisFloor, Math.min(asked, 32_000))
+  let wanted = Math.max(requested, taskTarget, structuredFloor, analysisFloor, Math.min(asked, 32_000))
+  const intent = resolveConversationIntent({ prompt, messages: conversationHistory(body), attachments: body?.attachments })
+  // An inherited request for brevity is real conversation state, not a reason
+  // to buy a full deep-mode output for a one-paragraph follow-up. Explicit
+  // long/structured/code deliverables keep their existing completion budget.
+  if (intent.requirements.length === "brief" && intent.target === "text" && !structuredFloor && !analysisFloor && !asked) wanted = Math.min(wanted, 1200)
   const cap = Number(body?.maxTokensCap)
   return Number.isFinite(cap) && cap > 0 ? Math.min(wanted, Math.floor(cap)) : wanted
 }
