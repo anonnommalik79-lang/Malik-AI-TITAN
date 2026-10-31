@@ -39,7 +39,7 @@ import { WebsiteProjectCard } from "./work-code/WebsiteProjectCard"
 import { isForgeSiteHtml, SitePublishButton, SitePublishStrip, useSitePublish } from "./SitePublish"
 export type { MalikCitation } from "@/lib/ai/citation-names"
 
-type Props = { text: string; className?: string; allowImages?: boolean; /** Verified reference photos (catalogues, sources), apart from model-written image URLs. Defaults to allowImages. */ referencePhotos?: boolean; autoPreview?: boolean; citations?: MalikCitation[]; /** A public answer page: see SharedPageContext. */ shared?: boolean; visualContext?: { question: string; messageId?: string; previousQuestion?: string; previousAnswer?: string; hasAttachment?: boolean; isLatest?: boolean; streaming?: boolean } }
+type Props = { text: string; className?: string; allowImages?: boolean; /** Verified reference photos (catalogues, sources), apart from model-written image URLs. Defaults to allowImages. */ referencePhotos?: boolean; autoPreview?: boolean; /** A finished build: each file shows its bar, its code opens on request. */ collapseCode?: boolean; citations?: MalikCitation[]; /** A public answer page: see SharedPageContext. */ shared?: boolean; visualContext?: { question: string; messageId?: string; previousQuestion?: string; previousAnswer?: string; hasAttachment?: boolean; isLatest?: boolean; streaming?: boolean } }
 
 function ScrollableMarkdownTable({ children, label }: { children: ReactNode; label: string }) {
   const viewportRef = useRef<HTMLDivElement>(null)
@@ -956,8 +956,9 @@ function HeatmapTable({ headers, rows, heatmap, label, renderCell }: { headers: 
   </figure>
 }
 
-function CodeBlock({ language, filename, code, previewFiles, autoPreview = false }: { language: string; filename: string; code: string; previewFiles: ProjectZipFile[]; autoPreview?: boolean }) {
+function CodeBlock({ language, filename, code, previewFiles, autoPreview = false, collapsed = false }: { language: string; filename: string; code: string; previewFiles: ProjectZipFile[]; autoPreview?: boolean; collapsed?: boolean }) {
   const [copied, setCopied] = useState(false)
+  const [codeShown, setCodeShown] = useState(!collapsed)
   const [previewOpen, setPreviewOpen] = useState(false)
   const [previewKey, setPreviewKey] = useState(0)
   const shared = useContext(SharedPageContext)
@@ -1026,6 +1027,12 @@ function CodeBlock({ language, filename, code, previewFiles, autoPreview = false
                 {treeAsText ? "Деревом" : "Текстом"}
               </button>
             ) : null}
+            {collapsed ? (
+              <button type="button" className={codeShown ? "is-active" : undefined} onClick={() => setCodeShown((value) => !value)} aria-expanded={codeShown} aria-label={codeShown ? "Скрыть код" : "Показать код"}>
+                <FileText aria-hidden="true" />
+                {codeShown ? "Скрыть код" : "Код"}
+              </button>
+            ) : null}
             {previewable ? (
               <button
                 type="button"
@@ -1050,7 +1057,7 @@ function CodeBlock({ language, filename, code, previewFiles, autoPreview = false
           </div>
         </div>
         {publishable ? <SitePublishStrip state={site.state} onUnpublish={(id) => void site.unpublish(id)} onClose={site.reset} /> : null}
-        {tree && !treeAsText
+        {!codeShown ? null : tree && !treeAsText
           ? <div className="malik-md-tree" role="tree" aria-label="Структура проекта"><FileTree nodes={tree} level={1} /></div>
           : <pre className={"malik-md-pre" + (diff ? " is-diff" : "")} data-language={language || undefined} data-filename={filename}>
               <code>{diff ? diffCode(code) : highlightedCode(code, language)}</code>
@@ -1237,7 +1244,7 @@ function isMultiSubjectVisualQuestion(question: string): boolean {
   return /(?:список|перечисли|все(?:х|ми)?\b|нескольк|сравни|сравнение|участник[ио]|спикер[ыо]|кто\s+(?:будет|был|приехал|выступал)|какие\s+(?:люди|модели|виды)|\b(?:list|all|compare|versus|speakers|participants|attendees|several|multiple|top\s+\d+)\b)/iu.test(question)
 }
 
-export function MalikMarkdown({ text, className, allowImages = true, referencePhotos, autoPreview = false, citations, shared = false, visualContext }: Props) {
+export function MalikMarkdown({ text, className, allowImages = true, referencePhotos, autoPreview = false, collapseCode = false, citations, shared = false, visualContext }: Props) {
   // `allowImages` governs image URLs the model wrote itself (![](…)); a chat
   // keeps those off. Reference photos are found by the app in catalogues and
   // the answer's own sources, so the chat turns them on separately.
@@ -1653,7 +1660,7 @@ export function MalikMarkdown({ text, className, allowImages = true, referencePh
           }
           const changes = codeChanges.get(position)
           return <Fragment key={key}>
-            <CodeBlock language={block.language} filename={block.filename} code={block.lines.join("\n")} previewFiles={codeFiles} autoPreview={autoPreview && block.filename === primaryPreviewFilename} />
+            <CodeBlock language={block.language} filename={block.filename} code={block.lines.join("\n")} previewFiles={codeFiles} autoPreview={autoPreview && block.filename === primaryPreviewFilename} collapsed={collapseCode} />
             {changes && !streaming ? <CodeChanges before={changes.before} after={changes.after} /> : null}
           </Fragment>
         }

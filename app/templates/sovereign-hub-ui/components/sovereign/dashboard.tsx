@@ -13,6 +13,7 @@ import { ChatView } from "./chat-view"
 import { ChatInvestorBackground } from "./ChatInvestorBackground"
 import { PerformanceGuard } from "./performance-guard"
 import { PreviewPanel } from "./preview-panel"
+import { ChatBuildPreviewPanel, closeBuildPreview } from "./ChatBuildPreview"
 import { clearStoredAuthSnapshot, storeWorkOSProfile } from "@/lib/auth/client-session"
 import { MALIK_OWNER_EMAIL, isVerifiedOwner } from "@/lib/auth/admin-policy"
 import { readWebSearchEnabled } from "@/lib/ai/web-search-preference"
@@ -5183,6 +5184,8 @@ export function Dashboard({ guestMode = false, initialView = "home", initialWork
   const [storageRestored, setStorageRestored] = useState(false)
 
   useEffect(() => { messagesRef.current = messages }, [messages])
+  // A build's Live Preview belongs to its chat: another chat or section closes it.
+  useEffect(() => { closeBuildPreview() }, [activeChatId, workspaceMode, activeView])
   useEffect(() => { chatsRef.current = chats }, [chats])
 
   const applyPersistentMediaPatch = useCallback((mediaId: string, patch: Partial<InlineMediaGeneration>) => {
@@ -8195,6 +8198,8 @@ const shouldShowMobilePreviewButton =
             )}
           </aside>
         )}
+        {/* A finished site, game or app from the chat, live beside it. */}
+        {!shouldShowPreviewPanel && !shouldRenderEmptyHome ? <ChatBuildPreviewPanel variant="aside" /> : null}
       </>
     );
   };
@@ -8543,6 +8548,8 @@ const shouldShowMobilePreviewButton =
   )}
 
   {renderActiveView()}
+  {/* Project threads have their own chat column: there the preview floats over the right side. */}
+  {activeView === "projects" ? <ChatBuildPreviewPanel variant="overlay" /> : null}
   <MalikCodexModal open={codexOpen} onClose={() => setCodexOpen(false)} onSendToCanvas={(code) => safeOpenCanvas(code, "generator-panel")} />
   <CommandPalette open={commandPaletteOpen} onOpenChange={setCommandPaletteOpen} onRunAction={runCommandPaletteAction} />
   <MissionControlHost />

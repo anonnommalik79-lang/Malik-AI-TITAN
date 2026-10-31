@@ -87,6 +87,8 @@ import { prepareFolder } from "@/lib/uploads/folder-digest"
 import { PREFILL_EVENT, takePrefillPrompt } from "@/lib/malik-context"
 import { AnswerSheet } from "./answer-sheet/AnswerSheet"
 import { ChatExecution } from "./ChatExecution"
+import { ChatBuildResult, ChatBuildSteps } from "./ChatBuild"
+import { chatBuildFiles, chatBuildIsProse, chatBuildKind, chatBuildKindFromContent, chatBuildKindFromTrace, chatBuildPrimary } from "@/lib/ai/chat-build"
 import type { ExecutionTrace } from "@/lib/ai/chat-execution"
 import { loadAnswerFeedback, nextAnswerMark, saveAnswerFeedback } from "@/lib/ai/answer-feedback-client"
 import type { WorkspaceMode } from "@/lib/ai/work-mode"
@@ -1784,6 +1786,16 @@ function MessageBubble({
   const responseModel = !isUser && message.modelId ? getMalikModel(message.modelId) : null
   // Copy, speech and sharing get the cards as readable text, never as JSON.
   const actionContent = isUser ? displayContent : stripAnswerPhotoHints(oilReportBlocksToText(answerQuizzesToText(answerCardsToText(displayContent))))
+  // A site, game or app being built: its steps instead of code on screen,
+  // then the result card and the Live Preview beside the chat.
+  const [builtLive] = useState(streaming)
+  const buildKind = !isUser && !olderVersion && !message.generatedMedia && !message.imageConfirmation && !message.superflow
+    ? chatBuildKind(question) || chatBuildKindFromTrace(message.execution) || (!streaming ? chatBuildKindFromContent(displayContent) : null)
+    : null
+  const buildFiles = useMemo(() => buildKind && !streaming ? chatBuildFiles(displayContent) : [], [buildKind, streaming, displayContent])
+  const buildPrimary = chatBuildPrimary(buildFiles)
+  const buildLive = Boolean(buildKind) && streaming && !chatBuildIsProse(displayContent)
+  const buildDone = Boolean(buildKind && buildPrimary) && !streaming && !["failed", "interrupted", "cancelled"].includes(message.execution?.state || "")
   if (!isUser && message.isStreaming && !streaming && !displayContent && !message.generatedMedia && !message.imageConfirmation) {
     return null
   }
@@ -1830,7 +1842,7 @@ function MessageBubble({
             </div>
           ) : null}
           {!isUser && message.actionPlan ? <MalikActionPlanCard plan={message.actionPlan} onOpenTarget={onOpenActionTarget} /> : null}
-          {!isUser ? <ChatExecution key={`${message.id}:${shownVersion}`} trace={olderVersion ? undefined : message.execution} legacyThought={olderVersion ? undefined : message.thought} live={streaming} sources={olderVersion ? [] : message.research?.sources} workMode={workspaceMode === "work"} writing={Boolean(displayContent)} browserTask={olderVersion ? "" : question} latest={isLatest} stages={!olderVersion && !message.generatedMedia && !message.imageConfirmation && !message.superflow && !videoAnalysis} /> : null}
+          {!isUser && !buildLive && !buildDone ? <ChatExecution key={`${message.id}:${shownVersion}`} trace={olderVersion ? undefined : message.execution} legacyThought={olderVersion ? undefined : message.thought} live={streaming} sources={olderVersion ? [] : message.research?.sources} workMode={workspaceMode === "work"} writing={Boolean(displayContent)} browserTask={olderVersion ? "" : question} latest={isLatest} stages={!olderVersion && !message.generatedMedia && !message.imageConfirmation && !message.superflow && !videoAnalysis} /> : null}
           {isUser && message.attachments?.length ? <UserAttachmentGallery items={message.attachments} /> : null}
           {!isUser && message.superflow ? (
             <SuperflowBlock messageId={message.id} reference={message.superflow} />
@@ -1910,16 +1922,23 @@ function MessageBubble({
                 <p className="mt-4 text-sm font-medium text-zinc-400">Генерация отменена.</p>
               )}
             </section>
+          ) : buildLive && buildKind ? (
+            <ChatBuildSteps kind={buildKind} question={question} trace={message.execution} live content={displayContent} />
           ) : displayContent
             ? (
               isUser
                 ? <UserMessageText text={displayContent} />
                 : (
                   <>
+                    {buildDone && buildKind && buildPrimary ? <>
+                      <ChatBuildSteps kind={buildKind} question={question} trace={message.execution} live={false} content="" tookMs={message.responseMetrics?.tookMs} />
+                      <ChatBuildResult messageId={message.id} kind={buildKind} question={question} files={buildFiles} primary={buildPrimary} autoOpen={builtLive && isLatest}
+                        warnings={buildFiles.some((file) => !file.closed) || /⚠️|❌|Ответ не завершён/u.test(displayContent)} />
+                    </> : null}
                     {/* While streaming, `malik-streaming` gives the growing
                         answer its caret and lets only newly added blocks
                         fade in (chat-live.css). It is dropped when done. */}
-                    <MalikMarkdown text={displayContent} allowImages={false} referencePhotos autoPreview={!streaming && !olderVersion && isChatArtifactCreationRequest(question)} className={writingLive ? "malik-streaming" : undefined} citations={message.research?.sources}
+                    <MalikMarkdown text={displayContent} allowImages={false} referencePhotos autoPreview={!streaming && !olderVersion && !buildDone && isChatArtifactCreationRequest(question)} collapseCode={buildDone} className={writingLive ? "malik-streaming" : undefined} citations={message.research?.sources}
                       visualContext={!olderVersion && !message.generatedMedia && !message.imageConfirmation && !message.superflow
                         && !["failed", "interrupted", "cancelled"].includes(message.execution?.state || "")
                         ? { question, messageId: message.id, previousQuestion, previousAnswer, hasAttachment: questionHasAttachment, isLatest, streaming } : undefined} />
