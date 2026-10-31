@@ -4,6 +4,7 @@ import { instantReply } from "@/lib/ai/instant-replies"
 import { answerCardsToText } from "@/lib/ai/answer-cards"
 import { userContextBlocks } from "@/lib/ai/client-context"
 import {conversationIntentInstruction,resolveConversationIntent} from "@/lib/ai/conversation-intent"
+import { conversationHistory, conversationHistorySource } from "@/lib/ai/conversation-history"
 import { domainPlanInstruction, resolveDomainPlan } from "@/lib/ai/domain-intelligence"
 import { refineDomainPlan } from "@/lib/server/domain-planner"
 import {conversationRepairInstruction} from "@/lib/ai/conversation-validation"
@@ -1062,8 +1063,9 @@ export async function malikGodAnswer(
   const requestPrompt = preparedEvidence?.prompt || prompt
   // Attachment extraction may augment `prompt` with untrusted document text.
   // Preferences must still come from the original public user question.
-  const universalIntent=resolveConversationIntent({prompt:requestPrompt,messages:body?.history||body?.messages,attachments:body?.attachments})
-  let domainPlan = resolveDomainPlan({ prompt: requestPrompt, messages: body?.history || body?.messages, attachments: body?.attachments, intent: universalIntent })
+  const chatHistory = conversationHistory(body)
+  const universalIntent=resolveConversationIntent({prompt:requestPrompt,messages:conversationHistorySource(body),attachments:body?.attachments})
+  let domainPlan = resolveDomainPlan({ prompt: requestPrompt, messages: chatHistory, attachments: body?.attachments, intent: universalIntent })
   let universalContract=[conversationIntentInstruction(universalIntent),domainPlanInstruction(domainPlan),conversationRepairInstruction(body?.metadata?.conversationRepair)].filter(Boolean).join("\n\n")
   const requestFreshness = classifyFreshness(requestPrompt)
   const activeSuperpowers = detectMalikSuperpowers(
@@ -1087,7 +1089,7 @@ export async function malikGodAnswer(
   // so keeping this below the selection branch made even "привет" pay full
   // provider + reasoning latency. These deterministic replies are model-agnostic
   // product behavior and should be instant regardless of the selected model.
-  const local = instantReply(prompt)
+  const local = chatHistory.length || Object.keys(universalIntent.requirements).length || userContextBlocks(body) ? "" : instantReply(prompt)
   if (local && !fusionActive && !requestFreshness.needsSearch) {
     activity?.status("Мгновенный ответ без внешних инструментов")
     return {
@@ -1120,7 +1122,7 @@ export async function malikGodAnswer(
   }
 
   if (selection) {
-    const history = Array.isArray(body?.history) ? body.history : Array.isArray(body?.messages) ? body.messages : []
+    const history = chatHistory
     const attachments = Array.isArray(body?.attachments) ? body.attachments : []
     // Only mixed/underspecified tasks need semantic classification. This one
     // bounded call may select read-only evidence, never private tools/writes.
@@ -1338,7 +1340,7 @@ export async function malikRescueAnswer(
   options: { wallMs: number; onToken?: (chunk: string) => void; activity?: ExecutionReporter; signal?: AbortSignal },
 ): Promise<GodAnswer> {
   const prompt = extractPrompt(body)
-  const history = Array.isArray(body?.history) ? body.history : Array.isArray(body?.messages) ? body.messages : []
+  const history = conversationHistory(body)
   const intent = resolveConversationIntent({ prompt, messages: history, attachments: body?.attachments })
   const domainPlan = resolveDomainPlan({ prompt, messages: history, attachments: body?.attachments, intent })
   const focus = domainPlan.context.followUp ? conversationFocus(prompt, history) : { followUp: false, anchor: "", searchText: prompt, shapeText: prompt }

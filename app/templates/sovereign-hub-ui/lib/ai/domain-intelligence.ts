@@ -54,7 +54,7 @@ export function domainText(value: unknown): string {
 
 function pastRequests(prompt: string, messages: unknown): string[] {
   if (!Array.isArray(messages)) return []
-  const values = messages.slice(-32).filter(m => m?.role === "user" && typeof m.content === "string").map(m => domainText(m.content).slice(0, 1800))
+  const values = messages.slice(-64).filter(m => m?.role === "user" && typeof m.content === "string").map(m => domainText(m.content).slice(0, 1800))
   if (values.at(-1) === prompt) values.pop()
   return values
 }

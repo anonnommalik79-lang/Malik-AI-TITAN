@@ -1,6 +1,9 @@
 import {classifyFreshness} from "./freshness-intent"
 import {isExplicitImageEditRequest,isExplicitImageGenerationRequest,isExplicitVideoGenerationRequest} from "./image-intent"
 import {primaryNonMediaArtifact} from "./artifact-intent"
+import { conversationTurns, withoutCurrentTurn } from "./conversation-history"
+import { isContextDependent } from "./conversation-focus"
+import { isContinueRequest } from "./answer-completion"
 
 export type OutputFormat="pdf"|"docx"|"pptx"|"xlsx"|"csv"|"txt"|"md"|"html"|"json"|"zip"
 export type ConversationRequirements={language?:"ru"|"kk"|"en"|"mixed";tone?:"formal"|"conversational";audience?:"child"|"expert";length?:"brief"|"detailed";lists?:boolean;formulas?:boolean;presentation?:"table"|"json";format?:OutputFormat}
@@ -29,54 +32,69 @@ const TRANSFORM=/^(?:(?:нет|неа|бля|блин|теперь|ток|тол
 const REFERENCE=/(?<!\p{L})(?:это|этот|эту|этого|его|её|ее|там|прошл|предыдущ|так\s+же|как\s+было|обратно|same|previous|that|this|it|again|бұны|осыны|алдыңғы)/iu
 function requirements(text:string):ConversationRequirements {
  const r:ConversationRequirements={}
- const languages=[...text.matchAll(/(?:по[- ]?|на\s+)?(русск\p{L}*|казахск\p{L}*|английск\p{L}*|қазақша|орысша|ағылшынша|english|russian|kazakh)/giu)]
+ const languages=[...text.matchAll(/русск\p{L}*|казахск\p{L}*|английск\p{L}*|қазақша|орысша|ағылшынша|english|russian|kazakh/giu)].filter(match=>{
+  const before=text.slice(Math.max(0,match.index!-80),match.index!).trim()
+  const after=text.slice(match.index!+match[0].length).trim()
+  if(/^(?:язык|language|linguistic)/iu.test(after))return false
+  return /(?:по[- ]?|на|in|using|use|switch\s+to)\s*[- ]?$/iu.test(before)
+   || /^(?:(?:а|и|теперь|now|then|please|енді|пожалуйста)[,\s]*)*$/iu.test(before)&&(!after||/^[,;.!?]|^(?:please|brief|only|кратко|подробн)/iu.test(after))
+   || /^(?:жауап|түсіндір|айт|қорытындыла|жаз)/iu.test(after)
+   || /(?:answer|repl(?:y|ies)|respond|отвечай|пиши)\s*(?:only)?$/iu.test(before)
+ })
  const languageOf=(s:string)=>/рус|russian|орыс/iu.test(s)?"ru":/казах|kazakh|қазақ/iu.test(s)?"kk":"en"
  if(languages.length)r.language=/сосын|затем|потом|then|mixed|смесь/iu.test(text)&&new Set(languages.map(m=>languageOf(m[0]))).size>1?"mixed":languageOf(languages.at(-1)![0])
  if(/не\s+(?:так\p{L}*\s+)?официальн|разговорн|неформальн|conversational|casual/iu.test(text))r.tone="conversational"
  else if(/официальн|делов\p{L}*\s+стил|formal/iu.test(text))r.tone="formal"
  if(/реб[её]н|дет[еям]|для\s+нович|child|beginner/iu.test(text))r.audience="child"
  if(/профессиональн\p{L}*\s+инженер|для\s+(?:эксперт|инженер)|expert|professional\s+engineer/iu.test(text))r.audience="expert"
- if(/сократ|сокрот|короче|кратко|short|brief|қысқарт/iu.test(text))r.length="brief"
- if(/подробн|разв[её]рнут|detail/iu.test(text))r.length="detailed"
- if(/без\s+списк|убери\s+списк|no\s+(?:lists|bullets)|without\s+(?:lists|bullets)/iu.test(text))r.lists=false
+ if(/сократ|сокрот|короче|кратко|коротко|short|brief|қысқарт|қысқаша/iu.test(text))r.length="brief"
+ if(/подробн|разв[её]рнут|detail|толығырақ|егжей/iu.test(text))r.length="detailed"
+ if(/без\s+списк|убери\s+списк|no\s+(?:lists|bullets)|without\s+(?:lists|bullets)|тізімсіз/iu.test(text))r.lists=false
  else if(/списком|bullet\s+list/iu.test(text))r.lists=true
  if(/формул|formula/iu.test(text))r.formulas=!/без\s+формул|no\s+formulas/iu.test(text)
  if(/(?:в|сделай|as\s+a)\s+таблиц|as\s+a\s+table/iu.test(text))r.presentation="table"
- if(/строго.*json|валидн\p{L}*\s+json|json\s+only|in\s+json|в\s+json/iu.test(text))r.presentation="json"
+ if(/строго.*json|валидн\p{L}*\s+json|json\s+only|in\s+json|в\s+json|тек\s+json|json\s+форматында/iu.test(text))r.presentation="json"
  const format=explicitFormat(text)
  if(format&&(format!=="json"||FILE_REQUEST.test(text)))r.format=format
  if(!format&&/^(?:создай|сделай|подготовь|create|make|prepare).{0,30}(?:презентаци|presentation|slides)/iu.test(text))r.format="pptx"
  return r
 }
-function turns(value:unknown):Turn[]{
- if(!Array.isArray(value))return[]
- const out:Turn[]=[]
- for(let i=Math.max(0,value.length-64);i<value.length;i++){
-  const t=value[i]
-  if(t&&(t.role==="user"||t.role==="assistant")&&typeof t.content==="string"&&t.content.trim())out.push({role:t.role,content:t.content,index:i})
- }
- return out
-}
+function turns(value:unknown):Turn[]{return conversationTurns(value)}
+const CONVERSATION_SCOPE=/(?:в\s+(?:этом|текущем|нашем)\s+(?:разговор|диалог|чат)|всегда\s+отвеч|все\s+ответы|for\s+the\s+rest\s+of\s+(?:this\s+)?(?:conversation|chat)|from\s+now\s+on|always\s+(?:answer|reply|respond)|all\s+(?:answers|replies)|осы\s+(?:әңгіме|чат)|әрқашан\s+жауап)/iu
+const PLAIN_PRESENTATION=/(?:обычн\p{L}*\s+текст|plain\s+text|no\s+(?:table|json)|без\s+(?:таблиц|json)|кестесіз|жай\s+мәтін)/iu
+const ONE_TURN_SCOPE=/(?:только\s+(?:для|в)\s+эт(?:ого|ом)\s+ответ|for\s+this\s+(?:answer|reply)\s+only|осы\s+жауапта\s+ғана)/iu
+const RESET_PREFERENCES=/(?:забудь|сбрось|отмени).{0,35}(?:предпочтен|языков\p{L}*\s+настройк|требован\p{L}*\s+к\s+стил)|(?:forget|reset|clear).{0,40}(?:preferences|style\s+instructions|language\s+instructions)|(?:тіл|стиль).{0,25}баптауларын\s+ұмыт/iu
 function ownNewSubject(text:string){return (/(?:сайт|website|код|компонент|component|стих|poem|рецепт|recipe|найди|новост|news|погода|weather|реши|calculate|рассчитай)/iu.test(text)||/^(?:создай|напиши|подготовь|create|write).{0,24}(?:документ|договор|отч[её]т|document|report)/iu.test(text))&&!REFERENCE.test(text)}
 export function resolveConversationIntent(input:{prompt:string;messages?:unknown;attachments?:unknown}):ConversationIntent {
- const original=String(input.prompt||""),text=instructionText(original),history=turns(input.messages)
+ const original=String(input.prompt||""),text=instructionText(original),history=withoutCurrentTurn(turns(input.messages),original)
  // The client may include the latest user message in its history. Do not let
  // that message choose its own ancestor or be applied twice to the ledger.
- if(history.at(-1)?.role==="user"&&history.at(-1)!.content.trim()===original.trim())history.pop()
  const last=history.filter(t=>t.role==="assistant").at(-1)
  const complaint=/(?:неправильн|не\s+то\s+сдел|ошиб)/iu.test(text)&&/исправ|верни|передел|сделай/iu.test(text)
  const preferenceOnly=/^(?:(?:а|и|теперь|нет|now|then|енді)[,\s]*)*(?:для\s+(?:реб[её]н|профессиональн|эксперт|инженер)|строго\s+json|json\s+only|официальн|разговорн|подробнее|короче|без\s+списк|на\s+(?:русск|казахск|английск))/iu.test(text)
- const followUp=Boolean(last&&text.length<1200&&(TRANSFORM.test(text)||complaint||preferenceOnly)&&!ownNewSubject(text))
- const current=requirements(text),active:ConversationRequirements={}
+ const followUp=Boolean(last&&text.length<1200&&(TRANSFORM.test(text)||complaint||preferenceOnly||isContextDependent(text)||isContinueRequest(text))&&!ownNewSubject(text))
+ const current=requirements(text),active:ConversationRequirements={},persistent:ConversationRequirements={},local:ConversationRequirements={}
  const tones:Array<NonNullable<ConversationRequirements["tone"]>>=[]
- if(followUp)for(const turn of history)if(turn.role==="user"){
+ for(const turn of history)if(turn.role==="user"){
   const value=instructionText(turn.content)
-  if(ownNewSubject(value))for(const key of Object.keys(active))delete active[key as keyof ConversationRequirements]
+  if(RESET_PREFERENCES.test(value)){for(const key of Object.keys(persistent))delete persistent[key as keyof ConversationRequirements];for(const key of Object.keys(local))delete local[key as keyof ConversationRequirements]}
+  if(ownNewSubject(value))for(const key of Object.keys(local))delete local[key as keyof ConversationRequirements]
   const prefs=requirements(value)
   if(prefs.tone&&tones.at(-1)!==prefs.tone)tones.push(prefs.tone)
-  Object.assign(active,prefs);if(CANCEL_FILE.test(value))delete active.format
+  if(!ONE_TURN_SCOPE.test(value)){
+   Object.assign(local,prefs)
+   if(prefs.language)persistent.language=prefs.language
+   if(CONVERSATION_SCOPE.test(value))Object.assign(persistent,prefs)
+  }
+  if(CANCEL_FILE.test(value)){delete local.format;delete persistent.format}
+  if(PLAIN_PRESENTATION.test(value)){delete local.presentation;delete persistent.presentation}
  }
+ Object.assign(active,persistent,followUp?local:{})
+ if(RESET_PREFERENCES.test(text))for(const key of Object.keys(active))delete active[key as keyof ConversationRequirements]
  Object.assign(active,current);if(CANCEL_FILE.test(text)||current.presentation==="json"&&!current.format)delete active.format
+ if(PLAIN_PRESENTATION.test(text))delete active.presentation
+ const followUpQuestion=followUp&&!TRANSFORM.test(text)&&!preferenceOnly&&!isContinueRequest(text)&&/^(?:почему|зачем|откуда|как|когда|где|сколько|чем|why|how|when|where|what|which|неге|қалай|қашан|қайдан|қанша)(?:[\s?!.]|$)/iu.test(text)
+ if(followUpQuestion&&!current.format)delete active.format
  if(/верни.*(?:стар|предыдущ|прежн).*(?:стиль|тон)|restore.*(?:previous|old).*(?:style|tone)/iu.test(text)&&tones.length>1&&!current.tone)active.tone=tones.at(-2)
  const directCreation=/(?<!\p{L})(?:создай|созда[йи]|сдела[йи]|сгенерируй|подготовь|напиши|дай|выдай|create|build|generate|design|make|write|export|жаса)/iu.test(text)
  const formatOnly=Boolean(current.format&&text.replace(/(?:pdf|word|docx|pptx|xlsx|excel|csv|txt|markdown|md|html|json|zip|ворд|эксель|файл|документ|формат|вместо|формате|сделай|сделаи|хочу|нет|не|теперь|дай|выдай|мне|это|в|на|а|и|пожалуйста|as|a|file|make|give|me|export|no|now|then|the|please|in)/giu,"").replace(/[\s,.!?—-]/g,"").length<3)
@@ -103,7 +121,7 @@ export function resolveConversationIntent(input:{prompt:string;messages?:unknown
  const reference=text.match(/(?:на\s+)?(?:второй|вторую|second|екінші|первой|первую|first|бірінші|третьей|третью|third|үшінші)\s+(?:фото|фотограф|картин|image|photo|сурет)/iu)
  if(reference){const ordinal=/втор|second|екінші/iu.test(reference[0])?1:/трет|third|үшінші/iu.test(reference[0])?2:0;if(attachments[ordinal])attachmentIndex=ordinal;else clarification="missing-attachment"}
  const requiresFreshData=classifyFreshness(original).needsSearch
- const action:ConversationIntent["action"]=/^(?:стоп|стой|stop|тоқта)[.!\s]*$/iu.test(text)?"stop":clarification?"reply":target==="document"&&formatOnly?"export":/исправ|ошиб|не\s+то|неправильн|fix|wrong|қате/iu.test(text)&&followUp?"repair":followUp?"transform":requiresFreshData?"research":directCreation?"create":"reply"
+ const action:ConversationIntent["action"]=/^(?:стоп|стой|stop|тоқта)[.!\s]*$/iu.test(text)?"stop":clarification?"reply":target==="document"&&formatOnly?"export":/исправ|ошиб|не\s+то|неправильн|fix|wrong|қате|түзет/iu.test(text)&&followUp?"repair":requiresFreshData?"research":followUpQuestion?"reply":followUp?"transform":directCreation?"create":"reply"
  return{version:1,original,action,target,followUp,requirements:active,source:followUp||formatOnly?source:undefined,attachmentIndex,clarification,requiresTools:target!=="text"||requiresFreshData,requiresFreshData,executionStatus:"pending",historyTruncated:Array.isArray(input.messages)&&input.messages.length>64}
 }
 

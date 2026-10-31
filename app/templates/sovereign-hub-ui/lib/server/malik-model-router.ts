@@ -13,6 +13,7 @@ import { providerFetch } from "@/lib/ai/providers/base"
 import { hasHiddenGeminiMedia, runHiddenGeminiMultimodal } from "@/lib/server/hidden-gemini-multimodal"
 import { resolveRequestEntitlement, type RequestEntitlement } from "@/lib/server/request-entitlement"
 import { analyzeMalikBrainV1 } from "@/lib/ai/brain-v1"
+import { boundedConversationHistory, withoutCurrentTurn } from "@/lib/ai/conversation-history"
 import type { ExecutionReporter } from "@/lib/ai/chat-execution"
 
 export type HistoryMessage = { role: "user" | "assistant"; content: string }
@@ -145,10 +146,10 @@ export function buildMessages(input: {
   /** The user's request before retrieved excerpts were appended. */
   taskPrompt?: string
 }): ProviderMessage[] {
-  const normalizedHistory = (input.history || [])
+  const normalizedHistory = withoutCurrentTurn((input.history || [])
     .filter((message) => (message?.role === "user" || message?.role === "assistant") && typeof message.content === "string")
     .map((message) => ({ role: message.role, content: message.role === "assistant" ? stripIncompleteNote(message.content) : message.content.trim() }))
-    .filter((message) => message.content)
+    .filter((message) => message.content), input.prompt, input.taskPrompt)
   const historyMessageLimit = Math.max(12, Math.min(128, Number(process.env.MALIK_MAX_HISTORY_MESSAGES || 64)))
   const configuredHistoryChars = Math.max(24_000, Math.min(800_000, Number(process.env.MALIK_MAX_HISTORY_CHARS || 180_000)))
   // Preserve the new prompt first. On huge pasted documents, old turns are the
@@ -162,15 +163,7 @@ export function buildMessages(input: {
         ? 90_000
         : configuredHistoryChars
   const historyCharLimit = Math.min(configuredHistoryChars, adaptiveHistoryChars)
-  const history: HistoryMessage[] = []
-  let historyChars = 0
-  for (let index = normalizedHistory.length - 1; index >= 0 && history.length < historyMessageLimit; index -= 1) {
-    const message = normalizedHistory[index]
-    const cost = message.content.length
-    if (history.length && historyChars + cost > historyCharLimit) break
-    history.unshift(message)
-    historyChars += cost
-  }
+  const history = boundedConversationHistory(normalizedHistory, historyMessageLimit, historyCharLimit)
   const images = (input.attachments || [])
     .filter((attachment) => attachment?.kind === "image" || attachment?.mime?.startsWith("image/"))
     .map(imageUrl)
@@ -179,7 +172,7 @@ export function buildMessages(input: {
   if (images.length && !input.model.capabilities.includes("vision")) {
     throw new MalikModelRouteError("MODEL_CAPABILITY_MISMATCH", `${input.model.label} не принимает изображения.`, 422, input.model.id)
   }
-  const prior = history.at(-1)?.role === "user" ? history.slice(0, -1) : history
+  const prior = history
   const qwenNoThink = input.fastMode && input.model.provider === "cloudflare" && /qwen3/i.test(input.model.providerModel)
   const userPrompt = qwenNoThink ? `${input.prompt}\n/no_think` : input.prompt
   const content: ProviderMessage["content"] = images.length

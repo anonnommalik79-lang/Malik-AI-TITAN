@@ -1,4 +1,6 @@
 type ChatHistoryMessage = { role: "user" | "assistant"; content: string }
+import { conversationHistory, conversationHistorySource } from "@/lib/ai/conversation-history"
+import { resolveConversationIntent } from "@/lib/ai/conversation-intent"
 
 const OWNER_CONTEXT = [
   "Verified account context for this conversation:",
@@ -118,7 +120,8 @@ function companyAnswer(language: "ru" | "kk" | "en", ownerMode: boolean) {
 export function malikIdentityAnswer(body: any, ownerMode: boolean): string {
   const prompt = cleanPrompt(body)
   if (!prompt) return ""
-  const language = languageOf(prompt)
+  const preferred = resolveConversationIntent({ prompt, messages: conversationHistorySource(body) }).requirements.language
+  const language = preferred === "ru" || preferred === "kk" || preferred === "en" ? preferred : languageOf(prompt)
 
   if (ownerMode && asksCurrentUserIdentity(prompt)) return ownerCreatorAnswer(language)
   if (asksCreator(prompt)) return ownerMode ? ownerCreatorAnswer(language) : publicCreatorAnswer(language)
@@ -139,16 +142,9 @@ export function malikIdentityAnswer(body: any, ownerMode: boolean): string {
 }
 
 export function withVerifiedOwnerChatContext(body: any): any {
-  const sourceHistory = Array.isArray(body?.history)
-    ? body.history
-    : Array.isArray(body?.messages)
-      ? body.messages
-      : []
-
-  const history: ChatHistoryMessage[] = sourceHistory
-    .filter((item: any) => item && (item.role === "user" || item.role === "assistant") && typeof item.content === "string")
-    .slice(-10)
-    .map((item: any) => ({ role: item.role, content: item.content }))
+  const history: ChatHistoryMessage[] = conversationHistory(body)
+    .filter(item => !(item.role === "assistant" && item.content === OWNER_CONTEXT))
+    .map(({ role, content }) => ({ role, content }))
 
   const ownerMessage: ChatHistoryMessage = { role: "assistant", content: OWNER_CONTEXT }
   if (history.at(-1)?.role === "user") {

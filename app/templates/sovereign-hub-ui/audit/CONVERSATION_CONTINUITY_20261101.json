@@ -1,0 +1,342 @@
+{
+  "baselineCommit": "2078e5f1",
+  "scope": "Intent, context, provider packets, bounded completion and validation. Not live-model answer accuracy.",
+  "fixtureSha256": "5d9241637c461d5438d15e5526a4ac10917862c5381226319667d911ec7eee33",
+  "beforePassed": 19,
+  "afterPassed": 66,
+  "total": 66,
+  "modelResponsesSubstituted": 0,
+  "visualFilesChanged": 0,
+  "cases": [
+    {
+      "name": "ru/why/context-and-preferences",
+      "beforePassed": false,
+      "afterPassed": true
+    },
+    {
+      "name": "ru/improve/context-and-preferences",
+      "beforePassed": false,
+      "afterPassed": true
+    },
+    {
+      "name": "ru/continue/context-and-preferences",
+      "beforePassed": false,
+      "afterPassed": true
+    },
+    {
+      "name": "ru/repair/context-and-preferences",
+      "beforePassed": true,
+      "afterPassed": true
+    },
+    {
+      "name": "ru/language-survives-new-subject",
+      "beforePassed": false,
+      "afterPassed": true
+    },
+    {
+      "name": "kk/why/context-and-preferences",
+      "beforePassed": false,
+      "afterPassed": true
+    },
+    {
+      "name": "kk/improve/context-and-preferences",
+      "beforePassed": false,
+      "afterPassed": true
+    },
+    {
+      "name": "kk/continue/context-and-preferences",
+      "beforePassed": false,
+      "afterPassed": true
+    },
+    {
+      "name": "kk/repair/context-and-preferences",
+      "beforePassed": false,
+      "afterPassed": true
+    },
+    {
+      "name": "kk/language-survives-new-subject",
+      "beforePassed": false,
+      "afterPassed": true
+    },
+    {
+      "name": "en/why/context-and-preferences",
+      "beforePassed": false,
+      "afterPassed": true
+    },
+    {
+      "name": "en/improve/context-and-preferences",
+      "beforePassed": true,
+      "afterPassed": true
+    },
+    {
+      "name": "en/continue/context-and-preferences",
+      "beforePassed": false,
+      "afterPassed": true
+    },
+    {
+      "name": "en/repair/context-and-preferences",
+      "beforePassed": true,
+      "afterPassed": true
+    },
+    {
+      "name": "en/language-survives-new-subject",
+      "beforePassed": false,
+      "afterPassed": true
+    },
+    {
+      "name": "ru/conversation-json",
+      "beforePassed": false,
+      "afterPassed": true
+    },
+    {
+      "name": "kk/conversation-json",
+      "beforePassed": false,
+      "afterPassed": true
+    },
+    {
+      "name": "en/conversation-json",
+      "beforePassed": false,
+      "afterPassed": true
+    },
+    {
+      "name": "ru/explicit-language-override",
+      "beforePassed": true,
+      "afterPassed": true
+    },
+    {
+      "name": "en/format-cancellation",
+      "beforePassed": false,
+      "afterPassed": true
+    },
+    {
+      "name": "ru/mentioned-language-is-not-preference",
+      "beforePassed": false,
+      "afterPassed": true
+    },
+    {
+      "name": "en/mentioned-language-is-not-preference",
+      "beforePassed": false,
+      "afterPassed": true
+    },
+    {
+      "name": "ru/quoted-preferences-untrusted",
+      "beforePassed": false,
+      "afterPassed": true
+    },
+    {
+      "name": "ru/scoped-brevity-survives-topic-change",
+      "beforePassed": false,
+      "afterPassed": true
+    },
+    {
+      "name": "en/turn-local-table-does-not-leak",
+      "beforePassed": true,
+      "afterPassed": true
+    },
+    {
+      "name": "ru/seven-turn-anchor",
+      "beforePassed": false,
+      "afterPassed": true
+    },
+    {
+      "name": "kk/seven-turn-anchor",
+      "beforePassed": false,
+      "afterPassed": true
+    },
+    {
+      "name": "en/seven-turn-anchor",
+      "beforePassed": false,
+      "afterPassed": true
+    },
+    {
+      "name": "ru/manual-long-answer-resume",
+      "beforePassed": true,
+      "afterPassed": true
+    },
+    {
+      "name": "kk/manual-long-answer-resume",
+      "beforePassed": false,
+      "afterPassed": true
+    },
+    {
+      "name": "en/manual-long-answer-resume",
+      "beforePassed": false,
+      "afterPassed": true
+    },
+    {
+      "name": "provider/retain-distinct-trailing-user",
+      "beforePassed": false,
+      "afterPassed": true
+    },
+    {
+      "name": "provider/current-user-appears-once",
+      "beforePassed": true,
+      "afterPassed": true
+    },
+    {
+      "name": "provider/augmented-current-user-appears-once",
+      "beforePassed": true,
+      "afterPassed": true
+    },
+    {
+      "name": "provider/old-topic-not-lost-behind-long-assistant",
+      "beforePassed": false,
+      "afterPassed": true
+    },
+    {
+      "name": "budget/brief-follow-up-does-not-pay-for-8000-output-tokens",
+      "beforePassed": false,
+      "afterPassed": true
+    },
+    {
+      "name": "budget/complex-brief-still-receives-complete-budget",
+      "beforePassed": true,
+      "afterPassed": true
+    },
+    {
+      "name": "validation/corrective-reply-cannot-repeat-rejected-text",
+      "beforePassed": false,
+      "afterPassed": true
+    },
+    {
+      "name": "ru/unsupported-execution-claim",
+      "beforePassed": false,
+      "afterPassed": true
+    },
+    {
+      "name": "ru/honest-nonexecution-is-accepted",
+      "beforePassed": true,
+      "afterPassed": true
+    },
+    {
+      "name": "kk/unsupported-execution-claim",
+      "beforePassed": false,
+      "afterPassed": true
+    },
+    {
+      "name": "kk/honest-nonexecution-is-accepted",
+      "beforePassed": true,
+      "afterPassed": true
+    },
+    {
+      "name": "en/unsupported-execution-claim",
+      "beforePassed": false,
+      "afterPassed": true
+    },
+    {
+      "name": "en/honest-nonexecution-is-accepted",
+      "beforePassed": true,
+      "afterPassed": true
+    },
+    {
+      "name": "ru/simplification-keeps-source",
+      "beforePassed": false,
+      "afterPassed": true
+    },
+    {
+      "name": "kk/simplification-keeps-source",
+      "beforePassed": false,
+      "afterPassed": true
+    },
+    {
+      "name": "en/simplification-keeps-source",
+      "beforePassed": false,
+      "afterPassed": true
+    },
+    {
+      "name": "validation/json-repair-must-change-rejected-json",
+      "beforePassed": false,
+      "afterPassed": true
+    },
+    {
+      "name": "en/language-subject-at-start-is-not-preference",
+      "beforePassed": false,
+      "afterPassed": true
+    },
+    {
+      "name": "pipeline/contextual-greeting-reaches-model-with-language",
+      "beforePassed": false,
+      "afterPassed": true
+    },
+    {
+      "name": "pipeline/empty-history-falls-back-to-messages",
+      "beforePassed": false,
+      "afterPassed": true
+    },
+    {
+      "name": "pipeline/earlier-user-statement-reaches-provider",
+      "beforePassed": false,
+      "afterPassed": true
+    },
+    {
+      "name": "domain/nineteen-turns-use-the-same-anchor",
+      "beforePassed": false,
+      "afterPassed": true
+    },
+    {
+      "name": "ru/stream-continuation-does-not-repeat-tail",
+      "beforePassed": true,
+      "afterPassed": true
+    },
+    {
+      "name": "kk/stream-continuation-does-not-repeat-tail",
+      "beforePassed": true,
+      "afterPassed": true
+    },
+    {
+      "name": "en/stream-continuation-does-not-repeat-tail",
+      "beforePassed": true,
+      "afterPassed": true
+    },
+    {
+      "name": "preferences/one-answer-language-override-expires",
+      "beforePassed": false,
+      "afterPassed": true
+    },
+    {
+      "name": "preferences/explicit-reset-is-respected",
+      "beforePassed": true,
+      "afterPassed": true
+    },
+    {
+      "name": "provider/scaffolded-current-user-appears-once",
+      "beforePassed": true,
+      "afterPassed": true
+    },
+    {
+      "name": "validation/authored-explanation-is-not-false-tool-claim",
+      "beforePassed": true,
+      "afterPassed": true
+    },
+    {
+      "name": "validation/chat-example-is-not-an-external-send",
+      "beforePassed": true,
+      "afterPassed": true
+    },
+    {
+      "name": "identity/explicit-conversation-language-is-retained",
+      "beforePassed": false,
+      "afterPassed": true
+    },
+    {
+      "name": "pipeline/verified-owner-context-preserves-old-preferences",
+      "beforePassed": false,
+      "afterPassed": true
+    },
+    {
+      "name": "ru/style-switch-is-not-a-new-topic",
+      "beforePassed": false,
+      "afterPassed": true
+    },
+    {
+      "name": "kk/style-switch-is-not-a-new-topic",
+      "beforePassed": false,
+      "afterPassed": true
+    },
+    {
+      "name": "en/style-switch-is-not-a-new-topic",
+      "beforePassed": false,
+      "afterPassed": true
+    }
+  ]
+}
