@@ -43,6 +43,9 @@ jobs:
       - name: Install
         run: npm ci --legacy-peer-deps
 
+      - name: Verify dynamic autonomous branch planning (offline)
+        run: npm run test:dynamic-autonomy
+
       - name: Core release regression suite
         run: npm run test:release-core
 
