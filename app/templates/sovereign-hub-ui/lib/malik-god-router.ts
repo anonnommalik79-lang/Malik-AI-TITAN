@@ -22,8 +22,10 @@ import { fetchPageText } from "@/lib/malik-research/fetch-page"
 import { runStrictMalikModel } from "@/lib/server/malik-model-router"
 import { chatWebsiteInstruction } from "@/lib/server/chat-website-design"
 import { fetchEiaSpotEvidence } from "@/lib/server/petroleum-eia"
-import { classifyFreshness, freshnessMode, isModelLeaderboardRequest, NO_WEB, publicSearchText, type FreshnessMode } from "@/lib/ai/freshness-intent"
-import { assessSources, currentEvidenceAvailable, finalizeFreshAnswer, freshnessCheckLine, freshnessEvidenceInstruction, safeEvidenceUrl, sourceDisagreements, unavailableFreshAnswer } from "@/lib/live-intelligence/evidence"
+import { classifyFreshness, freshnessMode, isModelLeaderboardRequest, NO_WEB, publicSearchText, type FreshnessMode, type FreshnessIntent } from "@/lib/ai/freshness-intent"
+import { assessSources, currentEvidenceAvailable, currentNewsSources, finalizeFreshAnswer, freshnessCheckLine, freshnessEvidenceInstruction, safeEvidenceUrl, sourceDisagreements, unavailableFreshAnswer } from "@/lib/live-intelligence/evidence"
+import { searchTimeFilters } from "@/lib/live-intelligence/search-time-filters"
+import { searchNewsFeed } from "@/lib/live-intelligence/news-search"
 import { runLiveSearch, type LiveSearchProvider } from "@/lib/live-intelligence/search-engine"
 import { mapBounded } from "@/lib/live-intelligence/concurrency"
 import { indexedSources } from "@/lib/live-intelligence/index-reader"
@@ -116,7 +118,7 @@ export async function gatherSourcesForPrompt(prompt: string, emit?: ResearchEmit
 export type PreparedLiveEvidence = { prompt: string; sources: SourceItem[] }
 
 const CACHE = new Map<string, { expiresAt: number; value: GodAnswer }>()
-const SEARCH_CACHE_VERSION = "current-evidence-v6-isolated"
+const SEARCH_CACHE_VERSION = "current-evidence-v7-fresh-news"
 
 function env(name: string) {
   const value = process.env[name]
@@ -166,7 +168,7 @@ function cacheKey(prompt: string) {
 }
 
 function getCache(prompt: string) {
-  if (needsCurrentEvidence(prompt)) return null
+  if (classifyFreshness(prompt).needsSearch || needsCurrentEvidence(prompt)) return null
   const key = cacheKey(prompt)
   const item = CACHE.get(key)
   if (!item) return null
@@ -178,7 +180,7 @@ function getCache(prompt: string) {
 }
 
 function setCache(prompt: string, value: GodAnswer) {
-  if (needsCurrentEvidence(prompt)) return
+  if (classifyFreshness(prompt).needsSearch || needsCurrentEvidence(prompt)) return
   const ttl = Number(process.env.MALIK_GOD_CACHE_TTL_MS || process.env.RESEARCH_CACHE_TTL_MS || 1000 * 60 * 20)
   CACHE.set(cacheKey(prompt), { expiresAt: Date.now() + ttl, value })
   trimSharedAnswerCache(CACHE)
@@ -241,7 +243,7 @@ function diverseSources(items: SourceItem[], limit: number) {
   return out
 }
 
-async function searchSerper(query: string, limit: number, signal?: AbortSignal): Promise<SourceItem[]> {
+async function searchSerper(query: string, limit: number, signal?: AbortSignal, intent = classifyFreshness(query)): Promise<SourceItem[]> {
   const key = env("SERPER_API_KEY")
   if (!key) return []
 
@@ -250,7 +252,7 @@ async function searchSerper(query: string, limit: number, signal?: AbortSignal):
     {
       method: "POST",
       headers: { "X-API-KEY": key, "Content-Type": "application/json" },
-      body: JSON.stringify({ q: query, num: Math.min(limit, 10) }),
+      body: JSON.stringify({ q: query, num: Math.min(limit, 10), ...searchTimeFilters(intent).serper }),
     },
     7000, signal
   )
@@ -267,7 +269,7 @@ async function searchSerper(query: string, limit: number, signal?: AbortSignal):
   )
 }
 
-async function searchTavily(query: string, limit: number, signal?: AbortSignal): Promise<SourceItem[]> {
+async function searchTavily(query: string, limit: number, signal?: AbortSignal, intent = classifyFreshness(query)): Promise<SourceItem[]> {
   const key = env("TAVILY_API_KEY")
   if (!key) return []
 
@@ -284,6 +286,7 @@ async function searchTavily(query: string, limit: number, signal?: AbortSignal):
           max_results: Math.min(limit, 10),
           include_answer: false,
           include_raw_content: false,
+          ...searchTimeFilters(intent).tavily,
         }),
       },
       8000, signal
@@ -305,16 +308,15 @@ async function searchTavily(query: string, limit: number, signal?: AbortSignal):
   )
 }
 
-async function searchBrave(query: string, limit: number, signal?: AbortSignal): Promise<SourceItem[]> {
+async function searchBrave(query: string, limit: number, signal?: AbortSignal, intent = classifyFreshness(query)): Promise<SourceItem[]> {
   const key = env("BRAVE_SEARCH_API_KEY")
   if (!key) return []
 
   const url = new URL("https://api.search.brave.com/res/v1/web/search")
   url.searchParams.set("q", query)
   url.searchParams.set("count", String(Math.min(limit, 10)))
-  const intent = classifyFreshness(query)
-  if (intent.category === "LIVE") url.searchParams.set("freshness", "pd")
-  else if (intent.window?.label === "last-seven-days") url.searchParams.set("freshness", "pw")
+  const freshness = searchTimeFilters(intent).brave
+  if (freshness) url.searchParams.set("freshness", freshness)
 
   const res = await fetchWithTimeout(url.toString(), { headers: { "X-Subscription-Token": key, accept: "application/json" } }, 8000, signal)
   if (!res.ok) return []
@@ -324,7 +326,8 @@ async function searchBrave(query: string, limit: number, signal?: AbortSignal): 
 
   return uniqueSources(
     results
-      .map((x: any) => normalizeSource({ title: x.title, url: x.url, snippet: x.description, publishedAt: x.page_age || x.age }, "brave"))
+      // Web page age can mean crawl/modified time; it is not a publication date.
+      .map((x: any) => normalizeSource({ title: x.title, url: x.url, snippet: x.description }, "brave"))
       .filter(Boolean) as SourceItem[],
     limit
   )
@@ -386,32 +389,8 @@ async function searchBingRss(query: string, limit: number, signal?: AbortSignal)
   }).filter(Boolean) as SourceItem[], limit)
 }
 
-async function searchGoogleNews(query: string, limit: number, signal?: AbortSignal): Promise<SourceItem[]> {
-  const isRussian = /[а-яё]/i.test(query)
-  const url = new URL("https://news.google.com/rss/search")
-  url.searchParams.set("q", query)
-  url.searchParams.set("hl", isRussian ? "ru" : "en-US")
-  url.searchParams.set("gl", isRussian ? "KZ" : "US")
-  url.searchParams.set("ceid", isRussian ? "KZ:ru" : "US:en")
-
-  const res = await fetchWithTimeout(url.toString(), {}, 9000, signal)
-  if (!res.ok) return []
-  const xml = await res.text()
-  const items = Array.from(xml.matchAll(/<item>([\s\S]*?)<\/item>/gi))
-
-  return uniqueSources(items.map((match) => {
-    const block = match[1]
-    const title = decodeSearchText(block.match(/<title>([\s\S]*?)<\/title>/i)?.[1] || "")
-    const link = decodeSearchText(block.match(/<link>([\s\S]*?)<\/link>/i)?.[1] || "")
-    const snippet = decodeSearchText(block.match(/<description>([\s\S]*?)<\/description>/i)?.[1] || "")
-    const publisher = decodeSearchText(block.match(/<source[^>]*>([\s\S]*?)<\/source>/i)?.[1] || "")
-    return normalizeSource({
-      title,
-      url: link,
-      snippet: publisher ? `${publisher}. ${snippet}` : snippet,
-      publishedAt: decodeSearchText(block.match(/<pubDate>([\s\S]*?)<\/pubDate>/i)?.[1] || ""),
-    }, "google-news")
-  }).filter(Boolean) as SourceItem[], limit)
+async function searchGoogleNews(query: string, limit: number, signal?: AbortSignal, intent: FreshnessIntent = classifyFreshness(query)): Promise<SourceItem[]> {
+  return searchNewsFeed(query, limit, signal, intent)
 }
 
 async function searchWikipedia(query: string, limit: number, signal?: AbortSignal): Promise<SourceItem[]> {
@@ -727,11 +706,12 @@ async function gatherSources(prompt: string, emit?: ResearchEmitter, activity?: 
   const providers: LiveSearchProvider[] = [
     ...(/next\.?js|react/iu.test(prompt) && needsCurrentEvidence(prompt) ? [{ name: "github-releases", timeoutMs: 5500, run: searchOfficialReleases }] : []),
     ...(env("SERPER_API_KEY") ? [{ name: "serper", run: searchSerper }] : []),
-    ...(env("TAVILY_API_KEY") ? [{ name: "tavily", run: searchTavily }] : []),
     ...(env("BRAVE_SEARCH_API_KEY") ? [{ name: "brave", run: searchBrave }] : []),
+    ...(env("TAVILY_API_KEY") ? [{ name: "tavily", run: searchTavily }] : []),
+    ...(intent.news ? [{ name: "google-news", run: searchGoogleNews }] : []),
     ...(/(?:ИИ|AI|LLM|ЖИ|модел|model|GPT|OpenAI|Anthropic|Claude|Google|Gemini|DeepMind|Grok|xAI)/iu.test(prompt) ? KNOWLEDGE_FEEDS.filter((feed) => /google|gemini|deepmind/iu.test(prompt) ? feed.id === "deepmind" : /anthropic|claude/iu.test(prompt) ? feed.id === "anthropic" : /grok|xai/iu.test(prompt) ? feed.id === "xai" : ["openai", "deepmind", "anthropic"].includes(feed.id)).map((feed) => ({ name: `official-feed:${feed.id}`, timeoutMs: 5500, run: (query: string, limit: number, searchSignal: AbortSignal) => searchOfficialFeed(feed, query, limit, searchSignal) })) : []),
     { name: "bing-rss", run: searchBingRss },
-    { name: "google-news", run: searchGoogleNews },
+    ...(!intent.news ? [{ name: "google-news", run: searchGoogleNews }] : []),
     ...(env("JINA_SEARCH_DISABLED") === "true" ? [] : [{ name: "jina", run: searchJina }]),
     ...(!intent.needsSearch || intent.historical ? [{ name: "wikipedia", run: searchWikipedia }] : []),
     { name: "gdelt", run: searchGdelt },
@@ -758,8 +738,9 @@ async function gatherSources(prompt: string, emit?: ResearchEmitter, activity?: 
   // Deduplicate the complete provider pool first. Truncating before ranking
   // allowed one noisy provider to crowd Wikipedia and other relevant sources
   // out of consideration.
+  const ranked = rankSourcesForPrompt(prompt, uniqueSources(all, Math.max(maxSearchResults * 8, 96)))
   const unique = diverseSources(
-    rankSourcesForPrompt(prompt, uniqueSources(all, Math.max(maxSearchResults * 8, 96))),
+    intent.news ? currentNewsSources(prompt, assessSources(prompt, ranked, intent), intent) : ranked,
     maxSearchResults,
   )
   activity?.finish(searchCall, compactSearchReceipt(unique, {
@@ -810,7 +791,7 @@ async function gatherSources(prompt: string, emit?: ResearchEmitter, activity?: 
   signal?.throwIfAborted()
 
   const sources = read.flatMap((item) => item.status === "fulfilled" ? [item.value] : [])
-  const finalSources = assessSources(prompt, uniqueSources([...sources, ...unique], maxSources), intent)
+  const finalSources = currentNewsSources(prompt, assessSources(prompt, uniqueSources([...sources, ...unique], maxSources), intent), intent)
   emit?.({
     kind: "done",
     text: finalSources.length
