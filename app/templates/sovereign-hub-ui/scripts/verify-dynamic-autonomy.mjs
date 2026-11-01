@@ -60,7 +60,7 @@ test("auto runtime is actually connected to the primary chat with cancellation",
   const runtime = fs.readFileSync(new URL("../lib/server/malik-agent-runtime.ts", import.meta.url), "utf8")
   assert.match(main, /prepareAutonomousMalikRuntime\(executionBody, \{ signal, activity \}\)/)
   assert.match(runtime, /Promise\.all\(missions\.map/)
-  assert.match(runtime, /signal:.*\bsignal\b/)
+  assert.match(runtime, /allowCatalog: false, signal/)
   assert.match(runtime, /controller\.abort/)
   assert.match(runtime, /formatReports\(runId, reports\)/)
   assert.doesNotMatch(runtime, /autoExecuteShell|eval\(/)
