@@ -1,5 +1,6 @@
 ﻿import type { AIProvider, AIRequest, AIResponse } from "../types"
 import { modelFor } from "../models"
+import { openAINativeRequest, openAINativeOutput, usesOpenAIResponses } from "../provider-native-compat"
 import { hasEnv, health, providerFetch, responseType } from "./base"
 
 export const openAIProvider: AIProvider = {
@@ -17,15 +18,11 @@ export const openAIProvider: AIProvider = {
     if (!key) throw new Error("OPENAI_API_KEY not configured")
 
     const model = modelFor("openai", input.task || "chat", input.model)
-    const response = await providerFetch("https://api.openai.com/v1/chat/completions", {
+    const native = openAINativeRequest(input, model)
+    const response = await providerFetch(native.endpoint, {
       method: "POST",
       headers: { "content-type": "application/json", authorization: `Bearer ${key}` },
-      body: JSON.stringify({
-        model,
-        messages: input.messages?.length ? input.messages : [{ role: "user", content: input.prompt }],
-        temperature: input.temperature ?? 0.35,
-        max_tokens: input.maxTokens || Number(process.env.MAX_OUTPUT_TOKENS || 1600),
-      }),
+      body: JSON.stringify(native.body),
       signal: input.signal,
     })
 
@@ -37,7 +34,7 @@ export const openAIProvider: AIProvider = {
       provider: "openai",
       model,
       type: responseType(input.task),
-      output: payload?.choices?.[0]?.message?.content || "",
+      output: openAINativeOutput(payload, usesOpenAIResponses(model)),
       usage: payload?.usage,
       latencyMs: Date.now() - started,
     }
