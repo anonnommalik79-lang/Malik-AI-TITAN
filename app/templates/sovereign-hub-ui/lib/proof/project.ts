@@ -4,6 +4,7 @@ import { buildPassport, type ProofPassport } from "./passport"
 export function projectPassport(input: {
   projectId: string; title: string; files: Array<{ path: string; content: string }>
   qa?: { passed: boolean; checks: string[]; issues: string[]; staticIssues?: string[]; reviewer?: string; reviewStatus?: "pass" | "fail" | "not_run" }
+  now?: Date
 }): ProofPassport {
   const qa = input.qa
   const staticRan = Boolean(qa && (qa.checks.length || qa.issues.length))
@@ -23,5 +24,6 @@ export function projectPassport(input: {
     knownIssues: qa?.issues || [],
     blindSpots: ["Статические проверки и мнение модели не доказывают работоспособность или безопасность"],
     artifacts: input.files.slice(0, 20).map(file => ({ name: file.path, bytes: new TextEncoder().encode(file.content).length })),
+    now: input.now,
   })
 }
