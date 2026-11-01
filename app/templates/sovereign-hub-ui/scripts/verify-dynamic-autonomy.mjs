@@ -2,9 +2,6 @@ import test from "node:test"
 import assert from "node:assert/strict"
 import fs from "node:fs"
 import { shouldAutonomouslyDecompose, parseAutonomousMissionPlan } from "../lib/ai/autonomy-policy.ts"
-import { analyzeMalikBrainV1 } from "../lib/ai/brain-v1.ts"
-import { resolveConversationIntent } from "../lib/ai/conversation-intent.ts"
-import { classifyFreshness } from "../lib/ai/freshness-intent.ts"
 
 const deep = [
   "Проанализируй архитектуру независимой системы обработки задач и предложи законченный проект.",
@@ -21,7 +18,6 @@ const deep = [
 test("auto plans are selected by complexity, not a fixed list of tasks", () => {
   assert.equal(shouldAutonomouslyDecompose({ originalQuestion: "Привет" }), false)
   assert.equal(shouldAutonomouslyDecompose({ originalQuestion: "Сколько будет 2+2?" }), false)
-  console.log("AUTONOMY_DIAG", JSON.stringify({brain:analyzeMalikBrainV1({prompt:deep}), intent:resolveConversationIntent({prompt:deep}).target, freshness:classifyFreshness(deep).reason, eligible:shouldAutonomouslyDecompose({originalQuestion:deep})}))
   assert.equal(shouldAutonomouslyDecompose({ originalQuestion: deep }), true)
   assert.equal(shouldAutonomouslyDecompose({ originalQuestion: deep, responseDepth: "ultra" }), true)
   assert.equal(shouldAutonomouslyDecompose({ originalQuestion: deep, chatRecovery: true }), false)
