@@ -3,7 +3,7 @@ import { createHash } from "node:crypto"
 import type { ProjectBuilderResult } from "@/lib/ai/project-builder"
 import { projectPassport } from "@/lib/proof/project"
 import { readPassport } from "@/lib/proof/passport"
-import { deletePrivateJson, readPrivateJson, writePrivateJson } from "@/lib/server/private-json-store"
+import { deletePrivateJson, privateJsonStoreConfigured, readPrivateJson, writePrivateJson } from "@/lib/server/private-json-store"
 
 export type StoredProjectArtifact = {
   id: string
@@ -12,20 +12,67 @@ export type StoredProjectArtifact = {
   project: ProjectBuilderResult
   createdAt: number
   expiresAt: number
+  /** Content binding, not a signature or proof that generated code ran. */
+  integrity?: { version: 1; sha256: string }
 }
 
 const ARTIFACT_TTL_MS = 24 * 60 * 60 * 1000
 const MAX_ARTIFACTS = 48
+const MAX_CACHE_BYTES = 16 * 1024 * 1024
+const MAX_SOURCE_BYTES = 4 * 1024 * 1024
+const MAX_RECORD_BYTES = 6 * 1024 * 1024
+const ARTIFACT_ID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i
+type CacheEntry = { artifact: StoredProjectArtifact; bytes: number }
 
 const globalArtifacts = globalThis as typeof globalThis & {
-  __malikProjectArtifacts?: Map<string, StoredProjectArtifact>
+  __malikProjectArtifactCache?: Map<string, CacheEntry>
 }
 
 function store() {
-  if (!globalArtifacts.__malikProjectArtifacts) {
-    globalArtifacts.__malikProjectArtifacts = new Map<string, StoredProjectArtifact>()
+  if (!globalArtifacts.__malikProjectArtifactCache) {
+    globalArtifacts.__malikProjectArtifactCache = new Map<string, CacheEntry>()
   }
-  return globalArtifacts.__malikProjectArtifacts
+  return globalArtifacts.__malikProjectArtifactCache
+}
+
+function snapshot<T>(value: T): T {
+  const json = JSON.stringify(value)
+  if (Buffer.byteLength(json) > MAX_RECORD_BYTES) throw new Error("PROJECT_ARTIFACT_TOO_LARGE")
+  return JSON.parse(json) as T
+}
+
+/** Refuse ambiguous extraction paths instead of silently losing/renaming files. */
+function validateFiles(files: ProjectBuilderResult["files"]) {
+  if (!Array.isArray(files) || !files.length || files.length > 200) throw new Error("INVALID_PROJECT_ARTIFACT_FILES")
+  const seen = new Set<string>()
+  let bytes = 0
+  for (const file of files) {
+    if (!file || typeof file.path !== "string" || typeof file.content !== "string") throw new Error("INVALID_PROJECT_ARTIFACT_FILES")
+    const parts = file.path.split("/")
+    if (file.path.length > 240 || parts.some(part => !part || part === "." || part === ".."
+      || /[\\<>:"|?*]/u.test(part) || [...part].some(character => character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127) || /[. ]$/u.test(part)
+      || /^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(part))) throw new Error("INVALID_PROJECT_ARTIFACT_PATH")
+    const canonical = file.path.normalize("NFC").toLowerCase()
+    if (seen.has(canonical)) throw new Error("DUPLICATE_PROJECT_ARTIFACT_PATH")
+    seen.add(canonical)
+    bytes += Buffer.byteLength(file.content)
+    if (bytes > MAX_SOURCE_BYTES) throw new Error("PROJECT_ARTIFACT_TOO_LARGE")
+  }
+}
+
+function recordChecksum(artifact: StoredProjectArtifact) {
+  const payload = { ...artifact }
+  delete payload.integrity
+  return createHash("sha256").update(JSON.stringify(payload)).digest("hex")
+}
+
+function cacheArtifact(artifact: StoredProjectArtifact) {
+  const artifacts = store()
+  artifacts.delete(artifact.id)
+  // Bound a conservative text payload estimate, not total process RSS.
+  const bytes = Buffer.byteLength(JSON.stringify(artifact)) * 2
+  if (bytes <= MAX_CACHE_BYTES) artifacts.set(artifact.id, { artifact, bytes })
+  cleanup()
 }
 
 function slugify(value: string) {
@@ -41,19 +88,19 @@ function ownerHash(ownerId: string) {
 }
 
 function artifactKey(ownerId: string, id: string) {
-  return `private/system/malik-project-artifacts/${ownerHash(ownerId)}/${String(id || "").replace(/[^a-f0-9-]/gi, "")}.json`
+  return `private/system/malik-project-artifacts/${ownerHash(ownerId)}/${id}.json`
 }
 
 function cleanup(now = Date.now()) {
   const artifacts = store()
-  for (const [id, artifact] of artifacts) {
-    if (artifact.expiresAt <= now) artifacts.delete(id)
+  for (const [id, entry] of artifacts) {
+    if (entry.artifact.expiresAt <= now) artifacts.delete(id)
   }
-
-  if (artifacts.size <= MAX_ARTIFACTS) return
-  const oldest = [...artifacts.values()].sort((a, b) => a.createdAt - b.createdAt)
-  for (const artifact of oldest.slice(0, artifacts.size - MAX_ARTIFACTS)) {
-    artifacts.delete(artifact.id)
+  let bytes = [...artifacts.values()].reduce((sum, entry) => sum + entry.bytes, 0)
+  for (const [id, entry] of artifacts) {
+    if (artifacts.size <= MAX_ARTIFACTS && bytes <= MAX_CACHE_BYTES) break
+    artifacts.delete(id)
+    bytes -= entry.bytes
   }
 }
 
@@ -61,6 +108,7 @@ export async function putProjectArtifact(project: ProjectBuilderResult, ownerId:
   if (project.status !== "completed" || !project.qa?.passed || !project.files.length) {
     throw new Error("Only completed QA-passed projects can be stored as downloadable artifacts.")
   }
+  validateFiles(project.files)
 
   const normalizedOwner = String(ownerId || "guest").trim().toLowerCase() || "guest"
   cleanup()
@@ -69,19 +117,23 @@ export async function putProjectArtifact(project: ProjectBuilderResult, ownerId:
     id: crypto.randomUUID(),
     ownerId: normalizedOwner,
     filename: `${slugify(project.title)}.zip`,
-    project: { ...project, passport: exportPassport(project) },
+    project: snapshot({ ...project, passport: exportPassport(project, new Date(now)) }),
     createdAt: now,
     expiresAt: now + ARTIFACT_TTL_MS,
   }
-  store().set(artifact.id, artifact)
-  cleanup(now)
-  await writePrivateJson(artifactKey(normalizedOwner, artifact.id), artifact)
-  return artifact
+  artifact.integrity = { version: 1, sha256: recordChecksum(artifact) }
+  snapshot(artifact) // Check the complete envelope before I/O or cache insertion.
+  const saved = await writePrivateJson(artifactKey(normalizedOwner, artifact.id), artifact)
+  if (!saved && privateJsonStoreConfigured()) throw new Error("PROJECT_ARTIFACT_STORAGE_UNAVAILABLE")
+  // Preserve the existing short-lived fallback only without durable storage.
+  cacheArtifact(artifact)
+  return snapshot(artifact)
 }
 
 /** Always regenerated from server-owned QA; model-authored passports are removed. */
-export function projectArtifactFiles(project: ProjectBuilderResult) {
-  const passport = exportPassport(project)
+export function projectArtifactFiles(project: ProjectBuilderResult, exportedAt?: Date) {
+  validateFiles(project.files)
+  const passport = exportPassport(project, exportedAt)
   passport.artifacts = project.files.filter(file => file.path.toUpperCase() !== "PROOF_PASSPORT.JSON").slice(0, 20).map(file => ({
     name: file.path, bytes: Buffer.byteLength(file.content), sha256: createHash("sha256").update(file.content).digest("hex"),
   }))
@@ -91,7 +143,7 @@ export function projectArtifactFiles(project: ProjectBuilderResult) {
   ]
 }
 
-function exportPassport(project: ProjectBuilderResult) {
+function exportPassport(project: ProjectBuilderResult, now?: Date) {
   const stored = readPassport(project.passport)
   if (stored?.kind === "selfbuild") {
     const content = project.files.map(file => ({path:file.path,content:file.content})).sort((a,b)=>a.path.localeCompare(b.path))
@@ -99,28 +151,44 @@ function exportPassport(project: ProjectBuilderResult) {
     if (stored.sourceHash === hash && stored.projectId === project.projectId) return stored
     // Stale receipts must never bless edited code.
   }
-  return projectPassport(project)
+  return projectPassport({ ...project, now })
 }
 
 export async function getProjectArtifact(id: string, ownerId: string) {
+  if (typeof id !== "string" || !ARTIFACT_ID.test(id)) return null
   cleanup()
   const normalizedOwner = String(ownerId || "guest").trim().toLowerCase() || "guest"
-  let artifact = store().get(String(id || "")) || null
+  let artifact = store().get(id)?.artifact || null
 
   if (artifact && artifact.ownerId !== normalizedOwner) return null
 
   if (!artifact) {
-    artifact = await readPrivateJson<StoredProjectArtifact>(artifactKey(normalizedOwner, id))
+    artifact = await readPrivateJson<StoredProjectArtifact>(artifactKey(normalizedOwner, id), { throwOnReadError: true })
     if (artifact?.ownerId !== normalizedOwner) return null
-    if (artifact) store().set(artifact.id, artifact)
   }
 
   if (!artifact || artifact.expiresAt <= Date.now()) {
-    if (artifact) {
-      store().delete(artifact.id)
-      await deletePrivateJson(artifactKey(normalizedOwner, artifact.id))
+    if (artifact && artifact.id === id) {
+      store().delete(id)
+      await deletePrivateJson(artifactKey(normalizedOwner, id))
     }
     return null
   }
-  return artifact
+  try {
+    if (artifact.id !== id || !Number.isFinite(artifact.createdAt) || !Number.isFinite(artifact.expiresAt)
+      || artifact.expiresAt <= artifact.createdAt || typeof artifact.filename !== "string"
+      || typeof artifact.project?.title !== "string" || typeof artifact.project.projectId !== "string"
+      || artifact.project.status !== "completed" || !artifact.project.qa?.passed
+      || !Array.isArray(artifact.project.qa.checks) || !Array.isArray(artifact.project.qa.issues)) return null
+    validateFiles(artifact.project.files)
+    // Legacy records remain readable after structural validation. New records
+    // additionally bind their envelope and every file to the saved checksum.
+    if (artifact.integrity && (artifact.integrity.version !== 1 || artifact.integrity.sha256 !== recordChecksum(artifact))) return null
+    const result = snapshot(artifact)
+    cacheArtifact(artifact)
+    return result
+  } catch {
+    store().delete(id)
+    return null
+  }
 }

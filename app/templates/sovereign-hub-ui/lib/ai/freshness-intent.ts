@@ -12,6 +12,8 @@ export type FreshnessIntent = {
   window?: TimeWindow
   historical: boolean
   ttlMs: number
+  /** A dated event digest, distinct from the current state of documentation. */
+  news?: boolean
 }
 
 export const NO_WEB = /(?:не\s+(?:ищи|гугли|загугливай)|без\s+(?:поиска|интернета|гугла)|do not (?:search|browse)|don't (?:search|browse)|without (?:web|search|internet)|интернетсіз|іздеме|іздеудің\s+қажеті\s+жоқ)/iu
@@ -20,8 +22,8 @@ const CREATIVE = /^(?:(?:пожалуйста|please)\s+)?(?:(?:напиши|с�
 const SELF_CONTAINED = /^(?:(?:пожалуйста|please)\s+)?(?:переведи|перевод|translate\b|аудар|посчитай|вычисли|реши|calculate\b|compute\b|solve\b|есепте|шеш\b|докажи|prove\b)/iu
 const WRITING = /(?:напиши|создай|сделай|объясни|рассчитай|write\b|build\b|create\b|explain\b|implement\b|жаз|түсіндір|жаса)/iu
 const LIVE_WORDS = /(?:последние?\s+24\s+час|за\s+24\s+час|сегодня|вчера|прямо\s+сейчас|в\s+реальном\s+времени|\btoday\b|\byesterday\b|last\s+24\s+hours|right\s+now|бүгін|кеше|соңғы\s+24\s+сағат)/iu
-const TIME_WORDS = /(?:последн|новейш|свеж|актуальн|на\s+этой\s+неделе|текущ|\blatest\b|\bcurrent\b|\brecent\b|this\s+(?:week|month|year)|соңғы|қазіргі|жаңа)/iu
-const VOLATILE = /(?:новост|погод|курс\s+(?:валют|доллар|евро)|цен[ауы]|стоимост|сколько\s+стоит|президент|министр|расписани|спикер|релиз|выпуст|выш[её]л|(?<!\p{L})(?:версии?|версия)|доступност|\b(?:news|weather|price|pricing|exchange rate|president|ceo|schedule|release|version|available|availability)\b|жаңалық|бағасы|бағам|нұсқа|шығарыл|президент|министр)/iu
+const TIME_WORDS = /(?:последн|новейш|свеж|актуальн|сейчас|на\s+данный\s+момент|на\s+сегодняшний\s+день|на\s+этой\s+неделе|текущ|\blatest\b|\bcurrent\b|\brecent\b|\bnow\b|this\s+(?:week|month|year)|соңғы|қазіргі|қазір|жаңа)/iu
+const VOLATILE = /(?:новост|погод|курс\s+(?:валют|доллар|евро)|цен[ауы]|стоимост|сколько(?:\s+\p{L}+){0,3}\s+стоит|президент|министр|расписани|спикер|релиз|выпуст|выш[её]л|(?<!\p{L})(?:версии?|версия)|доступност|\b(?:news|weather|price|pricing|exchange rate|president|ceo|schedule|release|version|available|availability)\b|жаңалық|бағасы|бағам|нұсқа|шығарыл|президент|министр)/iu
 const AI = /(?:\b(?:AI|LLM|GPT|OpenAI|Anthropic|Claude|Gemini|DeepMind|Meta|Llama|DeepSeek|Alibaba|Qwen|Mistral|xAI|Grok)\b|(?<!\p{L})ИИ[ -]?модел|модел.{0,20}(?<!\p{L})ИИ(?!\p{L})|искусственн.{0,20}интеллект|жасанды\s+интеллект|ЖИ[ -]?модел)/iu
 /** A ranked model list is a changing factual claim, even without words like "today". */
 const LEADERBOARD = /(?:\b(?:top[\s-]?\d+|rankings?|leaderboards?|benchmarks?|best|strongest)\b|(?:^|[^\p{L}])топ(?:[\s-]?\d+|(?=[^\p{L}]|$))|рейтинг\p{L}*|лидерборд\p{L}*|бенчмарк\p{L}*|лучш\p{L}*\s+\d+|үздік\p{L}*)/iu
@@ -36,6 +38,11 @@ const HISTORICAL = /(?:в\s+(?:19\d{2}|20\d{2})\s*году|историческ|
 const BASIC = /(?:фотосинтез|photosynthesis|теорем.{0,15}пифагор|pythagor|площадь\s+круга|закон\s+ньютона|newton's laws|арифметик|arithmetic|гравитация|what is a prime number)/iu
 const EVENT = /(?:спикер|участник|программ|speakers?|participants?|programme?|program|lineup|қатысушылар)/iu
 const TECH = /(?:технолог|продукт|компани|technology|technologies|products?|companies|next\.?js|react|python|node\.?js)/iu
+
+/** Event/news discovery differs from asking which documented state is current. */
+export function isNewsRequest(prompt: string): boolean {
+  return /(?:новост|дайджест|сводк|\bnews\b|жаңалық|что(?:\s+(?:сейчас|сегодня))?\s+(?:нового|новенького)|what(?:['’]s| is)\s+new|latest\s+(?:updates|announcements))/iu.test(prompt)
+}
 
 export function localDateAt(now: Date, timeZone = "Asia/Almaty"): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(now)
@@ -65,6 +72,7 @@ export function temporalWindow(prompt: string, now = new Date(), timeZone = "Asi
   else if (/(?:семь|7|seven)\s*(?:дн|days|күн)|недел|this week|соңғы\s+апта/iu.test(prompt)) { from = end - 7 * day; label = "last-seven-days" }
   else if (/текущ.{0,8}месяц|this month|осы ай/iu.test(prompt)) { from = localMidnight(date.slice(0, 7) + "-01", timeZone); label = "this-month" }
   else if (/текущ.{0,8}год|this year|осы жыл/iu.test(prompt)) { from = localMidnight(date.slice(0, 4) + "-01-01", timeZone); label = "this-year" }
+  else if (isNewsRequest(prompt) && !/(?:в|за|in)\s+(?:19|20)\d{2}(?:\s|$)|(?:19|20)\d{2}\s*(?:год|жыл)/iu.test(prompt)) { from = end - 7 * day; label = "last-seven-days" }
   else return undefined
   return { from: new Date(from).toISOString(), to: new Date(to).toISOString(), label }
 }
@@ -77,9 +85,9 @@ export function classifyFreshness(prompt: string, now = new Date(), timeZone = "
   const result = (category: FreshnessCategory, needsSearch: boolean, reason: string): FreshnessIntent => {
     const window = needsSearch && !historical ? temporalWindow(text, now, timeZone) : undefined
     // "Latest model today" asks what is current as of today, not what was released today.
-    const asOf = window?.label === "today" && !/(?:новост|news|жаңалық|произошл|выш|выпуст|released|announced|launch|опублик|событ|не\s+болды|шығарыл)/iu.test(text)
+    const asOf = window?.label === "today" && !isNewsRequest(text) && !/(?:произошл|выш|выпуст|released|announced|launch|опублик|событ|не\s+болды|шығарыл)/iu.test(text)
       && /(?:модел|models?|верс|version|price|pricing|цен|погод|weather|президент|president|министр|minister|бағам|нұсқа)/iu.test(text)
-    return { ...base, category, needsSearch, reason, ttlMs: category === "LIVE" ? 60_000 : category === "STATIC" ? 1_200_000 : 300_000, ...(window && !asOf ? { window } : {}) }
+    return { ...base, category, needsSearch, reason, news: needsSearch && !historical && isNewsRequest(text), ttlMs: category === "LIVE" || needsSearch && isNewsRequest(text) ? 60_000 : category === "STATIC" ? 1_200_000 : 300_000, ...(window && !asOf ? { window } : {}) }
   }
   if (!text) return result("STATIC", false, "empty")
   if (NO_WEB.test(text)) return result("UNCERTAIN", false, "user-opt-out")
@@ -88,7 +96,7 @@ export function classifyFreshness(prompt: string, now = new Date(), timeZone = "
   if (CREATIVE.test(text) && !/(?:новост|источник|research|sources|news|жаңалық)/iu.test(text)) return result("STATIC", false, "creative")
   if (SELF_CONTAINED.test(text) && !VOLATILE.test(text) && !/(?:актуальн|current|latest|соңғы|қазіргі)/iu.test(text)) return result("STATIC", false, "self-contained")
   if (historical) return result("STATIC", false, "historical")
-  const changing = isModelLeaderboardRequest(text) || VOLATILE.test(text) || AI.test(text) && (COMPARISON.test(text) || TIME_WORDS.test(text) || /(?:модел|models?|GPT[ -]?\d|Claude[ -]?\d|Gemini[ -]?\d|Grok[ -]?\d)/iu.test(text))
+  const changing = isNewsRequest(text) || isModelLeaderboardRequest(text) || VOLATILE.test(text) || AI.test(text) && (COMPARISON.test(text) || TIME_WORDS.test(text) || /(?:модел|models?|GPT[ -]?\d|Claude[ -]?\d|Gemini[ -]?\d|Grok[ -]?\d)/iu.test(text))
     || TECH.test(text) && /(?:нов[а-я]*|latest|current|recent|new|жаңа|соңғы)/iu.test(text)
     || EVENT.test(text) && /(?:форум|конференц|мероприяти|выставк|conference|summit|forum|event|expo)/iu.test(text)
   const factualTime = (TIME_WORDS.test(text) || LIVE_WORDS.test(text)) && /(?:кто|како|каки|что.{0,20}(?:произошло|нового)|когда|what|which|who|when|қандай|не\s+болды)/iu.test(text)

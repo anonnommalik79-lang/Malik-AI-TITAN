@@ -1,5 +1,5 @@
 import type { MalikWebSource } from "../ai/web-research-types"
-import { classifyFreshness, type FreshnessIntent } from "../ai/freshness-intent"
+import { classifyFreshness, isNewsRequest, type FreshnessIntent } from "../ai/freshness-intent"
 
 const AI_DOMAINS = ["openai.com", "anthropic.com", "claude.com", "deepmind.google", "ai.google.dev", "blog.google", "ai.meta.com", "llama.com", "deepseek.com", "qwen.ai", "qwenlm.github.io", "mistral.ai", "x.ai"]
 const SCIENCE_DOMAINS = ["arxiv.org", "nature.com", "science.org", "nasa.gov", "esa.int"]
@@ -72,9 +72,16 @@ export function assessSources(prompt: string, sources: readonly MalikWebSource[]
     const authority = sourceAuthority(prompt, url)
     const dated = Date.parse(eventAt || publishedAt || "")
     const inWindow = !intent.window || Number.isFinite(dated) && dated >= Date.parse(intent.window.from) && dated <= Date.parse(intent.window.to)
-    const freshness = intent.historical ? "historical" : intent.window && !inWindow ? "outside-window" : Number.isFinite(dated) ? now - dated <= 30 * 86_400_000 ? "recent" : "old" : "undated"
+    const freshness = intent.historical ? "historical" : intent.window ? inWindow ? "recent" : "outside-window" : Number.isFinite(dated) ? now - dated <= 30 * 86_400_000 ? "recent" : "old" : "undated"
     return [{ ...input, url, domain: new URL(url).hostname.replace(/^www\./u, ""), title: sanitizeEvidenceText(input.title, 180), snippet: sanitizeEvidenceText(input.snippet || ""), publishedAt, eventAt, checkedAt, authority, freshness, currentCatalog: input.provider === "github-releases" && authority === "primary" && input.currentCatalog === true } as MalikWebSource]
-  }).sort((a, b) => evidenceScore(b) - evidenceScore(a))
+  }).sort((a, b) => {
+    if ((isNewsRequest(prompt) || intent.window) && !intent.historical) {
+      const dated = (source: MalikWebSource) => Date.parse(source.eventAt || source.publishedAt || "") || 0
+      const byDate = dated(b) - dated(a)
+      if (byDate) return byDate
+    }
+    return evidenceScore(b) - evidenceScore(a)
+  })
 }
 
 function evidenceScore(source: MalikWebSource): number {
@@ -83,13 +90,21 @@ function evidenceScore(source: MalikWebSource): number {
 }
 
 export function currentEvidenceAvailable(sources: readonly MalikWebSource[], intent: FreshnessIntent): boolean {
-  return sources.some((source) => {
+  return sources.some(source => isCurrentEvidenceSource(source, intent))
+}
+
+function isCurrentEvidenceSource(source: MalikWebSource, intent: FreshnessIntent): boolean {
     if (!source.snippet?.trim()) return false
     if (source.provider === "verified-index" && Date.parse(intent.checkedAt) - Date.parse(source.checkedAt || "") > intent.ttlMs && !source.readAt) return false
     if (intent.window) return source.freshness === "recent" || source.freshness === "old" && intent.historical
     // Undated pages can support current documentation but not a dated announcement.
     return source.freshness !== "outside-window" && (source.freshness !== "old" || source.currentCatalog === true)
-  })
+}
+
+/** Old news may be background, but must not enter a current-news answer as proof. */
+export function currentNewsSources(prompt: string, sources: readonly MalikWebSource[], intent = classifyFreshness(prompt)): MalikWebSource[] {
+  return (isNewsRequest(prompt) || intent.window) && intent.needsSearch && !intent.historical
+    ? sources.filter(source => isCurrentEvidenceSource(source, intent)) : [...sources]
 }
 
 export type EvidenceClaim = { subject: string; predicate: string; value: string; sourceUrl: string; eventAt?: string }
@@ -142,10 +157,16 @@ export function finalizeFreshAnswer(answer: string, intent: FreshnessIntent, sou
   if (!currentEvidenceAvailable(sources, intent)) return unavailableFreshAnswer(intent)
   // Array indexes and example URLs inside code are not factual citations.
   const citationBody = answer.replace(/(`{3,}|~{3,})[^\n]*\n[\s\S]*?\1/gu, " ").replace(/`[^`\n]+`/gu, " ")
-  const invalidCitation = [...citationBody.matchAll(/(?<!!)\[(\d{1,3})\](?!\()/gu)].some((match) => Number(match[1]) < 1 || Number(match[1]) > citationSources.length)
+  const news = intent.news === true || Boolean(intent.window && !intent.historical)
+  const webUrls = new Set(sources.map(source => safeEvidenceUrl(source.url)))
+  // Connected/private project citations have their own provenance. They must
+  // not be mistaken for public news items just because an answer uses both.
+  const citationEligible = (source: MalikWebSource) => !news || !webUrls.has(safeEvidenceUrl(source.url)) || isCurrentEvidenceSource(source, intent)
+  const invalidCitation = [...citationBody.matchAll(/(?<!!)\[(\d{1,3})\](?!\()/gu)].some((match) => Number(match[1]) < 1 || Number(match[1]) > citationSources.length
+    || !citationEligible(citationSources[Number(match[1]) - 1]))
   const urls = [...citationBody.matchAll(/https?:\/\/[^\s)<>"\]]+/gu)].map((match) => safeEvidenceUrl(match[0].replace(/[.,;]+$/u, "")))
-  const allowed = new Set(citationSources.map((source) => safeEvidenceUrl(source.url)))
+  const allowed = new Set(citationSources.filter(citationEligible).map((source) => safeEvidenceUrl(source.url)))
   if (invalidCitation || urls.some((url) => !url || !allowed.has(url))) return unavailableFreshAnswer(intent)
-  const citations = /\[\d+\]/u.test(citationBody) || urls.length ? "" : "\n\n" + sources.slice(0, 3).map((source, index) => `[${index + 1}] ${source.title}: ${source.url}`).join("\n")
+  const citations = /\[\d+\]/u.test(citationBody) || urls.length ? "" : "\n\n" + sources.filter(source => !news || isCurrentEvidenceSource(source, intent)).slice(0, 3).map((source) => `[${citationSources.findIndex(candidate => candidate.url === source.url) + 1}] ${source.title}: ${source.url}`).join("\n")
   return `${answer.trim()}${citations}\n\n${freshnessCheckLine(intent)}`
 }

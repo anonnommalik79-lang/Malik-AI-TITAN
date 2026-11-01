@@ -7,6 +7,7 @@ import { attributionKind } from "./attribution-evidence"
 import { websiteIntent } from "@/lib/website/engine/intent"
 import { resolveDomainPlan, type DomainPlan } from "./domain-intelligence"
 export type WebSearchOptions = {
+  /** UI research preference; current factual questions still require evidence. */
   research?: boolean
   disableResearch?: boolean
   forceResearch?: boolean
@@ -17,14 +18,20 @@ export type WebSearchOptions = {
 /** Pure intent check: no classifier request, keys, or token consumption. */
 export function shouldUseWeb(prompt: string, options: WebSearchOptions = {}, serverPlan?: DomainPlan): boolean {
   const text = prompt.toLowerCase().replace(/ё/g, "е").replace(/\s+/g, " ").trim()
-  if (!text || options.disableResearch || options.research === false) return false
-  if (NO_WEB.test(text) && !serverPlan) return false
+  if (!text || options.disableResearch) return false
+  if (NO_WEB.test(text)) return false
   const plan = serverPlan || resolveDomainPlan({ prompt, messages: options.history || options.messages })
   if (plan.evidence.web === "off" && options.forceResearch !== true) return false
   // A build brief may contain «современный», «2026» or ask for photos/video.
   // Those are project requirements, not a news-research answer. Any factual
   // content research belongs to a separate project stage.
   if (websiteIntent(prompt)) return false
+  const freshness = classifyFreshness(text)
+  if (freshness.category === "STATIC" && !freshness.historical && !freshness.needsSearch && !options.forceResearch) return false
+  // An unchecked Web button is not a request to invent current facts from
+  // model memory. Explicit no-web text and server restrictions above win.
+  if (options.research === false && !freshness.needsSearch) return false
+  if (freshness.needsSearch && !freshness.historical) return true
   if (plan.evidence.web === "required") return true
   if (/(?:не\s+(?:ищи|гугли|загугливай)|без\s+(?:поиска|интернета|гугла)|do not (?:search|browse)|don't (?:search|browse)|without (?:web|search|internet))/i.test(text)) return false
   // An explicit opt-in forces search, except for explicit opt-out and site generation.
@@ -48,7 +55,6 @@ export function shouldUseWeb(prompt: string, options: WebSearchOptions = {}, ser
   if (attributionKind(text)) return true
   // An analyst checks the current numbers before analysing a market, a company, a technology or an event.
   if (asksAnalysis(text) && (["market", "company", "technology", "event"].includes(analysisFrame(text)) || (analysisFrame(text) === "decision" && /бизнес|кофейн|магазин|салон|открыва|открыть|инвест|вклад|акци|крипт|недвиж|business|invest|stock|crypto/iu.test(text)))) return true
-  const freshness = classifyFreshness(text)
   if (freshness.category === "STATIC" && !options.forceResearch) return false
 
   // Coding/writing/calculation requests must stay on the model path even when

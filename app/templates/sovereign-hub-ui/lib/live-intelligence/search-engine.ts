@@ -1,6 +1,6 @@
 import type { MalikWebSource } from "../ai/web-research-types"
 import { classifyFreshness, publicSearchText, type FreshnessMode, type FreshnessIntent } from "../ai/freshness-intent"
-import { assessSources, currentEvidenceAvailable } from "./evidence"
+import { assessSources, currentEvidenceAvailable, currentNewsSources } from "./evidence"
 
 export type LiveSearchProvider = { name: string; timeoutMs?: number; run: (query: string, limit: number, signal: AbortSignal, intent: FreshnessIntent) => Promise<MalikWebSource[]> }
 export type SearchAttempt = { provider: string; outcome: "success" | "empty" | "failed" | "circuit-open"; ms: number }
@@ -112,7 +112,7 @@ export async function runLiveSearch(input: {
     result.sources.push(...confirmed)
   }
   if (input.signal?.aborted) input.signal.throwIfAborted()
-  result.sources = take(result.sources).slice(0, limits.results)
+  result.sources = currentNewsSources(input.prompt, take(result.sources), intent).slice(0, limits.results)
   result.tookMs = clock() - started
   result.cost = result.calls ? "provider-dependent" : "no-api-calls"
   return result

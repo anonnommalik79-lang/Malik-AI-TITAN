@@ -1,0 +1,253 @@
+{
+  "baselineCommit": "3328f73b",
+  "fixtureSHA256": "5e8235ee96b999ffa3e864fbdfeeb8a8582aecfdcb77667d9964ca9f4f6bc188",
+  "beforePassed": 15,
+  "afterPassed": 46,
+  "total": 46,
+  "modelCalls": 0,
+  "visualFilesChanged": 0,
+  "livePublicSearch": {
+    "checkedAt": "2026-11-01T15:40:40.747Z",
+    "elapsedMs": 3242,
+    "sourceCount": 4,
+    "publishedAt": [
+      "2026-11-01T13:37:12Z",
+      "2026-10-31T12:20:00Z",
+      "2026-10-30T23:28:26Z",
+      "2026-10-30T21:09:58Z"
+    ],
+    "mode": "real HTTP; no model call; no paid search keys"
+  },
+  "cases": [
+    {
+      "name": "automatic recent-news evidence window: Последние новости NVIDIA",
+      "beforePassed": false,
+      "afterPassed": true
+    },
+    {
+      "name": "automatic recent-news evidence window: Какие новости Казахстана?",
+      "beforePassed": false,
+      "afterPassed": true
+    },
+    {
+      "name": "automatic recent-news evidence window: Свежие новости медицины",
+      "beforePassed": false,
+      "afterPassed": true
+    },
+    {
+      "name": "automatic recent-news evidence window: Расскажи новости бизнеса",
+      "beforePassed": false,
+      "afterPassed": true
+    },
+    {
+      "name": "automatic recent-news evidence window: Что нового у OpenAI?",
+      "beforePassed": false,
+      "afterPassed": true
+    },
+    {
+      "name": "automatic recent-news evidence window: Что новенького в науке?",
+      "beforePassed": false,
+      "afterPassed": true
+    },
+    {
+      "name": "automatic recent-news evidence window: Latest news about energy",
+      "beforePassed": false,
+      "afterPassed": true
+    },
+    {
+      "name": "automatic recent-news evidence window: What's new at Google?",
+      "beforePassed": false,
+      "afterPassed": true
+    },
+    {
+      "name": "automatic recent-news evidence window: Recent sports news",
+      "beforePassed": false,
+      "afterPassed": true
+    },
+    {
+      "name": "automatic recent-news evidence window: Соңғы жаңалықтар қандай?",
+      "beforePassed": false,
+      "afterPassed": true
+    },
+    {
+      "name": "automatic recent-news evidence window: Қазақстан жаңалықтары",
+      "beforePassed": false,
+      "afterPassed": true
+    },
+    {
+      "name": "automatic recent-news evidence window: Жаңа технология жаңалықтары",
+      "beforePassed": false,
+      "afterPassed": true
+    },
+    {
+      "name": "explicit news period is preserved: Новости сегодня",
+      "beforePassed": true,
+      "afterPassed": true
+    },
+    {
+      "name": "explicit news period is preserved: News yesterday",
+      "beforePassed": true,
+      "afterPassed": true
+    },
+    {
+      "name": "explicit news period is preserved: Жаңалықтар соңғы 24 сағат",
+      "beforePassed": true,
+      "afterPassed": true
+    },
+    {
+      "name": "ordinary task/opt-out preserved: Реши 17 * 23",
+      "beforePassed": true,
+      "afterPassed": true
+    },
+    {
+      "name": "ordinary task/opt-out preserved: Напиши стих",
+      "beforePassed": true,
+      "afterPassed": true
+    },
+    {
+      "name": "ordinary task/opt-out preserved: Объясни теорему Пифагора",
+      "beforePassed": true,
+      "afterPassed": true
+    },
+    {
+      "name": "ordinary task/opt-out preserved: Напиши React компонент кнопки",
+      "beforePassed": true,
+      "afterPassed": true
+    },
+    {
+      "name": "ordinary task/opt-out preserved: Explain CUDA",
+      "beforePassed": true,
+      "afterPassed": true
+    },
+    {
+      "name": "ordinary task/opt-out preserved: Өлең жаз",
+      "beforePassed": true,
+      "afterPassed": true
+    },
+    {
+      "name": "ordinary task/opt-out preserved: Переведи: latest news",
+      "beforePassed": true,
+      "afterPassed": true
+    },
+    {
+      "name": "ordinary task/opt-out preserved: Без интернета: последние новости",
+      "beforePassed": true,
+      "afterPassed": true
+    },
+    {
+      "name": "news are ordered by event/publication date ahead of source authority",
+      "beforePassed": false,
+      "afterPassed": true
+    },
+    {
+      "name": "a new check/update/crawl timestamp cannot refresh an old news event",
+      "beforePassed": true,
+      "afterPassed": true
+    },
+    {
+      "name": "fresh unrelated evidence cannot validate a cited old news item",
+      "beforePassed": false,
+      "afterPassed": true
+    },
+    {
+      "name": "fallback continues past stale/undated primary results",
+      "beforePassed": false,
+      "afterPassed": true
+    },
+    {
+      "name": "news cache expires within one minute and revalidates the rolling window",
+      "beforePassed": false,
+      "afterPassed": true
+    },
+    {
+      "name": "no fresh result returns no stale news as current evidence",
+      "beforePassed": false,
+      "afterPassed": true
+    },
+    {
+      "name": "provider time filters share the actual user's period",
+      "beforePassed": false,
+      "afterPassed": true
+    },
+    {
+      "name": "an explicit year window includes valid earlier events in that year",
+      "beforePassed": false,
+      "afterPassed": true
+    },
+    {
+      "name": "as-of stable release is distinct from a release announced today",
+      "beforePassed": true,
+      "afterPassed": true
+    },
+    {
+      "name": "historical news does not receive a current seven-day window",
+      "beforePassed": true,
+      "afterPassed": true
+    },
+    {
+      "name": "explicit no-web and server disable still win over automatic news search",
+      "beforePassed": true,
+      "afterPassed": true
+    },
+    {
+      "name": "changing facts require evidence with Web unchecked: Кто сейчас CEO NVIDIA?",
+      "beforePassed": false,
+      "afterPassed": true
+    },
+    {
+      "name": "changing facts require evidence with Web unchecked: Какие ограничения Gemini API действуют сейчас?",
+      "beforePassed": false,
+      "afterPassed": true
+    },
+    {
+      "name": "changing facts require evidence with Web unchecked: What Gemini API limits apply now?",
+      "beforePassed": false,
+      "afterPassed": true
+    },
+    {
+      "name": "changing facts require evidence with Web unchecked: Қазір Gemini API қандай шектеулері бар?",
+      "beforePassed": false,
+      "afterPassed": true
+    },
+    {
+      "name": "changing facts require evidence with Web unchecked: Проверь текущую версию Next.js",
+      "beforePassed": false,
+      "afterPassed": true
+    },
+    {
+      "name": "changing facts require evidence with Web unchecked: Сколько сейчас стоит iPhone?",
+      "beforePassed": false,
+      "afterPassed": true
+    },
+    {
+      "name": "actual adapter request filters and sequential fallback: serper",
+      "beforePassed": false,
+      "afterPassed": true
+    },
+    {
+      "name": "actual adapter request filters and sequential fallback: brave",
+      "beforePassed": false,
+      "afterPassed": true
+    },
+    {
+      "name": "actual adapter request filters and sequential fallback: tavily",
+      "beforePassed": false,
+      "afterPassed": true
+    },
+    {
+      "name": "actual adapter request filters and sequential fallback: all-fail",
+      "beforePassed": false,
+      "afterPassed": true
+    },
+    {
+      "name": "RSS preserves long article URLs instead of applying title truncation",
+      "beforePassed": false,
+      "afterPassed": true
+    },
+    {
+      "name": "RSS sorts the complete candidate pool before applying the result limit",
+      "beforePassed": false,
+      "afterPassed": true
+    }
+  ]
+}

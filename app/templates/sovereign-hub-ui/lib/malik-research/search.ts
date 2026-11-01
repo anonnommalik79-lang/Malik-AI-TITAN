@@ -1,7 +1,9 @@
 import type { SearchResult } from "./types";
 import { cleanTitle, decodeHtml, domainOf, fetchWithTimeout, stripHtml } from "./utils";
 import { runLiveSearch } from "../live-intelligence/search-engine";
-import { classifyFreshness } from "../ai/freshness-intent";
+import { classifyFreshness, type FreshnessIntent } from "../ai/freshness-intent";
+import { searchTimeFilters } from "../live-intelligence/search-time-filters";
+import { searchNewsFeed } from "../live-intelligence/news-search";
 
 function uniqueResults(results: SearchResult[], limit: number) {
   const seen = new Set<string>();
@@ -53,7 +55,7 @@ function unwrapDuckUrl(href: string) {
   return decoded;
 }
 
-async function searchSerper(query: string, limit: number, signal?: AbortSignal): Promise<SearchResult[]> {
+async function searchSerper(query: string, limit: number, signal?: AbortSignal, intent = classifyFreshness(query)): Promise<SearchResult[]> {
   const key = process.env.SERPER_API_KEY?.trim();
   if (!key) return [];
 
@@ -65,7 +67,7 @@ async function searchSerper(query: string, limit: number, signal?: AbortSignal):
         "X-API-KEY": key,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ q: query, num: Math.min(limit, 10) }),
+      body: JSON.stringify({ q: query, num: Math.min(limit, 10), ...searchTimeFilters(intent).serper }),
     },
     7000, signal
   );
@@ -93,7 +95,7 @@ async function searchSerper(query: string, limit: number, signal?: AbortSignal):
   );
 }
 
-async function tavilyFetch(query: string, limit: number, key: string, useBearer: boolean, signal?: AbortSignal) {
+async function tavilyFetch(query: string, limit: number, key: string, useBearer: boolean, signal?: AbortSignal, intent = classifyFreshness(query)) {
   return fetchWithTimeout(
     "https://api.tavily.com/search",
     {
@@ -109,20 +111,21 @@ async function tavilyFetch(query: string, limit: number, key: string, useBearer:
         search_depth: "basic",
         include_answer: false,
         include_raw_content: false,
+        ...searchTimeFilters(intent).tavily,
       }),
     },
     8000, signal
   );
 }
 
-async function searchTavily(query: string, limit: number, signal?: AbortSignal): Promise<SearchResult[]> {
+async function searchTavily(query: string, limit: number, signal?: AbortSignal, intent = classifyFreshness(query)): Promise<SearchResult[]> {
   const key = process.env.TAVILY_API_KEY?.trim();
   if (!key) return [];
 
-  let res = await tavilyFetch(query, limit, key, false, signal);
+  let res = await tavilyFetch(query, limit, key, false, signal, intent);
 
   if (!res.ok && [401, 403, 422].includes(res.status)) {
-    res = await tavilyFetch(query, limit, key, true, signal);
+    res = await tavilyFetch(query, limit, key, true, signal, intent);
   }
 
   if (!res.ok) return [];
@@ -149,16 +152,15 @@ async function searchTavily(query: string, limit: number, signal?: AbortSignal):
   );
 }
 
-async function searchBrave(query: string, limit: number, signal?: AbortSignal): Promise<SearchResult[]> {
+async function searchBrave(query: string, limit: number, signal?: AbortSignal, intent = classifyFreshness(query)): Promise<SearchResult[]> {
   const key = process.env.BRAVE_SEARCH_API_KEY?.trim();
   if (!key) return [];
 
   const url = new URL("https://api.search.brave.com/res/v1/web/search");
   url.searchParams.set("q", query);
   url.searchParams.set("count", String(Math.min(limit, 20)));
-  const intent = classifyFreshness(query);
-  if (intent.category === "LIVE") url.searchParams.set("freshness", "pd");
-  else if (intent.needsSearch) url.searchParams.set("freshness", "pm");
+  const freshness = searchTimeFilters(intent).brave;
+  if (freshness) url.searchParams.set("freshness", freshness);
 
   const res = await fetchWithTimeout(
     url.toString(),
@@ -184,7 +186,7 @@ async function searchBrave(query: string, limit: number, signal?: AbortSignal): 
             title: x.title,
             url: x.url,
             snippet: x.description,
-            publishedAt: x.page_age || x.age,
+            // Brave web age may be crawl/modified time, not article publication.
           },
           "brave"
         )
@@ -324,11 +326,12 @@ async function runProvider(name: string, fn: () => Promise<SearchResult[]>) {
   }
 }
 
-function availableProviders() {
+function availableProviders(intent: FreshnessIntent) {
   return [
     ...(process.env.SERPER_API_KEY?.trim() ? [{ name: "serper", run: searchSerper }] : []),
-    ...(process.env.TAVILY_API_KEY?.trim() ? [{ name: "tavily", run: searchTavily }] : []),
     ...(process.env.BRAVE_SEARCH_API_KEY?.trim() ? [{ name: "brave", run: searchBrave }] : []),
+    ...(process.env.TAVILY_API_KEY?.trim() ? [{ name: "tavily", run: searchTavily }] : []),
+    ...(intent.news ? [{ name: "google-news", run: searchNewsFeed }] : []),
     ...(process.env.SEARXNG_URL?.trim() ? [{ name: "searxng", run: searchSearxng }] : []),
     ...(process.env.JINA_SEARCH_DISABLED === "true" ? [] : [{ name: "jina", run: searchJina }]),
     { name: "duckduckgo", run: searchDuckDuckGo },
@@ -336,7 +339,7 @@ function availableProviders() {
 }
 
 export async function searchWeb(query: string, limit = 8): Promise<SearchResult[]> {
-  const result = await runLiveSearch({ prompt: query, queries: [query], mode: "fast", providers: availableProviders() })
+  const result = await runLiveSearch({ prompt: query, queries: [query], mode: "fast", providers: availableProviders(classifyFreshness(query)) })
   return result.sources.slice(0, limit)
 }
 

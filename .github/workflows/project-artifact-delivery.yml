@@ -1,0 +1,45 @@
+name: Project artifact delivery
+
+on:
+  pull_request:
+    paths:
+      - "app/templates/sovereign-hub-ui/lib/server/project-artifact-*.ts"
+      - "app/templates/sovereign-hub-ui/lib/proof/project.ts"
+      - "app/templates/sovereign-hub-ui/lib/work/documents/zip.ts"
+      - "app/templates/sovereign-hub-ui/app/api/ai/project/artifacts/**"
+      - "app/templates/sovereign-hub-ui/scripts/verify-project-delivery.mjs"
+      - ".github/workflows/project-artifact-delivery.yml"
+  push:
+    branches: [main]
+    paths:
+      - "app/templates/sovereign-hub-ui/lib/server/project-artifact-*.ts"
+      - "app/templates/sovereign-hub-ui/lib/proof/project.ts"
+      - "app/templates/sovereign-hub-ui/lib/work/documents/zip.ts"
+      - "app/templates/sovereign-hub-ui/app/api/ai/project/artifacts/**"
+      - "app/templates/sovereign-hub-ui/scripts/verify-project-delivery.mjs"
+      - ".github/workflows/project-artifact-delivery.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: project-artifact-delivery-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: app/templates/sovereign-hub-ui
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/templates/sovereign-hub-ui/package-lock.json
+      - run: npm ci --legacy-peer-deps
+      - name: Real storage and download modules with isolated I/O fixtures
+        run: node --test scripts/verify-project-delivery.mjs scripts/verify-project-passports.mjs

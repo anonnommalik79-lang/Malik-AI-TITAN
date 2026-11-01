@@ -1,0 +1,201 @@
+{
+  "baselineCommit": "61dee8dc",
+  "fixtureSHA256": "ff34a47bdd3bd0565518afab8b92f1e0574b49cac7451d5ae77ae98505b27fe6",
+  "beforePassed": 7,
+  "afterPassed": 38,
+  "total": 38,
+  "modelCalls": 0,
+  "visualFilesChanged": 0,
+  "cases": [
+    {
+      "name": "multi-file Unicode project survives storage, cold read, download and ZIP CRC",
+      "beforePassed": true,
+      "afterPassed": true
+    },
+    {
+      "name": "changing the caller's source does not mutate the saved result",
+      "beforePassed": false,
+      "afterPassed": true
+    },
+    {
+      "name": "changing a returned snapshot does not mutate the cache",
+      "beforePassed": false,
+      "afterPassed": true
+    },
+    {
+      "name": "reject unsafe or extraction-ambiguous filename \"../escape.js\"",
+      "beforePassed": false,
+      "afterPassed": true
+    },
+    {
+      "name": "reject unsafe or extraction-ambiguous filename \"/root.js\"",
+      "beforePassed": false,
+      "afterPassed": true
+    },
+    {
+      "name": "reject unsafe or extraction-ambiguous filename \"C:/root.js\"",
+      "beforePassed": false,
+      "afterPassed": true
+    },
+    {
+      "name": "reject unsafe or extraction-ambiguous filename \"a\\\\\\\\b.js\"",
+      "beforePassed": false,
+      "afterPassed": true
+    },
+    {
+      "name": "reject unsafe or extraction-ambiguous filename \"a//b.js\"",
+      "beforePassed": false,
+      "afterPassed": true
+    },
+    {
+      "name": "reject unsafe or extraction-ambiguous filename \"a/./b.js\"",
+      "beforePassed": false,
+      "afterPassed": true
+    },
+    {
+      "name": "reject unsafe or extraction-ambiguous filename \"a/../b.js\"",
+      "beforePassed": false,
+      "afterPassed": true
+    },
+    {
+      "name": "reject unsafe or extraction-ambiguous filename \"a/evil\\\\u0000.js\"",
+      "beforePassed": false,
+      "afterPassed": true
+    },
+    {
+      "name": "reject unsafe or extraction-ambiguous filename \"a/end.\"",
+      "beforePassed": false,
+      "afterPassed": true
+    },
+    {
+      "name": "reject unsafe or extraction-ambiguous filename \"CON.txt\"",
+      "beforePassed": false,
+      "afterPassed": true
+    },
+    {
+      "name": "reject extraction collision [\"app.ts\",\"app.ts\"]",
+      "beforePassed": false,
+      "afterPassed": true
+    },
+    {
+      "name": "reject extraction collision [\"App.ts\",\"app.ts\"]",
+      "beforePassed": false,
+      "afterPassed": true
+    },
+    {
+      "name": "reject extraction collision [\"é.txt\",\"é.txt\"]",
+      "beforePassed": false,
+      "afterPassed": true
+    },
+    {
+      "name": "reject oversized source before storage or ZIP allocation",
+      "beforePassed": false,
+      "afterPassed": true
+    },
+    {
+      "name": "cache is bounded by payload bytes and evicted durable projects can reopen",
+      "beforePassed": false,
+      "afterPassed": true
+    },
+    {
+      "name": "configured storage write failure cannot report a successfully saved project",
+      "beforePassed": false,
+      "afterPassed": true
+    },
+    {
+      "name": "unconfigured storage preserves the existing temporary-download fallback",
+      "beforePassed": true,
+      "afterPassed": true
+    },
+    {
+      "name": "owner isolation is enforced for warm and cold downloads",
+      "beforePassed": true,
+      "afterPassed": true
+    },
+    {
+      "name": "malformed IDs cannot alias existing private objects",
+      "beforePassed": false,
+      "afterPassed": true
+    },
+    {
+      "name": "mismatched stored ID or modified sealed content is not delivered",
+      "beforePassed": false,
+      "afterPassed": true
+    },
+    {
+      "name": "storage outage is retryable 503, not a false missing-file 404",
+      "beforePassed": false,
+      "afterPassed": true
+    },
+    {
+      "name": "large compressible source downloads within the existing Render bandwidth guard",
+      "beforePassed": false,
+      "afterPassed": true
+    },
+    {
+      "name": "same saved artifact has stable bytes, ETag, length and SHA-256",
+      "beforePassed": false,
+      "afterPassed": true
+    },
+    {
+      "name": "HEAD verifies the same owner and metadata without an archive body",
+      "beforePassed": false,
+      "afterPassed": true
+    },
+    {
+      "name": "interrupted downloads resume two byte ranges into the exact original ZIP",
+      "beforePassed": false,
+      "afterPassed": true
+    },
+    {
+      "name": "conditional download still requires ownership",
+      "beforePassed": false,
+      "afterPassed": true
+    },
+    {
+      "name": "structurally valid legacy records remain downloadable",
+      "beforePassed": true,
+      "afterPassed": true
+    },
+    {
+      "name": "expired downloads keep the existing expiry policy",
+      "beforePassed": true,
+      "afterPassed": true
+    },
+    {
+      "name": "large temporary downloads remain available within the bounded cache",
+      "beforePassed": false,
+      "afterPassed": true
+    },
+    {
+      "name": "bounded range handling: bytes=-0",
+      "beforePassed": false,
+      "afterPassed": true
+    },
+    {
+      "name": "bounded range handling: bytes=10-2",
+      "beforePassed": false,
+      "afterPassed": true
+    },
+    {
+      "name": "bounded range handling: bytes=99999999999999999999-",
+      "beforePassed": false,
+      "afterPassed": true
+    },
+    {
+      "name": "bounded range handling: items=0-9",
+      "beforePassed": true,
+      "afterPassed": true
+    },
+    {
+      "name": "bounded range handling: bytes=0-9,20-29",
+      "beforePassed": true,
+      "afterPassed": true
+    },
+    {
+      "name": "bounded range handling: bytes=0-999999",
+      "beforePassed": false,
+      "afterPassed": true
+    }
+  ]
+}

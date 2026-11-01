@@ -1,0 +1,47 @@
+name: Current evidence regression
+
+on:
+  pull_request:
+    paths:
+      - "app/templates/sovereign-hub-ui/lib/ai/freshness-intent.ts"
+      - "app/templates/sovereign-hub-ui/lib/ai/web-search-policy.ts"
+      - "app/templates/sovereign-hub-ui/lib/live-intelligence/**"
+      - "app/templates/sovereign-hub-ui/lib/malik-research/**"
+      - "app/templates/sovereign-hub-ui/lib/malik-god-router.ts"
+      - "app/templates/sovereign-hub-ui/scripts/verify-news-freshness.mjs"
+      - ".github/workflows/current-evidence.yml"
+  push:
+    branches: [main]
+    paths:
+      - "app/templates/sovereign-hub-ui/lib/ai/freshness-intent.ts"
+      - "app/templates/sovereign-hub-ui/lib/ai/web-search-policy.ts"
+      - "app/templates/sovereign-hub-ui/lib/live-intelligence/**"
+      - "app/templates/sovereign-hub-ui/lib/malik-research/**"
+      - "app/templates/sovereign-hub-ui/lib/malik-god-router.ts"
+      - "app/templates/sovereign-hub-ui/scripts/verify-news-freshness.mjs"
+      - ".github/workflows/current-evidence.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: current-evidence-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: app/templates/sovereign-hub-ui
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/templates/sovereign-hub-ui/package-lock.json
+      - run: npm ci --legacy-peer-deps
+      - run: node --test scripts/verify-news-freshness.mjs
+      - run: npm run test:live-intelligence
