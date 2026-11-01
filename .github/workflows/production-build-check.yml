@@ -88,6 +88,9 @@ jobs:
       - name: Production build
         run: npm run clean && npm run build
 
+      - name: Verify GPT and Claude native API protocols (offline)
+        run: npm run test:gpt-claude-native
+
       - name: Verify Malik model registry
         run: npm run test:models
 
