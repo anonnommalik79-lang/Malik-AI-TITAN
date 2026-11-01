@@ -270,10 +270,14 @@ function inline(text: string, keyPrefix: string): ReactNode[] {
   return out.length ? out : [text]
 }
 
-/** `**bold**`, `*italic*`, `code`, and safe http(s)/same-origin API links. */
+/**
+ * `**bold**`, `*italic*`, `_italic_`, `code`, and safe http(s)/same-origin API
+ * links. An underscore marks emphasis only outside a word, so snake_case and
+ * file_names stay as they are; the chat's own notes («_Остановлено…_») use it.
+ */
 function inlineBase(text: string, keyPrefix: string): ReactNode[] {
   const nodes: ReactNode[] = []
-  const pattern = /(`[^`\n]+`)|(\*\*[^*\n]+\*\*)|(__[^_\n]+__)|(\*[^*\n]+\*)|(\[[^\]\n]+\]\(((?:https?:\/\/|\/api\/)[^\s)]+)\))|((?:\s?\[\d{1,2}(?:\s*[,;]\s*\d{1,2})*\])+(?!\())/g
+  const pattern = /(`[^`\n]+`)|(\*\*[^*\n]+\*\*)|(__[^_\n]+__)|(\*[^*\n]+\*)|(\[[^\]\n]+\]\(((?:https?:\/\/|\/api\/)[^\s)]+)\))|((?:\s?\[\d{1,2}(?:\s*[,;]\s*\d{1,2})*\])+(?!\())|((?<![\p{L}\p{N}_])_(?![\s_])[^_\n]+?(?<![\s_])_(?![\p{L}\p{N}_]))/gu
 
   let last = 0
   let match: RegExpExecArray | null

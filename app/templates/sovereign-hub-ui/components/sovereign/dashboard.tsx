@@ -19,7 +19,7 @@ import { MALIK_OWNER_EMAIL, isVerifiedOwner } from "@/lib/auth/admin-policy"
 import { readWebSearchEnabled } from "@/lib/ai/web-search-preference"
 import { chatHttpErrorMessage, chatVisibleErrorMessage } from "@/lib/ai/errors"
 import { fetchRecoverableChat } from "@/lib/ai/chat-stream-recovery"
-import { chatCompletionError, mergeChatStreamText } from "@/lib/ai/chat-stream-contract"
+import { CHAT_STOPPED_BY_USER, chatCompletionError, isChatStoppedByUser, mergeChatStreamText } from "@/lib/ai/chat-stream-contract"
 import { readResponseMetrics, type MalikResponseMetrics } from "@/lib/ai/token-telemetry"
 import { mergeStreamingAssistantCheckpoints, restoreInterruptedAssistant } from "@/lib/ai/stream-checkpoint"
 import { fixWrongKeyboardLayout } from "@/lib/ai/keyboard-layout"
@@ -5163,6 +5163,8 @@ export function Dashboard({ guestMode = false, initialView = "home", initialWork
   const chatsRef = useRef<Chat[]>([])
   const sendGateRef = useRef<{ signature: string; at: number }>({ signature: "", at: 0 })
   const activeStreamAbortRef = useRef<AbortController | null>(null)
+  /** Ends the running turn as stopped by the person (see handleSendMessage). */
+  const activeStreamStopRef = useRef<(() => void) | null>(null)
   const [streamAbortable, setStreamAbortable] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [isGeneratingTerminal, setIsGeneratingTerminal] = useState(false) // Новое состояние для терминала
@@ -7119,6 +7121,21 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
   const streamController = new AbortController()
   activeStreamAbortRef.current?.abort()
   activeStreamAbortRef.current = streamController
+  // Stop belongs to the person, and the turn remembers the press itself:
+  // AccountChatPersistence shields this controller from stray aborts and
+  // cancels the network on its own, so the signal here may never say
+  // "aborted", and the cancelled body then looks like a dropped connection.
+  // The press freezes what is on screen and ends the read at once; nothing
+  // that arrives later (recovery notes, errors) is applied.
+  let stoppedByPerson = false
+  let streamReader: ReadableStreamDefaultReader<Uint8Array> | undefined
+  const stopThisTurn = () => {
+    if (stoppedByPerson) return
+    stoppedByPerson = true
+    stopLive()
+    void streamReader?.cancel(CHAT_STOPPED_BY_USER).catch(() => {})
+  }
+  activeStreamStopRef.current = stopThisTurn
   setStreamAbortable(true)
   applyExecution({ version: 1, id: assistantMessage.id, startedAt: Date.now(), state: "running", model: getMalikModel(selectedModelId).label,
     steps: [{ id: `${assistantMessage.id}:request`, title: "Отправка запроса", kind: "status", state: "running", startedAt: Date.now() }] })
@@ -7308,10 +7325,12 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
 
     if (responseType.includes("text/event-stream") && response.body) {
       const reader = response.body.getReader()
+      streamReader = reader
       const decoder = new TextDecoder()
       let buffer = ""
 
       const consumeEvent = (block: string) => {
+        if (stoppedByPerson) return
         const eventName = block.match(/^event:\s*(.+)$/m)?.[1]?.trim() || "message"
         const rawData = block.split(/\r?\n/)
           .filter((line) => line.startsWith("data:"))
@@ -7409,6 +7428,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
         buffer = blocks.pop() || ""
         blocks.forEach(consumeEvent)
       }
+      if (stoppedByPerson) throw new DOMException("Stopped by the person", "AbortError")
       buffer += decoder.decode()
       if (buffer.trim()) consumeEvent(buffer)
       stopLive()
@@ -7499,7 +7519,9 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
     finalizeAssistant(cleanDashboardAIText(cleanText || fullText), code, finalResearch, connectionCut && !stoppedByUser)
   } catch (error) {
     stopLive()
-    if (streamController.signal.aborted) {
+    // The network may be cut by Stop before this turn hears the press itself:
+    // the cancelled body then carries the Stop reason through every layer.
+    if (streamController.signal.aborted || stoppedByPerson || isChatStoppedByUser(error)) {
       if (finalExecution) applyExecution(settleExecution(finalExecution, "cancelled"))
       const partial = cleanDashboardAIText(liveShownText || fullText)
       finalizeAssistant(
@@ -7561,6 +7583,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
     finalizeAssistant(failedText, undefined, interruptedResearch, true)
   } finally {
     if (activeStreamAbortRef.current === streamController) activeStreamAbortRef.current = null
+    if (activeStreamStopRef.current === stopThisTurn) activeStreamStopRef.current = null
     setStreamAbortable(false)
     setIsLoading(false)
     setStreamingText("")
@@ -7568,6 +7591,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
 }, [activeChatId, messages, username, isLoading, isAdmin, activeAiMode, currentPlan, selectedModelId, canAccessAdmin, guestMode, workOSUser?.email, safeOpenView, workspaceMode])
 
   const handleStopGeneration = useCallback(() => {
+    activeStreamStopRef.current?.()
     activeStreamAbortRef.current?.abort("user")
   }, [])
 

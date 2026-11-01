@@ -43,16 +43,32 @@ export function MalikStopPolish() {
   useEffect(() => {
     if (typeof document === "undefined") return
 
+    // Only the answers that changed are read again. Rereading every answer's
+    // text on each frame of a long stream cost the whole thread's length per
+    // frame; the streaming answer alone is enough.
     let frame = 0
+    const pending = new Set<HTMLElement>()
+    const ROW = "[data-malik-message='assistant']"
     const scan = () => {
       frame = 0
-      scanStoppedTurns()
+      pending.forEach((row) => { if (row.isConnected) polishStoppedTurn(row) })
+      pending.clear()
     }
-    const schedule = () => {
-      if (!frame) frame = window.requestAnimationFrame(scan)
+    const schedule = (records: MutationRecord[]) => {
+      for (const record of records) {
+        const at = record.target instanceof Element ? record.target : record.target.parentElement
+        const row = at?.closest<HTMLElement>(ROW)
+        if (row) { pending.add(row); continue }
+        record.addedNodes.forEach((node) => {
+          if (!(node instanceof Element)) return
+          if (node.matches(ROW)) pending.add(node as HTMLElement)
+          else node.querySelectorAll<HTMLElement>(ROW).forEach((item) => pending.add(item))
+        })
+      }
+      if (pending.size && !frame) frame = window.requestAnimationFrame(scan)
     }
 
-    scan()
+    scanStoppedTurns()
     const observer = new MutationObserver(schedule)
     observer.observe(document.body, { subtree: true, childList: true, characterData: true })
 

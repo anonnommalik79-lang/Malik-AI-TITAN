@@ -1,7 +1,7 @@
 import { briefNeedsDeep } from "./brief-quality"
 import { chatAnswerDeadline } from "./chat-deadline"
 import { answerRevises } from "./answer-completion"
-import { chatCompletionError, MAX_CHAT_SSE_FRAME_CHARS, mergeChatStreamText, parseChatSseFrame } from "./chat-stream-contract"
+import { chatCompletionError, isChatStoppedByUser, MAX_CHAT_SSE_FRAME_CHARS, mergeChatStreamText, parseChatSseFrame } from "./chat-stream-contract"
 import { resolveConversationIntent } from "./conversation-intent"
 
 /** Recover a saved turn before repeating a read-only question. Never replay actions. */
@@ -73,7 +73,8 @@ export function canRetryChat(body: unknown): boolean {
 
 function abortError() { return new DOMException("Chat stopped", "AbortError") }
 function isAbort(error: unknown, signal?: AbortSignal | null) {
-  return Boolean(signal?.aborted || (error as Error)?.name === "AbortError")
+  // The person's Stop is a cancellation, not a dropped line to recover from.
+  return Boolean(signal?.aborted || (error as Error)?.name === "AbortError" || isChatStoppedByUser(error))
 }
 function wait(ms: number, signal?: AbortSignal | null) {
   return new Promise<void>((resolve, reject) => {

@@ -7,6 +7,7 @@ import { normalizeExecutionTrace, type ExecutionTrace } from "@/lib/ai/chat-exec
 import { mergeAccountChatStates } from "@/lib/ai/account-chat-state-merge"
 import { accountChatRetryDelay, accountChatWriteConfirmed, shouldRetryAccountChatWrite } from "@/lib/ai/account-chat-sync-retry"
 import { pollingChatResponse } from "@/lib/ai/chat-poll-transport"
+import { CHAT_STOPPED_BY_USER } from "@/lib/ai/chat-stream-contract"
 
 const DASHBOARD_STORAGE_KEY = "malik_dashboard_state_v3"
 const ACCOUNT_PREFIX = `${DASHBOARD_STORAGE_KEY}:account:`
@@ -525,7 +526,7 @@ function installBackgroundRuntime(
       }).catch(() => {})
     }
     if (controller && !controller.signal.aborted) {
-      try { runtime.originalAbort.call(controller, "Malik AI stopped by user") } catch {}
+      try { runtime.originalAbort.call(controller, CHAT_STOPPED_BY_USER) } catch {}
     }
   }
   window.addEventListener("click", onExplicitStop, true)

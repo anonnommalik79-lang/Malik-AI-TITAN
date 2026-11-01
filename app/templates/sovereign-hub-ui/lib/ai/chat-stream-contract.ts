@@ -6,6 +6,17 @@ export const MAX_CHAT_RESULT_CHARS = 1_500_000
 // malformed/unterminated frame without rejecting a valid maximum-size answer.
 export const MAX_CHAT_SSE_FRAME_CHARS = MAX_CHAT_RESULT_CHARS * 6 + 64 * 1024
 
+/**
+ * The reason the explicit Stop aborts a chat request with. A fetch aborted
+ * with a reason errors its body with that very value, so every layer between
+ * the network and the chat can tell the person's Stop from a dropped line.
+ */
+export const CHAT_STOPPED_BY_USER = "Malik AI stopped by user"
+
+export function isChatStoppedByUser(error: unknown) {
+  return error === CHAT_STOPPED_BY_USER || (error instanceof Error && error.message === CHAT_STOPPED_BY_USER)
+}
+
 export type ChatSseEvent = { type: string; payload: Record<string, unknown> }
 
 export function parseChatSseFrame(frame: string): ChatSseEvent | null {

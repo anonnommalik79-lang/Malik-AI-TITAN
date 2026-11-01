@@ -322,6 +322,8 @@ for (const width of WIDTHS) {
       return (rows[rows.length - 1]?.querySelector(".malik-md")?.textContent || "").length > 300
     }, null, { timeout: 30_000 })
     if (process.env.MALIK_QA_DEBUG) await page.evaluate(() => window.__qaSampler.start())
+    // What the person sees at the press: every word of it must stay.
+    const seen = await assistant(page).locator(".malik-md").innerText()
     await stopButton(page).click()
     await waitIdle(page, 20_000)
     if (process.env.MALIK_QA_DEBUG) console.log("DEBUG stop", JSON.stringify((await page.evaluate(() => window.__qaSampler.stop())).samples.map((s) => s.length)))
@@ -331,7 +333,9 @@ for (const width of WIDTHS) {
     await page.waitForTimeout(1200)
     const after = await assistant(page).locator(".malik-md").innerText()
     assert.equal(after.length, atStop, "nothing more arrives after Stop")
-    assert.ok(after.length > 250, "the written part stays")
+    const flat = (text) => text.replace(/\s+/g, " ").trim()
+    if (process.env.MALIK_QA_DEBUG) console.log("DEBUG seen ", JSON.stringify(flat(seen)), "\nDEBUG after", JSON.stringify(flat(after)))
+    assert.ok(flat(after).startsWith(flat(seen).slice(0, -12)), `every word seen before Stop stays (saw ${seen.length}, kept ${after.length})`)
     assert.match(await assistant(page).innerText(), /Остановлено/, "the answer says it was stopped")
     assert.equal(await page.evaluate(() => window.__qa.aborted), 1, "the request itself was cancelled")
     assert.equal(await page.evaluate(() => window.__qa.stops), 1, "the server is told to stop the turn")
