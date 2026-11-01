@@ -34,3 +34,36 @@ export function shouldAutonomouslyDecompose(body: Record<string, any>): boolean 
   const sufficientBudget = !Number.isFinite(Number(body.maxTokens)) || Number(body.maxTokens) >= 1200
   return sufficientBudget && (explicit || (profile.depth === "deep" || profile.depth === "ultra") && profile.complexityScore >= 6)
 }
+
+export type GeneratedMission = {
+  kind: "analysis" | "research" | "code" | "website" | "project"
+  title: string
+  detail: string
+}
+
+const ACTION_INTENT = /(?:закаж\p{L}*|оплат\p{L}*|покуп\p{L}*|отправ\p{L}*|опублику\p{L}*|удал\p{L}*|заброниру\p{L}*|соверш\p{L}*\s+перевод|purchase|send\s|publish|delete|book\s|deploy\s|execute\s+shell)/iu
+
+/** A provider returns proposals, never authorization for actions. Invalid
+ * plans cause direct answering instead of substituting hardcoded missions. */
+export function parseAutonomousMissionPlan(raw: string): GeneratedMission[] {
+  if (typeof raw !== "string" || raw.length > 7000) return []
+  const clean = raw.trim().replace(/^\x60\x60\x60(?:json)?\s*|\s*\x60\x60\x60$/gu, "")
+  let parsed: any
+  try { parsed = JSON.parse(clean) } catch { return [] }
+  if (!parsed || !Array.isArray(parsed.missions)) return []
+  if (parsed.missions.length < 2 || parsed.missions.length > 3) return []
+  const result: GeneratedMission[] = []
+  const names = new Set<string>()
+  for (const item of parsed.missions) {
+    if (!item || !["analysis", "research", "code", "website", "project"].includes(item.kind) ||
+      typeof item.title !== "string" || typeof item.detail !== "string") return []
+    const title = item.title.trim()
+    const detail = item.detail.trim()
+    const key = title.toLocaleLowerCase()
+    if (title.length < 8 || title.length > 130 || detail.length < 16 || detail.length > 600 ||
+      names.has(key) || ACTION_INTENT.test(title + " " + detail)) return []
+    names.add(key)
+    result.push({ kind: item.kind, title, detail })
+  }
+  return result.slice(0, 2)
+}
