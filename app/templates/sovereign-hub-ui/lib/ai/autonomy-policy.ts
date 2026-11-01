@@ -32,7 +32,7 @@ export function shouldAutonomouslyDecompose(body: Record<string, any>): boolean 
   if (profile.depth === "instant") return false
   const explicit = /(?:нескольк\p{L}*\s+агент\p{L}*|параллельн\p{L}*\s+(?:ветк\p{L}*|агент\p{L}*)|multi[- ]agent|subagents?|parallel agents|несколько независимых анализов)/iu.test(prompt)
   const sufficientBudget = !Number.isFinite(Number(body.maxTokens)) || Number(body.maxTokens) >= 1200
-  return sufficientBudget && (explicit || (profile.depth === "deep" || profile.depth === "ultra") && profile.complexityScore >= 6)
+  return sufficientBudget && (explicit || (profile.depth === "deep" || profile.depth === "ultra") && profile.complexityScore >= 5)
 }
 
 export type GeneratedMission = {
