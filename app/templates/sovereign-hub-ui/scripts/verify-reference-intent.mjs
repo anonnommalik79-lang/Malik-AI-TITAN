@@ -68,6 +68,26 @@ assert.ok(policy.planReferenceVisuals("Теперь покажи их фото",
 assert.equal(catalog.referenceTopicMatches("Medeu", "Almaty city centre"), false)
 assert.equal(catalog.referenceTopicMatches("Medeu", "File:DSC123.jpg A view of the Medeu skating rink"), true)
 assert.equal(catalog.referenceTitleScore("Samsung Galaxy S24", "Samsung Galaxy S24 Ultra"), 0)
+// Ordinary factual questions should automatically search the entity, not the
+// entire sentence. These never need an explicit "show me a photo" follow-up.
+for (const [question, expectedQuery, expectedPerson] of [
+  ["Сколько лет Илону Маску?", "Elon Musk", true],
+  ["Когда родился Альберт Эйнштейн?", "Альберт Эйнштейн", true],
+  ["Где живут пингвины?", "пингвины", false],
+  ["Чем питаются коалы?", "коалы", false],
+  ["Что ты знаешь про Эйфелеву башню?", "Эйфелеву башню", false],
+  ["Where do penguins live?", "penguins", false],
+  ["How old is Elon Musk?", "Elon Musk", true],
+]) {
+  const visual = policy.planReferenceVisuals(question)
+  assert(visual, "automatic photo intent for: " + question)
+  assert.equal(visual.queries[0], expectedQuery, "search the actual subject: " + question)
+  assert.equal(visual.person, expectedPerson, "person-vs-object safety: " + question)
+}
+assert.equal(policy.planReferenceVisuals("How old is the Earth?")?.person, false, "not every age question is a portrait")
+assert.equal(policy.planReferenceVisuals("Где живут пингвины? Только текст"), null, "text-only overrides automatic photos")
+assert.equal(policy.planReferenceVisuals("Напиши код, который выводит фото пингвинов"), null, "code remains code")
+
 // A single conversational question about a person should contain its portrait in
 // the FIRST reply; no second "Покажи фото" message must be necessary.
 for (const request of ["Жириновский знаешь", "Жириновский знаешь?", "Ты знаешь Жириновского?", "Знаешь Владимира Жириновского?"]) {
