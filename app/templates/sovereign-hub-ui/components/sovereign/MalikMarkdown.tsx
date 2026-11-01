@@ -461,6 +461,22 @@ function isTableStart(lines: string[], index: number) {
   return Boolean(lines[index]?.includes("|") && lines[index + 1]?.includes("|") && isTableSeparator(lines[index + 1]))
 }
 
+/**
+ * While an answer streams, a table's header line arrives before the line
+ * that makes it a table: shown alone it is raw «| a | b |» text that snaps
+ * into a table a moment later. The trailing header (with a separator still
+ * being written) waits until the separator is complete. Code is left alone.
+ */
+function withoutPendingTable(text: string) {
+  const lines = text.split("\n")
+  let start = lines.length
+  while (start > 0 && /^\s*\|/.test(lines[start - 1])) start -= 1
+  const run = lines.length - start
+  if (!run || run > 2 || (run === 2 && isTableSeparator(lines[start + 1]))) return text
+  if (lines.slice(0, start).filter((line) => /^\s*```/.test(line)).length % 2) return text
+  return lines.slice(0, start).join("\n")
+}
+
 const LANGUAGE_EXTENSIONS: Record<string, string> = {
   bash: "sh", c: "c", cpp: "cpp", csharp: "cs", css: "css", csv: "csv", dockerfile: "Dockerfile",
   go: "go", html: "html", java: "java", javascript: "js", js: "js", json: "json", jsx: "jsx",
@@ -1256,7 +1272,7 @@ export function MalikMarkdown({ text, className, allowImages = true, referencePh
   const streaming = Boolean(visualContext?.streaming)
   // FAQ sections fold into questions only once the answer is complete, so a
   // streaming answer never hides the text that is arriving.
-  const normalizedText = useMemo(() => streaming ? text : faqToDetails(normalizeCompletedFormatting(text)), [text, streaming])
+  const normalizedText = useMemo(() => streaming ? withoutPendingTable(text) : faqToDetails(normalizeCompletedFormatting(text)), [text, streaming])
   const blocks = useMemo(() => parseBlocks(normalizedText), [normalizedText])
   const question = visualContext?.question || ""
   const previousQuestion = visualContext?.previousQuestion || ""

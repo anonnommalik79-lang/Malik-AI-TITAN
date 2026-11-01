@@ -287,6 +287,7 @@ for (const width of WIDTHS) {
     await page.evaluate(() => window.__qaSampler.start())
     await waitIdle(page, 120_000)
     const { samples, longTasks } = await page.evaluate(() => window.__qaSampler.stop())
+    if (process.env.MALIK_QA_DEBUG) console.log("DEBUG shrinks", JSON.stringify(samples.map((sample, index) => index && sample.length && sample.length < samples[index - 1].length ? { index, of: samples.length, from: samples[index - 1].length, to: sample.length, t: sample.t } : null).filter(Boolean)), "end", samples.at(-1)?.t)
     const growth = steadyGrowth(samples)
     assert.equal(growth.blanks, 0, `blank frames: ${growth.blanks}`)
     assert.equal(growth.shrinks, 0, `the text shrank ${growth.shrinks} times`)
@@ -296,6 +297,7 @@ for (const width of WIDTHS) {
     let run = 0, longestRun = 0
     for (const sample of streaming) { run = sample.away > 160 ? run + 1 : 0; longestRun = Math.max(longestRun, run) }
     const behind = longestRun
+    if (process.env.MALIK_QA_DEBUG) console.log("DEBUG shrink", JSON.stringify(streaming.map((sample, index) => index && sample.length < streaming[index - 1].length ? { index, of: streaming.length, from: streaming[index - 1].length, to: sample.length } : null).filter(Boolean)))
     if (process.env.MALIK_QA_DEBUG) console.log("DEBUG behind", JSON.stringify(streaming.map((sample, index) => sample.away > 160 ? { index, of: streaming.length, away: sample.away, length: sample.length, height: sample.height } : null).filter(Boolean)), "final length", streaming.at(-1)?.length)
     if (process.env.MALIK_QA_DEBUG) console.log("DEBUG long behind", JSON.stringify(streaming.map((sample, index) => sample.away > 160 ? { index, of: streaming.length, ...sample } : null).filter(Boolean)), "tasks", JSON.stringify(longTasks))
     assert.ok(behind <= 2, `the newest line stayed out of view ${behind} frames in a row (max ${Math.max(...streaming.map((s) => s.away))}px)`)
