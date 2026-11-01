@@ -161,6 +161,35 @@ function conversationalPersonSubject(input: string): string | null {
   return before.exec(text)?.[1] || after.exec(text)?.[1] || null
 }
 
+/**
+ * Recover the subject from ordinary factual questions without requiring a
+ * "show photos" instruction. Use a concrete entity query rather than sending
+ * "Where do penguins live?" to an image catalogue. Model-written photo hints
+ * remain the fallback for sentences whose subject cannot be safely isolated.
+ */
+function contextualVisualSubject(input: string): { topic: string; person: boolean } | null {
+  const text = input.trim().replace(/[?!.]+$/u, "").trim()
+  const patterns: Array<{ pattern: RegExp; person?: boolean }> = [
+    { pattern: /^(?:сколько\s+лет\s+(?:у\s+)?|how\s+old\s+is\s+)(.+)$/iu, person: true },
+    { pattern: /^(?:когда|где)\s+родил(?:ся|ась|ись)\s+(.+)$/iu, person: true },
+    { pattern: /^when\s+was\s+(.+?)\s+born$/iu, person: true },
+    { pattern: /^где\s+(?:жив[её]т|живут|обитают|расположен[аоы]?)\s+(.+)$/iu },
+    { pattern: /^where\s+do(?:es)?\s+(.+?)\s+live$/iu },
+    { pattern: /^(?:что\s+(?:ест|едят)|чем\s+пита(?:ется|ются))\s+(.+)$/iu },
+    { pattern: /^what\s+do(?:es)?\s+(.+?)\s+eat$/iu },
+    { pattern: /^что\s+(?:ты\s+)?знаешь\s+(?:про|о|об)\s+(.+)$/iu },
+    { pattern: /^what\s+do\s+you\s+know\s+about\s+(.+)$/iu },
+  ]
+  for (const { pattern, person } of patterns) {
+    const topic = pattern.exec(text)?.[1]?.trim()
+    if (!topic || topic.length < 3 || topic.length > 110) continue
+    // "How old is the Earth?" is not a person. Names have multiple capitalized parts.
+    const properName = /^[\p{Lu}][\p{L}'’-]+(?:\s+[\p{Lu}][\p{L}'’-]+){1,3}$/u.test(topic)
+    return { topic, person: Boolean(person && properName) }
+  }
+  return null
+}
+
 /** Evaluate every explanatory answer; never require the user to ask for photos. */
 export function planReferenceVisuals(question: string, previousQuestion = "", hasAttachment = false, previousAnswer = ""): ReferenceVisualPlan | null {
   const raw = String(question || "").trim()
@@ -182,7 +211,8 @@ export function planReferenceVisuals(question: string, previousQuestion = "", ha
   if (/^(?:покажи(?:те)?(?:\s+мне)?|show(?:\s+me)?)\s+(?:как\s|(?:код|code|логи|logs|таймер|timer|доказательств[\p{L}]*|возможност[\p{L}]*|capabilities)(?:\s|$)|список\s+моделей\s*$)/iu.test(text)) return null
   let explicit = isReferenceImageRequest(text)
   const conversationalPerson = conversationalPersonSubject(text)
-  let subject = conversationalPerson || text
+  const contextualSubject = contextualVisualSubject(text)
+  let subject = conversationalPerson || contextualSubject?.topic || text
   const followUp = isReferencePhotoFollowUp(text)
   if (followUp) {
     if (!previousQuestion) return null
@@ -195,7 +225,7 @@ export function planReferenceVisuals(question: string, previousQuestion = "", ha
     if (domain.domains.includes("science") && !domain.visuals.roles.includes("photo")) return null
     // Questions about places, people, objects and concepts get references by default.
     const places = /^(?:что\s+посмотреть\s+в|куда\s+сходить\s+в|достопримечательности|what\s+to\s+see\s+in|places\s+to\s+visit\s+in)\s+(.+)$/iu.exec(text)
-    subject = places ? places[1] : (conversationalPerson || text)
+    subject = places ? places[1] : (conversationalPerson || contextualSubject?.topic || text)
     if (/^(?:объясни\s+как|почему\s+не\s+работает)/iu.test(text)) return null
   }
   const topic = referenceTopic(subject)
@@ -210,7 +240,7 @@ export function planReferenceVisuals(question: string, previousQuestion = "", ha
   const listed = followUp ? namedReferenceSubjects(previousAnswer) : []
   const allIPhones = /(?:все|всех|all|every).{0,25}(?:модел|поколен|models?|generations?).{0,15}(?:iphone|айфон)/iu.test(subject)
   const subjects = listed.length ? listed : allIPhones ? Object.keys(APPLE_IPHONE_PHOTOS).reverse() : undefined
-  const person = Boolean(conversationalPerson) || /^(?:кто(?:\s+(?:такой|такая|такое|это))?|who(?:\s+is)?|кім)(?:\s|$)/iu.test(subject)
+  const person = Boolean(conversationalPerson || contextualSubject?.person) || /^(?:кто(?:\s+(?:такой|такая|такое|это))?|who(?:\s+is)?|кім)(?:\s|$)/iu.test(subject)
     || /(?:назарбаев|портрет|portrait|биографи)/iu.test(subject)
   return { topic, queries, explicit, subjects, person, context, entity: person || /(?:iphone|айфон)/iu.test(subject), layout: person || /референс|вдохнов|бренд|постер|reference|inspiration|poster|brand/iu.test(text) ? "portrait" : "landscape" }
 }
