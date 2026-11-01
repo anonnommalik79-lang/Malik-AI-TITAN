@@ -21,7 +21,7 @@ export function shouldAutonomouslyDecompose(body: Record<string, any>): boolean 
   if (delivery !== "text" && delivery !== "code") return false
   // Fresh facts need real search evidence from the main research lane, not
   // speculative unaided subagents that may look like verified research.
-  if (classifyFreshness(prompt).needsSearch) return false
+  if (classifyFreshness(prompt).needsSearch && /(?:сегодня|сейчас|актуальн|новост|последн|найди|поищ|источник|интернет|latest|current|today|live|breaking|browse|search the web)/iu.test(prompt)) return false
 
   const profile = analyzeMalikBrainV1({
     prompt,
