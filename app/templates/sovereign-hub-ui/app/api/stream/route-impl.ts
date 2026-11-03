@@ -32,7 +32,7 @@ import {
   resolveStrictMalikSelection,
 } from "@/lib/server/malik-model-router"
 import { runMalikCoderOrchestrator } from "@/lib/server/malik-coder-orchestrator"
-import { prepareMalikAgentRuntime } from "@/lib/server/malik-agent-runtime"
+import { prepareMalikAgentRuntime, prepareAutonomousMalikRuntime } from "@/lib/server/malik-agent-runtime"
 import { resolveRequestEntitlement, type RequestEntitlement } from "@/lib/server/request-entitlement"
 import { reserveWorkQuota, refundWorkQuota, WorkQuotaError, type WorkQuotaReceipt } from "@/lib/server/work-quota"
 import { malikIdentityAnswer, withVerifiedOwnerChatContext } from "@/lib/server/malik-owner-context"
@@ -931,7 +931,9 @@ async function runSelectedAnswerUnchecked(
   } | null = null
 
   try {
-    const runtimeResult = body?.chatRecovery ? null : await prepareMalikAgentRuntime(executionBody)
+    const runtimeResult = body?.chatRecovery ? null
+      : await prepareMalikAgentRuntime(executionBody)
+        || (requestAttachments.length ? null : await prepareAutonomousMalikRuntime(executionBody, { signal, activity }))
     if (runtimeResult) {
       executionBody = runtimeResult.augmentedBody
       agentRuntime = {
