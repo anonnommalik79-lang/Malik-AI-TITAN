@@ -106,11 +106,11 @@ export const MODEL_REGISTRY: Record<AIProviderId, Partial<Record<AITaskType, str
     file_analysis: process.env.OPENAI_MODEL || "gpt-4.1-mini",
   },
   claude: {
-    chat: process.env.ANTHROPIC_MODEL || "claude-3-5-sonnet-latest",
-    code: process.env.ANTHROPIC_CODE_MODEL || "claude-3-5-sonnet-latest",
-    debug: process.env.ANTHROPIC_CODE_MODEL || "claude-3-5-sonnet-latest",
-    project: process.env.ANTHROPIC_CODE_MODEL || "claude-3-5-sonnet-latest",
-    file_analysis: process.env.ANTHROPIC_MODEL || "claude-3-5-sonnet-latest",
+    chat: process.env.ANTHROPIC_MODEL || "claude-sonnet-5-5",
+    code: process.env.ANTHROPIC_CODE_MODEL || "claude-sonnet-5-5",
+    debug: process.env.ANTHROPIC_CODE_MODEL || "claude-sonnet-5-5",
+    project: process.env.ANTHROPIC_CODE_MODEL || "claude-sonnet-5-5",
+    file_analysis: process.env.ANTHROPIC_MODEL || "claude-sonnet-5-5",
   },
   azure: {
     chat: process.env.AZURE_OPENAI_DEPLOYMENT || "azure-deployment",

@@ -1,5 +1,6 @@
 ﻿import type { AIProvider, AIRequest, AIResponse } from "../types"
 import { modelFor } from "../models"
+import { claudeNativeRequest, claudeNativeOutput } from "../provider-native-compat"
 import { hasEnv, health, providerFetch, responseType } from "./base"
 
 export const claudeProvider: AIProvider = {
@@ -17,12 +18,7 @@ export const claudeProvider: AIProvider = {
     if (!key) throw new Error("ANTHROPIC_API_KEY not configured")
 
     const model = modelFor("claude", input.task || "chat", input.model)
-    const messages = input.messages?.length
-      ? input.messages.filter((m) => m.role !== "system").map((m) => ({ role: m.role === "assistant" ? "assistant" : "user", content: m.content }))
-      : [{ role: "user", content: input.prompt }]
-
-    const system = input.messages?.find((m) => m.role === "system")?.content
-
+    const nativeBody = claudeNativeRequest(input, model)
     const response = await providerFetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
@@ -30,13 +26,7 @@ export const claudeProvider: AIProvider = {
         "x-api-key": key,
         "anthropic-version": "2023-06-01",
       },
-      body: JSON.stringify({
-        model,
-        system,
-        messages,
-        max_tokens: input.maxTokens || Number(process.env.MAX_OUTPUT_TOKENS || 1600),
-        temperature: input.temperature ?? 0.35,
-      }),
+      body: JSON.stringify(nativeBody),
       signal: input.signal,
     })
 
@@ -48,7 +38,7 @@ export const claudeProvider: AIProvider = {
       provider: "claude",
       model,
       type: responseType(input.task),
-      output: payload?.content?.map((part: any) => part.text || "").join("") || "",
+      output: claudeNativeOutput(payload),
       usage: payload?.usage ? { inputTokens: payload.usage.input_tokens, outputTokens: payload.usage.output_tokens } : undefined,
       latencyMs: Date.now() - started,
     }
