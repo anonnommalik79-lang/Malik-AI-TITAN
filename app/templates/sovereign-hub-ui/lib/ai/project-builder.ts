@@ -198,6 +198,16 @@ function parseFileBlocks(raw: string): ProjectFile[] {
   return [...unique.values()]
 }
 
+/** Keep complete files from an output-limited model response while repairing only missing/broken files. */
+export function mergeProjectGeneratedFiles(previous: ProjectFile[], updates: ProjectFile[]): ProjectFile[] {
+  const merged = new Map<string, ProjectFile>()
+  for (const file of [...previous, ...updates]) {
+    if (!safePath(file.path) || !String(file.content || "").trim()) continue
+    merged.set(file.path, file)
+  }
+  return [...merged.values()]
+}
+
 function mergeBaseFiles(files: ProjectFile[], title: string) {
   const name = slugify(title)
   return BASE_FILES.map((file) => file.path === "package.json"
@@ -307,11 +317,19 @@ async function aiReview(input: ProjectBuilderInput, files: ProjectFile[]) {
   }
 }
 
-async function generateFiles(input: ProjectBuilderInput, feedback = ""): Promise<GeneratedProject> {
+async function generateFiles(input: ProjectBuilderInput, feedback = "", previous: ProjectFile[] = [], onlyPath = ""): Promise<GeneratedProject> {
   const modelId = input.modelId || DEFAULT_MODEL
   const feedbackBlock = feedback
-    ? `\n\nPREVIOUS QA FAILED. Regenerate the project and fix EVERY item below. Do not merely describe the fixes.\n${feedback.slice(0, 6000)}`
+    ? `\n\nPREVIOUS QA FEEDBACK. Fix the named issues with complete replacement FILE blocks. Do not merely describe the fixes.\n${feedback.slice(0, 6000)}`
     : ""
+  const existingContext = previous.length
+    ? `\n\nEXISTING COMPLETE FILES (do not discard or repeat unchanged files):\n${projectSnapshot(previous, 14_000)}`
+    : ""
+  const recoveryInstruction = onlyPath
+    ? `OUTPUT-LIMIT RECOVERY: The previous response was truncated. Return exactly ONE complete file block for ${onlyPath}, including its END_FILE marker. The usual 4-16 file requirement does not apply to this recovery call. Never output other files.`
+    : previous.length
+      ? "REPAIR MODE: Return complete FILE blocks for changed files only. Files not returned are preserved. Keep imports compatible with the existing files."
+      : ""
   const preferences = [
     input.framework ? `Framework preference: ${input.framework}` : "",
     input.language ? `Language preference: ${input.language}` : "",
@@ -320,8 +338,8 @@ async function generateFiles(input: ProjectBuilderInput, feedback = ""): Promise
 
   const result = await runStrictMalikModel({
     modelId,
-    systemPrompt: [BUILDER_SYSTEM_PROMPT, chatWebsiteInstruction(input.websiteContext)].filter(Boolean).join("\n\n"),
-    prompt: `USER PROJECT BRIEF:\n${input.prompt.slice(0, 24_000)}${preferences ? `\n\nPREFERENCES:\n${preferences}` : ""}${feedbackBlock}`,
+    systemPrompt: [BUILDER_SYSTEM_PROMPT, recoveryInstruction, chatWebsiteInstruction(input.websiteContext)].filter(Boolean).join("\n\n"),
+    prompt: `USER PROJECT BRIEF:\n${input.prompt.slice(0, onlyPath ? 14_000 : 24_000)}${preferences ? `\n\nPREFERENCES:\n${preferences}` : ""}${existingContext}${onlyPath ? `\n\nRECOVERY FILE: ${onlyPath}` : ""}${feedbackBlock}`,
     maxTokens: Number(process.env.MAX_CODE_OUTPUT_TOKENS || 8_000),
     temperature: feedback ? 0.03 : 0.08,
   })
@@ -359,6 +377,24 @@ export async function generateProjectWithBrain(input: ProjectBuilderInput): Prom
   try {
     let generated = await generateFiles(input)
     rounds += 1
+    // The initial answer may end mid-file at the provider output cap.
+    // Preserve complete FILE blocks and request only each absent required file,
+    // rather than asking the model to regenerate the entire 4-16-file project.
+    for (const path of REQUIRED_GENERATED) {
+      if (generated.files.some((file) => file.path === path)) continue
+      try {
+        const recovery = await generateFiles(input, "", generated.files, path)
+        rounds += 1
+        const matching = recovery.files.filter((file) => file.path === path)
+        if (matching.length) generated = {
+          ...generated,
+          files: mergeProjectGeneratedFiles(generated.files, matching),
+        }
+      } catch {
+        // Retain all successfully completed files for honest QA diagnostics.
+        // Missing required files still fail validation; nothing unverified is packaged.
+      }
+    }
     let files = mergeBaseFiles(generated.files, title)
     let staticQa = validateProject(files)
     let reviewer = staticQa.issues.length ? null : await aiReview(input, files)
@@ -368,8 +404,15 @@ export async function generateProjectWithBrain(input: ProjectBuilderInput): Prom
     for (let repair = 0; repair < 2 && (staticQa.issues.length || (reviewer !== null && !reviewerPassed(reviewer))); repair++) {
       const before = staticQa.issues.length
       const feedback = [...staticQa.issues, reviewer && !reviewerPassed(reviewer) ? reviewer : ""].filter(Boolean).join("\n")
-      generated = await generateFiles(input, feedback)
+      const repairPatch = await generateFiles(input, feedback, generated.files)
       rounds += 1
+      if (!repairPatch.files.length) break
+      generated = {
+        ...generated,
+        provider: repairPatch.provider,
+        model: repairPatch.model,
+        files: mergeProjectGeneratedFiles(generated.files, repairPatch.files),
+      }
       files = mergeBaseFiles(generated.files, title)
       staticQa = validateProject(files)
       reviewer = staticQa.issues.length ? null : await aiReview(input, files)
