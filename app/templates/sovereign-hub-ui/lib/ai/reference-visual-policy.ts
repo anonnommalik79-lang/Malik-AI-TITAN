@@ -133,14 +133,19 @@ export function referenceSearchTopic(topic: string): string {
     .replace(/\s+/g, " ").trim()
 }
 
-const TEXT_TASK = /^(?:напиши|перепиши|исправь|улучши|переведи|сократи|сочини|реши|вычисли|посчитай|write|rewrite|translate|calculate|solve|аудар|есепте)(?![\p{L}\p{N}_])/iu
+const TEXT_TASK = /^(?:напиши|пиши|продолжай|перепиши|исправь|улучши|переведи|сократи|сочини|реши|вычисли|посчитай|write|rewrite|translate|calculate|solve|аудар|есепте)(?![\p{L}\p{N}_])/iu
 const NON_VISUAL = /^(?:привет|салам|сәлем|спасибо|рахмет|ок|окей|okay|ok|hi|hello|ты\s+кто|кто\s+ты|да|нет|yes|no|как\s+(?:дела|ты|сам|поживаешь)|қалайсың|how\s+are\s+you|понятно|ясно|хорошо|отлично|круто|класс|супер)[!?\s.)]*$/iu
 const STRUCTURED_TASK = /(?:чек[ -]?лист|checklist|таблиц|spreadsheet|\btable\b|дв[еу]\s+колонк|two\s+columns|\b(?:python|javascript|typescript|sql)\b|\bкод\b|\bcode\b)/iu
+
+// «Оцени фото», «сделай баннер», «придумай слоган»: an order is carried out, it
+// names no subject to look up, and its own words are not a search query.
+const ORDER_NOT_LOOKUP = /^(?:(?:ну|да|давай|так|же|блин|пожалуйста)[\s,!.]+)*(?:оцени|сгенерируй|генерируй|сделай|делай|создай|нарисуй|придумай|составь|подготовь|оформи|собери|evaluate|rate|generate|make|create|draw|design)(?:те)?(?![\p{L}\p{N}_])/iu
 
 /** A model may name concrete objects in comparisons, but must respect text-only requests. */
 export function allowsAnswerPhotoHints(question: string, hasAttachment = false, previousQuestion = ""): boolean {
   if (routePetroleum(question).engine === "petroleum") return false
   const text = question.trim()
+  if (ORDER_NOT_LOOKUP.test(text)) return false
   const domain = resolveDomainPlan({ prompt: question, messages: previousQuestion ? [{ role: "user", content: previousQuestion }, { role: "assistant", content: "" }] : [] })
   if (domain.context.followUp && domain.visuals.mode === "off") return false
   if (domain.delivery !== "text" || domain.presentation.tables === "off" || ["translate", "summarize", "modify", "calculate", "converse"].includes(domain.goal)) return false
@@ -204,12 +209,14 @@ export function planReferenceVisuals(question: string, previousQuestion = "", ha
     ? raw.split(/\r?\n/u, 1)[0].slice(0, 220).split(/(?<=[.!?])\s+/u, 1)[0].trim()
     : raw
   if (!text) return null
-  if (/^\//u.test(text) || isExplicitImageGenerationRequest(text) || NON_VISUAL.test(text) || TEXT_TASK.test(text)) return null
+  if (/^\//u.test(text) || isExplicitImageGenerationRequest(text) || NON_VISUAL.test(text) || TEXT_TASK.test(text) || ORDER_NOT_LOOKUP.test(text)) return null
   if (STRUCTURED_TASK.test(text) && !/(?:фото(?:граф|к)?|картинк|изображени|\bphotos?\b|\bimages?\b|\bpictures?\b|сурет)/iu.test(text)) return null
   const tutorial = planTutorialVisuals(text)
   if (tutorial) return tutorial
   if (/^(?:покажи(?:те)?(?:\s+мне)?|show(?:\s+me)?)\s+(?:как\s|(?:код|code|логи|logs|таймер|timer|доказательств[\p{L}]*|возможност[\p{L}]*|capabilities)(?:\s|$)|список\s+моделей\s*$)/iu.test(text)) return null
   let explicit = isReferenceImageRequest(text)
+  // «Дай длинный разбор» names nothing to photograph; «дай фото Медеу» is explicit.
+  if (!explicit && /^(?:дай(?:те)?|give)(?![\p{L}\p{N}_])/iu.test(text)) return null
   const conversationalPerson = conversationalPersonSubject(text)
   const contextualSubject = contextualVisualSubject(text)
   let subject = conversationalPerson || contextualSubject?.topic || text
@@ -257,7 +264,7 @@ export function visualSegmentLabel(text: string): string {
 export function isAbstractPhotoSubject(label: string): boolean {
   // These are actions/categories, not the object the user asked to see.
   // Searching "Регистрация" alone produced a historical register in an NVIDIA guide.
-  if (/^(?:регистрация|регистрации|вход|войти|аккаунт|подтверждение|настройки|пошагово|инструкция|сервисы|характеристики|преимущества|недостатки|итог|вывод|важно|registration|register|sign[ -]?up|sign[ -]?in|login|settings|confirmation|features|conclusion|summary)(?:\s|$|[:.!?])/iu.test(label.trim())) return true
+  if (/^(?:раздел|глава|часть|пункт|шаг|этап|подробный|подробно|подробности|введение|заключение|обзор|разбор|section|chapter|part|step|introduction|overview|стиль|тип|вид|цель|формат|размер|цвет|бюджет|аудитория|назначение|настроение|style|type|format|size|color|colour|budget|audience|регистрация|регистрации|вход|войти|аккаунт|подтверждение|настройки|пошагово|инструкция|сервисы|характеристики|преимущества|недостатки|итог|вывод|важно|registration|register|sign[ -]?up|sign[ -]?in|login|settings|confirmation|features|conclusion|summary)(?:\s|$|[:.!?])/iu.test(label.trim())) return true
   return /(?:анализ\s+(?:рынка|данных|продаж)|архитектура\s+(?:процессов|систем)|регламент|\bSOP\b|контент[- ]маркетинг|маркетинговая\s+стратегия|(?:финансов|бизнес)[\p{L}]*\s+модел|бизнес[- ]процесс|рабочий\s+процесс|план\s+бизнес|техническая\s+реализация|автоматизац|юнит[- ]экономик|сила\s+(?:claude|chatgpt)|как\s+(?:работает|работают|построить)|market\s+analysis|business\s+(?:model|process)|content\s+marketing|process\s+architecture|workflow|standard\s+operating\s+procedure|проверка\s+и\s+согласование)/iu.test(label)
 }
 

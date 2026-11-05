@@ -19,7 +19,9 @@ export type WebSearchOptions = {
 export function shouldUseWeb(prompt: string, options: WebSearchOptions = {}, serverPlan?: DomainPlan): boolean {
   const text = prompt.toLowerCase().replace(/ё/g, "е").replace(/\s+/g, " ").trim()
   if (!text || options.disableResearch) return false
-  if (NO_WEB.test(text)) return false
+  // «Без интернета» from an earlier turn may sit inside the resolved subject. A
+  // plan that requires the web read the newest message: «теперь поищи» replaced it.
+  if (NO_WEB.test(text) && serverPlan?.evidence.web !== "required") return false
   const plan = serverPlan || resolveDomainPlan({ prompt, messages: options.history || options.messages })
   if (plan.evidence.web === "off" && options.forceResearch !== true) return false
   // A build brief may contain «современный», «2026» or ask for photos/video.

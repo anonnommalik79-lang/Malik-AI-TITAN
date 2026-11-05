@@ -193,7 +193,8 @@ import {
   ShieldCheck
 } from "lucide-react"
 import { clientFetchWithTimeout } from "@/lib/api-client"
-import { isExplicitImageGenerationRequest, isExplicitImageEditRequest, isReferenceImageRequest, isTextOnlyMediaDiscussion } from "@/lib/ai/image-intent"
+import { isExplicitImageGenerationRequest, isExplicitImageEditRequest, isExplicitVideoGenerationRequest, isReferenceImageRequest, isTextOnlyMediaDiscussion } from "@/lib/ai/image-intent"
+import { isBareMediaOrder, isMusicCreationRequest, mediaHandoffText, resolveMediaTurn, type MediaTurn } from "@/lib/ai/do-what-user-says"
 import {
   DEFAULT_MALIK_MODEL_ID,
   canUseMalikModel,
@@ -739,13 +740,17 @@ function detectInlineMediaGenerationRequest(
   if (isReferenceImageRequest(prompt) && !attachments.some((item) => item.kind === "image" || item.mime?.startsWith("image/"))) return null
   if (isExplicitImageEditRequest(prompt, attachments.some((item) => item.kind === "image"))) return "image"
 
-  // Natural-language photo requests are accepted only when the request is an
-  // explicit CREATE-image intent. Mentioning or discussing photos stays chat.
-  if (isExplicitImageGenerationRequest(prompt)) return "image"
-
   // An explicitly chosen composer mode counts as consent; "auto" never does.
   if (mode === "image") return "image"
   if (mode === "video") return "video"
+
+  // «Сделай фото» with no subject has nothing to draw: the model asks what.
+  if (isBareMediaOrder(prompt)) return null
+
+  // Natural-language media requests are accepted only when the request is an
+  // explicit CREATE intent. Mentioning or discussing photos stays chat.
+  if (isExplicitImageGenerationRequest(prompt)) return "image"
+  if (isExplicitVideoGenerationRequest(prompt)) return "video"
 
   return null
 }
@@ -6250,6 +6255,7 @@ async function revealAssistantTextQuickly(text: string, onFrame: (visible: strin
   onFrame(answer)
 }
 
+const handleSendMessageRef = useRef<((content: string, attachments?: ChatAttachment[], options?: ChatSendOptions) => Promise<void>) | null>(null)
 const handleSendMessage = useCallback(async (content: string, attachments: ChatAttachment[] = [], options?: ChatSendOptions) => {
   const turnWorkspaceMode = options?.workspaceMode ?? workspaceMode
   const cleanContent = (content || "").trim()
@@ -6345,6 +6351,18 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
     return
   }
 
+  // «Создай трек про лето» is a job for the music studio: it opens with the
+  // request written in. Lyrics and advice stay in the chat.
+  if (turnWorkspaceMode !== "work" && !attachments.length && !options?.forcedMedia && !petroleumRoute.domain && isMusicCreationRequest(cleanContent)) {
+    try {
+      window.sessionStorage.setItem("malik.music.handoff", JSON.stringify({ prompt: cleanContent }))
+    } catch {
+      /* Without storage the studio simply opens on its start screen. */
+    }
+    safeOpenView("music-generation", "manual")
+    return
+  }
+
   // "Сделай презентацию про …" is a job for the presentation studio, not a
   // chat reply: the topic is handed across and the studio starts the plan
   // itself. Questions *about* presentations stay in the chat — see
@@ -6426,24 +6444,29 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
   // Routing invariant: when real image bytes/context are present and the user
   // asks to change the picture, text chat is not an eligible destination.
   const forcedImageEdit = hasRequestImageAttachment && isExplicitImageEditRequest(cleanContent, true)
+  const parsedMediaCommand = parseMediaCommand(cleanContent)
+  // What this message asks for, read together with the conversation: «ну
+  // сгенерируй как я говорю» points back at the picture already asked for.
+  const mediaTurn: Pick<MediaTurn, "kind" | "prompt"> | null = options?.forcedMedia
+    || (petroleumRoute.domain || parsedMediaCommand ? null : resolveMediaTurn(cleanContent, conversationBase, requestAttachments.length > 0))
   const requestedInlineMediaKind = petroleumAnalytic ? null : petroleumRoute.domain && petroleumRoute.engine === "image" ? "image" : petroleumRoute.domain && petroleumRoute.engine === "video" ? "video" : forcedImageEdit
     ? "image"
-    : detectInlineMediaGenerationRequest(cleanContent, requestAttachments, activeAiMode)
-  const parsedMediaCommand = parseMediaCommand(cleanContent)
+    : mediaTurn?.kind || detectInlineMediaGenerationRequest(cleanContent, requestAttachments, activeAiMode)
   const editingImage = forcedImageEdit || (
     requestedInlineMediaKind === "image"
     && isExplicitImageEditRequest(cleanContent, hasRequestImageAttachment)
   )
-  const needsImageConfirmation = requestedInlineMediaKind === "image" && !parsedMediaCommand && !editingImage
-  const inlineMediaKind = needsImageConfirmation ? null : requestedInlineMediaKind
+  // Asked for is done: the request itself is the consent, and the composer
+  // already shows what a picture costs.
+  const inlineMediaKind = requestedInlineMediaKind
   // Shown in the chat card: without the slash command.
-  const inlineMediaPrompt = parsedMediaCommand ? parsedMediaCommand.prompt || cleanContent : cleanContent
+  const inlineMediaPrompt = parsedMediaCommand ? parsedMediaCommand.prompt || cleanContent : mediaTurn?.prompt || cleanContent
   // Sent to the API: the server-side cost guard only accepts prompts that carry
   // the command, so a mode-selected request gets the prefix added here.
   const inlineMediaApiPrompt = parsedMediaCommand
     ? cleanContent
-    : `${inlineMediaKind === "video" ? "/video" : "/image"} ${cleanContent}`
-  setActiveGenerationKind(needsImageConfirmation ? "text" : inlineMediaKind || detectDashboardGenerationKind(cleanContent, requestAttachments, activeAiMode))
+    : `${inlineMediaKind === "video" ? "/video" : "/image"} ${inlineMediaPrompt}`
+  setActiveGenerationKind(inlineMediaKind || detectDashboardGenerationKind(cleanContent, requestAttachments, activeAiMode))
   const chatId = branchChatId || activeChatId || crypto.randomUUID()
   const currentConversation = chatsRef.current.find((chat) => chat.id === chatId)
   if (currentConversation?.projectId) {
@@ -6532,24 +6555,19 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
 
   const assistantMessage: Message = {
     id: regenTarget ? regenTarget.message.id : crypto.randomUUID(),
-    versions: regenTarget && regenTarget.message.content.trim()
+    versions: regenTarget && regenTarget.message.content.trim() && !options?.forcedMedia
       ? [...(regenTarget.message.versions || []), { content: regenTarget.message.content, at: Date.now() }].slice(-8)
       : regenTarget?.message.versions,
     role: "assistant",
     selectedSkillId,
-    content: needsImageConfirmation
-      ? "Запрос на изображение распознан. Генерация начнётся только после вашего подтверждения."
-      : inlineMediaKind ? buildInlineMediaAssistantText(createInlineMediaSeed(inlineMediaKind, inlineMediaPrompt)) : "",
+    content: inlineMediaKind ? buildInlineMediaAssistantText(createInlineMediaSeed(inlineMediaKind, inlineMediaPrompt)) : "",
     timestamp: new Date(),
-    isStreaming: !needsImageConfirmation,
+    isStreaming: true,
     intentType: inlineMediaKind ? "chat" : isProjReq ? "project" : "chat",
     modelId: selectedModelId,
     // Research UI starts only when the server actually emits a search event.
     research: undefined,
     generatedMedia: inlineMediaKind ? createInlineMediaSeed(inlineMediaKind, inlineMediaPrompt) : undefined,
-    imageConfirmation: needsImageConfirmation
-      ? { prompt: inlineMediaPrompt, status: "pending" }
-      : undefined,
     actionPlan: actionPlan || undefined,
   }
 
@@ -6566,11 +6584,6 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
     if (!nextMessages.some((message) => message.id === assistantMessage.id)) nextMessages.push(assistantMessage)
     return { ...chat, messages: nextMessages }
   }))
-  if (needsImageConfirmation) {
-    setIsLoading(false)
-    setStreamingText("")
-    return
-  }
   setIsLoading(true)
   dashboardEventBus.emit({
     type: "chat:send",
@@ -6652,6 +6665,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
   let finalExecution: ExecutionTrace | undefined
   let turnMetrics: MalikResponseMetrics | undefined
   let textOnlyAnswer = false
+  const turnHandoff: { media?: { kind: "image" | "video"; prompt: string } } = {}
   const applyExecution = (trace: ExecutionTrace) => {
     finalExecution = trace
     setMessages((current) => current.map((message) => message.id === assistantMessage.id ? { ...message, execution: trace } : message))
@@ -7222,6 +7236,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
         isAdmin,
         isCreator: canAccessAdmin,
         creatorName: canAccessAdmin ? "Абдумалик" : undefined,
+        supportsMediaAction: true,
         attachments: apiRequestAttachments,
         media_b64: requestAttachments.some((item) => item.kind === "video")
           ? undefined
@@ -7387,6 +7402,9 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
             scheduleLive()
           }
           textOnlyAnswer = payload?.textOnly === true
+          if ((payload?.mediaAction?.kind === "image" || payload?.mediaAction?.kind === "video") && typeof payload.mediaAction.prompt === "string" && payload.mediaAction.prompt.trim()) {
+            turnHandoff.media = { kind: payload.mediaAction.kind, prompt: payload.mediaAction.prompt }
+          }
           const trace = normalizeExecutionTrace(payload?.execution)
           if (trace) applyExecution({ ...trace, model: getMalikModel(selectedModelId).label })
           else if (finalExecution) applyExecution(settleExecution(finalExecution, "completed"))
@@ -7443,6 +7461,17 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
       // A plain (non-SSE) text reply is complete by definition.
       sawDone = true
       fullText = cleanDashboardAIText(await response.text())
+    }
+
+    // The server read this turn as a request for media the browser did not
+    // catch (or a model refused it): this same answer becomes the real picture.
+    const handoff = turnHandoff.media
+    if (handoff) {
+      finalizeAssistant(mediaHandoffText({ ...handoff, via: "request" }), undefined, finalResearch)
+      window.setTimeout(() => {
+        void handleSendMessageRef.current?.(cleanContent, [], { regenerateMessageId: assistantMessage.id, forcedMedia: handoff, workspaceMode: turnWorkspaceMode, selectedSkillId })
+      }, 120)
+      return
     }
 
     const connectionCut = !sawDone
@@ -7589,6 +7618,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
     setStreamingText("")
   }
 }, [activeChatId, messages, username, isLoading, isAdmin, activeAiMode, currentPlan, selectedModelId, canAccessAdmin, guestMode, workOSUser?.email, safeOpenView, workspaceMode])
+handleSendMessageRef.current = handleSendMessage
 
   const handleStopGeneration = useCallback(() => {
     activeStreamStopRef.current?.()

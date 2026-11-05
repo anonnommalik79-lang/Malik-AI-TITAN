@@ -51,7 +51,9 @@ try {
   await check("speaker requests search automatically and respect explicit opt-out", () => {
     assert.equal(shouldUseWeb(screenshotPrompt), true)
     assert.equal(shouldUseWeb("Дай программу конференции Web Summit"), true)
-    assert.equal(shouldUseWeb(screenshotPrompt, { research: false }), false)
+    // The unchecked Web button never means «invent current facts from memory».
+    assert.equal(shouldUseWeb(screenshotPrompt, { research: false }), true)
+    assert.equal(shouldUseWeb("Что такое фотосинтез", { research: false }), false)
     assert.equal(shouldUseWeb("Без интернета " + screenshotPrompt), false)
     assert.equal(shouldUseWeb("Напиши программу на Python"), false)
     assert.equal(query.normalizeWebSearchQuery(screenshotPrompt), "Ai Digital Bridge спикеры")
@@ -70,7 +72,7 @@ try {
     assert.equal(shouldUseWeb(prompt), true)
     assert.equal(shouldUseWeb("Напиши последние новости мира"), true)
     assert.equal(shouldUseWeb("Напиши код на Python"), false)
-    assert.equal(shouldUseWeb(prompt, { research: false }), false)
+    assert.equal(shouldUseWeb(prompt, { research: false }), true)
     assert.deepEqual(currentEvidence.currentModelSubjects(prompt), ["Gemini 4 pro", "GPT 6.1S SOL"])
     const router = functionsFrom("lib/malik-god-router.ts", ["extractNamedSubject", "knownPersonSearchName", "buildQueries"], { ...query, ...currentEvidence, ...truth, ...freshness })
     const queries = router.buildQueries(prompt)
@@ -91,7 +93,7 @@ try {
     assert.match(instruction, /do NOT prove/)
     assert.match(instruction, /not "it does not exist"/)
     const cache = new Map()
-    const caching = functionsFrom("lib/malik-god-router.ts", ["cacheKey", "getCache", "setCache"], { CACHE: cache, SEARCH_CACHE_VERSION: "test", needsCurrentEvidence: currentEvidence.needsCurrentEvidence, ...sharedCache })
+    const caching = functionsFrom("lib/malik-god-router.ts", ["cacheKey", "getCache", "setCache"], { CACHE: cache, SEARCH_CACHE_VERSION: "test", needsCurrentEvidence: currentEvidence.needsCurrentEvidence, ...freshness, ...sharedCache })
     caching.setCache(prompt, { content: "outdated comparison" })
     assert.equal(caching.getCache(prompt), null, "changing facts are rechecked, not restored from a stale answer")
     assert.equal(cache.size, 0)
@@ -148,6 +150,7 @@ try {
     malikModelErrorPayload: (error) => ({ message: String(error) }),
     sameAnswerText, withIncompleteNote,
     buildClaimLedger: load("lib/ai/claim-ledger.ts").buildClaimLedger,
+    skipsClaimAudit: load("lib/ai/do-what-user-says.ts").skipsClaimAudit,
     normalizeProviderTokenUsage: load("lib/ai/token-telemetry.ts").normalizeProviderTokenUsage,
     ...load("lib/ai/chat-deadline.ts"),
     canRetryChat: load("lib/ai/chat-stream-recovery.ts").canRetryChat,

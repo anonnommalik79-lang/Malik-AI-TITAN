@@ -13,6 +13,8 @@ export type ChatSendOptions = {
   imageStyle?: string
   /** Client-only: edit a historical user turn by forking from this message. */
   branchFromMessageId?: string
+  /** Client-only: run this turn as the given media job (the server read it as one, or a model refused it). */
+  forcedMedia?: { kind: "image" | "video"; prompt: string }
   /** Client-only: this send came from the one-turn queue, so duplicate-burst protection must not swallow it. */
   queueDispatch?: boolean
   /** Client-only: answer in the chat even if the text would start a Superflow (the flow was refused). */

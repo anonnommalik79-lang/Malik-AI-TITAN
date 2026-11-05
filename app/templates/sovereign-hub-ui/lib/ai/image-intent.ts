@@ -21,14 +21,32 @@ const META_TASK_PREFIX_PATTERN = /^\s*(?:напиши(?:те)?|дай(?:те)?|�
 // «don't generate an image»: a negated verb is the opposite of a request.
 const NEGATION_BEFORE_VERB_PATTERN = /(?:^|[^\p{L}])(?:не|ни|нет|без|never|not|no|don'?t|do\s+not|doesn'?t|емес)(?:\s+[\p{L}'-]+){0,2}\s*$/iu
 
-/** The first create-verb that is not negated, or null. */
+// «Ты сам его генерировал», «я сделала фото вчера»: a report of what happened
+// is not an order, and generating from it spends the person's credits.
+const REPORTED_VERB_PATTERN = /^(?:сдел|созд|сген|генерир|нарис|изобраз)[\p{L}-]*(?:л|ла|ло|ли|лся|лась|лись|ет|ёт|ут|ют|ат|ят|ст|ется|ются|нн[\p{L}]*|вш[\p{L}]*|щ[\p{L}]*)$/iu
+
+/** The first create-verb that is an order and not negated, or null. */
 function firstRequestedVerb(value: string, verbs = IMAGE_CREATE_VERB_PATTERN) {
   const pattern = new RegExp(verbs.source, "giu")
   for (let match = pattern.exec(value); match; match = pattern.exec(value)) {
+    if (REPORTED_VERB_PATTERN.test(match[0])) continue
     if (!NEGATION_BEFORE_VERB_PATTERN.test(value.slice(Math.max(0, match.index - 40), match.index))) return { index: match.index, text: match[0] }
   }
   return null
 }
+
+const LATIN_LOOKALIKES: Record<string, string> = { a: "а", c: "с", e: "е", o: "о", p: "р", x: "х", y: "у", A: "А", B: "В", C: "С", E: "Е", H: "Н", K: "К", M: "М", O: "О", P: "Р", T: "Т", X: "Х" }
+
+/** A Latin «o» typed inside a Russian word looks the same and matches nothing. */
+export function repairMixedScript(input: string) {
+  return String(input || "").replace(/\p{L}+/gu, (word) => /\p{Script=Cyrillic}/u.test(word) && /[A-Za-z]/.test(word)
+    ? word.replace(/[A-Za-z]/g, (letter) => LATIN_LOOKALIKES[letter] ?? letter)
+    : word)
+}
+
+// «Хочу картинку с котом», «мне нужно фото модели в куртке»: a wish is a request.
+const IMAGE_WISH_PATTERN = /(?<!\p{L})(?:хочу|хотел(?:а)?\s+бы|нужн[аоы]|нужен|надо|мне\s+бы|i\s+(?:need|want)|i'?d\s+like|керек|қажет)(?!\p{L})/iu
+const LOOKUP_OR_PAPERWORK_PATTERN = /(?:увидеть|посмотреть|найти|найди|покажи|(?<!\p{L})see(?!\p{L})|(?<!\p{L})find(?!\p{L})|look\s+at|на\s+(?:паспорт|визу|документ)|для\s+(?:паспорта|визы|документов)|\d\s*[xх×]\s*\d)/iu
 
 function firstMatch(value: string, pattern: RegExp) {
   const match = pattern.exec(value)
@@ -143,7 +161,7 @@ export function isExplicitImageEditRequest(input: string, hasImage = false): boo
  * supported.
  */
 export function isExplicitImageGenerationRequest(input: string): boolean {
-  const text = String(input || "").trim()
+  const text = repairMixedScript(String(input || "").trim())
   if (!text) return false
 
   if (VIDEO_COMMAND_PATTERN.test(text)) return false
@@ -156,11 +174,18 @@ export function isExplicitImageGenerationRequest(input: string): boolean {
   }
 
   const actionable = actionableRequest(text)
+  // «Хочу сделать фото на айфон, какие настройки?» asks for advice.
+  if (/\?\s*$/u.test(actionable) && /(?<!\p{L})(?:как|какие|какой|какая|какое|где|зачем|почему|сколько|когда|кто|how|which|where|why|when)(?!\p{L})/iu.test(actionable)) return false
   const verb = firstRequestedVerb(actionable)
-  const noun = firstMatch(actionable, IMAGE_NOUN_PATTERN) || firstMatch(actionable, /(?<!\p{L})(?:аву|аватар|логотип|logo)(?!\p{L})/iu)
+  const noun = firstMatch(actionable, IMAGE_NOUN_PATTERN) || firstMatch(actionable, /(?<!\p{L})(?:аву|аватар|логотип|logo|флаер|листовк[\p{L}]*|стикер[\p{L}]*|обои|визитк[\p{L}]*|flyer|sticker|wallpaper)(?!\p{L})/iu)
   if(verb&&!noun&&/(?:нарис|изобраз|\bdraw\b|\brender\b|сал)/iu.test(verb.text)){
     const object=actionable.slice(verb.index+verb.text.length).trim()
     return Boolean(object)&&!NON_IMAGE_OBJECT_PATTERN.test(object)&&!/(?:график|диаграмм|таблиц|схем|план|вывод|conclusions?|plans?|charts?|graphs?|tables?)/iu.test(object)
+  }
+  if (!verb && noun) {
+    const wish = firstMatch(actionable, IMAGE_WISH_PATTERN)
+    return Boolean(wish && wish.index < noun.index && !/\?\s*$/u.test(actionable)
+      && !LOOKUP_OR_PAPERWORK_PATTERN.test(actionable) && !NON_IMAGE_OBJECT_PATTERN.test(actionable.slice(wish.index, noun.index)))
   }
   if (!verb || !noun) return false
 

@@ -124,6 +124,9 @@ export function ChatTurnScrollRuntime() {
 
     const restoreSubmittedViewport = (thread: HTMLElement) => {
       markStableTurn(thread, pendingThreadTop)
+      // This jump is ours. The thread's follow logic must not read it as the
+      // person scrolling up, or the answer streams on below an abandoned view.
+      thread.dataset.malikViewportRestoredUntil = String(performance.now() + 250)
       ;(nativeScrollTo as (options: ScrollToOptions) => void).call(thread, {
         top: Math.min(pendingThreadTop, Math.max(0, thread.scrollHeight - thread.clientHeight)),
         behavior: "auto",

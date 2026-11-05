@@ -273,6 +273,40 @@ try {
     await withCompute(async () => Response.json({ ok: false, error: "failed" }), "image")(request())
     assert.equal(balance("nested").used, 1)
   })
+  await check("a request that breaks is not reported as a limit problem", async () => {
+    login("broken")
+    const response = await withCompute(async () => { throw new TypeError("attachment.url is undefined") }, "chat")(request())
+    const body = await response.json()
+    assert.equal(response.status, 502)
+    assert.equal(body.code, "MALIK_REQUEST_FAILED")
+    assert.doesNotMatch(body.message, /лимит|Compute|attachment/iu)
+    assert.equal(balance("broken").reserved, 0, "the reservation is released")
+    assert.equal(balance("broken").used, 0)
+  })
+  await check("a text answer survives a ledger that cannot be read, paid media does not", async () => {
+    login("ledgerless")
+    const original = computeService.reserveCompute
+    computeService.reserveCompute = () => { const error = new Error("disk unavailable"); throw error }
+    try {
+      const chat = await withCompute(async () => Response.json({ ok: true, content: "ответ" }), "chat")(request())
+      assert.equal(chat.status, 200)
+      assert.equal((await chat.json()).content, "ответ")
+      let ran = false
+      const image = await withCompute(async () => { ran = true; return Response.json({ ok: true }) }, "image")(request())
+      assert.equal(image.status, 503)
+      assert.equal(ran, false)
+    } finally { computeService.reserveCompute = original }
+  })
+  await check("settling a finished answer never costs the person that answer", async () => {
+    login("settle")
+    const original = computeService.settleCompute
+    computeService.settleCompute = () => { throw new Error("disk unavailable") }
+    try {
+      const response = await withCompute(async () => Response.json({ ok: true, content: "готово" }), "chat")(request())
+      assert.equal(response.status, 200)
+      assert.equal((await response.json()).content, "готово")
+    } finally { computeService.settleCompute = original }
+  })
   await check("binary voice output is metered without parsing audio as JSON", async () => {
     login("audio")
     const response = await withCompute(async () => new Response(new Uint8Array([1, 2, 3]), { headers: { "Content-Type": "audio/mpeg" } }), "voice")(request())
