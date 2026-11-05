@@ -233,6 +233,18 @@ const IconSpinner = () => <svg {...stroke} className="mm-spin" aria-hidden="true
 export function MusicGenerationStudio({ username }: { username?: string }) {
   const [genreId, setGenreId] = useState<GenreId>("other")
   const [prompt, setPrompt] = useState("")
+  // «Создай трек про лето» from the chat arrives written in.
+  useEffect(() => {
+    try {
+      const raw = window.sessionStorage.getItem("malik.music.handoff")
+      if (!raw) return
+      window.sessionStorage.removeItem("malik.music.handoff")
+      const request = String((JSON.parse(raw) as { prompt?: unknown })?.prompt || "").trim()
+      if (request) setPrompt(request)
+    } catch {
+      /* The studio simply opens on its start screen. */
+    }
+  }, [])
   const [lyrics, setLyrics] = useState("")
   const [lyricsEnabled, setLyricsEnabled] = useState(false)
   const [lyricsLanguage, setLyricsLanguage] = useState<LyricsLanguage>("auto")

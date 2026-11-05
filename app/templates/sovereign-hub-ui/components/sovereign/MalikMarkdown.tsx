@@ -1322,6 +1322,8 @@ export function MalikMarkdown({ text, className, allowImages = true, referencePh
     )) return new Map<string, AnswerVisualSlot>()
     // Event lineups need explicit subject metadata: a guessed portrait is not attendance evidence.
     if (!question || /(?:спикер|выступ|участни|приехал|присутств|speaker|attend|participant|lineup)/iu.test(question)) return new Map<string, AnswerVisualSlot>()
+    // An answer that asks back or talks about making a picture has no subject to show.
+    if (/(?:уточните|уточни(?!\p{L})|промпт|prompt|сгенерировать\s+изображени|не\s+могу\s+сгенерировать)/iu.test(text.slice(0, 600))) return new Map<string, AnswerVisualSlot>()
     // A chart or a dates/pricing card does not disable photos in other sections.
     // Only subjects already illustrated by a card own their image slot.
     const illustrated = blocks.flatMap((block) => {

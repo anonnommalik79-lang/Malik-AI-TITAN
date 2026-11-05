@@ -212,7 +212,8 @@ check("the chat router uses the follow-up, the user's context and the resolved q
   assert.match(router, /gatherSources\(focus\.searchText/)
   assert.match(router, /taskPrompt: focus\.shapeText/)
   assert.match(router, /userContextBlocks\(body\)/)
-  assert.match(router, /const local = instantReply\(prompt\)/)
+  // A canned greeting only opens an empty chat; inside a conversation the model answers.
+  assert.match(router, /const local = chatHistory\.length \|\| [^\n]*instantReply\(prompt\)/)
   // A follow-up never shares a cached answer with another conversation.
   assert.match(router, /!legacyFocus\.followUp/)
 })

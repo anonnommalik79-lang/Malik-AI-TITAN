@@ -19,7 +19,7 @@ test('latest format wins and no-file cancels previous preferences',()=>{
  assert.equal(r({prompt:'Не PDF, а Word',messages:history}).requirements.format,'docx')
  const i=r({prompt:'Сократи, только в чат, без файла',messages:history});assert.equal(i.target,'text');assert.equal(i.requirements.format,undefined);assert.equal(i.requirements.length,'brief')
 })
-test('new topic does not inherit a PDF or old tone; code is not document export',()=>{const i=r({prompt:'Напиши React компонент на TypeScript',messages:history});assert.equal(i.target,'code');assert.deepEqual(i.requirements,{});assert.equal(i.source,undefined)})
+test('new topic does not inherit a PDF or old tone; code is not document export',()=>{const i=r({prompt:'Напиши React компонент на TypeScript',messages:history});assert.equal(i.target,'code');assert.equal(i.requirements.format,undefined);assert.equal(i.requirements.tone,undefined);assert.equal(i.requirements.language,'ru','a chosen language stays for the whole conversation');assert.equal(i.source,undefined)})
 test('HTML code contract does not request Markdown document substitution',()=>{const i=r({prompt:'Напиши код HTML страницы'});assert.equal(i.target,'code');assert.doesNotMatch(contract(i),/Author the complete document/)})
 test('generic follow-up cannot disable active code/project flags; only explicit delivery does',()=>{
  const messages=[{role:'user',content:'Напиши проект React'},{role:'assistant',content:'```tsx\nexport default function App(){return null}\n```'}]

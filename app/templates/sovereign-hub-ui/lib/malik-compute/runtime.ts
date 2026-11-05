@@ -58,6 +58,25 @@ export async function retryCompute<T>(run: () => T): Promise<T> {
   }
 }
 
+function computeCode(error: unknown) {
+  return error instanceof MalikComputeError ? error.code : "MALIK_COMPUTE_STORAGE_UNAVAILABLE"
+}
+
+// A text answer costs little and the person is waiting for it: a ledger that
+// cannot be read this moment is logged, not turned into a failed chat. Paid
+// media keeps failing closed, because a wrong allowance there costs real money.
+function answersWithoutLedger(operation: ComputeOperation, error: unknown) {
+  const code = computeCode(error)
+  return (operation === "chat" || operation === "research") && (code === "MALIK_COMPUTE_STORAGE_UNAVAILABLE" || code === "MALIK_COMPUTE_STORE_BUSY")
+}
+
+/** The request itself broke, after admission. Nothing here is about the balance. */
+function requestFailureResponse(error: unknown) {
+  console.error("[MALIK_REQUEST_FAILED]", error instanceof Error ? error.stack || error.message : String(error))
+  const message = "Не удалось получить ответ. Попробуйте отправить запрос снова."
+  return Response.json({ ok: false, code: "MALIK_REQUEST_FAILED", error: message, message }, { status: 502, headers: { "Cache-Control": "private, no-store" } })
+}
+
 export function computeErrorResponse(error: unknown) {
   const code = error instanceof MalikComputeError ? error.code : "MALIK_COMPUTE_STORAGE_UNAVAILABLE"
   const tokenLimited = code === "MALIK_TEXT_TOKEN_LIMIT_REACHED"
@@ -114,6 +133,7 @@ export function withCompute<R extends Request, Args extends unknown[]>(
     if (active.getStore()) return handler(request, ...args)
     let reservation: ComputeReservation | undefined
     let finalized = false
+    let admitted = false
     const context: Context = { metadata: {} }
     const finish = async (failed: boolean, status = 500) => {
       if (!reservation || finalized) return
@@ -133,6 +153,11 @@ export function withCompute<R extends Request, Args extends unknown[]>(
         computeService.settleCompute(item, freeResult(context.metadata) ? 0 : estimateCompute(operation), operation, fallbackCount)
       })
     }
+    // Settling a finished answer must never cost the person that answer: an
+    // unsettled reservation is released by its expiry.
+    const settle = (failed: boolean, status = 500) => finish(failed, status).catch((error) => {
+      console.warn("[MALIK_COMPUTE_SETTLE]", error instanceof Error ? error.message : String(error))
+    })
     try {
       const identity = await getComputeIdentity()
       const operation = typeof policy === "function" ? await policy(request) : policy
@@ -145,7 +170,8 @@ export function withCompute<R extends Request, Args extends unknown[]>(
           context.textQuota = { userId: identity.userId, unlimited: true, recorded: false, output: "" }
         }
         context.metadata.ownerUnlimited = true
-        return active.run(context, () => handler(request, ...args))
+        admitted = true
+        return await active.run(context, () => handler(request, ...args))
       }
 
       if (textQuotaOperation(operation)) {
@@ -166,11 +192,17 @@ export function withCompute<R extends Request, Args extends unknown[]>(
         }
       }
 
-      reservation = await retryCompute(() => computeService.reserveCompute(identity.userId, estimateCompute(operation), operation, randomUUID()))
-      if (request.signal.aborted) { await finish(true); return new Response(null, { status: 499 }) }
+      try {
+        reservation = await retryCompute(() => computeService.reserveCompute(identity.userId, estimateCompute(operation), operation, randomUUID()))
+      } catch (error) {
+        if (!answersWithoutLedger(operation, error)) throw error
+        console.warn("[MALIK_COMPUTE_UNAVAILABLE] answering without a reservation", computeCode(error))
+      }
+      if (request.signal.aborted) { await settle(true); return new Response(null, { status: 499 }) }
+      admitted = true
       const response = await active.run(context, () => handler(request, ...args))
-      if (!response.ok) { await finish(true, response.status); return response }
-      if (request.signal.aborted) { await finish(true); return response }
+      if (!response.ok) { await settle(true, response.status); return response }
+      if (request.signal.aborted) { await settle(true); return response }
       if (response.headers.get("content-type")?.includes("text/event-stream") && response.body) {
         const reader = response.body.getReader()
         const decoder = new TextDecoder()
@@ -230,13 +262,13 @@ export function withCompute<R extends Request, Args extends unknown[]>(
               if (next.done) {
                 inspect(decoder.decode())
                 if (!failed && completed && hasContent) chargeTextQuota(context)
-                await finish(failed || !completed || !hasContent)
+                await settle(failed || !completed || !hasContent)
                 ended = true
                 request.signal.removeEventListener("abort", abort)
                 controller.close()
               } else {
                 inspect(decoder.decode(next.value, { stream: true }))
-                if (completed) await finish(failed || !hasContent)
+                if (completed) await settle(failed || !hasContent)
                 if (ended) return
                 controller.enqueue(next.value)
               }
@@ -244,7 +276,7 @@ export function withCompute<R extends Request, Args extends unknown[]>(
               if (ended) return
               ended = true
               request.signal.removeEventListener("abort", abort)
-              await finish(true).catch(() => {})
+              await settle(true)
               controller.error(new Error("Malik AI: ответ прерван, Compute не списан."))
             }
           },
@@ -252,11 +284,11 @@ export function withCompute<R extends Request, Args extends unknown[]>(
             ended = true
             request.signal.removeEventListener("abort", abort)
             await reader.cancel().catch(() => {})
-            await finish(true)
+            await settle(true)
           },
         })
         const headers = new Headers(response.headers)
-        headers.set("X-Malik-Compute-Reserved", String(reservation.amount))
+        if (reservation) headers.set("X-Malik-Compute-Reserved", String(reservation.amount))
         return new Response(body, { status: response.status, headers })
       }
       if (response.headers.get("content-type")?.includes("application/json")) {
@@ -272,16 +304,18 @@ export function withCompute<R extends Request, Args extends unknown[]>(
       if (operation === "video" && !unsuccessful(context.metadata) && !freeResult(context.metadata) &&
           (pending(context.metadata) || (jobDetails(context.metadata, request) && !videoReady(context.metadata)))) {
         const job = jobDetails(context.metadata, request)
-        if (!job) { await finish(true); return response }
+        if (!job) { await settle(true); return response }
         await retryCompute(() => computeService.attachJob(reservation!, job.jobId, job.route))
         // Polling settles this same reservation, never a second charge.
         return response
       }
-      await finish(false)
+      await settle(false)
       return response
     } catch (error) {
-      await finish(true).catch(() => {})
-      return computeErrorResponse(error)
+      await settle(true)
+      // Only the ledger speaks about the balance. Anything the request itself
+      // threw used to reach the person as «не может проверить лимит запросов».
+      return admitted && !(error instanceof MalikComputeError) ? requestFailureResponse(error) : computeErrorResponse(error)
     }
   }
 }

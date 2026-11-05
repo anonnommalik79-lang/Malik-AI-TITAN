@@ -54,6 +54,7 @@ function parseSseFrame(frame: string, state: { content: string; error: string; d
       incomplete: payload.incomplete && typeof payload.incomplete === "object" ? payload.incomplete : null,
       selectedModelId: typeof payload.selectedModelId === "string" ? payload.selectedModelId : undefined,
       artifactDelivery: payload.artifactDelivery && typeof payload.artifactDelivery === "object" ? payload.artifactDelivery : undefined,
+      mediaAction: payload.mediaAction && typeof payload.mediaAction === "object" ? payload.mediaAction : undefined,
     }
   }
 }

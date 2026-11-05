@@ -10,6 +10,7 @@ const source = { title: "Next.js v99 TEST FIXTURE", url: "https://github.com/ver
 let queries = [], modelInputs = [], fileInputs = [], godInputs = [], fail = false, fileKind = "answer", draft = "Current stable release [1].", checks = 0
 const deps = {
   ...load("lib/ai/conversation-history.ts"),
+  ...load("lib/ai/do-what-user-says.ts"),
   ...load("lib/website/engine/intent.ts"),
   ...load("lib/server/chat-website-design.ts"),
   ...freshness, ...evidence, ...accuracy, ...gates, ...brain,

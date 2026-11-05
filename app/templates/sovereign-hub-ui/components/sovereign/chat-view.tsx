@@ -2356,6 +2356,11 @@ export function ChatView({ messages, workspaceMode = "chat", onSendMessage, onIm
     const onScroll = () => {
       const top = thread.scrollTop
       const away = distance()
+      if (performance.now() < Number(thread.dataset.malikViewportRestoredUntil || 0)) {
+        lastTop = top
+        syncJumpButton()
+        return
+      }
       if (away <= FOLLOW_EPSILON_PX) followRef.current = true
       // Moving up and ending away from the bottom is the person reading
       // above (this also catches find-in-page and middle-click scrolling).
