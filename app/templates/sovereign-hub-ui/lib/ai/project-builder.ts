@@ -31,7 +31,11 @@ export type ProjectBuilderInput = {
   modelId?: MalikModelId
   /** Server-only Symbol context; JSON clients cannot supply verified media. */
   websiteContext?: object
+  signal?: AbortSignal
 }
+
+/** Server injection for bounded skill execution; other callers keep the same router. */
+export type ProjectBuilderDeps = { model?: (input: { modelId: MalikModelId; systemPrompt: string; prompt: string; maxTokens: number; temperature: number; signal?: AbortSignal }) => Promise<{ content: string; provider: string; model: string; latencyMs: number }> }
 
 export type ProjectBuilderResult = {
   projectId: string
@@ -288,9 +292,9 @@ function reviewerPassed(review: string | null) {
   return /^PASS\b/i.test(String(review || "").trim())
 }
 
-async function aiReview(input: ProjectBuilderInput, files: ProjectFile[]) {
+async function aiReview(input: ProjectBuilderInput, files: ProjectFile[], deps: ProjectBuilderDeps) {
   try {
-    const result = await runStrictMalikModel({
+    const result = await (deps.model || runStrictMalikModel)({
       modelId: DEFAULT_MODEL,
       systemPrompt: [
         "You are MALIK AI Project QA, a strict senior reviewer.",
@@ -300,6 +304,7 @@ async function aiReview(input: ProjectBuilderInput, files: ProjectFile[]) {
       prompt: `USER BRIEF:\n${input.prompt.slice(0, 7000)}\n\nPROJECT SNAPSHOT:\n${projectSnapshot(files)}`,
       maxTokens: 850,
       temperature: 0.02,
+      signal: input.signal,
     })
     return String(result.content || "").trim().slice(0, 5000)
   } catch {
@@ -307,7 +312,7 @@ async function aiReview(input: ProjectBuilderInput, files: ProjectFile[]) {
   }
 }
 
-async function generateFiles(input: ProjectBuilderInput, feedback = ""): Promise<GeneratedProject> {
+async function generateFiles(input: ProjectBuilderInput, feedback = "", deps: ProjectBuilderDeps = {}): Promise<GeneratedProject> {
   const modelId = input.modelId || DEFAULT_MODEL
   const feedbackBlock = feedback
     ? `\n\nPREVIOUS QA FAILED. Regenerate the project and fix EVERY item below. Do not merely describe the fixes.\n${feedback.slice(0, 6000)}`
@@ -318,12 +323,13 @@ async function generateFiles(input: ProjectBuilderInput, feedback = ""): Promise
     input.style ? `Visual style preference: ${input.style}` : "",
   ].filter(Boolean).join("\n")
 
-  const result = await runStrictMalikModel({
+  const result = await (deps.model || runStrictMalikModel)({
     modelId,
     systemPrompt: [BUILDER_SYSTEM_PROMPT, chatWebsiteInstruction(input.websiteContext)].filter(Boolean).join("\n\n"),
     prompt: `USER PROJECT BRIEF:\n${input.prompt.slice(0, 24_000)}${preferences ? `\n\nPREFERENCES:\n${preferences}` : ""}${feedbackBlock}`,
     maxTokens: Number(process.env.MAX_CODE_OUTPUT_TOKENS || 8_000),
     temperature: feedback ? 0.03 : 0.08,
+    signal: input.signal,
   })
 
   return {
@@ -334,7 +340,7 @@ async function generateFiles(input: ProjectBuilderInput, feedback = ""): Promise
   }
 }
 
-export async function generateProjectWithBrain(input: ProjectBuilderInput): Promise<ProjectBuilderResult> {
+export async function generateProjectWithBrain(input: ProjectBuilderInput, deps: ProjectBuilderDeps = {}): Promise<ProjectBuilderResult> {
   const prompt = String(input.prompt || "").trim()
   const title = titleFromPrompt(prompt)
   const createdAt = new Date().toISOString()
@@ -357,22 +363,24 @@ export async function generateProjectWithBrain(input: ProjectBuilderInput): Prom
 
   let rounds = 0
   try {
-    let generated = await generateFiles(input)
+    input.signal?.throwIfAborted()
+    let generated = await generateFiles(input, "", deps)
     rounds += 1
     let files = mergeBaseFiles(generated.files, title)
     let staticQa = validateProject(files)
-    let reviewer = staticQa.issues.length ? null : await aiReview(input, files)
+    let reviewer = staticQa.issues.length ? null : await aiReview(input, files, deps)
 
     // Repair with the real diagnostics; a second repair only when the first
     // one reduced the problems, so a model that cannot fix it is not looped.
     for (let repair = 0; repair < 2 && (staticQa.issues.length || (reviewer !== null && !reviewerPassed(reviewer))); repair++) {
       const before = staticQa.issues.length
       const feedback = [...staticQa.issues, reviewer && !reviewerPassed(reviewer) ? reviewer : ""].filter(Boolean).join("\n")
-      generated = await generateFiles(input, feedback)
+      input.signal?.throwIfAborted()
+      generated = await generateFiles(input, feedback, deps)
       rounds += 1
       files = mergeBaseFiles(generated.files, title)
       staticQa = validateProject(files)
-      reviewer = staticQa.issues.length ? null : await aiReview(input, files)
+      reviewer = staticQa.issues.length ? null : await aiReview(input, files, deps)
       if (staticQa.issues.length && staticQa.issues.length >= before) break
     }
 

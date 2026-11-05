@@ -16,6 +16,8 @@ import { reserveWorkQuota, refundWorkQuota, WorkQuotaError, type WorkQuotaReceip
 
 import { withCompute } from "@/lib/malik-compute/runtime"
 import { chatComputeOperation } from "@/lib/malik-compute/policies"
+import { skillChatRequest } from "@/lib/skills/chat-intent"
+import { SkillError } from "@/lib/skills/types"
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
@@ -79,6 +81,11 @@ async function handlePOST(request: Request) {
       ? { ...body, maxTokens: maxOutputTokens, maxTokensCap: textQuota.unlimited ? undefined : Math.max(1, Math.floor(textQuota.remaining ?? 0)) }
       : body
     const routedBody = ownerMode ? withVerifiedOwnerChatContext(quotaBoundBody) : quotaBoundBody
+    if (skillChatRequest(routedBody)) {
+      const { runSkillChat } = await import("@/lib/skills/chat")
+      const result = await runSkillChat({ body: routedBody, owner: entitlement, modelId: selection?.modelId || DEFAULT_MALIK_MODEL_ID, maxTokens: maxOutputTokens, signal: request.signal })
+      return Response.json({ ok: result?.skillRun.status !== "failed" && result?.skillRun.status !== "cancelled", ...result }, { headers: { "cache-control": "private, no-store" } })
+    }
     if (pluginCommand) {
       const result = await runPluginModelAnswer(pluginCommand, routedBody, {
         modelId: selection?.modelId || DEFAULT_MALIK_MODEL_ID,
@@ -108,6 +115,7 @@ async function handlePOST(request: Request) {
     })
   } catch (error) {
     if (workReceipt) await refundWorkQuota(workUserId, workReceipt).catch((reason) => console.error("[MALIK_WORK_QUOTA_REFUND]", reason))
+    if (error instanceof SkillError) return Response.json({ ok: false, error: error.code, retryable: error.retryable }, { status: error.status, headers: { "cache-control": "private, no-store" } })
     if (error instanceof WorkQuotaError) return Response.json({ ok: false, error: error.code, message: error.message }, { status: error.status, headers: { "cache-control": "private, no-store" } })
     const payload = malikModelErrorPayload(error)
     const status = error instanceof MalikModelRouteError ? error.status : 503

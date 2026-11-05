@@ -79,6 +79,8 @@ import {conversationSource,deliverConversationDocument,deliveryProblem} from "@/
 import { prepareDocumentAssets } from "@/lib/server/document-assets"
 import { prepareChatWebsite, chatWebsiteInstruction } from "@/lib/server/chat-website-design"
 import { documentAssets, type DocumentAsset } from "@/lib/work/documents/assets"
+import { skillChatRequest } from "@/lib/skills/chat-intent"
+import { SkillError } from "@/lib/skills/types"
 
 import { withCompute, observeComputeResult } from "@/lib/malik-compute/runtime"
 import { chatComputeOperation } from "@/lib/malik-compute/policies"
@@ -96,6 +98,7 @@ function wantsSse(request: Request, body: any) {
 }
 
 function isProjectBuildRequest(body: any) {
+  if (skillChatRequest(body)) return false
   return body?.isProjectRequest === true || (body?.forceCanvas === true && body?.responseMode === "canvas")
     || (!hasMalikAttachments(body?.attachments) && body?.modelId !== "malik-oil-1tb" && body?.model !== "malik-oil-1tb" && selfBuildIntent(coderPrompt(body)))
 }
@@ -564,6 +567,11 @@ async function runSelectedAnswer(
   const intent=resolveConversationIntent({prompt:originalPrompt,messages:conversationHistorySource(body),attachments:body?.attachments})
   const domainPlan=resolveDomainPlan({prompt:originalPrompt,messages:conversationHistorySource(body),attachments:body?.attachments,intent})
   const owner=serverOwner||selection?.entitlement
+  if (skillChatRequest(body)) {
+    const { runSkillChat } = await import("@/lib/skills/chat")
+    const result = await runSkillChat({ body, owner, modelId: selection?.modelId || DEFAULT_MALIK_MODEL_ID, maxTokens: maxOutputTokens, signal, activity })
+    if (result) return result
+  }
   const fileFormat=intent.target==="document"?intent.requirements.format:undefined
   const validateText=intent.target==="text"&&(intent.requirements.presentation==="json"||intent.action==="repair"||needsActionClaimValidation(originalPrompt))&&!hasMalikAttachments(body?.attachments)&&!freshness.needsSearch&&!routePetroleum(originalPrompt,body?.selectedSkillId).domain&&!parsePluginCommand(originalPrompt)
   const requestedCap=Number(body?.maxTokens)
@@ -1249,7 +1257,7 @@ function liveSseResponse(
         code: isCodeRequest(coderPrompt(body)), deep: briefNeedsDeep(coderPrompt(body)), site: Boolean(chatArtDirection(coderPrompt(body))),
         game: Boolean(gameStudioTurn(coderPrompt(body), { messages: body?.messages || body?.history, attachments: body?.attachments })),
       })
-      const settledAnswer = isProjectBuildRequest(body) || !canRetryChat(body) ? answerPromise : withinChatDeadline(answerPromise, deadline, startedAt, {
+      const settledAnswer = skillChatRequest(body) || isProjectBuildRequest(body) || !canRetryChat(body) ? answerPromise : withinChatDeadline(answerPromise, deadline, startedAt, {
         wrote: () => streamedAny,
         stop: () => { writer = "rescue"; mainRun.abort() },
         rescue: () => {
@@ -1341,6 +1349,8 @@ function liveSseResponse(
           usedWeb: answer.usedWeb,
           sources: answer.sources,
           webSourceCount: answer.sources.length,
+          skillRun: "skillRun" in answer ? answer.skillRun : undefined,
+          ...("skillRun" in answer && ["failed", "cancelled"].includes(answer.skillRun.status) ? { ok: false, error: answer.skillRun.error || "SKILL_RUN_FAILED" } : {}),
           textOnly: body?.chatRecovery === true,
           // The answer's own figures, checked against the pages it was written
           // from. This rides on `done` rather than an event of its own so the
@@ -1363,10 +1373,11 @@ function liveSseResponse(
       }).catch((error) => {
         stopHeartbeat()
         if (workReceipt) failedWorkRefund = refundWorkQuota(entitlement.userId, workReceipt).catch((reason) => console.error("[MALIK_WORK_QUOTA_REFUND]", reason))
-        const payload = malikModelErrorPayload(error)
+        const payload = error instanceof SkillError ? { error: error.code, message: error.code } : malikModelErrorPayload(error)
         activity.finish(responseCall, undefined, "failed", payload.message || payload.error)
         send("error", {
           type: "error",
+          ...(error instanceof SkillError ? { code: error.code, retryable: error.retryable } : {}),
           message: payload.message || payload.error || "Malik AI temporarily unavailable.",
           execution: activity.settle("failed"),
         })
@@ -1573,6 +1584,7 @@ async function handlePOST(request: Request) {
     return textResponse(content)
   } catch (error) {
     if (workReceipt) await refundWorkQuota(workUserId, workReceipt).catch((reason) => console.error("[MALIK_WORK_QUOTA_REFUND]", reason))
+    if (error instanceof SkillError) return Response.json({ ok: false, error: error.code, retryable: error.retryable }, { status: error.status, headers: { "cache-control": "private, no-store" } })
     if (error instanceof WorkQuotaError) return Response.json({ ok: false, error: error.code, message: error.message }, { status: error.status, headers: { "cache-control": "private, no-store" } })
     const payload = malikModelErrorPayload(error)
     const status = error instanceof MalikModelRouteError ? error.status : 503

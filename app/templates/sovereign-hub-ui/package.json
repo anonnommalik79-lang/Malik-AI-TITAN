@@ -6,6 +6,7 @@
     "node": ">=20 <23"
   },
   "scripts": {
+    "test:skills": "node --test --test-concurrency=1 scripts/verify-skills-unit.mjs scripts/verify-skills-integration.mjs scripts/verify-skills-e2e.mjs",
     "test:client-cancellation": "node --test scripts/verify-client-cancellation.mjs",
     "test:founder-overview-access": "node --test scripts/verify-founder-overview-access.mjs",
     "test:client-cancellation-browser": "node scripts/verify-client-cancellation-browser.mjs",
