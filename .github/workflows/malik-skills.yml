@@ -1,0 +1,31 @@
+name: Malik Skills Engine
+on:
+  pull_request:
+    paths:
+      - "app/templates/sovereign-hub-ui/lib/skills/**"
+      - "app/templates/sovereign-hub-ui/app/api/skills/**"
+      - "app/templates/sovereign-hub-ui/app/api/stream/route-impl.ts"
+      - "app/templates/sovereign-hub-ui/app/api/ai/chat/route.ts"
+      - "app/templates/sovereign-hub-ui/lib/ai/project-builder.ts"
+      - "app/templates/sovereign-hub-ui/scripts/*skills*.mjs"
+      - "app/templates/sovereign-hub-ui/scripts/fixtures/skills-fixture.mjs"
+      - ".github/workflows/malik-skills.yml"
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: app/templates/sovereign-hub-ui
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/templates/sovereign-hub-ui/package-lock.json
+      - run: npm ci --legacy-peer-deps
+      - run: npm run test:skills
+      - run: npm run typecheck
