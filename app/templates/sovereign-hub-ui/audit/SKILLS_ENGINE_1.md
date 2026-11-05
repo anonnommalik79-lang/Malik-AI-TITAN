@@ -4,7 +4,7 @@ Base: main `7e2338bf` (contains `55601c4a`). User requested stopping further dev
 
 ## Audit
 
-Existing Work has a 19-item capability catalog, but its direct run API executes only math, petroleum and document export. Superflow has 15 executable tools, dependency scheduling, retries, account-scoped storage and artifact validation. Forge and project generators produce real source. Research can search and fetch pages. The older agent runtime produces bounded read-only model reports; it is not an arbitrary shell/browser executor. These components did not form a single executable, verified skill registry.
+Existing Work has a 20-item capability catalog, but its direct run API executes only math, petroleum and document export. Superflow has 15 executable tools, dependency scheduling, retries, account-scoped storage and artifact validation. Forge and project generators produce real source. Research can search and fetch pages. The older agent runtime produces bounded read-only model reports; it is not an arbitrary shell/browser executor. These components did not form a single executable, verified skill registry. The older Work catalog test still expected 19, omitting the already-installed business.launch tool; its count assertion was updated to the actual 20 entries.
 
 ## Implemented
 

@@ -8,7 +8,7 @@ const request = data => new Request("http://qa.invalid/api/work/skills/run", { m
 let passed = 0; async function check(name, fn) { await fn(); passed++; console.log(`ok ${name}`) }
 await check("catalog has engines, existing OS tools and GitHub with truthful missing connections", async () => {
   const result = await (await catalog(new Request("http://qa.invalid/api/work/skills"))).json()
-  assert.equal(result.skills.length, 19)
+  assert.equal(result.skills.length, 20) // Three engines, fifteen OS tools, two GitHub operations (includes business.launch).
   assert.equal(new Set(result.skills.map(s => s.id)).size, result.skills.length)
   assert.equal(result.skills.find(s => s.id === "github.work").status, "needs-connection")
   assert.equal(result.skills.find(s => s.id === "math.compute").status, "ready")
