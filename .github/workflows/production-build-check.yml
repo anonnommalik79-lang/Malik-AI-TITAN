@@ -43,6 +43,9 @@ jobs:
       - name: Install
         run: npm ci --legacy-peer-deps
 
+      - name: Verify short-chat token budgets and exact provider usage
+        run: npm run test:token-telemetry
+
       - name: Core release regression suite
         run: npm run test:release-core
 
