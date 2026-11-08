@@ -64,6 +64,17 @@ export function malikVideoStreamUrl(taskId: string) {
   return `/api/media/video/brand-source?taskId=${encodeURIComponent(taskId)}`
 }
 
+/** ClipTaps marks /uploads/ videos private. The browser must use Malik's
+ * authenticated owner-scoped stream rather than retrying an unsigned URL. */
+export function isProtectedClipTapsUrl(src: string) {
+  try {
+    const url = new URL(src)
+    return url.protocol === "https:" && url.hostname === "cliptaps.com" && url.pathname.startsWith("/uploads/")
+  } catch {
+    return false
+  }
+}
+
 const wait = (ms: number) => new Promise((resolve) => window.setTimeout(resolve, ms))
 
 /**
@@ -84,7 +95,10 @@ export async function deliverGeneratedVideo(input: {
   const fetcher = input.fetcher || fetch
   const direct = directMediaUrl(input.url, input.origin)
   let lastError: unknown
-  if (direct) {
+  // An unsigned ClipTaps /uploads/ URL will always be 403 in the browser.
+  // Go straight to the server's owner-authenticated path instead of wasting
+  // multiple metadata timeouts on a known private link.
+  if (direct && !(input.taskId && isProtectedClipTapsUrl(direct))) {
     for (const delay of input.waits || [0, 4000, 9000]) {
       if (delay) await wait(delay)
       try {
