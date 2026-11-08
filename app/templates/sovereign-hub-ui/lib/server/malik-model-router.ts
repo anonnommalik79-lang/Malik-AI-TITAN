@@ -13,7 +13,7 @@ import { providerFetch } from "@/lib/ai/providers/base"
 import { hasHiddenGeminiMedia, runHiddenGeminiMultimodal } from "@/lib/server/hidden-gemini-multimodal"
 import { resolveRequestEntitlement, type RequestEntitlement } from "@/lib/server/request-entitlement"
 import { analyzeMalikBrainV1 } from "@/lib/ai/brain-v1"
-import { boundedConversationHistory, withoutCurrentTurn } from "@/lib/ai/conversation-history"
+import { boundedConversationHistory, conversationTransportBudget, withoutCurrentTurn } from "@/lib/ai/conversation-history"
 import type { ExecutionReporter } from "@/lib/ai/chat-execution"
 
 export type HistoryMessage = { role: "user" | "assistant"; content: string }
@@ -152,18 +152,15 @@ export function buildMessages(input: {
     .filter((message) => message.content), input.prompt, input.taskPrompt)
   const historyMessageLimit = Math.max(12, Math.min(128, Number(process.env.MALIK_MAX_HISTORY_MESSAGES || 64)))
   const configuredHistoryChars = Math.max(24_000, Math.min(800_000, Number(process.env.MALIK_MAX_HISTORY_CHARS || 180_000)))
-  // Preserve the new prompt first. On huge pasted documents, old turns are the
-  // expendable part of the context and should not push otherwise capable
-  // providers over their window.
-  const adaptiveHistoryChars = input.prompt.length >= 240_000
-    ? 24_000
-    : input.prompt.length >= 120_000
-      ? 48_000
-      : input.prompt.length >= 60_000
-        ? 90_000
-        : configuredHistoryChars
-  const historyCharLimit = Math.min(configuredHistoryChars, adaptiveHistoryChars)
-  const history = boundedConversationHistory(normalizedHistory, historyMessageLimit, historyCharLimit)
+  // Keep short everyday chat cheap without truncating the stored transcript.
+  // Long code/analysis requests still use the established extended budget.
+  const historyBudget = conversationTransportBudget({
+    fastMode: input.fastMode,
+    promptLength: input.prompt.length,
+    configuredMessages: historyMessageLimit,
+    configuredChars: configuredHistoryChars,
+  })
+  const history = boundedConversationHistory(normalizedHistory, historyBudget.maxMessages, historyBudget.maxChars)
   const images = (input.attachments || [])
     .filter((attachment) => attachment?.kind === "image" || attachment?.mime?.startsWith("image/"))
     .map(imageUrl)
