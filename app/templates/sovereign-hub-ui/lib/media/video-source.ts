@@ -35,9 +35,17 @@ export function allowedVideoSource(raw: string): URL | null {
 export async function fetchVideoSource(raw: string, options: { range?: string; timeoutMs?: number } = {}): Promise<{ response: Response } | { error: string; status: number }> {
   let remote = allowedVideoSource(raw)
   if (!remote) return { error: "VIDEO_SOURCE_UNSUPPORTED", status: 422 }
-  const headers = new Headers({ Accept: "video/mp4,video/webm,video/*;q=0.9,*/*;q=0.5" })
-  if (options.range) headers.set("Range", options.range)
+  // ClipTaps can return an owner-private /uploads/ URL even when a render
+  // is complete. Browser <video> requests cannot carry its account API key.
+  // Authenticate only this exact ClipTaps media host + path, and re-create
+  // headers on every redirect so credentials NEVER reach another host.
+  const clipTapsKey = String(process.env.CLIPTAPS_API_KEY || "").trim()
   for (let redirects = 0; redirects < 5; redirects++) {
+    const headers = new Headers({ Accept: "video/mp4,video/webm,video/*;q=0.9,*/*;q=0.5" })
+    if (options.range) headers.set("Range", options.range)
+    if (clipTapsKey && remote.hostname === "cliptaps.com" && remote.pathname.startsWith("/uploads/")) {
+      headers.set("Authorization", `Bearer ${clipTapsKey}`)
+    }
     const response: Response = await fetch(remote.toString(), {
       method: "GET", headers, redirect: "manual", cache: "no-store",
       signal: AbortSignal.timeout(options.timeoutMs ?? 90_000),
