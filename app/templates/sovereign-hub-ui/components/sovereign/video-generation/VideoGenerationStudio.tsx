@@ -1086,6 +1086,12 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
   }
 
   const shareCurrent = async () => {
+    // Do not share a ClipTaps URL that returns MEDIA_NOT_PUBLIC to everyone else.
+    // Download the owner-authorized MP4 and share the actual file instead.
+    if (isProtectedClipTapsUrl(shareUrl)) {
+      setModelNotice("Ссылка ClipTaps приватная. Скачайте видео с логотипом и отправьте MP4 как файл — ссылка для других людей не откроется.")
+      return
+    }
     // The Malik stream needs this account's sign-in; others get the provider's link.
     const src = shareUrl || (viaMalik ? "" : videoUrl) || selectedItem.src
     try {
