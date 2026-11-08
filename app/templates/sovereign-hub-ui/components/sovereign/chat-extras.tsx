@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import { Check, Copy, Download, Pencil, Square, Volume2 } from "lucide-react"
 import { buildContextualFollowUps, type FollowUpSendOptions } from "@/lib/ai/chat-followups"
+import { isContinueRequest, stripIncompleteNote } from "@/lib/ai/answer-completion"
 export type { FollowUpSendOptions } from "@/lib/ai/chat-followups"
 
 /**
@@ -142,7 +143,7 @@ export function UserMessageActions({ id, text, onEdit }: { id: string; text: str
   if (!text.trim()) return null
   const copy = async () => {
     try {
-      await navigator.clipboard?.writeText(text)
+      await navigator.clipboard.writeText(text)
       setCopied(true)
       window.setTimeout(() => setCopied(false), 1400)
     } catch {
@@ -165,14 +166,17 @@ export function UserMessageActions({ id, text, onEdit }: { id: string; text: str
 
 /* ------------------------------------------------------------ follow-ups */
 
-export function FollowUpChips({ onSend, question = "", answer = "", hasAttachment = false, disabled }: {
+export function FollowUpChips({ onSend, question = "", answer = "", hasAttachment = false, disabled, onlyContinue = false }: {
   onSend: (text: string, options?: FollowUpSendOptions) => void
   question?: string
   answer?: string
   hasAttachment?: boolean
   disabled?: boolean
+  onlyContinue?: boolean
 }) {
   const actions = buildContextualFollowUps(question, answer, { hasAttachment })
+    .filter((item) => !onlyContinue || isContinueRequest(item.text))
+  if (!actions.length) return null
   return (
     <div className="malik-follow-ups" role="group" aria-label="Продолжить разговор">
       {actions.map((item) => (
@@ -232,10 +236,10 @@ export function useChatShortcuts(input: {
         return
       }
       if (mod && event.shiftKey && (event.key === "C" || event.key === "c" || event.code === "KeyC")) {
-        const last = [...messages].reverse().find((message) => message.role === "assistant" && message.content.trim())
+        const last = [...messages].reverse().find((message) => message.role === "assistant" && stripIncompleteNote(message.content))
         if (!last) return
         event.preventDefault()
-        void navigator.clipboard?.writeText(last.content).then(() => notify("Последний ответ скопирован."), () => undefined)
+        void navigator.clipboard?.writeText(stripIncompleteNote(last.content)).then(() => notify("Последний ответ скопирован."), () => undefined)
         return
       }
       if (mod && event.shiftKey && (event.key === ";" || event.code === "Semicolon")) {

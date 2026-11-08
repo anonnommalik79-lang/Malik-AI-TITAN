@@ -126,7 +126,9 @@ function researchFixture({indexOnly=false,indexFails=false,searchFails=false,rea
    if(readFails)throw Error('PRIVATE_READER_ERROR')
    return readNull?null:{title:'Read page',text:'Actual returned page text. '.repeat(30)}
   },
-  assessSources:(_p,items)=>items,process:{env:{}},console:{info:()=>{}},
+  assessSources:(_p,items)=>items,currentNewsSources:load('lib/live-intelligence/evidence.ts').currentNewsSources,
+  attributionKind:load('lib/ai/attribution-evidence.ts').attributionKind,
+  process:{env:{}},console:{info:()=>{}},
  }
  const gather=new Function(...Object.keys(deps),js+'\nreturn gatherSources')(...Object.values(deps))
  return {activity,events,controller,run:()=>gather('Проверь информацию',event=>events.push(event),activity,controller.signal)}

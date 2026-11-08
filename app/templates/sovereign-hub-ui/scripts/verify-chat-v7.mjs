@@ -21,9 +21,9 @@ for (const question of ["Сравни", "Compare", "Салыстыр"]) {
 }
 const view = readFileSync(new URL("../components/sovereign/chat-view.tsx", import.meta.url), "utf8")
 const extras = readFileSync(new URL("../components/sovereign/chat-extras.tsx", import.meta.url), "utf8")
-assert.match(view, /<FollowUpChips onSend=\{onFollowUp\} question=\{question\} answer=\{displayContent\} hasAttachment=\{questionHasAttachment\}/, "Question and attachment context passed from actual response")
+assert.match(view, /<FollowUpChips onSend=\{onFollowUp\} question=\{question\} answer=\{notice \? rawAnswer : displayContent\} hasAttachment=\{questionHasAttachment\} onlyContinue=\{Boolean\(notice\)\}/, "Follow-ups preserve attachment context and offer only continuation under a partial reply")
 assert.match(view, /research: options\?\.research === true \? true : undefined/, "Research routed, not merely relabeled")
-assert.match(view, /const actionContent = isUser \? displayContent : stripAnswerPhotoHints\(oilReportBlocksToText\(answerQuizzesToText\(answerCardsToText\(displayContent\)\)\)\)/, "Export strips internal photo metadata and writes cards and quizzes as text")
+assert.match(view, /const actionContent = !isUser && !streaming \? stripAnswerPhotoHints\(oilReportBlocksToText\(answerQuizzesToText\(answerCardsToText\(displayContent\)\)\)\) : ""/, "Completed answer actions write cards and quizzes as text and remove internal photo metadata")
 assert.match(view, /<AnswerDownloadButton text=\{actionContent\}/, "Completed answer export")
 assert.match(extras, /URL\.createObjectURL\(blob\)/, "Export creates a real browser download")
 assert(buildContextualFollowUps("Посмотри скриншот", "Ответ", { hasAttachment: true }).some(x => x.label === "Разобрать файл"), "Attachment follow-up in Russian")

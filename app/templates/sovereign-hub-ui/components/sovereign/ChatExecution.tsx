@@ -60,7 +60,7 @@ function Receipt({ step, expanded, now }: { step: ExecutionStep; expanded?: bool
 
 const NO_SOURCES: ExecutionSource[] = []
 
-export function ChatExecution({ trace, live = false, sources = NO_SOURCES, workMode = false, writing = false, legacyThought, stages = false, browserTask = "", latest = false }: { trace?: ExecutionTrace; live?: boolean; sources?: ExecutionSource[]; workMode?: boolean; writing?: boolean; legacyThought?: { ms: number; steps: string[] }; browserTask?: string; latest?: boolean; /** Show the progress line under «Думаю…» for a turn that started live (visible without opening the panel). */ stages?: boolean }) {
+export function ChatExecution({ trace, live = false, sources = NO_SOURCES, workMode = false, writing = false, legacyThought, stages = false, browserTask = "", latest = false, compact = false }: { trace?: ExecutionTrace; live?: boolean; sources?: ExecutionSource[]; workMode?: boolean; writing?: boolean; legacyThought?: { ms: number; steps: string[] }; browserTask?: string; latest?: boolean; compact?: boolean; /** Show the progress line under «Думаю…» for a turn that started live (visible without opening the panel). */ stages?: boolean }) {
   const [open, setOpen] = useState(false)
   // Decided once, when this answer's row mounts: only a turn that is being
   // answered right now gets the progress line, never a reopened history item.
@@ -98,18 +98,18 @@ export function ChatExecution({ trace, live = false, sources = NO_SOURCES, workM
     catch { setCopyStatus("Копирование недоступно. Можно скачать отчёт.") }
   }
   const showJournal = active && !writing && activity.journal.length > 0
+  const compactWaiting = compact && active && !writing && !activity.hasResearch && !showJournal
   return <section className="malik-execution malik-execution--inline" aria-label="Ход выполнения запроса" data-state={trace?.state || (active ? "running" : "unrecorded")}>
-    <button type="button" className="malik-execution__summary" onClick={() => setOpen(value => !value)} aria-expanded={open} aria-controls={id}>
-      {active ? <Loader2 size={16} className="is-spinning" aria-hidden="true" /> : <BrainCircuit size={16} aria-hidden="true" />}
-      <span className="malik-execution__summary-label">Ход работы</span>
-      <span className="malik-execution__summary-status" role="status" aria-live="polite">{summary}</span>
+    <button type="button" className="malik-execution__summary" onClick={() => setOpen(value => !value)} aria-expanded={open} aria-controls={open ? id : undefined}>
+      {compactWaiting ? <MalikLiveActivity /> : <>
+        {active ? <Loader2 size={16} className="is-spinning" aria-hidden="true" /> : <BrainCircuit size={16} aria-hidden="true" />}
+        <span className="malik-execution__summary-label">Ход работы</span>
+        <span className="malik-execution__summary-status" role="status" aria-live="polite">{summary}</span>
+      </>}
       <ChevronDown size={15} className={open ? "is-open" : ""} aria-hidden="true" />
     </button>
-    {/* The waiting animation is visible without opening the panel: «Думаю…»
-        and the progress line sit right under the request until the first
-        characters arrive, then fold away. Receipts stay behind the toggle. */}
-    {active && !writing && trace ? <MalikLiveActivity /> : null}
-    {stagesForTurn ? <MalikResponseStages trace={trace} writing={writing} /> : null}
+    {active && !writing && trace && !compactWaiting ? <MalikLiveActivity /> : null}
+    {stagesForTurn && (!compact || open || tools.length > 0 || activity.hasResearch) ? <MalikResponseStages trace={trace} writing={writing} /> : null}
     {activity.hasResearch ? <div className="malik-execution__evidence" aria-label="Подтверждённая работа с источниками">
       <span>Найдено ссылок: {activity.countsAreLowerBounds ? "не менее " : ""}{activity.found}</span><span>Сайтов: {activity.countsAreLowerBounds ? "не менее " : ""}{activity.sites}</span><span>Прочитано страниц: {activity.read}</span>
       {activity.unavailable ? <span>Недоступно страниц: {activity.unavailable}</span> : null}
@@ -124,7 +124,7 @@ export function ChatExecution({ trace, live = false, sources = NO_SOURCES, workM
         return <li key={step.id} data-state={step.state}><div><Icon size={14} className={step.state === "running" ? "is-spinning" : ""} aria-hidden="true" /><span>{step.title}</span><span className="sr-only">{labels[step.state]}</span></div><p>{activityStepNote(step)}</p></li>
       })}</ol> : null}
     </div> : null}
-    {!active && activity.problems > 0 ? <p className="malik-execution__limitations" role="note"><AlertCircle size={14} aria-hidden="true" />Есть ограничения или прерванные действия: {activity.problems}. Подробности — в журнале.</p> : null}
+    {!active && trace?.state !== "cancelled" && activity.problems > 0 ? <p className="malik-execution__limitations" role="note"><AlertCircle size={14} aria-hidden="true" />Есть ограничения или прерванные действия: {activity.problems}. Подробности — в журнале.</p> : null}
     {open ? <div id={id} className="malik-execution__panel">
     <p className="malik-execution__explanation">Здесь реальные этапы и результаты инструментов, а не скрытые внутренние рассуждения модели.</p>
     {activity.detailsLimited ? <p className="malik-execution__explanation">Подробный список ссылок сокращён для ограничения размера журнала. Счётчики сохранены; объединённые неполные списки отмечаются «не менее».</p> : null}

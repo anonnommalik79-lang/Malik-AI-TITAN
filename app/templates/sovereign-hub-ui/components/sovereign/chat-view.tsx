@@ -87,6 +87,7 @@ import { prepareFolder } from "@/lib/uploads/folder-digest"
 import { PREFILL_EVENT, takePrefillPrompt } from "@/lib/malik-context"
 import { AnswerSheet } from "./answer-sheet/AnswerSheet"
 import { ChatExecution } from "./ChatExecution"
+import { chatAnswerNotice, stripIncompleteNote } from "@/lib/ai/answer-completion"
 import { ChatBuildResult, ChatBuildSteps } from "./ChatBuild"
 import { chatBuildFiles, chatBuildIsProse, chatBuildKind, chatBuildKindFromContent, chatBuildKindFromTrace, chatBuildPrimary } from "@/lib/ai/chat-build"
 import type { ExecutionTrace } from "@/lib/ai/chat-execution"
@@ -1778,14 +1779,16 @@ function MessageBubble({
   useEffect(() => { setVersionIndex(-1) }, [versionCount])
   const shownVersion = versionIndex < 0 || versionIndex >= versionTotal - 1 ? versionTotal - 1 : versionIndex
   const olderVersion = versionTotal > 1 && shownVersion < versionTotal - 1 ? message.versions![shownVersion] : null
-  const displayContent = isUser
-    ? message.content
-    : olderVersion
-      ? olderVersion.content
-      : cleanResearchDisplayText(message.content, message.research)
+  const rawAnswer = olderVersion?.content ?? message.content
+  const isTextAnswer = !isUser && !message.generatedMedia && !message.imageConfirmation && !message.superflow
+  const compactTurn = isTextAnswer && workspaceMode === "chat" && !videoAnalysis
+  const notice = !streaming && isTextAnswer ? chatAnswerNotice(rawAnswer) : null
+  const answerText = notice ? stripIncompleteNote(rawAnswer) : rawAnswer
+  const displayContent = isUser || olderVersion ? answerText : cleanResearchDisplayText(answerText, message.research)
   const responseModel = !isUser && message.modelId ? getMalikModel(message.modelId) : null
-  // Copy, speech and sharing get the cards as readable text, never as JSON.
-  const actionContent = isUser ? displayContent : stripAnswerPhotoHints(oilReportBlocksToText(answerQuizzesToText(answerCardsToText(displayContent))))
+  // The answer actions read the settled text and keep UI notices separate.
+  const actionContent = !isUser && !streaming ? stripAnswerPhotoHints(oilReportBlocksToText(answerQuizzesToText(answerCardsToText(displayContent)))) : ""
+  const hasActionContent = Boolean(actionContent.trim())
   // A site, game or app being built: its steps instead of code on screen,
   // then the result card and the Live Preview beside the chat.
   const [builtLive] = useState(streaming)
@@ -1800,9 +1803,15 @@ function MessageBubble({
     return null
   }
   const writingLive = !isUser && streaming && Boolean(displayContent) && !message.generatedMedia && !message.imageConfirmation
+  const answerState = isTextAnswer
+    ? (streaming ? writingLive ? "streaming" : "waiting" : notice?.kind ?? message.execution?.state ?? "completed")
+    : undefined
   return (
     <div
       data-malik-message={message.role}
+      data-malik-text-turn={isTextAnswer ? "" : undefined}
+      data-malik-response-state={answerState}
+      data-malik-stopped={notice?.kind === "stopped" ? "1" : undefined}
       className={cn(
         "malik-message-row flex w-full gap-3 sm:gap-4",
         isUser ? "malik-message-row-user justify-end" : "malik-message-row-assistant justify-start",
@@ -1810,13 +1819,8 @@ function MessageBubble({
         writingLive && "malik-live-writing",
       )}
     >
-      {/* The mark is a progress indicator, not a byline: it appears while the
-          answer is being produced and leaves with the spinner. A finished
-          answer stands on its own, the way every mainstream assistant shows
-          one. While text is already streaming it stays in the DOM (other
-          runtimes read it as "turn in progress") but chat-live.css hides it,
-          so the answer does not shift sideways when it completes. */}
-      {!isUser && streaming && (
+      {/* Keep the text column aligned across waiting, streaming and completion. */}
+      {!isUser && streaming && !compactTurn && (
         <div className="malik-ai-avatar is-working flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full border border-white/10 bg-black">
           <svg viewBox="0 0 44 44" className="h-full w-full" aria-hidden="true"><rect width="44" height="44" rx="12" fill="white" /><path d="M9 29 L22 15 L22 29 Z" fill="#03040a" /><path d="M24 15 H38 L24 29 Z" fill="#03040a" /></svg>
         </div>
@@ -1842,7 +1846,7 @@ function MessageBubble({
             </div>
           ) : null}
           {!isUser && message.actionPlan ? <MalikActionPlanCard plan={message.actionPlan} onOpenTarget={onOpenActionTarget} /> : null}
-          {!isUser && !buildLive && !buildDone ? <ChatExecution key={`${message.id}:${shownVersion}`} trace={olderVersion ? undefined : message.execution} legacyThought={olderVersion ? undefined : message.thought} live={streaming} sources={olderVersion ? [] : message.research?.sources} workMode={workspaceMode === "work"} writing={Boolean(displayContent)} browserTask={olderVersion ? "" : question} latest={isLatest} stages={!olderVersion && !message.generatedMedia && !message.imageConfirmation && !message.superflow && !videoAnalysis} /> : null}
+          {!isUser && !buildLive && !buildDone ? <ChatExecution key={`${message.id}:${shownVersion}`} trace={olderVersion ? undefined : message.execution} legacyThought={olderVersion ? undefined : message.thought} live={streaming} sources={olderVersion ? [] : message.research?.sources} compact={compactTurn} workMode={workspaceMode === "work"} writing={Boolean(displayContent)} browserTask={olderVersion ? "" : question} latest={isLatest} stages={!olderVersion && !message.generatedMedia && !message.imageConfirmation && !message.superflow && !videoAnalysis} /> : null}
           {isUser && message.attachments?.length ? <UserAttachmentGallery items={message.attachments} /> : null}
           {!isUser && message.superflow ? (
             <SuperflowBlock messageId={message.id} reference={message.superflow} />
@@ -1932,13 +1936,13 @@ function MessageBubble({
                   <>
                     {buildDone && buildKind && buildPrimary ? <>
                       <ChatBuildSteps kind={buildKind} question={question} trace={message.execution} live={false} content="" tookMs={message.responseMetrics?.tookMs} />
-                      <ChatBuildResult messageId={message.id} kind={buildKind} question={question} files={buildFiles} primary={buildPrimary} autoOpen={builtLive && isLatest}
-                        warnings={buildFiles.some((file) => !file.closed) || /⚠️|❌|Ответ не завершён/u.test(displayContent)} />
+                      <ChatBuildResult messageId={message.id} kind={buildKind} question={question} files={buildFiles} primary={buildPrimary} autoOpen={builtLive && isLatest && !notice}
+                        warnings={buildFiles.some((file) => !file.closed) || Boolean(notice) || /⚠️|❌/u.test(displayContent)} />
                     </> : null}
                     {/* While streaming, `malik-streaming` gives the growing
                         answer its caret and lets only newly added blocks
                         fade in (chat-live.css). It is dropped when done. */}
-                    <MalikMarkdown text={displayContent} allowImages={false} referencePhotos autoPreview={!streaming && !olderVersion && !buildDone && isChatArtifactCreationRequest(question)} collapseCode={buildDone} className={writingLive ? "malik-streaming" : undefined} citations={message.research?.sources}
+                    <MalikMarkdown text={displayContent} allowImages={false} referencePhotos autoPreview={!streaming && !olderVersion && !notice && !buildDone && isChatArtifactCreationRequest(question)} collapseCode={buildDone} className={cn(writingLive && "malik-streaming", freshTurn && isTextAnswer && "malik-answer-enter")} citations={message.research?.sources}
                       visualContext={!olderVersion && !message.generatedMedia && !message.imageConfirmation && !message.superflow
                         && !["failed", "interrupted", "cancelled"].includes(message.execution?.state || "")
                         ? { question, messageId: message.id, previousQuestion, previousAnswer, hasAttachment: questionHasAttachment, isLatest, streaming } : undefined} />
@@ -1948,10 +1952,11 @@ function MessageBubble({
                 )
             )
             : (streaming
-              ? message.execution ? null : <ThinkingBubble generationType={generationType} query={thinkingQuery} research={message.research} videoAnalysis={videoAnalysis} liveStatus={message.liveStatus} />
+              ? message.execution || compactTurn ? null : <ThinkingBubble generationType={generationType} query={thinkingQuery} research={message.research} videoAnalysis={videoAnalysis} liveStatus={message.liveStatus} />
               : "")}
+          {notice ? <p className="malik-answer-notice" data-malik-answer-notice={notice.kind} role="status">{notice.label}</p> : null}
           {/* Grounded UI how-to: interactive arrow navigator only after the answer is complete. */}
-          {!isUser && !streaming && !olderVersion && !message.generatedMedia && !message.imageConfirmation && !message.superflow && Boolean(displayContent) ? (
+          {isTextAnswer && !streaming && !notice && !olderVersion && Boolean(displayContent) ? (
             <MalikTapGuide question={question} answer={displayContent} />
           ) : null}
           {/* The verdict on the text above comes before the reading list it was
@@ -1969,43 +1974,49 @@ function MessageBubble({
           ) : null}
         </div>
         {!isUser && message.content && !streaming && !message.imageConfirmation && (
-          <div className={cn("malik-message-actions mt-2 flex min-w-0 flex-wrap items-center gap-2 text-zinc-500", Boolean(message.research?.sources.length) && "is-research", isLatest && "is-latest")}>
-            <button
-              type="button"
-              title={copied ? "Скопировано" : "Копировать"}
-              aria-label={copied ? "Скопировано" : "Копировать ответ"}
-              onClick={() => onCopy(message.id, actionContent)}
-              className={cn("malik-copy-action inline-flex items-center gap-1.5 rounded-md p-1 hover:bg-white/10 hover:text-white", copied && "is-copied")}
-            >
-              {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-              {copied ? <span className="malik-copy-action__label" role="status">Скопировано</span> : null}
-            </button>
-            <VersionPager index={shownVersion} total={versionTotal} onChange={setVersionIndex} />
-            <ReadAloudButton id={message.id} text={actionContent} />
-            {workspaceMode === "work" ? <WorkDownloadMenu markdown={actionContent} /> : <AnswerDownloadButton text={actionContent} />}
-            <button type="button" title="Перегенерировать" onClick={() => onRegenerate?.(message.id)} className="rounded-md p-1 hover:bg-white/10 hover:text-white"><RefreshCw className="h-4 w-4" /></button>
-            <button type="button" title="Полезно" aria-pressed={feedback === "up"} onClick={() => onFeedback?.(message.id, "up")} className={cn("malik-feedback-action rounded-md p-1 hover:bg-white/10 hover:text-white", feedback === "up" && "is-active")}><ThumbsUp className="h-4 w-4" /></button>
-            <button type="button" title="Не полезно" aria-pressed={feedback === "down"} onClick={() => onFeedback?.(message.id, "down")} className={cn("malik-feedback-action rounded-md p-1 hover:bg-white/10 hover:text-white", feedback === "down" && "is-active")}><ThumbsDown className="h-4 w-4" /></button>
-            <button type="button" title="Поделиться" onClick={() => onShare?.(actionContent)} className="rounded-md p-1 hover:bg-white/10 hover:text-white"><Share className="h-4 w-4" /></button>
-            {onOpenSheet && displayContent.trim() ? (
-              <button type="button" title="Открыть на листе" aria-label="Открыть ответ на листе с экспортом PDF" onClick={() => onOpenSheet(message.id)} className="malik-open-sheet inline-flex items-center gap-1.5 rounded-md px-1.5 py-1 text-[12.5px] font-medium hover:bg-white/10 hover:text-white">
-                <FileText className="h-4 w-4" />
-                <span>Лист / PDF</span>
+          <div role="group" aria-label="Действия с ответом" className={cn("malik-message-actions mt-2 flex min-w-0 flex-wrap items-center gap-2 text-zinc-500", Boolean(message.research?.sources.length) && "is-research", isLatest && "is-latest")}>
+            {hasActionContent ? (
+              <button
+                type="button"
+                title={copied ? "Скопировано" : "Копировать"}
+                aria-label="Копировать ответ"
+                onClick={() => onCopy(message.id, actionContent)}
+                className={cn("malik-copy-action inline-flex items-center rounded-md p-1 hover:bg-white/10 hover:text-white", copied && "is-copied")}
+              >
+                {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                {copied ? <span className="sr-only" role="status">Скопировано</span> : null}
               </button>
             ) : null}
+            <VersionPager index={shownVersion} total={versionTotal} onChange={setVersionIndex} />
+            {hasActionContent ? <>
+              <ReadAloudButton id={message.id} text={actionContent} />
+              {workspaceMode === "work" ? <WorkDownloadMenu markdown={actionContent} /> : <AnswerDownloadButton text={actionContent} />}
+            </> : null}
+            <button type="button" title="Перегенерировать" aria-label="Перегенерировать ответ" onClick={() => onRegenerate?.(message.id)} className="rounded-md p-1 hover:bg-white/10 hover:text-white"><RefreshCw className="h-4 w-4" /></button>
+            {hasActionContent ? <>
+              <button type="button" title="Полезно" aria-label="Полезный ответ" aria-pressed={feedback === "up"} onClick={() => onFeedback?.(message.id, "up")} className={cn("malik-feedback-action rounded-md p-1 hover:bg-white/10 hover:text-white", feedback === "up" && "is-active")}><ThumbsUp className="h-4 w-4" /></button>
+              <button type="button" title="Не полезно" aria-label="Неполезный ответ" aria-pressed={feedback === "down"} onClick={() => onFeedback?.(message.id, "down")} className={cn("malik-feedback-action rounded-md p-1 hover:bg-white/10 hover:text-white", feedback === "down" && "is-active")}><ThumbsDown className="h-4 w-4" /></button>
+              <button type="button" title="Поделиться" aria-label="Поделиться ответом" onClick={() => onShare?.(actionContent)} className="rounded-md p-1 hover:bg-white/10 hover:text-white"><Share className="h-4 w-4" /></button>
+              {onOpenSheet && displayContent.trim() ? (
+                <button type="button" title="Открыть на листе" aria-label="Открыть ответ на листе с экспортом PDF" onClick={() => onOpenSheet(message.id)} className="malik-open-sheet inline-flex items-center gap-1.5 rounded-md px-1.5 py-1 text-[12.5px] font-medium hover:bg-white/10 hover:text-white">
+                  <FileText className="h-4 w-4" />
+                  <span>Лист / PDF</span>
+                </button>
+              ) : null}
+            </> : null}
           </div>
         )}
         {/* Compact, inspectable completion statistics, directly below the answer.
             No token number is shown unless the provider reported it. */}
-        {!isUser && !streaming && !olderVersion && Boolean(message.content) && !message.imageConfirmation && message.responseMetrics ? (
+        {!isUser && !streaming && !olderVersion && Boolean(displayContent) && !message.imageConfirmation && message.responseMetrics ? (
           <details className="malik-response-telemetry mt-2 w-fit max-w-full rounded-lg border border-white/[0.09] bg-white/[0.025] px-3 py-1.5 text-xs text-zinc-400 open:bg-white/[0.045]">
             <summary className="flex cursor-pointer list-none items-center gap-1.5 text-[12px] transition hover:text-zinc-200 [&::-webkit-details-marker]:hidden" aria-label="Статистика ответа MALIK AI">
               <Timer size={12} aria-hidden="true" />
               <span className="tabular-nums">{(message.responseMetrics.tookMs / 1000).toLocaleString("ru-RU", { maximumFractionDigits: 1 })} с</span>
-              <span aria-hidden="true" className="text-zinc-600">·</span>
-              <span className="tabular-nums">{message.responseMetrics.usage
-                ? `${message.responseMetrics.usage.totalTokens.toLocaleString("ru-RU")} токенов`
-                : "токены: нет данных"}</span>
+              {message.responseMetrics.usage ? <>
+                <span aria-hidden="true" className="text-zinc-600">·</span>
+                <span className="tabular-nums">{message.responseMetrics.usage.totalTokens.toLocaleString("ru-RU")} токенов</span>
+              </> : null}
               <ChevronRight size={12} className="ml-0.5 opacity-60" aria-hidden="true" />
             </summary>
             <div className="mt-2 border-t border-white/10 pt-2 text-[11px] leading-5 text-zinc-400">
@@ -2025,7 +2036,8 @@ function MessageBubble({
             </div>
           </details>
         ) : null}
-        {!isUser && showFollowUps && onFollowUp ? <FollowUpChips onSend={onFollowUp} question={question} answer={displayContent} hasAttachment={questionHasAttachment} /> : null}
+        {!isUser && showFollowUps && onFollowUp && displayContent.trim() && (notice || message.execution?.state !== "failed")
+          ? <FollowUpChips onSend={onFollowUp} question={question} answer={notice ? rawAnswer : displayContent} hasAttachment={questionHasAttachment} onlyContinue={Boolean(notice)} /> : null}
         {isUser && message.content ? <UserMessageActions id={message.id} text={message.content} onEdit={onEditPrompt} /> : null}
       </div>
       {/* No initials disc beside the user's own turn either — the bubble and
@@ -2755,15 +2767,17 @@ export function ChatView({ messages, workspaceMode = "chat", onSendMessage, onIm
   // The row callbacks below are stable (useCallback + a ref to the latest
   // values), so the memoised rows are not re-rendered by every streamed chunk.
   const copyResetTimerRef = useRef(0)
+  useEffect(() => () => window.clearTimeout(copyResetTimerRef.current), [])
   const handleCopy = useCallback(async (id: string, text: string) => {
     try {
-      await navigator.clipboard?.writeText(text || "")
+      await navigator.clipboard.writeText(text)
       setCopiedId(id)
       window.clearTimeout(copyResetTimerRef.current)
       copyResetTimerRef.current = window.setTimeout(() => setCopiedId(null), 1600)
     } catch {
-      setLocalError("Clipboard blocked. Текст можно выделить и скопировать вручную.")
-      window.setTimeout(() => setLocalError(null), 2200)
+      const message = "Копирование недоступно. Выделите текст и скопируйте его вручную."
+      setLocalError(message)
+      window.setTimeout(() => setLocalError((current) => current === message ? null : current), 2200)
     }
   }, [])
 
@@ -3114,9 +3128,7 @@ export function ChatView({ messages, workspaceMode = "chat", onSendMessage, onIm
                     && !message.generatedMedia
                     && !message.imageConfirmation
                     && !message.superflow
-                    // «Подробнее / Короче» make no sense under an error or a stopped answer.
-                    && message.execution?.state !== "failed"
-                    && message.execution?.state !== "cancelled"
+                    // The row can still offer a continuation if a partial answer exists.
                   }
                 />
               ))}

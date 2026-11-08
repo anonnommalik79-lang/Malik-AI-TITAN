@@ -84,6 +84,28 @@
   font-weight: 500;
 }
 
+/* ------------------------------------------------------------ turn state */
+
+#malik-root .malik-chat-fullwidth .malik-execution__summary .malik-live-activity {
+  margin: 0;
+}
+
+#malik-root .malik-chat-fullwidth .malik-answer-enter {
+  animation: malik-answer-appear 180ms ease-out both;
+}
+
+@keyframes malik-answer-appear {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+#malik-root .malik-chat-fullwidth .malik-answer-notice {
+  margin-top: 10px;
+  color: #a1a1aa;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
 /* -------------------------------------------------------------- actions */
 
 #malik-root .malik-chat-fullwidth .malik-message-actions {
@@ -111,11 +133,6 @@
   color: #fff;
 }
 
-#malik-root .malik-chat-fullwidth .malik-copy-action__label {
-  font-size: 12px;
-  font-weight: 600;
-  animation: malik-live-block 0.2s ease-out both;
-}
 
 #malik-root .malik-chat-fullwidth .malik-feedback-action.is-active {
   color: #fff;
@@ -177,10 +194,10 @@
 
 @media (prefers-reduced-motion: reduce) {
   #malik-root .malik-chat-fullwidth .malik-live-enter,
+  #malik-root .malik-chat-fullwidth .malik-answer-enter,
   #malik-root .malik-chat-fullwidth .malik-md.malik-streaming > :last-child,
   #malik-root .malik-chat-fullwidth .malik-md.malik-streaming *::after,
-  #malik-root .malik-chat-fullwidth .malik-message-actions,
-  #malik-root .malik-chat-fullwidth .malik-copy-action__label {
+  #malik-root .malik-chat-fullwidth .malik-message-actions {
     animation: none !important;
   }
   #malik-root .malik-chat-fullwidth .malik-jump-bottom {

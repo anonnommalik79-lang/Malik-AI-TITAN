@@ -97,7 +97,6 @@ const REASON_TEXT: Record<AnswerIncompleteReason, string> = {
 
 /** The marker every incomplete-answer note starts with (stable, parsed by the chat). */
 export const INCOMPLETE_NOTE_START = "_Ответ не завершён:"
-const CONNECTION_NOTE_START = "_Соединение прервалось — ответ может быть неполным."
 
 export function incompleteNote(incomplete: AnswerIncomplete) {
   const parts = [REASON_TEXT[incomplete.reason] || REASON_TEXT.stalled]
@@ -116,23 +115,48 @@ export function withIncompleteNote(content: string, incomplete: AnswerIncomplete
 }
 
 const TRAILING_NOTE = /\n*\s*_(?:Ответ не завершён:|Соединение прервалось — ответ может быть неполным\.)[^\n]*_\s*$/u
+const TRAILING_STOP = /(?:^|\r?\n[ \t]*\r?\n)_(?:Генерация остановлена пользователем|Остановлено пользователем)\._\s*$/u
+const TRAILING_PARTIAL = /(?:^|\r?\n[ \t]*\r?\n)(?:_Ответ может быть неполным\. Нажмите «Перегенерировать», чтобы повторить\._|> Ответ прервался и может быть неполным\.[^\r\n]*)\s*$/u
 
 export function hasIncompleteNote(text: string) {
   return TRAILING_NOTE.test(String(text || ""))
 }
 
+function trailingAnswerNote(value: string) {
+  const stop = TRAILING_STOP.exec(value)
+  if (stop) return { match: stop, kind: "stopped" as const, label: "Остановлено пользователем." }
+
+  const partial = TRAILING_PARTIAL.exec(value)
+  if (partial) return { match: partial, kind: "interrupted" as const, label: "Ответ может быть неполным." }
+
+  const incomplete = TRAILING_NOTE.exec(value)
+  if (!incomplete) return null
+  const label = incomplete[0].trim().slice(1, -1).split(" Нажмите «")[0]
+  if (label.startsWith("Соединение прервалось")) {
+    return { match: incomplete, kind: "interrupted" as const, label: "Соединение прервалось. Полученный текст сохранён." }
+  }
+  return { match: incomplete, kind: "incomplete" as const, label }
+}
+
+/** A saved turn's status is separate from the Markdown and copied text. */
+export function chatAnswerNotice(text: string) {
+  const note = trailingAnswerNote(String(text || ""))
+  return note ? { kind: note.kind, label: note.label } : null
+}
+
 /** True when the chat should offer «Продолжить» under this answer. */
 export function answerNeedsContinuation(text: string) {
   const value = String(text || "")
-  return value.includes(INCOMPLETE_NOTE_START) && hasIncompleteNote(value)
-    || value.includes(CONNECTION_NOTE_START) && hasIncompleteNote(value)
+  const note = trailingAnswerNote(value)
+  return Boolean(note && value.slice(0, note.match.index).trim())
 }
 
-/** History sent back to the model: the status line is for the person, not part of the answer. */
+/** The answer itself, without the saved turn's status line. */
 export function stripIncompleteNote(text: string) {
   const value = String(text || "")
-  const note = TRAILING_NOTE.exec(value)?.[0]
-  const raw = value.replace(TRAILING_NOTE, "").replace(/\s+$/u, "")
+  const match = trailingAnswerNote(value)?.match
+  const note = match?.[0]
+  const raw = (match ? value.slice(0, match.index) : value).trimEnd()
   // withIncompleteNote closes an open block for DISPLAY, not because the
   // model finished it. Send the real open context back on a manual resume.
   if (note?.includes("блок кода не закрыт")) {

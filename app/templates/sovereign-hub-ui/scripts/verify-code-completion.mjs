@@ -56,6 +56,20 @@ await check('manual resume removes only the display fence and retains the real p
  assert.ok(log[0].messages.some(m=>m.role==='assistant'&&m.content===partial))
  assert.match(log[0].messages[0].content,/MANUAL CODE RESUME/)
 })
+await check('turn notices stay separate from code, copies, and normal conversation history',()=>{
+ const prefix='Начало ответа.\n\n~~~js\nconst kept = true;'
+ const stopped=prefix+'\n\n_Остановлено пользователем._'
+ assert.equal(completion.chatAnswerNotice(stopped)?.kind,'stopped')
+ assert.equal(completion.stripIncompleteNote(stopped),prefix)
+ assert.equal(completion.answerNeedsContinuation(stopped),true)
+ assert.equal(completion.answerNeedsContinuation('_Остановлено пользователем._'),false)
+ const history=[{role:'user',content:'Покажи пример'},{role:'assistant',content:stopped},{role:'user',content:'Продолжи'}]
+ assert.equal(completion.resumeText(completion.resumableAnswer(history).answer),prefix)
+ const interrupted=prefix+'\n\n> Ответ прервался и может быть неполным. Фоновая задача прервана.'
+ assert.equal(completion.chatAnswerNotice(interrupted)?.kind,'interrupted')
+ assert.equal(completion.stripIncompleteNote(interrupted),prefix)
+ assert.equal(completion.chatAnswerNotice('Пример строки: Остановлено пользователем.'),null)
+})
 await check('filename metadata on a redundant wrapper does not create a nested code block',()=>{
  let merged='```html filename=index.html\n<html><body>\n'
  const f=createCodeContinuationFilter(merged,c=>{merged+=c});f.push('```html filename=index.html\n</body></html>\n```');f.end()

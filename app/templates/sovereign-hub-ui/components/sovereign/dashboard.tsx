@@ -7,7 +7,7 @@ import { MobileViewport } from "./MobileViewport"
 const ComputePanel = dynamic(() => import("./compute/ComputePanel"))
 import { WelcomeScreen } from "./welcome-screen"
 import { splitPluginCommand } from "./composer-tools/model"
-import { stripIncompleteNote } from "@/lib/ai/answer-completion"
+import { chatAnswerNotice, isContinueRequest, stripIncompleteNote } from "@/lib/ai/answer-completion"
 import { getMalikPlugin } from "./features/plugin-registry"
 import { ChatView } from "./chat-view"
 import { ChatInvestorBackground } from "./ChatInvestorBackground"
@@ -6217,44 +6217,6 @@ const normalizeStreamChunk = (parsed: any): string | null => {
   return parsed.content ?? parsed.text ?? parsed.message ?? parsed.response ?? parsed.delta ?? null
 }
 
-/**
- * Some providers return the completed answer in one SSE event. Reveal that
- * payload in a compact burst so the answer reads like a live response instead
- * of popping onto the page as one large block. Checkpoints end on word
- * boundaries and are capped to avoid reparsing Markdown sixty times a second.
- * Reduced-motion users still receive the complete text at once.
- */
-async function revealAssistantTextQuickly(text: string, onFrame: (visible: string) => void) {
-  const answer = String(text || "")
-  if (!answer) return
-
-  const reduceMotion = typeof window !== "undefined"
-    && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches
-  if (reduceMotion || answer.length < 4) {
-    onFrame(answer)
-    return
-  }
-
-  const tokens = answer.match(/\S+\s*|\s+/g) || [answer]
-  const frameTarget = Math.min(24, Math.max(4, Math.ceil(answer.length / 90)))
-  const tokensPerFrame = Math.max(1, Math.ceil(tokens.length / frameTarget))
-  const checkpoints: string[] = []
-  let visible = ""
-
-  for (let index = 0; index < tokens.length; index += tokensPerFrame) {
-    visible += tokens.slice(index, index + tokensPerFrame).join("")
-    checkpoints.push(visible)
-  }
-
-  const durationMs = Math.min(650, Math.max(180, answer.length * 0.42))
-  const frameDelay = Math.max(16, Math.round(durationMs / Math.max(1, checkpoints.length)))
-  for (const checkpoint of checkpoints.slice(0, -1)) {
-    onFrame(checkpoint)
-    await new Promise<void>((resolve) => setTimeout(resolve, frameDelay))
-  }
-  onFrame(answer)
-}
-
 const handleSendMessageRef = useRef<((content: string, attachments?: ChatAttachment[], options?: ChatSendOptions) => Promise<void>) | null>(null)
 const handleSendMessage = useCallback(async (content: string, attachments: ChatAttachment[] = [], options?: ChatSendOptions) => {
   const turnWorkspaceMode = options?.workspaceMode ?? workspaceMode
@@ -6608,11 +6570,14 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
   const historyWindow = 32
   // A regenerated answer is asked without the answer it replaces.
   const priorMessages = regenTarget ? conversationBase.filter((item) => item.id !== regenTarget.message.id) : conversationBase
+  // The existing MAX resume path restores the unfinished prefix. Other
+  // selected models still get the text as ordinary conversation history.
+  const resumeId = !regenTarget && selectedModelId === DEFAULT_MALIK_MODEL_ID && isContinueRequest(cleanContent)
+    ? priorMessages.at(-1)?.id
+    : undefined
   const history = (carryContext ? (regenTarget ? priorMessages : [...priorMessages, userMessage]).slice(-historyWindow) : [userMessage]).map(m => {
     const mediaFact = describeReadyMediaAction(m.generatedMedia)
-    // «Ответ не завершён…» is a status line for the person; the model sees
-    // where its answer really stopped, so «Продолжить» resumes from there.
-    const content = m.role === "assistant" ? stripIncompleteNote(m.content) : m.content
+    const content = m.role === "assistant" && m.id !== resumeId ? stripIncompleteNote(m.content) : m.content
     return {
       role: m.role,
       content: mediaFact
@@ -7149,6 +7114,9 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
     stopLive()
     void streamReader?.cancel(CHAT_STOPPED_BY_USER).catch(() => {})
   }
+  const throwIfStopped = () => {
+    if (stoppedByPerson || streamController.signal.aborted) throw new DOMException("Stopped by the person", "AbortError")
+  }
   activeStreamStopRef.current = stopThisTurn
   setStreamAbortable(true)
   applyExecution({ version: 1, id: assistantMessage.id, startedAt: Date.now(), state: "running", model: getMalikModel(selectedModelId).label,
@@ -7283,9 +7251,10 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
       }),
     })
 
+    if (stoppedByPerson) void response.body?.cancel().catch(() => {})
+    throwIfStopped()
     if (!response.ok) {
       const rawError = await response.text()
-      throw new Error(chatHttpErrorMessage(response.status, rawError, response.headers.get("content-type") || ""))
     }
 
     fullText = ""
@@ -7446,7 +7415,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
         buffer = blocks.pop() || ""
         blocks.forEach(consumeEvent)
       }
-      if (stoppedByPerson) throw new DOMException("Stopped by the person", "AbortError")
+      throwIfStopped()
       buffer += decoder.decode()
       if (buffer.trim()) consumeEvent(buffer)
       stopLive()
@@ -7462,6 +7431,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
       sawDone = true
       fullText = cleanDashboardAIText(await response.text())
     }
+    throwIfStopped()
 
     // The server read this turn as a request for media the browser did not
     // catch (or a model refused it): this same answer becomes the real picture.
@@ -7477,37 +7447,18 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
     const connectionCut = !sawDone
     // The Stop button closes the stream itself (after its own marker), which
     // is not a broken connection.
-    const stoppedByUser = /Остановлено пользователем\.?\s*$/u.test(fullText)
+    const stoppedByUser = chatAnswerNotice(fullText)?.kind === "stopped"
     if (finalExecution?.state === "running") applyExecution(settleExecution(finalExecution, stoppedByUser ? "cancelled" : connectionCut ? "interrupted" : "completed"))
     if (connectionCut && fullText && !stoppedByUser && !isProjReq) {
       fullText = `${fullText}\n\n_Соединение прервалось — ответ может быть неполным. Нажмите «Продолжить», чтобы дописать, или «Перегенерировать», чтобы начать заново._`
     }
 
-    // Text that already streamed in live needs no second, simulated reveal.
-    // The burst reveal stays for answers that arrived as one block at the end
-    // (or while the tab was hidden and no frame could paint).
-    if (fullText && !isProjReq && !liveShownText) {
-      await revealAssistantTextQuickly(fullText, (visibleText) => {
-        setStreamingText(visibleText)
-        setMessages((current) => current.map((message) =>
-          message.id === assistantMessage.id ? { ...message, content: visibleText } : message
-        ))
-      })
-    }
-
-    if (fullText && !isWeakBackendAnswer(fullText)) {
-      setStreamingText(fullText)
-      setMessages(prev =>
-        prev.map(m =>
-          m.id === assistantMessage.id ? { ...m, content: fullText } : m
-        )
-      )
-    }
     if (isWeakBackendAnswer(fullText)) {
       const elapsed = Date.now() - startTime
       if (isProjReq && elapsed < MIN_TERMINAL_TIME) {
         await new Promise(res => setTimeout(res, MIN_TERMINAL_TIME - elapsed))
       }
+      throwIfStopped()
       setIsGeneratingTerminal(false)
 
       finalizeAssistant(
@@ -7537,6 +7488,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
     if (isProjReq && elapsed < MIN_TERMINAL_TIME) {
       await new Promise(res => setTimeout(res, MIN_TERMINAL_TIME - elapsed))
     }
+    throwIfStopped()
 
     setIsGeneratingTerminal(false)
     dashboardEventBus.emit({
@@ -7552,7 +7504,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
     // the cancelled body then carries the Stop reason through every layer.
     if (streamController.signal.aborted || stoppedByPerson || isChatStoppedByUser(error)) {
       if (finalExecution) applyExecution(settleExecution(finalExecution, "cancelled"))
-      const partial = cleanDashboardAIText(liveShownText || fullText)
+      const partial = isProjReq ? cleanDashboardAIText(fullText) : liveShownText
       finalizeAssistant(
         partial ? `${partial}\n\n_Остановлено пользователем._` : "_Остановлено пользователем._",
         undefined,

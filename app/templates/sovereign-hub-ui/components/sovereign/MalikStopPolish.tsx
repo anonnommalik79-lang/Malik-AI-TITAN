@@ -35,9 +35,7 @@ function polishStoppedTurn(row: HTMLElement) {
   }
 }
 
-function scanStoppedTurns(root: ParentNode = document) {
-  root.querySelectorAll<HTMLElement>("[data-malik-message='assistant']").forEach(polishStoppedTurn)
-}
+const MEDIA_ROW = "[data-malik-message='assistant']:not([data-malik-text-turn])"
 
 export function MalikStopPolish() {
   useEffect(() => {
@@ -48,7 +46,6 @@ export function MalikStopPolish() {
     // frame; the streaming answer alone is enough.
     let frame = 0
     const pending = new Set<HTMLElement>()
-    const ROW = "[data-malik-message='assistant']"
     const scan = () => {
       frame = 0
       pending.forEach((row) => { if (row.isConnected) polishStoppedTurn(row) })
@@ -57,18 +54,21 @@ export function MalikStopPolish() {
     const schedule = (records: MutationRecord[]) => {
       for (const record of records) {
         const at = record.target instanceof Element ? record.target : record.target.parentElement
-        const row = at?.closest<HTMLElement>(ROW)
-        if (row) { pending.add(row); continue }
+        const row = at?.closest<HTMLElement>("[data-malik-message]")
+        if (row) {
+          if (row.matches(MEDIA_ROW)) pending.add(row)
+          continue
+        }
         record.addedNodes.forEach((node) => {
           if (!(node instanceof Element)) return
-          if (node.matches(ROW)) pending.add(node as HTMLElement)
-          else node.querySelectorAll<HTMLElement>(ROW).forEach((item) => pending.add(item))
+          if (node.matches(MEDIA_ROW)) pending.add(node as HTMLElement)
+          else node.querySelectorAll<HTMLElement>(MEDIA_ROW).forEach((item) => pending.add(item))
         })
       }
       if (pending.size && !frame) frame = window.requestAnimationFrame(scan)
     }
 
-    scanStoppedTurns()
+    document.querySelectorAll<HTMLElement>(MEDIA_ROW).forEach(polishStoppedTurn)
     const observer = new MutationObserver(schedule)
     observer.observe(document.body, { subtree: true, childList: true, characterData: true })
 

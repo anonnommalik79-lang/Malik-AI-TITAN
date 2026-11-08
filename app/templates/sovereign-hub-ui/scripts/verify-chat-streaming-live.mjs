@@ -59,6 +59,7 @@ function installFakeStream() {
     }
     if (!/\/api\/stream(?:\/background)?(?:\?|$)/.test(url) || method !== "POST") return realFetch(input, init)
     qa.requests += 1
+    qa.lastRequest = JSON.parse(String(init.body || "{}"))
     const plan = qa.queue.shift() || { chunks: ["Ответ."] }
     const signal = init.signal
     const encoder = new TextEncoder()
@@ -84,7 +85,7 @@ function installFakeStream() {
           send("progress", { type: "progress", phase: "writing", text: "Пишет ответ…" })
           for (const chunk of plan.chunks) {
             send("content", { type: "content", content: chunk, contentMode: "delta" })
-            await wait(plan.everyMs ?? 25)
+            if (plan.everyMs !== 0) await wait(plan.everyMs ?? 25)
           }
           if (plan.error) {
             send("error", { type: "error", message: plan.error })
@@ -391,6 +392,73 @@ for (const width of WIDTHS) {
     await shot(page, `stopped-${width}`)
   })
 
+  await check("turn: Stop before the first word", width, async (page) => {
+    await send(page, "Подготовь краткий ответ", { chunks: ["Поздний ответ."], thinkMs: 6_000 })
+    await assistant(page).locator('[data-malik-live-activity="thinking"]').waitFor({ timeout: 10_000 })
+    assert.equal(await assistant(page).locator('.malik-message-actions').count(), 0, "actions wait for the end")
+    await stopButton(page).click()
+    await waitIdle(page)
+    const row = assistant(page)
+    assert.equal(await row.getAttribute("data-malik-response-state"), "stopped")
+    assert.equal(await row.locator(".malik-md").count(), 0, "an empty turn does not render a fake answer")
+    assert.equal(await row.locator('[data-malik-answer-notice="stopped"]').count(), 1, "Stop has a visible status")
+    assert.equal(await row.getByRole("button", { name: "Копировать ответ" }).count(), 0, "nothing to copy")
+    assert.equal(await row.locator('button[title="Перегенерировать"]').count(), 1, "can retry")
+    assert.deepEqual(await page.evaluate(() => [window.__qa.requests, window.__qa.stops, window.__qa.aborted]), [1, 1, 1])
+  })
+
+  await check("turn: Stop in code keeps only the visible text, with an optional continuation", width, async (page) => {
+    const prefix = "Начало примера.\n\n```js\nconst visible = 1;"
+    await send(page, "Покажи короткий пример на JavaScript", { chunks: [prefix, "\nconst late = 2;\n```"], everyMs: 60_000, thinkMs: 350 })
+    const row = assistant(page)
+    await row.locator(".malik-md pre").getByText("visible", { exact: false }).first().waitFor({ timeout: 12_000 })
+    await stopButton(page).click()
+    await waitIdle(page)
+    assert.match(await row.locator('[data-malik-answer-notice="stopped"]').innerText(), /Остановлено пользователем/)
+    assert.doesNotMatch(await row.locator(".malik-md pre").innerText(), /Остановлено|const late/, "status and late chunks stay out of the code")
+    assert.equal(await row.locator(".malik-execution__limitations").count(), 0, "a manual Stop isn't shown as an error")
+    await row.getByRole("button", { name: "Копировать ответ" }).click()
+    // Windows uses CRLF for native clipboard text.
+    const lineFeeds = (text) => text.replace(/\r\n|\r/g, "\n")
+    assert.equal(lineFeeds(await page.evaluate(() => navigator.clipboard.readText())), prefix)
+    await page.evaluate(() => window.__qa.queue.push({ chunks: ["Продолжение примера."], everyMs: 0, thinkMs: 350 }))
+    await row.getByRole("button", { name: "Продолжить", exact: true }).click()
+    await page.waitForFunction(() => window.__qa.requests === 2)
+    const history = await page.evaluate(() => window.__qa.lastRequest.history)
+    const resumed = history.filter((message) => message.role === "assistant").at(-1)
+    assert.equal(lineFeeds(resumed?.content || ""), prefix + "\n\n_Остановлено пользователем._", "explicit continuation preserves the server's resume marker")
+    await waitIdle(page)
+  })
+
+  await check("turn: one ready payload is shown once and the journal stays available", width, async (page) => {
+    await send(page, "Ответь кратко", { chunks: [SHORT], everyMs: 0, thinkMs: 750 })
+    const row = assistant(page)
+    await row.locator('[data-malik-live-activity="thinking"]').waitFor({ timeout: 10_000 })
+    await page.evaluate(() => window.__qaSampler.start())
+    await row.locator(".malik-md").waitFor({ timeout: 12_000 })
+    await waitIdle(page)
+    const { samples } = await page.evaluate(() => window.__qaSampler.stop())
+    const lengths = new Set(samples.map((sample) => sample.length).filter((length) => length > 0))
+    assert.equal(lengths.size, 1, "a complete payload is not retyped after done")
+    assert.match(await row.locator(".malik-md").innerText(), /Привет/)
+    assert.equal(await row.locator("[data-malik-live-activity], [data-malik-response-stages]").count(), 0, "ordinary completed reply has no waiting animation")
+    const journal = row.locator(".malik-execution__summary")
+    assert.equal(await journal.getAttribute("aria-expanded"), "false")
+    await journal.click()
+    assert.equal(await journal.getAttribute("aria-expanded"), "true", "real execution journal is available on demand")
+  })
+
+  await check("turn: clipboard denial does not report a successful copy", width, async (page) => {
+    await send(page, "Ответь кратко", { chunks: [SHORT], everyMs: 0, thinkMs: 350 })
+    const row = assistant(page)
+    await row.locator(".malik-md").waitFor({ timeout: 10_000 })
+    await waitIdle(page)
+    await page.evaluate(() => Object.defineProperty(navigator, "clipboard", { configurable: true, value: undefined }))
+    await row.getByRole("button", { name: "Копировать ответ" }).click()
+    await page.getByText("Копирование недоступно.", { exact: false }).waitFor({ timeout: 8000 })
+    assert.equal(await row.locator(".malik-copy-action.is-copied").count(), 0)
+  })
+
   await check("Regenerate answers again in place; Copy copies the answer", width, async (page) => {
     await send(page, "Скажи привет", { chunks: words(SHORT), everyMs: 10, thinkMs: 200 })
     await waitIdle(page)
@@ -421,6 +489,9 @@ for (const width of WIDTHS) {
 }
 
 await browser.close()
-if (OUT) fs.writeFileSync(path.join(OUT, "report.json"), JSON.stringify(report, null, 2))
+if (OUT) {
+  fs.mkdirSync(OUT, { recursive: true })
+  fs.writeFileSync(path.join(OUT, "report.json"), JSON.stringify(report, null, 2))
+}
 console.log(failures ? `\n${failures} chat check(s) failed` : "\nall chat streaming checks passed")
 process.exit(failures ? 1 : 0)
