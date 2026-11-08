@@ -29,6 +29,11 @@ const nextConfig = {
     root: projectRoot,
   },
   outputFileTracingRoot: projectRoot,
+  // Optional local verification on low-memory machines; normal deploys are unchanged.
+  ...(process.env.MALIK_BUILD_LOW_MEMORY === "1" ? {
+    experimental: { cpus: 1, workerThreads: false, webpackMemoryOptimizations: true },
+    typescript: { ignoreBuildErrors: true },
+  } : {}),
   outputFileTracingIncludes: { "/api/work/*": ["./assets/fonts/*.ttf"], "/api/os/artifacts/*/export": ["./assets/fonts/*.ttf"] },
   // Optional local verification on disk-constrained worktrees; normal deploys keep caching.
   webpack(config, { isServer, webpack }) {

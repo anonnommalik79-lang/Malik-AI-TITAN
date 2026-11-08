@@ -1,7 +1,7 @@
 import "server-only"
 
 import { createHash } from "node:crypto"
-import { GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3"
+import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3"
 
 type VideoQuotaState = {
   day: string
@@ -193,4 +193,26 @@ export async function markVideoAccountDailyQuota(userId: string): Promise<VideoQ
   }
 
   return { available: false, used: true, resetAt: nextUtcResetAt(), usedAt: state.usedAt, storage: "runtime-memory" }
+}
+
+/**
+ * A video that never arrived does not cost the day's video. Only today's mark
+ * is removed, and only when it was set at or before the failed job started.
+ */
+export async function refundVideoAccountDailyQuota(userId: string, jobCreatedAt: string): Promise<boolean> {
+  if (!jobCreatedAt || jobCreatedAt.slice(0, 10) !== utcDay()) return false
+  const key = memoryKey(userId)
+  const current = memory().get(key) || await cloudState(userId)
+  // The mark is set right after the job is created; a later mark belongs to another video.
+  if (!current || Date.parse(current.usedAt) > Date.parse(jobCreatedAt) + 120_000) return false
+  memory().delete(key)
+  const s = storage()
+  if (s) {
+    try {
+      await s.client.send(new DeleteObjectCommand({ Bucket: s.cfg.bucket, Key: objectKey(userId) }))
+    } catch {
+      // The memory mark is gone; the stored one expires with the day.
+    }
+  }
+  return true
 }

@@ -4,15 +4,19 @@ import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react"
 import {
   ArrowUp,
   Box,
+  Camera,
   Clock3,
   Crown,
   Monitor,
   Play,
   RectangleHorizontal,
+  RotateCw,
   ChevronLeft,
   ChevronRight,
   Download,
+  ExternalLink,
   FolderPlus,
+  History,
   ImagePlus,
   Info,
   Share2,
@@ -22,11 +26,9 @@ import {
   Video,
   X,
 } from "lucide-react"
-import { canUseGeneration, incrementUsage } from "@/lib/usage-limits"
 import { takePrefillPrompt } from "@/lib/malik-context"
-import { ROUTER_VIDEO_CATALOG, type RouterCatalogEntry } from "@/lib/ai/router-catalog"
 import type { VideoProviderId } from "@/lib/media/types"
-import { verifyDirectVideo, type VerifiedVideo } from "@/lib/media/browser-video-qa"
+import { deliverGeneratedVideo, malikVideoStreamUrl, VideoDeliveryError, type VerifiedVideo } from "@/lib/media/browser-video-qa"
 import { exportBrandedMalikVideo } from "@/lib/media/browser-video-branding"
 
 export type VideoGenerationStudioProps = {
@@ -41,7 +43,7 @@ type Ratio = "16:9" | "9:16" | "1:1" | "4:3"
 type Duration = 5 | 10
 type Quality = "fast" | "max"
 type VideoMode = "text" | "image" | "video"
-type GenerationPhase = "idle" | "queued" | "rendering" | "ready" | "failed"
+type GenerationPhase = "idle" | "queued" | "rendering" | "checking" | "ready" | "failed"
 type ShowcaseVideoTemplate = {
   id: string
   title: string
@@ -223,16 +225,6 @@ const MODELS = [
   },
 ] as const
 
-function catalogVideoIcon(entry: RouterCatalogEntry) {
-  const domains: Record<string, string> = {
-    kling: "klingai.com",
-    bytedance: "bytedance.com",
-    nara: "router.bynara.id",
-  }
-  const domain = domains[entry.brand] || (entry.provider === "nara" ? "router.bynara.id" : "llm7.io")
-  return `https://www.google.com/s2/favicons?sz=128&domain_url=https://${domain}`
-}
-
 // Keep the desktop model cards unchanged; the mobile picker exposes every video
 // provider accepted by /api/media/video.
 const MOBILE_MODELS = [
@@ -247,6 +239,75 @@ const MOBILE_MODELS = [
 
 const CATEGORIES = ["Популярное", "Кинематографичные", "Анимация", "Реалистичные", "Природа", "Технологии", "Люди", "Продукты"] as const
 
+// Which examples each gallery tab shows; «Популярное» shows them all.
+const CATEGORY_TEMPLATES: Record<(typeof CATEGORIES)[number], readonly string[] | null> = {
+  "Популярное": null,
+  "Кинематографичные": ["malik-epic-motion", "malik-ancient-worlds", "malik-transformer-flight", "malik-cloud-road"],
+  "Анимация": ["malik-animated-city", "malik-storybook-cat"],
+  "Реалистичные": ["malik-ancient-worlds", "malik-alpine-flight", "malik-product-serum", "malik-cloud-road"],
+  "Природа": ["malik-ancient-worlds", "malik-alpine-flight", "malik-storybook-cat"],
+  "Технологии": ["malik-mecha-impact", "malik-transformer-flight", "malik-animated-city"],
+  "Люди": ["malik-animated-city", "malik-alpine-flight", "malik-epic-motion"],
+  "Продукты": ["malik-product-serum", "malik-cloud-road"],
+}
+
+// Camera moves, as in professional video tools: one tap writes the move into
+// the prompt, a second tap takes it out.
+const CAMERA_MOVES = [
+  { id: "dolly-in", label: "Наезд", text: "Камера: плавный наезд (dolly in) к главному объекту." },
+  { id: "dolly-out", label: "Отъезд", text: "Камера: отъезд назад (dolly out), раскрывая всё окружение." },
+  { id: "orbit", label: "Облёт 360°", text: "Камера: облёт вокруг объекта на 360° (orbit)." },
+  { id: "crane", label: "Кран вверх", text: "Камера: подъём на кране вверх (crane up) с раскрытием панорамы." },
+  { id: "fpv", label: "FPV-дрон", text: "Камера: стремительный FPV-пролёт дроном сквозь сцену." },
+  { id: "tracking", label: "Слежение", text: "Камера: следует за героем сбоку (tracking shot) на одной скорости." },
+  { id: "handheld", label: "Ручная", text: "Камера: живая ручная съёмка (handheld) с лёгким естественным покачиванием." },
+  { id: "crash-zoom", label: "Зум-удар", text: "Камера: резкий кинематографичный зум (crash zoom) на ключевой момент." },
+  { id: "bullet-time", label: "Bullet time", text: "Камера: эффект bullet time, время почти останавливается, камера облетает момент." },
+  { id: "static", label: "Статика", text: "Камера: неподвижный штатив, движется только сцена." },
+] as const
+
+const ENHANCE_TEXT = "Кинематографичный свет, физически правдоподобное движение, плавная работа камеры, высокая детализация кадра и естественный звук."
+
+type ActiveVideoJob = { taskId: string; statusUrl: string; prompt: string; model: string; startedAt: number }
+type SavedVideo = { taskId: string; url: string; prompt: string; model: string; at: number; width?: number; height?: number; durationSeconds?: number; unverified?: boolean }
+type DeliveryIssue = { taskId: string; url: string; prompt: string; model: string; retry: boolean }
+
+const ACTIVE_JOB_KEY = "malik.video.active"
+const HISTORY_KEY = "malik.video.history"
+// How long the studio keeps checking a task before handing the check to a button.
+const RENDER_WINDOW_MS = 15 * 60_000
+
+const storageKey = (base: string, owner: string) => `${base}:${owner.trim().toLowerCase()}`
+
+function readStored<T>(key: string, fallback: T): T {
+  try {
+    const raw = window.localStorage.getItem(key)
+    return raw ? JSON.parse(raw) as T : fallback
+  } catch {
+    return fallback
+  }
+}
+
+function writeStored(key: string, value: unknown) {
+  try {
+    if (value === null) window.localStorage.removeItem(key)
+    else window.localStorage.setItem(key, JSON.stringify(value))
+  } catch {
+    /* Private mode: the video still shows; only the memory of it is lost. */
+  }
+}
+
+/** The server's reason in words a person can act on, never a bare status code. */
+function submitErrorMessage(status: number, data: Record<string, unknown>) {
+  const server = String(data?.error || data?.publicError || data?.message || "").trim()
+  if (status === 401) return "Войдите в аккаунт, чтобы создавать видео."
+  if (status === 402) return server || "Эта видеомодель или режим доступны в Malik PRO."
+  if (status === 429) return server || "Лимит видео на сегодня исчерпан. Он обновится завтра."
+  if (status === 503 && (!server || /not configured|api key|missing|disabled/iu.test(server))) return "Эта видеомодель сейчас не подключена. Выберите другую модель."
+  if (server && !/^[A-Z0-9_]+$/u.test(server)) return server
+  return `Видеосервис ответил ошибкой ${status}. Попробуйте ещё раз или выберите другую модель.`
+}
+
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
@@ -254,6 +315,7 @@ function sleep(ms: number) {
 function statusLabel(phase: GenerationPhase, attempt: number) {
   if (phase === "queued") return "Ставлю видео в очередь…"
   if (phase === "rendering") return attempt < 5 ? "Собираю сцену и движение…" : attempt < 15 ? "Рендерю свет, движение и звук…" : "Финализирую видео…"
+  if (phase === "checking") return "Проверяю готовый файл…"
   if (phase === "ready") return "Видео готово"
   if (phase === "failed") return "Генерация остановлена"
   return "Готов к созданию"
@@ -328,15 +390,30 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
   const [thumbPage, setThumbPage] = useState(0)
   const [modelNotice, setModelNotice] = useState("")
   const [exportingVideo, setExportingVideo] = useState(false)
+  const [deliveryIssue, setDeliveryIssue] = useState<DeliveryIssue | null>(null)
+  const [viaMalik, setViaMalik] = useState(false)
+  const [shareUrl, setShareUrl] = useState("")
+  const [savedVideos, setSavedVideos] = useState<SavedVideo[]>([])
+  const [stalledJob, setStalledJob] = useState<ActiveVideoJob | null>(null)
+  // Each check loop belongs to one run; leaving the studio or starting another
+  // video ends the old loop without touching the new one.
+  const runRef = useRef(0)
   const [selectedModelId, setSelectedModelId] = useState<(typeof MOBILE_MODELS)[number]["id"]>("novai")
   const [videoAccess, setVideoAccess] = useState({ pro: false, owner: false })
   const [modelAvailability, setModelAvailability] = useState<Partial<Record<VideoProviderId, boolean>>>({})
   const [mobilePanel, setMobilePanel] = useState<"text" | "image" | "video" | "style">("text")
-  const busy = phase === "queued" || phase === "rendering"
+  const busy = phase === "queued" || phase === "rendering" || phase === "checking"
   const selectedModel = MOBILE_MODELS.find((model) => model.id === selectedModelId) || MOBILE_MODELS[0]
   const selectedItem = SHOWCASE_TEMPLATES[selected] || SHOWCASE_TEMPLATES[0]
   const readyVideo = videoUrl && verifiedVideo?.url === videoUrl ? verifiedVideo : null
-  const cards = useMemo(() => SHOWCASE_TEMPLATES.slice(1), [])
+  const galleryItems = useMemo(() => {
+    const wanted = CATEGORY_TEMPLATES[activeCategory]
+    return SHOWCASE_TEMPLATES
+      .map((item, index) => ({ item, index }))
+      .filter(({ item, index }) => wanted ? wanted.includes(item.id) : index > 0)
+  }, [activeCategory])
+  // Desktop shows the core models plus every other model the server has connected.
+  const desktopModels = MOBILE_MODELS.filter((model) => MODELS.some((base) => base.id === model.id) || modelAvailability[model.id as VideoProviderId] === true)
   const thumbSize = 3
   const thumbPages = Math.max(1, Math.ceil(SHOWCASE_TEMPLATES.length / thumbSize))
   const thumbs = SHOWCASE_TEMPLATES.slice(thumbPage * thumbSize, thumbPage * thumbSize + thumbSize)
@@ -395,6 +472,29 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
     }
   }, [])
 
+  // A video started earlier keeps rendering at the provider: coming back to the
+  // studio picks its check up again instead of losing it.
+  const phaseRef = useRef(phase)
+  phaseRef.current = phase
+  // Only leaving the studio ends a check loop; a late-arriving account name does not.
+  useEffect(() => () => { runRef.current += 1 }, [])
+  useEffect(() => {
+    setSavedVideos(readStored<SavedVideo[]>(storageKey(HISTORY_KEY, operator), []).filter((item) => item?.taskId && item?.url).slice(0, 12))
+    const active = readStored<ActiveVideoJob | null>(storageKey(ACTIVE_JOB_KEY, operator), null)
+    const working = phaseRef.current === "queued" || phaseRef.current === "rendering" || phaseRef.current === "checking"
+    if (active?.taskId && active.statusUrl && !working) {
+      if (Date.now() - active.startedAt < RENDER_WINDOW_MS) {
+        setPrompt(active.prompt)
+        setModelNotice(`Продолжаю проверять видео, запущенное ранее: «${active.prompt.slice(0, 80)}».`)
+        void followTask(active)
+      } else {
+        setStalledJob(active)
+        setModelNotice("Есть видео, запущенное ранее. Нажмите «Проверить снова», чтобы получить результат.")
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [operator])
+
   const supportsMode = (modelId: (typeof MOBILE_MODELS)[number]["id"], targetMode: VideoMode) =>
     targetMode === "text" ? true : modelId === "magichour" || modelId === "runway"
 
@@ -421,7 +521,11 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
 
     setDuration(5)
     if (!supportsMode(selectedModelId, nextMode)) {
-      const compatibleId = modelAvailability.runway ? "runway" : "magichour"
+      const compatibleId = modelAvailability.runway === true ? "runway" : modelAvailability.magichour !== false ? "magichour" : null
+      if (!compatibleId) {
+        setModelNotice(`${nextMode === "image" ? "Фото → Видео" : "Видео → Видео"} работает через Magic Hour или Runway, а сейчас ни одна из них не подключена.`)
+        return
+      }
       const compatibleModel = MOBILE_MODELS.find((model) => model.id === compatibleId) || MOBILE_MODELS[0]
       setSelectedModelId(compatibleId)
       setModelNotice(
@@ -647,17 +751,16 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
       return
     }
 
+    // The daily limit lives on the server, per account; the browser does not guess it.
     setError("")
     setVideoUrl("")
     setVerifiedVideo(null)
     setReadyTaskId("")
+    setDeliveryIssue(null)
+    setStalledJob(null)
+    setViaMalik(false)
+    setShareUrl("")
     setAttempt(0)
-
-    if (!videoAccess.owner && !canUseGeneration("video", operator)) {
-      setPhase("failed")
-      setError("Сегодняшняя генерация видео на этом аккаунте уже использована. Лимит обновится завтра.")
-      return
-    }
 
     const submit = async (provider: VideoProviderId, sourcePath: string) => {
       const response = await videoFetch(
@@ -688,6 +791,7 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
     }
 
     setPhase("queued")
+    const run = ++runRef.current
     try {
       let provider = selectedModel.provider as VideoProviderId
       let sourcePath = extendTaskId ? sourcePreview : mode === "text" ? "" : await uploadSource(provider)
@@ -709,53 +813,179 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
         ;({ response, data } = await submit(provider, sourcePath))
       }
 
-      if (!response.ok) {
-        if (response.status === 429 && data?.code === "VIDEO_ACCOUNT_DAILY_LIMIT_REACHED") {
-          throw new Error("Сегодняшняя генерация уже использована. Лимит обновится завтра.")
-        }
-        throw new Error(data?.error || data?.publicError || data?.message || `Ошибка ${response.status}`)
-      }
+      if (!response.ok) throw new Error(submitErrorMessage(response.status, data))
 
       const taskId = String(data?.taskId || "")
-      if (!taskId) throw new Error("Видеомодель не вернула taskId")
-      if (!videoAccess.owner) incrementUsage("video")
-      setPhase("rendering")
-
-      const statusUrl = String(data?.statusUrl || `/api/media/video/status?taskId=${encodeURIComponent(taskId)}`)
-      for (let i = 0; i < 96; i += 1) {
-        setAttempt(i)
-        await sleep(i === 0 ? 1500 : i < 12 ? 2500 : 5000)
-        const statusResponse = await videoFetch(statusUrl, { method: "GET" }, 45_000)
-        const statusData = await statusResponse.json().catch(() => ({}))
-        if (!statusResponse.ok) throw new Error(statusData?.error || `Status ${statusResponse.status}`)
-        if (statusData?.status === "failed") throw new Error(statusData?.error || "Видеомодель не смогла завершить рендер")
-        const readyUrl = String(statusData?.videoUrl || statusData?.url || "")
-        if (readyUrl) {
-          const verified = await verifyDirectVideo(readyUrl, window.location.origin)
-          setVerifiedVideo(verified)
-          setVideoUrl(verified.url)
-          setReadyTaskId(taskId)
-          setPhase("ready")
-          if (projectImage) {
-            void videoFetch(`/api/os/projects/${encodeURIComponent(projectImage.projectId)}/video-artifacts`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ taskId, sourceImageId: projectImage.id }),
-            }, 45_000).then(async (saved) => {
-              if (!saved.ok) {
-                const failure = await saved.json().catch(() => ({}))
-                setModelNotice(`Видео готово, но не сохранено в проекте: ${String(failure.error || "повторите позже")}`)
-              }
-            }).catch(() => setModelNotice("Видео готово, но связь с проектом пока не подтверждена."))
-          }
-          return
-        }
-      }
-      throw new Error("Видео всё ещё рендерится. Проверьте задачу позже.")
+      if (!taskId) throw new Error("Видеомодель не вернула номер задачи. Попробуйте ещё раз.")
+      if (run !== runRef.current) return
+      await followTask({
+        taskId,
+        statusUrl: String(data?.statusUrl || `/api/media/video/status?taskId=${encodeURIComponent(taskId)}`),
+        prompt: cleanPrompt,
+        model: selectedModel.name,
+        startedAt: Date.now(),
+      }, projectImage)
     } catch (err) {
+      if (run !== runRef.current) return
       setPhase("failed")
       setError(err instanceof Error ? err.message : "Генерация видео недоступна")
     }
+  }
+
+  const rememberVideo = (entry: SavedVideo) => {
+    setSavedVideos((current) => {
+      const next = [entry, ...current.filter((item) => item.taskId !== entry.taskId)].slice(0, 12)
+      writeStored(storageKey(HISTORY_KEY, operator), next)
+      return next
+    })
+  }
+
+  /** A finished file is shown the way that works here, and never thrown away. */
+  const finishVideo = async (job: ActiveVideoJob, url: string, run: number, sourceImage: typeof projectImage = null) => {
+    setPhase("checking")
+    try {
+      const delivered = await deliverGeneratedVideo({ url, taskId: job.taskId, origin: window.location.origin })
+      if (run !== runRef.current) return
+      setVerifiedVideo(delivered.video)
+      setVideoUrl(delivered.video.url)
+      setViaMalik(delivered.via === "malik")
+      setShareUrl(delivered.originalUrl)
+      setReadyTaskId(job.taskId)
+      setDeliveryIssue(null)
+      setError("")
+      setPhase("ready")
+      if (delivered.via === "malik") setModelNotice("Провайдер не отдал файл браузеру напрямую, поэтому видео показано через Malik AI.")
+      rememberVideo({
+        taskId: job.taskId, url: delivered.originalUrl, prompt: job.prompt, model: job.model, at: Date.now(),
+        width: delivered.video.width, height: delivered.video.height, durationSeconds: delivered.video.durationSeconds,
+      })
+      if (sourceImage) {
+        void videoFetch(`/api/os/projects/${encodeURIComponent(sourceImage.projectId)}/video-artifacts`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ taskId: job.taskId, sourceImageId: sourceImage.id }),
+        }, 45_000).then(async (saved) => {
+          if (!saved.ok) {
+            const failure = await saved.json().catch(() => ({}))
+            setModelNotice(`Видео готово, но не сохранено в проекте: ${String(failure.error || "повторите позже")}`)
+          }
+        }).catch(() => setModelNotice("Видео готово, но связь с проектом пока не подтверждена."))
+      }
+    } catch (cause) {
+      if (run !== runRef.current) return
+      const original = cause instanceof VideoDeliveryError ? cause.originalUrl : url
+      setDeliveryIssue({ taskId: job.taskId, url: original, prompt: job.prompt, model: job.model, retry: cause instanceof VideoDeliveryError ? cause.retry : true })
+      setReadyTaskId(job.taskId)
+      setShareUrl(original)
+      setError(cause instanceof Error ? cause.message : "Видео создано, но файл не открывается.")
+      setPhase("failed")
+      rememberVideo({ taskId: job.taskId, url: original, prompt: job.prompt, model: job.model, at: Date.now(), unverified: true })
+    }
+  }
+
+  /** Waits for the provider. The task is saved, so leaving the page loses nothing. */
+  const followTask = async (job: ActiveVideoJob, sourceImage: typeof projectImage = null) => {
+    const run = ++runRef.current
+    const activeKey = storageKey(ACTIVE_JOB_KEY, operator)
+    writeStored(activeKey, job)
+    setStalledJob(null)
+    setDeliveryIssue(null)
+    setError("")
+    setPhase("rendering")
+    let networkMisses = 0
+    try {
+      for (let i = 0; ; i += 1) {
+        if (run !== runRef.current) return
+        if (Date.now() - job.startedAt > RENDER_WINDOW_MS) {
+          setStalledJob(job)
+          throw new Error("Видео рендерится дольше обычного. Задача сохранена: нажмите «Проверить снова» чуть позже.")
+        }
+        setAttempt(i)
+        await sleep(i === 0 ? 1500 : i < 12 ? 2500 : 5000)
+        if (run !== runRef.current) return
+        let statusResponse: Response
+        try {
+          statusResponse = await videoFetch(job.statusUrl, { method: "GET" }, 45_000)
+        } catch (cause) {
+          // A dropped connection on a phone is not a failed video: keep waiting.
+          if (++networkMisses < 6) continue
+          setStalledJob(job)
+          throw cause
+        }
+        networkMisses = 0
+        const statusData = await statusResponse.json().catch(() => ({}))
+        if (!statusResponse.ok) {
+          if (statusResponse.status >= 500 && i < 240) continue
+          writeStored(activeKey, null)
+          throw new Error(String(statusData?.error || `Не удалось проверить видео (HTTP ${statusResponse.status}).`))
+        }
+        if (statusData?.status === "failed") {
+          writeStored(activeKey, null)
+          const reason = String(statusData?.error || "Видеомодель не смогла завершить рендер.")
+          throw new Error(`${reason}${statusData?.quotaRefunded ? " Дневная попытка возвращена." : ""}`)
+        }
+        const readyUrl = String(statusData?.videoUrl || statusData?.url || "")
+        if (readyUrl) {
+          writeStored(activeKey, null)
+          await finishVideo(job, readyUrl, run, sourceImage)
+          return
+        }
+      }
+    } catch (err) {
+      if (run !== runRef.current) return
+      setPhase("failed")
+      setError(err instanceof Error ? err.message : "Генерация видео недоступна")
+    }
+  }
+
+  const retryDelivery = () => {
+    if (!deliveryIssue || busy) return
+    const run = ++runRef.current
+    setError("")
+    void finishVideo({ taskId: deliveryIssue.taskId, statusUrl: "", prompt: deliveryIssue.prompt, model: deliveryIssue.model, startedAt: Date.now() }, deliveryIssue.url, run)
+  }
+
+  const resumeStalled = () => {
+    if (!stalledJob || busy) return
+    void followTask({ ...stalledJob, startedAt: Date.now() })
+  }
+
+  // The provider's link can expire after the check; the same file then plays through Malik.
+  const playerFailed = () => {
+    if (viaMalik || !readyTaskId) return
+    const proxy = malikVideoStreamUrl(readyTaskId)
+    setViaMalik(true)
+    setVerifiedVideo((current) => current ? { ...current, url: proxy } : current)
+    setVideoUrl(proxy)
+    setModelNotice("Прямая ссылка провайдера не открылась, поэтому видео показано через Malik AI.")
+  }
+
+  const openSavedVideo = (item: SavedVideo) => {
+    if (busy) return
+    runRef.current += 1
+    setDeliveryIssue(null)
+    setStalledJob(null)
+    setError("")
+    setViaMalik(false)
+    setShareUrl(item.url)
+    setReadyTaskId(item.taskId)
+    setVerifiedVideo(item.width && item.height && item.durationSeconds ? { url: item.url, width: item.width, height: item.height, durationSeconds: item.durationSeconds } : null)
+    setVideoUrl(item.url)
+    setPrompt(item.prompt)
+    setPhase("ready")
+    setModelNotice(`Открыто из «Мои видео»: ${item.model}.`)
+  }
+
+  const forgetSavedVideos = () => {
+    setSavedVideos([])
+    writeStored(storageKey(HISTORY_KEY, operator), null)
+  }
+
+  const toggleCameraMove = (text: string) => {
+    if (busy) return
+    setPrompt((value) => value.includes(text)
+      ? value.replace(text, "").replace(/\s{2,}/gu, " ").trim()
+      : `${value.trim() || DEFAULT_PROMPT} ${text}`.trim().slice(0, 2000))
   }
 
   const extendReadyVideo = () => {
@@ -764,7 +994,7 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
     setMobilePanel("video")
     setSourceFile(null)
     setProjectImage(null)
-    setSourcePreview(readyVideo.url)
+    setSourcePreview(shareUrl || readyVideo.url)
     setSourceDurationSeconds(readyVideo.durationSeconds)
     setExtendTaskId(readyTaskId)
     setSelectedModelId("runway")
@@ -779,9 +1009,8 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
   }
 
   const improvePrompt = () => {
-    setPrompt((value) => value.trim()
-      ? `${value.trim()} Кинематографичный свет, реалистичная физика движения, плавная работа камеры, высокая детализация и естественная динамика.`
-      : DEFAULT_PROMPT)
+    if (busy) return
+    setPrompt((value) => !value.trim() ? DEFAULT_PROMPT : value.includes(ENHANCE_TEXT) ? value : `${value.trim()} ${ENHANCE_TEXT}`.slice(0, 2000))
   }
 
   const applyMobileStyle = (style: string) => {
@@ -855,13 +1084,59 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
   }
 
   const shareCurrent = async () => {
-    const src = videoUrl || selectedItem.src
+    // The Malik stream needs this account's sign-in; others get the provider's link.
+    const src = shareUrl || (viaMalik ? "" : videoUrl) || selectedItem.src
     try {
       const absolute = new URL(src, window.location.origin).href
       if (navigator.share) await navigator.share({ title: "MalikVideo", url: absolute })
       else await navigator.clipboard.writeText(absolute)
     } catch {}
   }
+
+  const recoverRow = deliveryIssue || stalledJob ? (
+    <div className="mv2__recover" role="group" aria-label="Что сделать с видео">
+      {deliveryIssue ? <button type="button" onClick={retryDelivery} disabled={busy}><RotateCw />Проверить ещё раз</button> : null}
+      {deliveryIssue ? <a href={deliveryIssue.url} target="_blank" rel="noreferrer noopener"><ExternalLink />Открыть файл</a> : null}
+      {stalledJob && !deliveryIssue ? <button type="button" onClick={resumeStalled} disabled={busy}><RotateCw />Проверить снова</button> : null}
+    </div>
+  ) : null
+
+  const cameraRow = (
+    <div className="mv2__camera" role="group" aria-label="Движение камеры">
+      <span className="mv2__camera-label"><Camera />Камера</span>
+      {CAMERA_MOVES.map((move) => {
+        const active = prompt.includes(move.text)
+        return (
+          <button key={move.id} type="button" className={active ? "is-active" : ""} aria-pressed={active} onClick={() => toggleCameraMove(move.text)} disabled={busy} title={move.text}>
+            {move.label}
+          </button>
+        )
+      })}
+    </div>
+  )
+
+  const historyStrip = savedVideos.length ? (
+    <div className="mv2__history" aria-label="Мои видео">
+      <div className="mv2__history-head">
+        <span><History />Мои видео</span>
+        <small>{savedVideos.length}</small>
+        <button type="button" onClick={forgetSavedVideos} disabled={busy}>Очистить</button>
+      </div>
+      <div className="mv2__history-list">
+        {savedVideos.map((item) => (
+          <button key={item.taskId} type="button" className={readyTaskId === item.taskId ? "is-active" : ""} onClick={() => openSavedVideo(item)} disabled={busy} title={item.prompt}>
+            <Play />
+            <span>{item.prompt}</span>
+            <small>
+              {new Date(item.at).toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
+              {item.durationSeconds ? ` · ${Math.round(item.durationSeconds)} сек` : ""}
+              {item.unverified ? " · не проверено" : ""}
+            </small>
+          </button>
+        ))}
+      </div>
+    </div>
+  ) : null
 
   return (
     <main className="mv2" data-view="video-generation-v2" data-phase={phase}>
@@ -930,6 +1205,7 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
             <button type="button" onClick={() => applyMobileStyle("Мягкая атмосферная цветокоррекция и плавное движение.")}>Soft</button>
           </div>
         ) : null}
+        {mobilePanel === "style" ? cameraRow : null}
 
         {mobilePanel === "image" ? (
           <div className="mv2m__source">
@@ -1036,11 +1312,13 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
         </button>
 
         <div className="mv2m__brand"><Crown />Превращай идеи в реальность с Malik AI</div>
+        {busy ? <div className="mv2m__status is-busy" role="status">{statusLabel(phase, attempt)}</div> : null}
         {(error || phase === "ready") ? (
-          <div className={`mv2m__status${error ? " is-error" : ""}`}>
-            {error || "Видео готово"}
+          <div className={`mv2m__status${error ? " is-error" : ""}`} role={error ? "alert" : "status"}>
+            {error || (viaMalik ? "Видео готово · показано через Malik AI" : "Видео готово")}
           </div>
         ) : null}
+        {recoverRow}
         {videoUrl ? (
           <div className="mv2m__result-video">
             <div className="mv2m__result-media">
@@ -1050,6 +1328,7 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
                 controls
                 playsInline
                 preload="metadata"
+                onError={playerFailed}
               />
               <MalikMediaWatermark compact />
             </div>
@@ -1101,7 +1380,7 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
                       : { width: "100%", aspectRatio: "16 / 9" }
                 }
               >
-                <video src={videoUrl} controls autoPlay playsInline preload="metadata" className="mv2__result" />
+                <video key={videoUrl} src={videoUrl} controls autoPlay playsInline preload="metadata" className="mv2__result" onError={playerFailed} />
                 <MalikMediaWatermark />
               </div>
             ) : sourcePreview && mode === "image" ? (
@@ -1141,7 +1420,7 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
           <div className="mv2__preview-copy">
             <div className="mv2__mobile-badges"><span>{readyVideo ? `${readyVideo.width}×${readyVideo.height}` : "MALIK VIDEO"}</span><span>CINEMATIC</span></div>
             <h3>{videoUrl ? "Готовое видео" : selectedItem.title}</h3>
-            <p>{videoUrl ? "Видео проверено в браузере. Отметка Malik AI видна в плеере; оригинальный файл скачивается без неё." : selectedItem.prompt}</p>
+            <p>{videoUrl ? (readyVideo ? `Видео проверено и готово${viaMalik ? ", показано через Malik AI" : ""}. Скачивание встраивает значок Malik AI в кадр.` : "Видео открыто из истории. Если прямая ссылка устарела, плеер переключится на Malik AI.") : selectedItem.prompt}</p>
             <div className="mv2__chips"><span>{readyVideo ? `${Math.round(readyVideo.durationSeconds)} секунд` : `${duration} секунд`}</span><span>{readyVideo ? `${readyVideo.width}×${readyVideo.height}` : QUALITY_RESOLUTION[quality]}</span><span>{ratio}</span><span>{videoUrl ? "Malik Video" : selectedModel.name}</span><span>{selectedModel.audio ? "Audio" : "Video"}</span></div>
           </div>
           <div className="mv2__preview-actions">
@@ -1153,6 +1432,7 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
             <button type="button" onClick={() => onViewChange("projects")}><FolderPlus /><span>В проект</span></button>
           </div>
         </div>
+        {historyStrip}
       </section>
 
       <section className="mv2__controls-column">
@@ -1186,13 +1466,14 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
           <textarea value={prompt} onChange={(event) => setPrompt(event.target.value.slice(0, 2000))} placeholder="Опишите, какое видео вы хотите создать..." disabled={busy} />
           <div className="mv2__prompt-foot">
             <div className="mv2__helper-row">
-              <button type="button" onClick={() => setPrompt(DEFAULT_PROMPT)}><Sparkles />Подсказки</button>
-              <button type="button" onClick={() => setPrompt((value) => value.trim() ? `${value.trim()} Кинематографичный свет, физически правдоподобное движение камеры, детализированный кадр, естественный звук.` : DEFAULT_PROMPT)}><Sparkles />Улучшить промпт</button>
-              <button type="button" onClick={() => chooseTemplate(1)}><ImagePlus />Примеры</button>
+              <button type="button" onClick={() => setPrompt(DEFAULT_PROMPT)} disabled={busy}><Sparkles />Подсказки</button>
+              <button type="button" onClick={improvePrompt} disabled={busy}><Sparkles />Улучшить промпт</button>
+              <button type="button" onClick={() => document.querySelector(".mv2__gallery")?.scrollIntoView({ behavior: "smooth", block: "center" })} disabled={busy}><ImagePlus />Примеры</button>
             </div>
             <span className="mv2__count">{prompt.length}/2000</span>
           </div>
         </div>
+        {cameraRow}
 
         {mode !== "text" ? (
           <div className="mv2__source-card">
@@ -1233,7 +1514,7 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
 
         <div className="mv2__section-title"><span>Модель</span><Info /><span className="mv2__selected-model">Выбрано: {selectedModel.name}</span></div>
         <div className="mv2__models">
-          {MODELS.map((model) => {
+          {desktopModels.map((model) => {
             const active = model.id === selectedModelId
             return (
               <button
@@ -1260,36 +1541,23 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
               </button>
             )
           })}
-          {ROUTER_VIDEO_CATALOG.map((entry) => (
-            <button
-              key={`catalog:${entry.provider}:${entry.providerModel}`}
-              type="button"
-              className="mv2__model"
-              disabled
-              aria-disabled="true"
-              title="Каталог провайдера · PAYG выключен"
-            >
-              <span className="mv2__model-icon"><img src={catalogVideoIcon(entry)} alt="" draggable={false} /></span>
-              <span className="mv2__model-copy"><strong>{entry.label}</strong><small>{entry.provider.toUpperCase()} · каталог</small></span>
-              <span className="mv2__tier is-free">Catalog</span>
-            </button>
-          ))}
         </div>
         {modelNotice ? <div className="mv2__model-notice">{modelNotice}</div> : null}
 
         <div className="mv2__settings-grid">
-          <div><div className="mv2__section-title">Качество <Info /></div><div className="mv2__segments"><button type="button" aria-pressed={quality === "fast"} className={quality === "fast" ? "is-active" : ""} onClick={() => setQuality("fast")} disabled={busy}>720p · Быстро</button><button type="button" aria-pressed={quality === "max"} className={quality === "max" ? "is-active" : ""} onClick={() => setQuality("max")} disabled={busy}>1080p · Max</button><button type="button" className="is-disabled" disabled>2K · Pro</button></div></div>
-          <div><div className="mv2__section-title">Длительность</div><div className="mv2__segments">{([5, 10] as Duration[]).map((value) => <button key={value} type="button" aria-pressed={duration === value} className={duration === value ? "is-active" : ""} onClick={() => chooseDuration(value)} disabled={busy}>{value} сек</button>)}<button type="button" className="is-disabled" disabled>16 сек · Pro</button></div></div>
+          <div><div className="mv2__section-title">Качество <Info /></div><div className="mv2__segments"><button type="button" aria-pressed={quality === "fast"} className={quality === "fast" ? "is-active" : ""} onClick={() => setQuality("fast")} disabled={busy}>720p · Быстро</button><button type="button" aria-pressed={quality === "max"} className={quality === "max" ? "is-active" : ""} onClick={() => setQuality("max")} disabled={busy}>1080p · Max</button></div></div>
+          <div><div className="mv2__section-title">Длительность</div><div className="mv2__segments">{([5, 10] as Duration[]).map((value) => <button key={value} type="button" aria-pressed={duration === value} className={duration === value ? "is-active" : ""} onClick={() => chooseDuration(value)} disabled={busy}>{value} сек</button>)}</div></div>
           <div><div className="mv2__section-title">Соотношение сторон</div><div className="mv2__segments">{(["16:9", "9:16", "1:1", "4:3"] as Ratio[]).map((value) => <button key={value} type="button" aria-pressed={ratio === value} className={ratio === value ? "is-active" : ""} onClick={() => setRatio(value)} disabled={busy}>{value}</button>)}</div></div>
         </div>
 
-        <div className="mv2__generate-row"><button type="button" className="mv2__generate" onClick={generate} disabled={busy || !prompt.trim() || (mode !== "text" && !sourceFile && !projectImage && !extendTaskId)}><span>{busy ? statusLabel(phase, attempt) : mode === "image" ? `Оживить фото · ${duration} сек` : mode === "video" ? `Изменить видео · ${duration} сек` : "Сгенерировать видео"}</span><ArrowUp /></button><div className="mv2__credits">◉ 1 видео / день</div><button type="button" className="mv2__tune"><SlidersHorizontal /></button></div>
-        <div className="mv2__status"><span className={`mv2__status-dot is-${phase}`} />{statusLabel(phase, attempt)}{error ? <b>{error}</b> : null}</div>
+        <div className="mv2__generate-row"><button type="button" className="mv2__generate" onClick={generate} disabled={busy || !prompt.trim() || (mode !== "text" && !sourceFile && !projectImage && !extendTaskId)}><span>{busy ? statusLabel(phase, attempt) : mode === "image" ? `Оживить фото · ${duration} сек` : mode === "video" ? `Изменить видео · ${duration} сек` : "Сгенерировать видео"}</span><ArrowUp /></button><div className="mv2__credits">◉ {videoAccess.owner ? "Без лимита" : "1 видео / день"}</div></div>
+        <div className="mv2__status" role="status"><span className={`mv2__status-dot is-${phase}`} />{phase === "ready" && viaMalik ? "Видео готово · через Malik AI" : statusLabel(phase, attempt)}{error ? <b role="alert">{error}</b> : null}</div>
+        {recoverRow}
 
-        <div className="mv2__gallery-tabs">{CATEGORIES.map((item) => <button key={item} type="button" className={activeCategory === item ? "is-active" : ""} onClick={() => setActiveCategory(item)}>{item}</button>)}</div>
+        <div className="mv2__gallery-tabs">{CATEGORIES.map((item) => <button key={item} type="button" className={activeCategory === item ? "is-active" : ""} aria-pressed={activeCategory === item} onClick={() => setActiveCategory(item)}>{item}</button>)}</div>
         <div className="mv2__gallery">
-          {cards.map((item, index) => (
-            <button key={item.id} type="button" className={`mv2__gallery-card${selected === index + 1 ? " is-active" : ""}`} onClick={() => chooseTemplate(index + 1)}>
+          {galleryItems.map(({ item, index }) => (
+            <button key={item.id} type="button" className={`mv2__gallery-card${selected === index ? " is-active" : ""}`} onClick={() => chooseTemplate(index)} disabled={busy}>
               <PosterAsset item={item} className="mv2__gallery-poster" />
               <span className="mv2__gallery-shade" />
               <span className="mv2__gallery-copy"><strong>{item.title}</strong><small>{item.theme} · 1080p</small></span>
@@ -1311,7 +1579,7 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
         .mv2__controls-column{position:relative;padding:5px 0 24px}.mv2__mode-tabs{position:absolute;right:0;top:0;display:flex;border:1px solid #1d2027;background:#0b0d11;border-radius:12px;padding:3px;overflow:hidden}.mv2__mode-tabs button{height:34px;border:0;border-radius:9px;background:transparent;color:#8e96a4;padding:0 13px;font-size:10px;white-space:nowrap}.mv2__mode-tabs button.is-active{background:#f4f4f5 !important;color:#050505 !important;box-shadow:inset 0 0 0 1px #fff}.mv2__mode-tabs button:disabled{cursor:not-allowed;opacity:.6}.mv2__eyebrow{margin-top:13px;color:#707887;letter-spacing:.28em;font-size:10px}.mv2 h1{margin:14px 0 6px;font-size:clamp(34px,3.2vw,52px);line-height:1;letter-spacing:-.05em}.mv2__lead{margin:0 0 15px;color:#929aa8;font-size:13px}
         .mv2__prompt-card{padding:12px}.mv2__prompt-card textarea{width:100%;height:106px;border:0;outline:0;resize:none;background:transparent;color:#fff;font-size:14px;line-height:1.5;padding:3px}.mv2__prompt-card textarea::placeholder{color:#6f7887}.mv2__source-card{margin-top:9px;min-height:64px;padding:8px;border:1px solid #272a31;border-radius:12px;background:#0c0f14;display:grid;grid-template-columns:48px minmax(0,1fr) auto auto;align-items:center;gap:9px}.mv2__source-preview{width:48px;height:48px;border-radius:9px;overflow:hidden;border:1px solid #2d323b;background:#12161d;display:grid;place-items:center;color:#aeb6c4}.mv2__source-preview img,.mv2__source-preview video{width:100%;height:100%;object-fit:contain!important;object-position:center center!important;display:block;background:#050608;transform:none!important}.mv2__source-preview svg{width:19px}.mv2__source-copy{min-width:0;display:flex;flex-direction:column;gap:4px}.mv2__source-copy strong{font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.mv2__source-copy small{font-size:8px;color:#858d9b;line-height:1.35}.mv2__source-upload,.mv2__source-clear{height:34px;border:1px solid #303540;border-radius:9px;background:#151922;color:#eef2f8;display:flex;align-items:center;justify-content:center;gap:6px}.mv2__source-upload{padding:0 10px;font-size:9px}.mv2__source-upload svg,.mv2__source-clear svg{width:13px;height:13px}.mv2__source-clear{width:34px;padding:0}.mv2__daily-note{margin-top:8px;color:#7e8795;font-size:9px}.mv2__prompt-foot{display:flex;align-items:center;justify-content:space-between;gap:10px}.mv2__helper-row{display:flex;gap:6px;flex-wrap:wrap}.mv2__helper-row button{height:30px;border:1px solid #2a2e36;border-radius:8px;background:#151922;color:#cbd2dd;display:flex;align-items:center;gap:5px;padding:0 9px;font-size:9px}.mv2__helper-row svg{width:12px;height:12px}.mv2__count{font-size:9px;color:#777f8d;white-space:nowrap}
         .mv2__section-title{display:flex;align-items:center;gap:5px;margin:15px 0 8px;font-size:12px;font-weight:750}.mv2__section-title svg{width:13px;height:13px}.mv2__selected-model{margin-left:auto;max-width:56%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#fff;font-size:9px;font-weight:750}.mv2__models{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}.mv2__model{position:relative;min-width:0;height:66px;padding:8px;border:1px solid #272b33;border-radius:11px;background:#0f131a;color:#fff;display:flex;align-items:center;gap:7px;text-align:left;overflow:hidden;transition:border-color .14s ease,background .14s ease,box-shadow .14s ease,transform .14s ease}.mv2__model.is-active{z-index:1;border-color:#fff !important;background:#1d222b !important;outline:2px solid #fff !important;outline-offset:-2px !important;box-shadow:inset 0 0 0 1px rgba(255,255,255,.72),0 0 0 1px rgba(255,255,255,.18) !important;transform:translateY(-1px)}.mv2__model.is-active .mv2__model-copy strong{color:#fff}.mv2__model:disabled{opacity:.28;cursor:not-allowed}.mv2__model.is-featured{grid-column:1/-1;height:72px;background:#121720}.mv2__model-icon{width:34px;height:34px;flex:0 0 34px;border-radius:8px;background:#fff;display:grid;place-items:center;overflow:hidden}.mv2__model-icon img{width:22px;height:22px;object-fit:contain}.mv2__model-copy{min-width:0;display:flex;flex-direction:column;gap:3px}.mv2__model-copy strong{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:10px}.mv2__model-copy small{color:#858d9b;font-size:8px}.mv2__tier{position:absolute;right:6px;top:5px;padding:2px 5px;border-radius:999px;font-size:7px}.mv2__tier.is-free{background:#fff;color:#000}.mv2__tier.is-pro{background:#252935;color:#c9d0db}.mv2__model-notice{margin-top:8px;min-height:26px;padding:7px 9px;border:1px solid #2b3038;border-radius:8px;background:#0f1217;color:#c3cad4;font-size:10px}
-        .mv2__settings-grid{display:grid;grid-template-columns:1.1fr 1fr 1.3fr;gap:10px}.mv2__segments{display:flex;flex-wrap:wrap;gap:6px}.mv2__segments button{height:31px;padding:0 10px;border:1px solid #2a2e36;border-radius:8px;background:#11151c;color:#aeb6c4;font-size:9px}.mv2__segments button.is-active{background:#f4f4f5 !important;color:#050505 !important;border-color:#fff !important;box-shadow:inset 0 0 0 1px rgba(255,255,255,.45)}.mv2__segments button.is-disabled{opacity:.45;cursor:default}.mv2__generate-row{display:grid;grid-template-columns:1fr auto 38px;gap:8px;align-items:center;margin-top:18px}.mv2__generate{height:46px;border:0;border-radius:12px;background:#fff;color:#050505;font-weight:800;display:flex;align-items:center;justify-content:center;gap:10px}.mv2__generate:disabled{opacity:.5;cursor:not-allowed}.mv2__generate svg{width:17px}.mv2__credits{font-size:9px;color:#8f97a5}.mv2__tune{height:38px;border:1px solid #292d35;border-radius:10px;background:#11151b;color:#ddd;display:grid;place-items:center}.mv2__tune svg{width:16px}.mv2__status{display:flex;align-items:center;gap:7px;min-height:32px;color:#8992a0;font-size:9px}.mv2__status b{color:#f4a6a6;font-weight:600}.mv2__status-dot{width:6px;height:6px;border-radius:50%;background:#666}.mv2__status-dot.is-ready{background:#39d98a}.mv2__status-dot.is-rendering,.mv2__status-dot.is-queued{background:#f5c451}.mv2__status-dot.is-failed{background:#ff6b6b}
+        .mv2__settings-grid{display:grid;grid-template-columns:1.1fr 1fr 1.3fr;gap:10px}.mv2__segments{display:flex;flex-wrap:wrap;gap:6px}.mv2__segments button{height:31px;padding:0 10px;border:1px solid #2a2e36;border-radius:8px;background:#11151c;color:#aeb6c4;font-size:9px}.mv2__segments button.is-active{background:#f4f4f5 !important;color:#050505 !important;border-color:#fff !important;box-shadow:inset 0 0 0 1px rgba(255,255,255,.45)}.mv2__segments button.is-disabled{opacity:.45;cursor:default}.mv2__generate-row{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;margin-top:18px}.mv2__generate{height:46px;border:0;border-radius:12px;background:#fff;color:#050505;font-weight:800;display:flex;align-items:center;justify-content:center;gap:10px}.mv2__generate:disabled{opacity:.5;cursor:not-allowed}.mv2__generate svg{width:17px}.mv2__credits{font-size:9px;color:#8f97a5}.mv2__status{display:flex;align-items:center;gap:7px;min-height:32px;color:#8992a0;font-size:9px}.mv2__status b{color:#f4a6a6;font-weight:600}.mv2__status-dot{width:6px;height:6px;border-radius:50%;background:#666}.mv2__status-dot.is-ready{background:#39d98a}.mv2__status-dot.is-rendering,.mv2__status-dot.is-queued,.mv2__status-dot.is-checking{background:#f5c451}.mv2__status-dot.is-failed{background:#ff6b6b}
         .mv2__gallery-tabs{display:flex;gap:5px;overflow-x:auto;padding:4px 0 8px;scrollbar-width:none}.mv2__gallery-tabs::-webkit-scrollbar{display:none}.mv2__gallery-tabs button{height:29px;padding:0 10px;border:1px solid #22262d;border-radius:999px;background:#0d1016;color:#89919f;font-size:8px;white-space:nowrap}.mv2__gallery-tabs button.is-active{background:#fff;color:#000}.mv2__gallery{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px}.mv2__gallery-card{position:relative;aspect-ratio:16/10;border:1px solid #20242b;border-radius:10px;overflow:hidden;padding:0;background:#080a0d}.mv2__gallery-card.is-active{border-color:#fff}.mv2__gallery-poster{width:100%;height:100%;object-fit:cover;display:block}.mv2__gallery-shade{position:absolute;inset:0;background:linear-gradient(180deg,transparent 50%,rgba(0,0,0,.84))}.mv2__gallery-copy{position:absolute;z-index:2;left:8px;right:8px;bottom:7px;display:flex;flex-direction:column;text-align:left}.mv2__gallery-copy strong{font-size:9px;color:#fff}.mv2__gallery-copy small{font-size:7px;color:#aab2bf;margin-top:2px}
         @media (max-width:1180px){.mv2{grid-template-columns:1fr;padding:14px}.mv2__preview-column{order:2}.mv2__controls-column{order:1}.mv2__models{grid-template-columns:repeat(3,minmax(0,1fr))}.mv2__gallery{grid-template-columns:repeat(4,minmax(0,1fr))}}
         @media (max-width:820px){
@@ -1345,6 +1613,7 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
           .mv2m__model-picker button.is-active{border-color:#fff;background:#1c2129;box-shadow:inset 0 0 0 1px rgba(255,255,255,.7),0 0 0 1px #fff}.mv2m__model-picker button.is-active:after{content:"✓";position:absolute;right:10px;bottom:9px;font-size:12px;color:#fff}.mv2m__model-picker button:disabled{opacity:.45;cursor:not-allowed}.mv2m__model-picker button[data-tier="pro"]:not(.is-active){background:#101115}
           .mv2m__generate{width:100%;height:48px;margin-top:8px;border:0;border-radius:12px;background:#39f75a;color:#041107;font-weight:850;display:flex;align-items:center;justify-content:center;gap:9px;box-shadow:0 0 22px rgba(57,247,90,.16)}.mv2m__generate svg{width:15px;height:15px;fill:currentColor}.mv2m__generate:disabled{opacity:.48;cursor:not-allowed}
           .mv2m__brand{margin-top:13px;color:#9fa6b0;font-size:8px;display:flex;align-items:center;justify-content:center;gap:6px}.mv2m__brand svg{width:13px;height:13px;color:#39f75a}
+          .mv2m__status.is-busy{border-color:#3a3420;background:#141108;color:#f5d27a}
           .mv2m__status{margin-top:8px;min-height:28px;padding:7px 9px;border:1px solid #26302a;border-radius:9px;background:#0c130e;color:#8ee89d;font-size:9px;display:flex;align-items:center;justify-content:space-between;gap:8px}.mv2m__status.is-error{border-color:#3c2828;background:#160d0d;color:#f0a0a0}.mv2m__status button{border:0;background:transparent;color:inherit;text-decoration:underline;font-size:9px}
           .mv2m__examples-head{margin-top:16px;display:flex;align-items:center;justify-content:space-between;color:#d8dde4;font-size:10px;font-weight:750}.mv2m__examples-head small{color:#737b86;font-size:8px}
           .mv2m__examples{display:flex;gap:7px;margin-top:8px;overflow-x:auto;padding-bottom:3px;scrollbar-width:none}.mv2m__examples::-webkit-scrollbar{display:none}
@@ -1354,6 +1623,18 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
           .mv2m__examples strong{position:absolute;z-index:2;left:7px;right:6px;bottom:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left;font-size:8px}
         }
         @media (max-width:380px){.mv2m__controls{grid-template-columns:1fr 1fr}.mv2m__tabs button{font-size:7.5px;gap:3px}.mv2m__tabs button svg{width:11px;height:11px}.mv2__mobile-only{padding-left:8px;padding-right:8px}}
+      `}</style>
+      {/* Shared rows (camera, «Мои видео», recovery) are rendered from variables, which
+          scoped styles do not reach; these rules are global but tied to this studio. */}
+      <style jsx global>{`
+        .mv2[data-view="video-generation-v2"] .mv2__recover{display:flex;flex-wrap:wrap;gap:7px;margin:2px 0 8px}.mv2[data-view="video-generation-v2"] .mv2__recover button,.mv2[data-view="video-generation-v2"] .mv2__recover a{height:34px;padding:0 12px;border:1px solid #343a45;border-radius:9px;background:#151922;color:#f2f5fa;display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:650;text-decoration:none}.mv2[data-view="video-generation-v2"] .mv2__recover svg{width:14px;height:14px}.mv2[data-view="video-generation-v2"] .mv2__recover button:disabled{opacity:.5;cursor:not-allowed}
+        .mv2[data-view="video-generation-v2"] .mv2__camera{display:flex;flex-wrap:nowrap;align-items:center;gap:6px;margin-top:9px;overflow-x:auto;scrollbar-width:none;flex:0 0 auto}.mv2[data-view="video-generation-v2"] .mv2__camera::-webkit-scrollbar{display:none}.mv2[data-view="video-generation-v2"] .mv2__camera>*{flex:0 0 auto}.mv2[data-view="video-generation-v2"] .mv2__camera-label{display:inline-flex;align-items:center;gap:5px;margin-right:2px;color:#aab2bf;font-size:10px;font-weight:700}.mv2[data-view="video-generation-v2"] .mv2__camera-label svg{width:13px;height:13px}.mv2[data-view="video-generation-v2"] .mv2__camera button{height:28px;padding:0 10px;border:1px solid #2a2e36;border-radius:999px;background:#11151c;color:#c2c9d4;font-size:10px}.mv2[data-view="video-generation-v2"] .mv2__camera button.is-active{background:#f4f4f5;color:#050505;border-color:#fff}.mv2[data-view="video-generation-v2"] .mv2__camera button:disabled{opacity:.5;cursor:not-allowed}
+        .mv2[data-view="video-generation-v2"] .mv2__history{margin-top:12px;border:1px solid #272a31;border-radius:14px;background:#0c0f14;padding:10px}.mv2[data-view="video-generation-v2"] .mv2__history-head{display:flex;align-items:center;gap:8px;margin-bottom:8px}.mv2[data-view="video-generation-v2"] .mv2__history-head span{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:750}.mv2[data-view="video-generation-v2"] .mv2__history-head svg{width:14px;height:14px}.mv2[data-view="video-generation-v2"] .mv2__history-head small{color:#7e8795;font-size:10px}.mv2[data-view="video-generation-v2"] .mv2__history-head button{margin-left:auto;height:26px;padding:0 9px;border:1px solid #2a2e36;border-radius:8px;background:transparent;color:#9aa3b1;font-size:10px}.mv2[data-view="video-generation-v2"] .mv2__history-list{display:flex;gap:7px;overflow-x:auto;padding-bottom:2px;scrollbar-width:thin}.mv2[data-view="video-generation-v2"] .mv2__history-list>button{position:relative;flex:0 0 190px;min-height:64px;padding:9px 10px 9px 34px;border:1px solid #262a31;border-radius:10px;background:#11151c;color:#eef2f8;text-align:left;display:flex;flex-direction:column;gap:4px}.mv2[data-view="video-generation-v2"] .mv2__history-list>button.is-active{border-color:#fff}.mv2[data-view="video-generation-v2"] .mv2__history-list>button svg{position:absolute;left:10px;top:11px;width:14px;height:14px}.mv2[data-view="video-generation-v2"] .mv2__history-list>button span{font-size:11px;line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}.mv2[data-view="video-generation-v2"] .mv2__history-list>button small{color:#8a93a1;font-size:9px}.mv2[data-view="video-generation-v2"] .mv2__history-list>button:disabled{opacity:.5;cursor:not-allowed}
+        @media (max-width:820px){
+          .mv2[data-view="video-generation-v2"] .mv2__recover{margin-top:8px}.mv2[data-view="video-generation-v2"] .mv2__recover button,.mv2[data-view="video-generation-v2"] .mv2__recover a{flex:1 1 auto;justify-content:center;height:40px;font-size:11px}
+          .mv2[data-view="video-generation-v2"] .mv2__camera{padding-top:8px;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none}.mv2[data-view="video-generation-v2"] .mv2__camera::-webkit-scrollbar{display:none}.mv2[data-view="video-generation-v2"] .mv2__camera button{flex:0 0 auto;height:30px}
+          .mv2[data-view="video-generation-v2"] .mv2__history{margin-top:12px;padding:9px}.mv2[data-view="video-generation-v2"] .mv2__history-list>button{flex-basis:160px}
+        }
       `}</style>
     </main>
   )

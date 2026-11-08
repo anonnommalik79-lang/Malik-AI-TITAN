@@ -1,3 +1,4 @@
+import { normalizeColloquial } from "./colloquial"
 import { routePetroleum } from "../work/petroleum/router"
 import { isExplicitImageEditRequest, isExplicitImageGenerationRequest, isReferenceImageRequest, isReferencePhotoFollowUp } from "./image-intent"
 import { isContextDependent } from "./conversation-focus"
@@ -110,7 +111,25 @@ export function referenceTopic(input: string): string {
     .replace(/^\s*(?:приложение|приложении|app|application)\s+/iu, "")
     .replace(/^\s*(?:of|про|о|об)\s+/iu, "")
     .replace(/\s+(?:look\s+like|с\s+(?:визуальн[\p{L}]*\s+)?референс[\p{L}]*|с\s+(?:картинк[\p{L}]*|фото(?:графи[\p{L}]*)?)|with\s+(?:images|photos|pictures))\s*$/giu, "")
+    // «сейчас сколько оценивается хиггсфиелд ии» → «хиггсфиелд ии»: the question
+    // around a subject is not something to photograph.
+    .replace(QUESTION_FRAME, " ")
     .replace(/["«»]/g, "").replace(/\s+/g, " ").trim().slice(0, 110)
+}
+
+const QUESTION_FRAME = /(?<!\p{L})(?:сейчас|сегодня|щас|га|же|ли|вообще|сколько|оценива\p{L}*|оценк[аиуе]|стоит|стоят|стоимост\p{L}*|капитализац\p{L}*|чем|занима\p{L}*|находится|расположен\p{L}*|где|когда|какая|какой|какое|какие|каков\p{L}*|кто|что|это|такое|такой|такая|компани\p{L}*|стартап\p{L}*)(?!\p{L})/giu
+
+const BRAND_LETTERS: Record<string, string> = { а: "a", б: "b", в: "v", г: "g", д: "d", е: "e", ё: "yo", ж: "zh", з: "z", и: "i", й: "y", к: "k", л: "l", м: "m", н: "n", о: "o", п: "p", р: "r", с: "s", т: "t", у: "u", ф: "f", х: "h", ц: "ts", ч: "ch", ш: "sh", щ: "sch", ъ: "", ы: "y", ь: "", э: "e", ю: "yu", я: "ya" }
+
+/** «хиггсфиелд ии» is Higgsfield AI typed in Cyrillic: a brand is found by its Latin name. */
+export function latinBrandTopic(topic: string): string | null {
+  if (!/(?<!\p{L})(?:ии|аи)(?!\p{L})/iu.test(topic)) return null
+  const latin = topic.replace(/(?<!\p{L})(?:ии|аи)(?!\p{L})/giu, "AI").replace(/\p{Script=Cyrillic}/gu, (letter) => {
+    const lower = letter.toLowerCase()
+    const mapped = BRAND_LETTERS[lower] ?? lower
+    return letter === lower ? mapped : mapped.charAt(0).toUpperCase() + mapped.slice(1)
+  }).replace(/\s+/gu, " ").trim()
+  return latin && latin !== topic ? latin.replace(/(?<!\p{L})(\p{Ll})/gu, (first) => first.toUpperCase()) : null
 }
 
 /** Common RU/KZ subjects are translated without another paid model call. */
@@ -197,7 +216,8 @@ function contextualVisualSubject(input: string): { topic: string; person: boolea
 
 /** Evaluate every explanatory answer; never require the user to ask for photos. */
 export function planReferenceVisuals(question: string, previousQuestion = "", hasAttachment = false, previousAnswer = ""): ReferenceVisualPlan | null {
-  const raw = String(question || "").trim()
+  // «а щя скоко оценивается хиггсфиелд» names its subject like any other question.
+  const raw = normalizeColloquial(String(question || "").trim()) || String(question || "").trim()
   if (!raw || raw.length > 80_000 || hasAttachment || NO_VISUAL.test(raw)) return null
   const domain = resolveDomainPlan({ prompt: raw, messages: previousQuestion ? [{ role: "user", content: previousQuestion }, { role: "assistant", content: previousAnswer }] : [] })
   if (domain.delivery !== "text" || domain.presentation.tables === "off" || ["translate", "summarize", "modify", "calculate", "converse"].includes(domain.goal)
@@ -243,7 +263,8 @@ export function planReferenceVisuals(question: string, previousQuestion = "", ha
   if (topic.length < 3 || /^(?:фото|картинки|изображения|photos?|images?|pictures?|код|code|формул[\p{L}]*|решени[\p{L}]*|текст|text|как|how|доказательств[\p{L}]*|логи|ошибк[\p{L}]*|расч[её]т[\p{L}]*)(?=\s|$)/iu.test(topic)) return null
   const translated = referenceSearchTopic(topic)
   const search = translated.replace(/(?<!\p{L})(?:есть|бывают|находятся|расположены|в|на|из|про|о|об|of|in|the|are)(?!\p{L})/giu, " ").replace(/\s+/gu, " ").trim()
-  const queries = [...new Set([search || translated, topic])].filter(Boolean).slice(0, 2)
+  const brand = latinBrandTopic(topic)
+  const queries = [...new Set([brand, search || translated, topic])].filter(Boolean).slice(0, 2) as string[]
   const listed = followUp ? namedReferenceSubjects(previousAnswer) : []
   const allIPhones = /(?:все|всех|all|every).{0,25}(?:модел|поколен|models?|generations?).{0,15}(?:iphone|айфон)/iu.test(subject)
   const subjects = listed.length ? listed : allIPhones ? Object.keys(APPLE_IPHONE_PHOTOS).reverse() : undefined

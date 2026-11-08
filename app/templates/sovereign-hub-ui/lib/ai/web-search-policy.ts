@@ -1,6 +1,7 @@
 import { asksHeadToHead, asksPurchaseAdvice, asksSubjectOverview } from "@/lib/ai/question-shape"
 import { analysisFrame, asksAnalysis } from "@/lib/ai/analysis-shape"
 import { needsCurrentEvidence } from "./current-evidence"
+import { normalizeColloquial } from "./colloquial"
 import { truthNeedsLiveEvidence } from "./truth-engine"
 import { classifyFreshness, NO_WEB } from "./freshness-intent"
 import { attributionKind } from "./attribution-evidence"
@@ -17,7 +18,7 @@ export type WebSearchOptions = {
 
 /** Pure intent check: no classifier request, keys, or token consumption. */
 export function shouldUseWeb(prompt: string, options: WebSearchOptions = {}, serverPlan?: DomainPlan): boolean {
-  const text = prompt.toLowerCase().replace(/ё/g, "е").replace(/\s+/g, " ").trim()
+  const text = normalizeColloquial(prompt.toLowerCase().replace(/ё/g, "е").replace(/\s+/g, " ").trim())
   if (!text || options.disableResearch) return false
   // «Без интернета» from an earlier turn may sit inside the resolved subject. A
   // plan that requires the web read the newest message: «теперь поищи» replaced it.
@@ -81,5 +82,12 @@ export function shouldUseWeb(prompt: string, options: WebSearchOptions = {}, ser
   const changingFact = /(?:погод[ауы]|прогноз\s+погоды|курс\s+(?:валют|доллар|евро|тенге)|цен[ауы]\s+на|сколько\s+стоит|расписани[ея]|последни[ея]\s+(?:новости|версии)|свежие\s+новости|\b(?:weather|exchange rate|stock price|latest news|release date)\b)/i.test(text)
   const currentQuestion = /(?:кто|како[йеяг]|какие|когда|где|сколько|\b(?:who|what|when|where|how much)\b)/i.test(text)
     && /(?:сейчас|сегодня|актуальн|последн|президент|министр|\b(?:current|today|latest|president|ceo)\b)/i.test(text)
-  return changingFact || currentQuestion
+  // A question about the world gets today's answer, as ChatGPT search does:
+  // amounts, people, dates and places change after any model's training.
+  // Questions about the person or about Malik itself stay with the model.
+  const worldQuestion = WORLD_QUESTION.test(text) && !PERSONAL_QUESTION.test(text) && !/\d\s*[-+*/×÷^=:]\s*\d|(?<!\p{L})(?:будет|равно|равен|корень|процент\p{L}*\s+от)(?!\p{L})/iu.test(text)
+  return changingFact || currentQuestion || worldQuestion
 }
+
+const WORLD_QUESTION = /(?<!\p{L})(?:сколько|какой|какая|какое|какие|каков\p{L}*|кто|когда|где|откуда|чем\s+занима\p{L}*|что\s+(?:с|нового|случилось|произошло)|how\s+(?:much|many)|who|when|where|which|what\s+happened)(?!\p{L})/iu
+const PERSONAL_QUESTION = /(?<!\p{L})(?:ты|тебя|тебе|твой|твоя|твои|вы|вас|вам|ваш|ваша|я|меня|мне|мой|моя|моё|мое|мои|нам|наш|наша|you|your|i|me|my|we|our)(?!\p{L})/iu

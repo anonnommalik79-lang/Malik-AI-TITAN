@@ -16,6 +16,8 @@ export type StoredVideoJob = {
   responseUrl?: string
   /** Provider credential selector only; secrets are never persisted. */
   credentialSlot?: number
+  /** The daily video this job took was given back after it failed. */
+  quotaRefunded?: boolean
   createdAt: string
   updatedAt: string
 }

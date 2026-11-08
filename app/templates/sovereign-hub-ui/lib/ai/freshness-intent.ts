@@ -1,3 +1,5 @@
+import { normalizeColloquial } from "./colloquial"
+
 export type FreshnessCategory = "STATIC" | "CURRENT" | "MIXED" | "LIVE" | "UNCERTAIN"
 export type FreshnessMode = "fast" | "deep" | "max"
 export type TimeWindow = { from: string; to: string; label: string }
@@ -23,6 +25,8 @@ const SELF_CONTAINED = /^(?:(?:пожалуйста|please)\s+)?(?:переве�
 const WRITING = /(?:напиши|создай|сделай|объясни|рассчитай|write\b|build\b|create\b|explain\b|implement\b|жаз|түсіндір|жаса)/iu
 const LIVE_WORDS = /(?:последние?\s+24\s+час|за\s+24\s+час|сегодня|вчера|прямо\s+сейчас|в\s+реальном\s+времени|\btoday\b|\byesterday\b|last\s+24\s+hours|right\s+now|бүгін|кеше|соңғы\s+24\s+сағат)/iu
 const TIME_WORDS = /(?:последн|новейш|свеж|актуальн|сейчас|на\s+данный\s+момент|на\s+сегодняшний\s+день|на\s+этой\s+неделе|текущ|\blatest\b|\bcurrent\b|\brecent\b|\bnow\b|this\s+(?:week|month|year)|соңғы|қазіргі|қазір|жаңа)/iu
+// What a company is worth, what it raised and earns changes with every round.
+const MONEY_NOW = /(?:оценива\p{L}*ся|(?<!\p{L})оценк[аиуе]\s+(?:компани|стартап|бизнес|фирм|бренд|проект)|капитализац|рыночн\p{L}*\s+стоимост|стоимост\p{L}*\s+(?:компани|стартап|бизнес)|сколько\s+(?:сейчас\s+)?(?:стоит|стоят)\s+(?:компани|стартап|акци)|привлек\p{L}*\s+(?:\$|инвестиц|деньг|раунд|финансир)|раунд\p{L}*\s+(?:финансир|инвестиц|seed|series|сид)|выручк|(?<!\p{L})(?:valuation|valued|market\s+cap|funding|raised|revenue|ipo|series\s+[a-f])(?!\p{L})|бағаланады|капитализация)/iu
 const VOLATILE = /(?:новост|погод|курс\s+(?:валют|доллар|евро)|цен[ауы]|стоимост|сколько(?:\s+\p{L}+){0,3}\s+стоит|президент|министр|расписани|спикер|релиз|выпуст|выш[её]л|(?<!\p{L})(?:версии?|версия)|доступност|\b(?:news|weather|price|pricing|exchange rate|president|ceo|schedule|release|version|available|availability)\b|жаңалық|бағасы|бағам|нұсқа|шығарыл|президент|министр)/iu
 const AI = /(?:\b(?:AI|LLM|GPT|OpenAI|Anthropic|Claude|Gemini|DeepMind|Meta|Llama|DeepSeek|Alibaba|Qwen|Mistral|xAI|Grok)\b|(?<!\p{L})ИИ[ -]?модел|модел.{0,20}(?<!\p{L})ИИ(?!\p{L})|искусственн.{0,20}интеллект|жасанды\s+интеллект|ЖИ[ -]?модел)/iu
 /** A ranked model list is a changing factual claim, even without words like "today". */
@@ -78,7 +82,7 @@ export function temporalWindow(prompt: string, now = new Date(), timeZone = "Asi
 }
 
 export function classifyFreshness(prompt: string, now = new Date(), timeZone = "Asia/Almaty"): FreshnessIntent {
-  const text = prompt.normalize("NFKC").replace(/ё/giu, "е").trim()
+  const text = normalizeColloquial(prompt.normalize("NFKC").replace(/ё/giu, "е").trim())
   const language = /[әіңғүұқөһ]|бүгін|кеше|қандай|соңғы|нұсқа/iu.test(text) ? "kk" : /[а-я]/iu.test(text) ? "ru" : "en"
   const historical = HISTORICAL.test(text) && !TIME_WORDS.test(text) && !LIVE_WORDS.test(text)
   const base = { language, checkedAt: now.toISOString(), localDate: localDateAt(now, timeZone), timeZone, historical } as const
@@ -96,7 +100,7 @@ export function classifyFreshness(prompt: string, now = new Date(), timeZone = "
   if (CREATIVE.test(text) && !/(?:новост|источник|research|sources|news|жаңалық)/iu.test(text)) return result("STATIC", false, "creative")
   if (SELF_CONTAINED.test(text) && !VOLATILE.test(text) && !/(?:актуальн|current|latest|соңғы|қазіргі)/iu.test(text)) return result("STATIC", false, "self-contained")
   if (historical) return result("STATIC", false, "historical")
-  const changing = isNewsRequest(text) || isModelLeaderboardRequest(text) || VOLATILE.test(text) || AI.test(text) && (COMPARISON.test(text) || TIME_WORDS.test(text) || /(?:модел|models?|GPT[ -]?\d|Claude[ -]?\d|Gemini[ -]?\d|Grok[ -]?\d)/iu.test(text))
+  const changing = isNewsRequest(text) || isModelLeaderboardRequest(text) || VOLATILE.test(text) || MONEY_NOW.test(text) || AI.test(text) && (COMPARISON.test(text) || TIME_WORDS.test(text) || /(?:модел|models?|GPT[ -]?\d|Claude[ -]?\d|Gemini[ -]?\d|Grok[ -]?\d)/iu.test(text))
     || TECH.test(text) && /(?:нов[а-я]*|latest|current|recent|new|жаңа|соңғы)/iu.test(text)
     || EVENT.test(text) && /(?:форум|конференц|мероприяти|выставк|conference|summit|forum|event|expo)/iu.test(text)
   const factualTime = (TIME_WORDS.test(text) || LIVE_WORDS.test(text)) && /(?:кто|како|каки|что.{0,20}(?:произошло|нового)|когда|what|which|who|when|қандай|не\s+болды)/iu.test(text)

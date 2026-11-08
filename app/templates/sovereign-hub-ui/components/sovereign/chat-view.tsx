@@ -701,6 +701,8 @@ function GeminiMediaGenerationCard({ media }: { media: InlineMediaGeneration }) 
   const isVideo = media.kind === "video"
   const [liveMedia, setLiveMedia] = useState(media)
   const [pollHint, setPollHint] = useState<string>("")
+  // A finished file the player cannot open is not hidden behind a black box.
+  const [playFailed, setPlayFailed] = useState(false)
 
   useEffect(() => {
     setLiveMedia(media)
@@ -831,11 +833,14 @@ function GeminiMediaGenerationCard({ media }: { media: InlineMediaGeneration }) 
         <div className={cn("w-full", isVideo ? "aspect-video" : "aspect-square")}>
           {realVideo ? (
             <video
+              key={url}
               src={url}
               poster={liveMedia.thumbnailUrl}
               controls
               playsInline
               preload="metadata"
+              onError={() => setPlayFailed(true)}
+              onLoadedMetadata={() => setPlayFailed(false)}
               className="h-full w-full rounded-[1.55rem] bg-black object-contain"
             />
           ) : previewImage ? (
@@ -887,6 +892,14 @@ function GeminiMediaGenerationCard({ media }: { media: InlineMediaGeneration }) 
           </div>
         )}
       </div>
+
+      {realVideo && playFailed ? (
+        <p className="relative mt-3 rounded-2xl border border-amber-300/25 bg-amber-300/[0.07] px-4 py-3 text-sm leading-6 text-amber-50" role="alert">
+          Видео создано, но этот плеер не смог его открыть.{" "}
+          <a href={url} target="_blank" rel="noreferrer noopener" className="font-semibold underline underline-offset-4">Открыть файл</a>
+          {" "}или откройте раздел «Генерация видео».
+        </p>
+      ) : null}
 
       <div className="relative mt-3 rounded-[1.25rem] border border-white/10 bg-black/35 p-4">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">

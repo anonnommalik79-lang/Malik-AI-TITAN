@@ -399,27 +399,10 @@ export function MalikVideoModelRuntime() {
         }
       }
 
-      const generateButton = studio.querySelector<HTMLButtonElement>(".mv2__generate")
-      if (generateButton) {
-        const lockValue = gate.limited ? "1" : "0"
-        if (generateButton.dataset.malikDailyLocked !== lockValue) generateButton.dataset.malikDailyLocked = lockValue
-        if (gate.limited) {
-          if (generateButton.getAttribute("aria-disabled") !== "true") generateButton.setAttribute("aria-disabled", "true")
-          const lockedTitle = "Дневной бесплатный лимит MalikVideo исчерпан. Доступ вернётся после обновления лимита."
-          if (generateButton.title !== lockedTitle) generateButton.title = lockedTitle
-        } else {
-          if (generateButton.hasAttribute("aria-disabled")) generateButton.removeAttribute("aria-disabled")
-          if (generateButton.hasAttribute("title")) generateButton.removeAttribute("title")
-        }
-        if (generateButton.dataset.malikDailyClickGuard !== "1") {
-          generateButton.dataset.malikDailyClickGuard = "1"
-          generateButton.addEventListener("click", (event) => {
-            if (generateButton.dataset.malikDailyLocked !== "1") return
-            event.preventDefault()
-            event.stopImmediatePropagation()
-          }, true)
-        }
-      }
+      // The generate button is never locked from here. This gate is global (one
+      // video by anyone used it up for everyone) and used to swallow clicks of
+      // PRO accounts silently; the studio and the server enforce each account's
+      // own limit and say so in words.
     }
 
     const install = () => {

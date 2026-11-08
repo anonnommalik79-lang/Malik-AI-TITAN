@@ -2,36 +2,15 @@ import "server-only"
 
 import { resolveMediaUser } from "@/lib/media/request"
 import { getVideoJob } from "@/lib/media/jobs"
-import { directMediaUrl } from "@/lib/os/media-reference"
+import { fetchVideoSource } from "@/lib/media/video-source"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
-// Only for an explicit user-initiated branded download. Normal video playback
-// remains direct from provider/CDN and consumes zero Render media bandwidth.
-// Keep an allowlist to avoid a saved job's URL becoming an SSRF gateway.
-const SAFE_HOSTS = [
-  "magichour.ai", "pixazo.ai", "aiapi-pro.com", "cliptaps.com",
-  "runwayml.com", "runwayml.cloud", "amazonaws.com", "cloudfront.net",
-  "r2.dev", "storage.googleapis.com", "googleapis.com",
-  "aliyuncs.com", "fal.media", "fal.ai", "lumalabs.ai", "pollo.ai",
-  "hf.space", "huggingface.co", "hf.co",
-]
-
-function allowedSource(raw: string) {
-  const direct = directMediaUrl(raw, process.env.NEXT_PUBLIC_APP_URL || process.env.MALIK_PUBLIC_ORIGIN || "")
-  if (!direct) return null
-  try {
-    const url = new URL(direct)
-    const configured = (process.env.MALIK_VIDEO_BRANDING_ALLOWED_HOSTS || "")
-      .split(",").map((host) => host.trim().toLowerCase()).filter(Boolean)
-    const names = [...SAFE_HOSTS, ...configured]
-    return names.some((domain) => url.hostname === domain || url.hostname.endsWith(`.${domain}`)) ? url : null
-  } catch {
-    return null
-  }
-}
-
+// The person's own finished video, streamed through Malik. Used for the branded
+// download and as the player's fallback when the provider's CDN refuses the
+// browser directly (referrer rules, missing range support). Normal playback
+// stays direct from the provider and costs Render no media bandwidth.
 export async function GET(request: Request) {
   const user = await resolveMediaUser(request)
   if (!user.authenticated || user.userId === "guest") {
@@ -45,45 +24,31 @@ export async function GET(request: Request) {
   if (!job || job.status !== "completed" || !job.videoUrl) {
     return Response.json({ error: "VIDEO_NOT_READY" }, { status: 404 })
   }
-  let remote = allowedSource(job.videoUrl)
-  if (!remote) {
-    return Response.json({ error: "VIDEO_SOURCE_UNSUPPORTED" }, { status: 422 })
-  }
 
-  const headers = new Headers({ Accept: "video/mp4,video/webm,video/*" })
-  const range = request.headers.get("range")
-  if (range) headers.set("Range", range)
-  let upstream: Response | undefined
   try {
-    // Validate each hop. Automatic redirects could otherwise target private IPs.
-    for (let redirects = 0; redirects < 5; redirects++) {
-      upstream = await fetch(remote.toString(), {
-        method: "GET", headers, redirect: "manual", cache: "no-store",
-        signal: AbortSignal.timeout(90_000),
-      })
-      if (![301, 302, 303, 307, 308].includes(upstream.status)) break
-      const next = upstream.headers.get("location")
-      remote = next ? allowedSource(new URL(next, remote).toString()) : null
-      if (!remote) {
-        return Response.json({ error: "VIDEO_REDIRECT_BLOCKED" }, { status: 502 })
-      }
-    }
-    if (!upstream || !upstream.ok || !upstream.body) {
-      return Response.json({ error: "VIDEO_SOURCE_UNAVAILABLE" }, { status: 502 })
+    const fetched = await fetchVideoSource(job.videoUrl, { range: request.headers.get("range") || undefined })
+    if ("error" in fetched) return Response.json({ error: fetched.error }, { status: fetched.status })
+    const upstream = fetched.response
+    if (!upstream.ok || !upstream.body) {
+      await upstream.body?.cancel().catch(() => {})
+      return Response.json({ error: "VIDEO_SOURCE_UNAVAILABLE", status: upstream.status }, { status: 502 })
     }
     const mime = (upstream.headers.get("content-type") || "").toLowerCase()
-    if (mime && !mime.includes("video/") && !mime.includes("octet-stream")) {
+    if (mime && !mime.includes("video/") && !mime.includes("octet-stream") && !mime.includes("binary/")) {
+      await upstream.body.cancel().catch(() => {})
       return Response.json({ error: "VIDEO_SOURCE_NOT_MEDIA" }, { status: 502 })
     }
     const length = Number(upstream.headers.get("content-length") || 0)
-    if (length > 128 * 1024 * 1024) {
+    if (length > 256 * 1024 * 1024) {
       await upstream.body.cancel()
       return Response.json({ error: "VIDEO_TOO_LARGE_FOR_BROWSER_EXPORT" }, { status: 413 })
     }
     const output = new Headers({
-      "content-type": mime || "video/mp4",
+      // An octet-stream from the CDN is still the MP4 the job produced.
+      "content-type": mime.includes("video/") ? mime : "video/mp4",
       "cache-control": "private, no-store",
       "x-content-type-options": "nosniff",
+      "content-disposition": 'inline; filename="malik-video.mp4"',
     })
     for (const h of ["content-length", "content-range", "accept-ranges"]) {
       const v = upstream.headers.get(h)

@@ -1,5 +1,8 @@
 import { resolveMediaUser } from "@/lib/media/request"
 import { refreshVideoJobStatus } from "@/lib/media/video-router"
+import { getVideoJob, patchVideoJob } from "@/lib/media/jobs"
+import { recordMediaUsage } from "@/lib/media/limits"
+import { refundVideoAccountDailyQuota } from "@/lib/server/video-account-quota"
 import type { VideoProviderId } from "@/lib/media/types"
 
 import { withComputeVideoStatus } from "@/lib/malik-compute/runtime"
@@ -60,6 +63,19 @@ async function handleGET(request: Request) {
   // media URL (Magic Hour, Pixazo, etc.), return that URL directly. The <video>
   // element still renders inside Malik AI, but the heavy MP4 bytes travel from
   // the provider/CDN to the user's browser instead of through Render.
+  // A render the provider could not finish gives the day's video back, once.
+  let refunded = false
+  if (result.status === "failed" && user.plan !== "owner") {
+    const job = await getVideoJob(taskId, user.userId).catch(() => null)
+    if (job && !job.quotaRefunded) {
+      refunded = await refundVideoAccountDailyQuota(user.userId, job.createdAt).catch(() => false)
+      if (refunded) {
+        await patchVideoJob(taskId, { quotaRefunded: true }, user.userId).catch(() => null)
+        await recordMediaUsage(user.userId, "video", -1).catch(() => {})
+      }
+    }
+  }
+
   const publicVideoUrl = browserDirectVideoUrl(result.videoUrl)
   const proxyBlocked = Boolean(renderVideoBandwidthGuard() && result.videoUrl && !publicVideoUrl)
 
@@ -76,5 +92,6 @@ async function handleGET(request: Request) {
     deliveryMode: publicVideoUrl ? "provider-direct-browser" : "metadata-only",
     renderVideoBytes: 0,
     error: proxyBlocked ? "VIDEO_DIRECT_DELIVERY_REQUIRED" : result.error,
+    quotaRefunded: refunded || undefined,
   }, { headers: { "cache-control": "private, no-store" } })
 }
