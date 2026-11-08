@@ -48,11 +48,15 @@ export function normalizeProviderTokenUsage(value: unknown): MalikTokenUsage | u
     }
   }
 
-  // Some providers return two separate, authoritative receipts after a
-  // continuation. Add them only if EVERY reported stage has exact metadata.
-  const parts = [source.primary, source.continuation].filter((part) => part !== undefined && part !== null)
-  if (parts.length) {
-    const metrics = parts.map(normalizeProviderTokenUsage)
+  // Routers use {primary, continuation}; MAX chains use {previous,
+  // continuation}. BOTH receipts must exist, including all nested stages:
+  // showing only the final stage as the entire turn would underreport usage.
+  const hasStages = "primary" in source || "previous" in source || "continuation" in source
+  if (hasStages) {
+    const first = source.previous ?? source.primary
+    const second = source.continuation
+    if (first === undefined || first === null || second === undefined || second === null) return undefined
+    const metrics = [normalizeProviderTokenUsage(first), normalizeProviderTokenUsage(second)]
     if (metrics.every((item): item is MalikTokenUsage => Boolean(item))) {
       const sum = (key: keyof MalikTokenUsage) =>
         metrics.every((item) => item[key] !== undefined)
@@ -69,6 +73,7 @@ export function normalizeProviderTokenUsage(value: unknown): MalikTokenUsage | u
         }
       }
     }
+    return undefined
   }
 
   return source.usage ? normalizeProviderTokenUsage(source.usage) : undefined

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 import { normalizeProviderTokenUsage, readResponseMetrics } from "../lib/ai/token-telemetry.ts"
+import { boundedConversationHistory, conversationTransportBudget } from "../lib/ai/conversation-history.ts"
 
 test("exact OpenAI / OpenRouter usage is preserved", () => {
   assert.deepEqual(normalizeProviderTokenUsage({
@@ -37,4 +38,49 @@ test("the chat metrics reader rejects fake or malformed counters", () => {
   })
   assert.equal(readResponseMetrics({ tookMs: -5, usage: { total_tokens: 50 } }), undefined)
   assert.equal(readResponseMetrics({ tookMs: 50, usage: { total_tokens: -4 } })?.usage, undefined)
+})
+
+test("MAX nested continuation receipts include every provider call", () => {
+  assert.deepEqual(normalizeProviderTokenUsage({
+    previous: {
+      previous: { prompt_tokens: 12000, completion_tokens: 100, total_tokens: 12100 },
+      continuation: { prompt_tokens: 400, completion_tokens: 200, total_tokens: 600 },
+    },
+    continuation: { prompt_tokens: 300, completion_tokens: 150, total_tokens: 450 },
+  }), { inputTokens: 12700, outputTokens: 450, totalTokens: 13150 })
+})
+
+test("partial continuation receipts are unknown, not deceptively cheap", () => {
+  assert.equal(normalizeProviderTokenUsage({ previous: { total_tokens: 300 } }), undefined)
+  assert.equal(normalizeProviderTokenUsage({ continuation: { total_tokens: 300 } }), undefined)
+  assert.equal(normalizeProviderTokenUsage({
+    previous: { total_tokens: 300 },
+    continuation: {},
+  }), undefined)
+})
+
+test("fast chat keeps context below 12k chars without altering stored history", () => {
+  const history = Array.from({ length: 60 }, (_, i) => ({
+    role: i % 2 ? "assistant" : "user",
+    content: (i === 58 ? "Я Абдумалик, основатель MALIK AI. " : "Text ").repeat(500),
+  }))
+  const untouched = structuredClone(history)
+  const fast = conversationTransportBudget({
+    fastMode: true, promptLength: 30,
+    configuredMessages: 64, configuredChars: 180_000,
+  })
+  const selected = boundedConversationHistory(history, fast.maxMessages, fast.maxChars)
+  assert.deepEqual(fast, { maxMessages: 14, maxChars: 12_000 })
+  assert.ok(selected.length <= 14)
+  assert.ok(selected.reduce((sum, message) => sum + message.content.length, 0) <= 12_000)
+  assert.ok(selected.some(message => message.content.includes("Абдумалик")))
+  assert.deepEqual(history, untouched)
+})
+
+test("long coding, explicit analysis and pasted documents retain extended budget", () => {
+  const original = { fastMode: false, promptLength: 48, configuredMessages: 64, configuredChars: 180_000 }
+  assert.deepEqual(conversationTransportBudget(original), { maxMessages: 64, maxChars: 180_000 })
+  assert.deepEqual(conversationTransportBudget({ ...original, promptLength: 260_000 }), { maxMessages: 64, maxChars: 24_000 })
+  assert.deepEqual(conversationTransportBudget({ ...original, fastMode: true, configuredMessages: 8, configuredChars: 6_000 }),
+    { maxMessages: 8, maxChars: 6_000 })
 })
