@@ -4,7 +4,7 @@
 import assert from "node:assert/strict"
 import fs from "node:fs"
 import { inspectVideoBytes, videoProbeVerdict } from "@/lib/media/video-file-check"
-import { deliverGeneratedVideo, VideoDeliveryError } from "@/lib/media/browser-video-qa"
+import { deliverGeneratedVideo, isProtectedClipTapsUrl, VideoDeliveryError } from "@/lib/media/browser-video-qa"
 import { normalizeColloquial } from "@/lib/ai/colloquial"
 import { shouldUseWeb } from "@/lib/ai/web-search-policy"
 import { classifyFreshness } from "@/lib/ai/freshness-intent"
@@ -64,6 +64,29 @@ await check("a CDN that refuses the browser falls back to the Malik stream", asy
   assert.equal(result.video.url, "/api/media/video/brand-source?taskId=task%207")
   assert.equal(result.originalUrl, "https://cdn.example.com/v.mp4", "the provider link is kept for sharing and opening")
   assert.equal(seen.length, 3, "two direct tries, then Malik")
+})
+
+await check("ClipTaps private uploads skip browser 403 and use authenticated Malik stream", async () => {
+  const privateUrl = "https://cliptaps.com/uploads/test_final.mp4"
+  assert.equal(isProtectedClipTapsUrl(privateUrl), true)
+  assert.equal(isProtectedClipTapsUrl("https://evil-cliptaps.com/uploads/test_final.mp4"), false)
+  assert.equal(isProtectedClipTapsUrl("https://cliptaps.com.evil.com/uploads/test_final.mp4"), false)
+  assert.equal(isProtectedClipTapsUrl("https://cliptaps.com/api/projects/demo"), false)
+  const seen = []
+  const result = await deliverGeneratedVideo({
+    url: privateUrl, taskId: "clip-project", origin: "https://malikaiworld.world",
+    waits: [0], verify: async (src) => { seen.push(src); if (src === privateUrl) throw Error("browser link should never be tried"); return ok(src) },
+  })
+  assert.equal(result.via, "malik")
+  assert.deepEqual(seen, ["/api/media/video/brand-source?taskId=clip-project"])
+})
+
+await check("ClipTaps bearer token stays server-side and is scoped to the exact upload host", () => {
+  const source = fs.readFileSync("lib/media/video-source.ts", "utf8")
+  assert.match(source, /process\.env\.CLIPTAPS_API_KEY/)
+  assert.match(source, /remote\.hostname === "cliptaps\.com" && remote\.pathname\.startsWith\("\/uploads\/"\)/)
+  assert.match(source, /headers\.set\("Authorization", `Bearer/)
+  assert.match(source, /for \(let redirects = 0; redirects < 5; redirects\+\+\) \{\s*const headers = new Headers/, "fresh headers must be built for every redirect")
 })
 
 await check("a file nobody can play keeps its link and names the reason", async () => {
