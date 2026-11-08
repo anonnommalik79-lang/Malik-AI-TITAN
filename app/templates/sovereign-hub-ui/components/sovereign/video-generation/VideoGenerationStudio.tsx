@@ -28,7 +28,7 @@ import {
 } from "lucide-react"
 import { takePrefillPrompt } from "@/lib/malik-context"
 import type { VideoProviderId } from "@/lib/media/types"
-import { deliverGeneratedVideo, malikVideoStreamUrl, VideoDeliveryError, type VerifiedVideo } from "@/lib/media/browser-video-qa"
+import { deliverGeneratedVideo, isProtectedClipTapsUrl, malikVideoStreamUrl, VideoDeliveryError, type VerifiedVideo } from "@/lib/media/browser-video-qa"
 import { exportBrandedMalikVideo } from "@/lib/media/browser-video-branding"
 
 export type VideoGenerationStudioProps = {
@@ -877,7 +877,9 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
       setDeliveryIssue({ taskId: job.taskId, url: original, prompt: job.prompt, model: job.model, retry: cause instanceof VideoDeliveryError ? cause.retry : true })
       setReadyTaskId(job.taskId)
       setShareUrl(original)
-      setError(cause instanceof Error ? cause.message : "Видео создано, но файл не открывается.")
+      setError(isProtectedClipTapsUrl(original)
+        ? "ClipTaps создал видео, но закрыл доступ к MP4. Malik AI попробовал открыть его с серверным ключом. Проверьте доступ к этому проекту в ClipTaps; повторная генерация не нужна."
+        : cause instanceof Error ? cause.message : "Видео создано, но файл не открывается.")
       setPhase("failed")
       rememberVideo({ taskId: job.taskId, url: original, prompt: job.prompt, model: job.model, at: Date.now(), unverified: true })
     }
@@ -1096,7 +1098,7 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
   const recoverRow = deliveryIssue || stalledJob ? (
     <div className="mv2__recover" role="group" aria-label="Что сделать с видео">
       {deliveryIssue ? <button type="button" onClick={retryDelivery} disabled={busy}><RotateCw />Проверить ещё раз</button> : null}
-      {deliveryIssue ? <a href={deliveryIssue.url} target="_blank" rel="noreferrer noopener"><ExternalLink />Открыть файл</a> : null}
+      {deliveryIssue && !isProtectedClipTapsUrl(deliveryIssue.url) ? <a href={deliveryIssue.url} target="_blank" rel="noreferrer noopener"><ExternalLink />Открыть файл</a> : null}
       {stalledJob && !deliveryIssue ? <button type="button" onClick={resumeStalled} disabled={busy}><RotateCw />Проверить снова</button> : null}
     </div>
   ) : null
