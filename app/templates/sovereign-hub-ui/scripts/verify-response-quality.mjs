@@ -369,13 +369,16 @@ check("a long multi-part brief is answered part by part, without subject templat
   assert.match(numbered, /HEAD-TO-HEAD CONTRACT/)
 })
 
-check("the UI supports tables, code copy and bounded word-safe reveal", () => {
+check("the UI supports tables, code copy and frame-bounded live streaming", () => {
   const markdown = fs.readFileSync("components/sovereign/MalikMarkdown.tsx", "utf8")
   const dashboard = fs.readFileSync("components/sovereign/dashboard.tsx", "utf8")
   assert.match(markdown, /malik-md-table/)
   assert.match(markdown, /navigator\.clipboard\.writeText/)
-  assert.match(dashboard, /answer\.match\(\/\\S\+\\s\*\|\\s\+\/g\)/)
-  assert.match(dashboard, /Math\.min\(24/)
+  // The old word-by-word reveal was replaced with true SSE rendering.
+  // Check that updates are frame-bounded and do not rerender on every token.
+  assert.match(dashboard, /const flushLive = \(\) => \{/)
+  assert.match(dashboard, /window\.requestAnimationFrame\(flushLive\)/)
+  assert.match(dashboard, /const wait = 48 - \(performance\.now\(\) - lastLiveFlushAt\)/)
 })
 
 console.log(failures ? `\n${failures} failing\n` : "\nall response-quality checks passed\n")
