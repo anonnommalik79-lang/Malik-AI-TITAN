@@ -34,6 +34,7 @@ import {
 import { runMalikCoderOrchestrator } from "@/lib/server/malik-coder-orchestrator"
 import { prepareMalikAgentRuntime } from "@/lib/server/malik-agent-runtime"
 import { resolveRequestEntitlement, type RequestEntitlement } from "@/lib/server/request-entitlement"
+import { withVerifiedComicChatContext } from "@/lib/server/account-addressing"
 import { reserveWorkQuota, refundWorkQuota, WorkQuotaError, type WorkQuotaReceipt } from "@/lib/server/work-quota"
 import { malikIdentityAnswer, withVerifiedOwnerChatContext } from "@/lib/server/malik-owner-context"
 import { putProjectArtifact } from "@/lib/server/project-artifact-store"
@@ -1598,7 +1599,7 @@ async function handlePOST(request: Request) {
 
     // Founder recognition is granted only from the verified WorkOS session.
     // User-controlled email/name fields in the request are intentionally ignored.
-    const routedBody = ownerMode ? withVerifiedOwnerChatContext(body) : body
+    const routedBody = withVerifiedComicChatContext(ownerMode ? withVerifiedOwnerChatContext(body) : body, entitlement)
     if (wantsSse(request, body)) return liveSseResponse(routedBody, selection, entitlement, maxOutputTokens, workReceipt)
     const answer = isProjectBuildRequest(routedBody)
       ? await runProjectAnswer(routedBody, selection, entitlement.userId)
