@@ -1,0 +1,26 @@
+name: Verified account comedy mode
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "app/templates/sovereign-hub-ui/lib/server/account-addressing.ts"
+      - "app/templates/sovereign-hub-ui/app/api/ai/chat/route.ts"
+      - "app/templates/sovereign-hub-ui/app/api/stream/route.ts"
+      - "app/templates/sovereign-hub-ui/app/api/stream/route-impl.ts"
+      - "app/templates/sovereign-hub-ui/scripts/verify-comic-account.mjs"
+      - ".github/workflows/comic-account-check.yml"
+  workflow_dispatch:
+
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Verify account targeting, rotation and SSE
+        run: node --experimental-strip-types --no-warnings --test app/templates/sovereign-hub-ui/scripts/verify-comic-account.mjs
