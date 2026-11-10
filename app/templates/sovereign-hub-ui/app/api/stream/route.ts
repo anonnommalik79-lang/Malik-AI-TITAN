@@ -216,8 +216,9 @@ function withLayoutFixed(request: Request, body: any): { request: Request; body:
 }
 
 async function addressedChatPOST(request: Request) {
+  const requestBody = await request.clone().json().catch(() => ({}))
   const response = await originalPOST(request)
-  return addressChatResponse(response, await resolveRequestEntitlement(request))
+  return addressChatResponse(response, await resolveRequestEntitlement(request), requestBody)
 }
 
 async function handlePOST(incoming: Request) {
