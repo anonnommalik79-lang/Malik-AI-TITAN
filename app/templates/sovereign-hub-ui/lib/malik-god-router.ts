@@ -1193,7 +1193,7 @@ export async function malikGodAnswer(
       && !body?.metadata?.conversationRepair
       && !body?.metadata?.petroleumDomain
       && !body?.metadata?.petroleumComputedEvidence
-      && !/^(?:deep|high|extra-high|pro)$/i.test(String(body?.responseDepth || body?.metadata?.responseDepth || ""))
+      && !/^(?:deep|ultra|high|extra-high|pro)$/i.test(String(body?.responseDepth || body?.metadata?.responseDepth || ""))
     const compactChatInstructions = [
       "You are MALIK AI, a helpful and capable assistant. Answer in the user's language.",
       "For everyday questions answer directly and concisely, unless the user explicitly requests details or a long answer.",
