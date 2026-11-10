@@ -9,7 +9,7 @@ import {
   resolveStrictMalikSelection,
 } from "@/lib/server/malik-model-router"
 import { resolveRequestEntitlement } from "@/lib/server/request-entitlement"
-import { addressChatResponse } from "@/lib/server/account-addressing"
+import { addressChatResponse, withVerifiedComicChatContext } from "@/lib/server/account-addressing"
 import { malikIdentityAnswer, withVerifiedOwnerChatContext } from "@/lib/server/malik-owner-context"
 import { getDailyTextTokenQuota } from "@/lib/server/daily-text-token-quota"
 import { reserveWorkQuota, refundWorkQuota, WorkQuotaError, type WorkQuotaReceipt } from "@/lib/server/work-quota"
@@ -24,8 +24,9 @@ export const dynamic = "force-dynamic"
 export const POST = withFounderRequestAudit(withCompute(addressedHandlePOST, async (request) => { const body = await request.clone().json().catch(() => ({})); return parsePluginCommandFromBody(body) ? "plugin" : chatComputeOperation(request) }), "chat")
 
 async function addressedHandlePOST(request: Request) {
+  const requestBody = await request.clone().json().catch(() => ({}))
   const response = await handlePOST(request)
-  return addressChatResponse(response, await resolveRequestEntitlement(request))
+  return addressChatResponse(response, await resolveRequestEntitlement(request), requestBody)
 }
 
 async function handlePOST(request: Request) {
@@ -80,7 +81,7 @@ async function handlePOST(request: Request) {
     const quotaBoundBody = maxOutputTokens
       ? { ...body, maxTokens: maxOutputTokens, maxTokensCap: textQuota.unlimited ? undefined : Math.max(1, Math.floor(textQuota.remaining ?? 0)) }
       : body
-    const routedBody = ownerMode ? withVerifiedOwnerChatContext(quotaBoundBody) : quotaBoundBody
+    const routedBody = withVerifiedComicChatContext(ownerMode ? withVerifiedOwnerChatContext(quotaBoundBody) : quotaBoundBody, entitlement)
     if (skillChatRequest(routedBody)) {
       const { runSkillChat } = await import("@/lib/skills/chat")
       const result = await runSkillChat({ body: routedBody, owner: entitlement, modelId: selection?.modelId || DEFAULT_MALIK_MODEL_ID, maxTokens: maxOutputTokens, signal: request.signal })
