@@ -110,7 +110,7 @@ test("catalog reports four executable skills and truthful infrastructure readine
 })
 test("HTTP/SSE -> research tools -> verified answer: one final response, real activity receipts", async () => {
   const result = await turn("/research Research the test fixture observations")
-  assert.equal(result.response.status, 200); assert.equal(result.events.filter(e => e.type === "done").length, 1)
+  assert.equal(result.response.status, 200, `Unexpected skill response: ${result.text.slice(0, 2000)}`); assert.equal(result.events.filter(e => e.type === "done").length, 1)
   assert.equal(result.done.skillRun.status, "completed"); assert.ok(result.done.sources.length)
   assert.ok(result.events.some(e => e.type === "activity" && e.step.tool?.endsWith(".search") && e.step.state === "completed"))
   assert.ok(result.events.some(e => e.type === "activity" && e.step.tool?.endsWith(".verify") && e.step.kind === "code"))
