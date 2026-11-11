@@ -7,6 +7,8 @@ export type MalikTokenUsage = {
   totalTokens: number
   inputTokens?: number
   outputTokens?: number
+  /** Provider-reported total minus known input/output; do not guess its cause. */
+  unattributedTokens?: number
 }
 
 export type MalikResponseMetrics = {
@@ -29,6 +31,15 @@ function count(source: Record<string, unknown>, keys: string[]): number | undefi
   return undefined
 }
 
+/** Providers may count categories that are absent from their prompt/completion fields. */
+function withBreakdown(usage: MalikTokenUsage): MalikTokenUsage {
+  if (usage.inputTokens === undefined || usage.outputTokens === undefined) return usage
+  const accounted = usage.inputTokens + usage.outputTokens
+  return accounted < usage.totalTokens
+    ? { ...usage, unattributedTokens: usage.totalTokens - accounted }
+    : usage
+}
+
 /** Recognizes OpenAI-compatible, Gemini and nested continuation receipts. */
 export function normalizeProviderTokenUsage(value: unknown): MalikTokenUsage | undefined {
   const source = record(value)
@@ -41,11 +52,11 @@ export function normalizeProviderTokenUsage(value: unknown): MalikTokenUsage | u
     inputTokens !== undefined && outputTokens !== undefined ? inputTokens + outputTokens : undefined
   )
   if (totalTokens !== undefined && Number.isSafeInteger(totalTokens)) {
-    return {
+    return withBreakdown({
       totalTokens,
       ...(inputTokens !== undefined ? { inputTokens } : {}),
       ...(outputTokens !== undefined ? { outputTokens } : {}),
-    }
+    })
   }
 
   // Routers use {primary, continuation}; MAX chains use {previous,
@@ -66,11 +77,11 @@ export function normalizeProviderTokenUsage(value: unknown): MalikTokenUsage | u
       const input = sum("inputTokens")
       const output = sum("outputTokens")
       if (total !== undefined && Number.isSafeInteger(total)) {
-        return {
+        return withBreakdown({
           totalTokens: total,
           ...(input !== undefined && Number.isSafeInteger(input) ? { inputTokens: input } : {}),
           ...(output !== undefined && Number.isSafeInteger(output) ? { outputTokens: output } : {}),
-        }
+        })
       }
     }
     return undefined
