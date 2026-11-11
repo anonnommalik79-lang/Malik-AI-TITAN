@@ -333,7 +333,8 @@ await check("carrying on is bounded: rounds, progress, time, allowance and the p
 await check("large code streams from the first second; code answers get room to be carried on", async () => {
   const engine = fs.readFileSync("lib/server/malik-max-engine.ts", "utf8")
   assert.match(engine, /const largeCode = codeMode && budget >= 6_000/)
-  assert.match(engine, /const panel = !resumed && !input\.wallMs && !deps\.lanes && !fastMode && !largeCode && budget >= 2_500/)
+  assert.match(engine, /const panel = !resumed && !input\.wallMs && !deps\.lanes && !fastMode && !microCode && !largeCode && budget >= 2_500/)
+  assert.match(engine, /const quickPath = microCode \|\| \(fastMode && !wantsFullShape\(taskPrompt\)\)/, "small replies must bypass the costly expert panel")
   const code = chatAnswerDeadline({ code: true, deep: false })
   assert.ok(code.hardMs - code.rescueAtMs >= 420_000, "several continuation rounds fit before the hard deadline")
   const route = fs.readFileSync("app/api/stream/route-impl.ts", "utf8")
