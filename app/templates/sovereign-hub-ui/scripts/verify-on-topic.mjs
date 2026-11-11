@@ -2,7 +2,7 @@ import assert from "node:assert/strict"
 import fs from "node:fs"
 import { malikIdentityAnswer } from "../lib/server/malik-owner-context.ts"
 import { instantReply } from "../lib/ai/instant-replies.ts"
-import { isCodeRequest, isFastChatRequest, wantsFullShape } from "../lib/ai/request-kind.ts"
+import { isCodeRequest, isFastChatRequest, isTinyCodeRequest, wantsFullShape } from "../lib/ai/request-kind.ts"
 import { conversationFocus, conversationFocusInstruction, isContextDependent } from "../lib/ai/conversation-focus.ts"
 import { userContextBlocks } from "../lib/ai/client-context.ts"
 import { shouldUseWeb } from "../lib/ai/web-search-policy.ts"
@@ -86,6 +86,18 @@ check("real coding requests are still code", () => {
     assert.ok(isCodeRequest(prompt), prompt)
   }
   assert.ok(analyzeResponseRequest("Исправь ошибку TypeScript и дай готовый код").signals.includes("code"))
+})
+
+check("remembered codes use fast chat, real code still routes to programming", () => {
+  for (const prompt of ["Запомни код теста: ОРБИТА-74. Ответь одним словом.", "Какой код я дал?", "Напомни код доступа", "What was the code?"]) {
+    assert.equal(isCodeRequest(prompt), false, prompt)
+    assert.equal(isFastChatRequest(prompt), true, prompt)
+  }
+  for (const prompt of ["Напиши код калькулятора", "Исправь JavaScript код", "Какой код функции isEven правильный?"]) {
+    assert.equal(isCodeRequest(prompt), true, prompt)
+  }
+  assert.equal(isTinyCodeRequest("Создай короткую функцию JavaScript isEven(n) и объясни её в одном предложении."), true)
+  assert.equal(isTinyCodeRequest("Создай полный сайт с React и приложением"), false)
 })
 
 check("overviews and comparisons keep their full shape even on the fast lanes", () => {
