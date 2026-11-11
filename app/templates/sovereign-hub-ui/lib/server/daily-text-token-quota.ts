@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto"
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs"
+import { closeSync, existsSync, mkdirSync, openSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs"
 import path from "node:path"
 import { computeDirectory } from "@/lib/malik-compute/file-store"
 import type { AIPlan } from "@/lib/ai/types"
@@ -62,15 +62,60 @@ function readStored(userId: string): StoredQuota {
       updatedAt: typeof parsed.updatedAt === "string" ? parsed.updatedAt : new Date().toISOString(),
     }
   } catch {
-    return { day, used: 0, updatedAt: new Date().toISOString() }
+    // A broken ledger must never silently reset a paid/free allowance.
+    throw new Error("DAILY_TEXT_QUOTA_STORAGE_UNAVAILABLE")
   }
 }
 
 function writeStored(userId: string, value: StoredQuota) {
   const file = quotaPath(userId)
   const temporary = `${file}.${process.pid}.${randomUUID()}.tmp`
-  writeFileSync(temporary, JSON.stringify(value), { encoding: "utf8", mode: 0o600 })
-  renameSync(temporary, file)
+  try {
+    writeFileSync(temporary, JSON.stringify(value), { encoding: "utf8", mode: 0o600 })
+    renameSync(temporary, file)
+  } finally {
+    if (existsSync(temporary)) unlinkSync(temporary)
+  }
+}
+
+/**
+ * The Compute file ledger already uses an exclusive OS lock. Text allowances
+ * need the same protection: atomic rename alone does NOT prevent two Node
+ * workers sharing a volume from reading and overwriting each other's count.
+ * This protects workers on one filesystem; separate hosts require a durable
+ * database ledger before horizontal scaling.
+ */
+const lockWaitWord = new Int32Array(new SharedArrayBuffer(4))
+function withQuotaLock<T>(userId: string, action: () => T): T {
+  const lock = quotaPath(userId) + ".lock"
+  for (let attempt = 0; attempt < 20; attempt++) {
+    let fd: number
+    try {
+      fd = openSync(lock, "wx", 0o600)
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw new Error("DAILY_TEXT_QUOTA_STORAGE_UNAVAILABLE")
+      // Only remove a stale lock when the original process is confirmed gone.
+      try {
+        const ownerPid = Number(readFileSync(lock, "utf8"))
+        if (Number.isSafeInteger(ownerPid) && ownerPid > 0) {
+          try { process.kill(ownerPid, 0) }
+          catch (probe) {
+            if ((probe as NodeJS.ErrnoException).code === "ESRCH") unlinkSync(lock)
+          }
+        }
+      } catch { /* Another worker may still be writing the PID. */ }
+      Atomics.wait(lockWaitWord, 0, 0, 5)
+      continue
+    }
+    try {
+      writeFileSync(fd, String(process.pid))
+      return action()
+    } finally {
+      closeSync(fd)
+      unlinkSync(lock)
+    }
+  }
+  throw new Error("DAILY_TEXT_QUOTA_BUSY")
 }
 
 /**
@@ -128,12 +173,14 @@ export function recordGeneratedTextTokens(userId: string, unlimited: boolean | A
   const tokens = estimateGeneratedTokens(text)
   if (tokens <= 0) return getDailyTextTokenQuota(userId, unlimited)
 
-  const current = readStored(userId)
-  const updated: StoredQuota = {
-    day: todayUtc(),
-    used: current.used + tokens,
-    updatedAt: new Date().toISOString(),
-  }
-  writeStored(userId, updated)
-  return getDailyTextTokenQuota(userId, unlimited)
+  return withQuotaLock(userId, () => {
+    const current = readStored(userId)
+    const updated: StoredQuota = {
+      day: todayUtc(),
+      used: current.used + tokens,
+      updatedAt: new Date().toISOString(),
+    }
+    writeStored(userId, updated)
+    return getDailyTextTokenQuota(userId, unlimited)
+  })
 }
