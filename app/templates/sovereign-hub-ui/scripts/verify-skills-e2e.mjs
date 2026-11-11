@@ -59,7 +59,7 @@ const stubs = {
   "@/lib/server/plugin-model-answer": { runPluginModelAnswer: forbidden },
   "@/lib/ai/project-builder": { generateProjectWithBrain: forbidden },
   "@/lib/limits/rate-limit": { checkUsageLimit: async () => ({ ok: admit, code: "DAILY_LIMIT_REACHED" }), recordChatUsage: async () => {} },
-  "@/lib/server/malik-model-router": { resolveStrictMalikSelection: async (_r, b) => ({ modelId: b.modelId || "malik-max", entitlement: currentOwner }), MalikModelRouteError: RouteError, malikModelErrorPayload: () => ({ error: "MODEL_UNAVAILABLE" }), runStrictMalikModel: forbidden },
+  "@/lib/server/malik-model-router": { resolveStrictMalikSelection: async (_r, b) => ({ modelId: b.modelId || "malik-max", entitlement: currentOwner }), MalikModelRouteError: RouteError, malikModelErrorPayload: (error) => ({ error: "MODEL_UNAVAILABLE", fixtureError: String(error?.message || error) }), runStrictMalikModel: forbidden },
   "@/lib/server/malik-coder-orchestrator": { runMalikCoderOrchestrator: forbidden },
   "@/lib/server/malik-agent-runtime": { prepareMalikAgentRuntime: async () => null },
   "@/lib/server/request-entitlement": { resolveRequestEntitlement: async () => currentOwner },
