@@ -2038,9 +2038,10 @@ function MessageBubble({
                   <div className="flex flex-wrap gap-x-4 gap-y-1 tabular-nums">
                     {message.responseMetrics.usage.inputTokens !== undefined ? <span>Вход: {message.responseMetrics.usage.inputTokens.toLocaleString("ru-RU")}</span> : null}
                     {message.responseMetrics.usage.outputTokens !== undefined ? <span>Выход: {message.responseMetrics.usage.outputTokens.toLocaleString("ru-RU")}</span> : null}
+                    {message.responseMetrics.usage.unattributedTokens !== undefined ? <span title="Часть общего расхода провайдером не отнесена к входу или выходу">Не распределено: {message.responseMetrics.usage.unattributedTokens.toLocaleString("ru-RU")}</span> : null}
                     <span>Всего: {message.responseMetrics.usage.totalTokens.toLocaleString("ru-RU")}</span>
                   </div>
-                  <p className="mt-1 text-zinc-500">Точные данные, полученные от провайдера модели. Дополнительные внутренние вызовы могут не учитываться.</p>
+                  <p className="mt-1 text-zinc-500">Данные из ответа провайдера. «Не распределено» — разница между общим расходом и суммой входа/выхода; точная причина не всегда известна. Внутренние вызовы без квитанций могут не учитываться.</p>
                 </>
               ) : (
                 <p>Провайдер не прислал точный расход токенов — MALIK AI не подменяет его приблизительным числом.</p>
