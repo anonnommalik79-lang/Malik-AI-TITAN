@@ -71,6 +71,7 @@ type GodAnswer = {
   /** Official upstream token receipt, when available; never guessed. */
   usage?: unknown
   selectedModelId?: MalikModelId
+  modelFallback?: { requestedModelId: MalikModelId; actualProvider: string; actualModel: string }
   /** Null whenever the answer had nothing checkable in it. */
   factAudit?: MalikFactAudit | null
   accuracy?: AccuracyReport
@@ -1239,6 +1240,7 @@ export async function malikGodAnswer(
       provider: result.provider,
       model: result.model,
       selectedModelId: result.selectedModelId,
+      ...(result.modelFallback ? { modelFallback: result.modelFallback } : {}),
       usedWeb: usedEvidence,
       sources,
       accuracy: verified.report,
