@@ -2046,6 +2046,11 @@ function MessageBubble({
               ) : (
                 <p>Провайдер не прислал точный расход токенов — MALIK AI не подменяет его приблизительным числом.</p>
               )}
+              {message.responseMetrics.modelFallback ? (
+                <p className="mt-1 text-amber-300/90" aria-label="Использована резервная модель">
+                  Выбрана {message.responseMetrics.modelFallback.requestedModelId}; ответила резервная модель {message.responseMetrics.modelFallback.actualModel} ({message.responseMetrics.modelFallback.actualProvider}).
+                </p>
+              ) : null}
               <p className="mt-1 text-zinc-500">Время ответа: {message.responseMetrics.tookMs.toLocaleString("ru-RU")} мс.</p>
             </div>
           </details>
