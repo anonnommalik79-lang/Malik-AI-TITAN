@@ -11,9 +11,16 @@ export type MalikTokenUsage = {
   unattributedTokens?: number
 }
 
+export type MalikModelFallback = {
+  requestedModelId: string
+  actualProvider: string
+  actualModel: string
+}
+
 export type MalikResponseMetrics = {
   tookMs: number
   usage?: MalikTokenUsage
+  modelFallback?: MalikModelFallback
 }
 
 function record(value: unknown): Record<string, unknown> | null {
@@ -97,5 +104,15 @@ export function readResponseMetrics(value: unknown): MalikResponseMetrics | unde
   const tookMs = source.tookMs
   if (typeof tookMs !== "number" || !Number.isFinite(tookMs) || tookMs < 0 || tookMs > 86_400_000) return undefined
   const usage = normalizeProviderTokenUsage(source.usage)
-  return { tookMs: Math.round(tookMs), ...(usage ? { usage } : {}) }
+  const rawFallback = record(source.modelFallback)
+  // Never restore free-form request metadata as a trusted fallback receipt.
+  const modelFallback = rawFallback
+    && ["requestedModelId", "actualProvider", "actualModel"].every((key) =>
+      typeof rawFallback[key] === "string" && (rawFallback[key] as string).length > 0
+      && (rawFallback[key] as string).length <= 200)
+    ? { requestedModelId: rawFallback.requestedModelId as string,
+        actualProvider: rawFallback.actualProvider as string,
+        actualModel: rawFallback.actualModel as string }
+    : undefined
+  return { tookMs: Math.round(tookMs), ...(usage ? { usage } : {}), ...(modelFallback ? { modelFallback } : {}) }
 }
