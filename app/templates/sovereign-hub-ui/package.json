@@ -20,6 +20,7 @@
     "test:claim-ledger-browser": "node scripts/verify-claim-ledger-browser.mjs",
     "test:chat-activity": "node --test scripts/verify-chat-activity.mjs",
     "test:token-telemetry": "node --experimental-strip-types --no-warnings --test scripts/verify-token-telemetry.mjs",
+    "test:p0-quotas": "node --test scripts/verify-p0-quotas.mjs",
     "test:code-completion": "node scripts/verify-code-completion.mjs",
     "test:chat-website-design": "node --test scripts/verify-chat-website-design.mjs",
     "test:site-cinema": "node --test scripts/verify-site-cinema.mjs",
