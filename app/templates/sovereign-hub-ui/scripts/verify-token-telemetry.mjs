@@ -69,6 +69,14 @@ test("partial continuation receipts are unknown, not deceptively cheap", () => {
   }), undefined)
 })
 
+test("fallback provenance survives valid history and rejects malformed values", () => {
+  assert.deepEqual(readResponseMetrics({
+    tookMs: 2100,
+    modelFallback: { requestedModelId: "malik-27b", actualProvider: "groq", actualModel: "gpt-oss-120b" },
+  }), { tookMs: 2100, modelFallback: { requestedModelId: "malik-27b", actualProvider: "groq", actualModel: "gpt-oss-120b" } })
+  assert.deepEqual(readResponseMetrics({ tookMs: 2100, modelFallback: { requestedModelId: "malik-27b", actualProvider: 3, actualModel: "" } }), { tookMs: 2100 })
+})
+
 test("fast chat keeps context below 12k chars without altering stored history", () => {
   const history = Array.from({ length: 60 }, (_, i) => ({
     role: i % 2 ? "assistant" : "user",
