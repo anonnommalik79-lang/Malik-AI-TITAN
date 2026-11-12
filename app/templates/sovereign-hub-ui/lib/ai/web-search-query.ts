@@ -1,6 +1,7 @@
+import { normalizeColloquial } from "./colloquial"
 /** Remove conversational instructions without changing the named subject. */
 export function normalizeWebSearchQuery(prompt: string): string {
-  return prompt.replace(/\[(?:system|assistant|developer|internal)[^\]]*\][\s\S]*$/iu, "")
+  return normalizeColloquial(prompt).replace(/\[(?:system|assistant|developer|internal)[^\]]*\][\s\S]*$/iu, "")
     .replace(/^(?:что\s+)?(?:ты\s+)?(?:знаеш[ь]?|знаете|расскажи(?:те)?|скажи(?:те)?|поведай|опиши|дай\s+(?:инфу|информацию|справку))(?:\s+(?:мне|нам|пожалуйста))?(?:\s+(?:ли|что[- ]нибудь))?\s+(?:про|о|об|обо)\s+/iu, "")
     .replace(/^(?:tell\s+me\s+(?:about|more\s+about)|what\s+do\s+you\s+know\s+about)\s+/iu, "")
     // «сравни жёстко/на глубоком уровне X и Y» searches for «X и Y сравнение».

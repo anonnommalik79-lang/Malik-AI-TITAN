@@ -27,6 +27,10 @@ const LIVE_WORDS = /(?:последние?\s+24\s+час|за\s+24\s+час|се
 const TIME_WORDS = /(?:последн|новейш|свеж|актуальн|сейчас|на\s+данный\s+момент|на\s+сегодняшний\s+день|на\s+этой\s+неделе|текущ|\blatest\b|\bcurrent\b|\brecent\b|\bnow\b|this\s+(?:week|month|year)|соңғы|қазіргі|қазір|жаңа)/iu
 // What a company is worth, what it raised and earns changes with every round.
 const MONEY_NOW = /(?:оценива\p{L}*ся|(?<!\p{L})оценк[аиуе]\s+(?:компани|стартап|бизнес|фирм|бренд|проект)|капитализац|рыночн\p{L}*\s+стоимост|стоимост\p{L}*\s+(?:компани|стартап|бизнес)|сколько\s+(?:сейчас\s+)?(?:стоит|стоят)\s+(?:компани|стартап|акци)|привлек\p{L}*\s+(?:\$|инвестиц|деньг|раунд|финансир)|раунд\p{L}*\s+(?:финансир|инвестиц|seed|series|сид)|выручк|(?<!\p{L})(?:valuation|valued|market\s+cap|funding|raised|revenue|ipo|series\s+[a-f])(?!\p{L})|бағаланады|капитализация)/iu
+/** «Сколько стоит/оценивается компания», funding rounds, revenue. */
+export function asksCompanyMoney(prompt: string): boolean {
+  return MONEY_NOW.test(normalizeColloquial(String(prompt || "")))
+}
 const VOLATILE = /(?:новост|погод|курс\s+(?:валют|доллар|евро)|цен[ауы]|стоимост|сколько(?:\s+\p{L}+){0,3}\s+стоит|президент|министр|расписани|спикер|релиз|выпуст|выш[её]л|(?<!\p{L})(?:версии?|версия)|доступност|\b(?:news|weather|price|pricing|exchange rate|president|ceo|schedule|release|version|available|availability)\b|жаңалық|бағасы|бағам|нұсқа|шығарыл|президент|министр)/iu
 const AI = /(?:\b(?:AI|LLM|GPT|OpenAI|Anthropic|Claude|Gemini|DeepMind|Meta|Llama|DeepSeek|Alibaba|Qwen|Mistral|xAI|Grok)\b|(?<!\p{L})ИИ[ -]?модел|модел.{0,20}(?<!\p{L})ИИ(?!\p{L})|искусственн.{0,20}интеллект|жасанды\s+интеллект|ЖИ[ -]?модел)/iu
 /** A ranked model list is a changing factual claim, even without words like "today". */

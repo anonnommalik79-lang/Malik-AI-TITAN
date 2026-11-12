@@ -1,4 +1,4 @@
-import { normalizeColloquial } from "./colloquial"
+import { latinBrandName, normalizeColloquial } from "./colloquial"
 import { routePetroleum } from "../work/petroleum/router"
 import { isExplicitImageEditRequest, isExplicitImageGenerationRequest, isReferenceImageRequest, isReferencePhotoFollowUp } from "./image-intent"
 import { isContextDependent } from "./conversation-focus"
@@ -119,19 +119,10 @@ export function referenceTopic(input: string): string {
 
 const QUESTION_FRAME = /(?<!\p{L})(?:сейчас|сегодня|щас|га|же|ли|вообще|сколько|оценива\p{L}*|оценк[аиуе]|стоит|стоят|стоимост\p{L}*|капитализац\p{L}*|чем|занима\p{L}*|находится|расположен\p{L}*|где|когда|какая|какой|какое|какие|каков\p{L}*|кто|что|это|такое|такой|такая|компани\p{L}*|стартап\p{L}*)(?!\p{L})/giu
 
-const BRAND_LETTERS: Record<string, string> = { а: "a", б: "b", в: "v", г: "g", д: "d", е: "e", ё: "yo", ж: "zh", з: "z", и: "i", й: "y", к: "k", л: "l", м: "m", н: "n", о: "o", п: "p", р: "r", с: "s", т: "t", у: "u", ф: "f", х: "h", ц: "ts", ч: "ch", ш: "sh", щ: "sch", ъ: "", ы: "y", ь: "", э: "e", ю: "yu", я: "ya" }
-
 /** «хиггсфиелд ии» is Higgsfield AI typed in Cyrillic: a brand is found by its Latin name. */
 export function latinBrandTopic(topic: string): string | null {
-  if (!/(?<!\p{L})(?:ии|аи)(?!\p{L})/iu.test(topic)) return null
-  const latin = topic.replace(/(?<!\p{L})(?:ии|аи)(?!\p{L})/giu, "AI").replace(/\p{Script=Cyrillic}/gu, (letter) => {
-    const lower = letter.toLowerCase()
-    const mapped = BRAND_LETTERS[lower] ?? lower
-    return letter === lower ? mapped : mapped.charAt(0).toUpperCase() + mapped.slice(1)
-  }).replace(/\s+/gu, " ").trim()
-  return latin && latin !== topic ? latin.replace(/(?<!\p{L})(\p{Ll})/gu, (first) => first.toUpperCase()) : null
+  return latinBrandName(topic)
 }
-
 /** Common RU/KZ subjects are translated without another paid model call. */
 export function referenceSearchTopic(topic: string): string {
   return normalizeIPhoneSubject(canonicalPortraitTopic(topic))

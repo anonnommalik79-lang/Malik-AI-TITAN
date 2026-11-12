@@ -638,3 +638,17 @@ function buildSummary(checked: number, supported: number, missing: number, broke
 
   return citationNote ? `${figures} · ${citationNote}` : figures
 }
+
+/**
+ * The check panel earns its place: always when something needs re-checking,
+ * never under a short answer («391») or a ledger with nothing in it.
+ */
+export function worthFactAuditPanel(audit: MalikFactAudit, answer: string): boolean {
+  if (audit.claims.some((claim) => claim.verdict === "bad-citation")) return true
+  // A proved calculation or the person's own data is not a fact about the world.
+  const worldFacts = (audit.ledger?.claims || []).filter((claim) => claim.origin === "external-fact")
+  if (String(answer || "").replace(/\s+/gu, " ").trim().length < 220) {
+    return worldFacts.some((claim) => claim.status !== "VERIFIED" && claim.status !== "SUPPORTED")
+  }
+  return audit.status === "flagged" || audit.claims.length > 0 || worldFacts.length > 0 || Boolean(audit.ledger?.claims.length)
+}

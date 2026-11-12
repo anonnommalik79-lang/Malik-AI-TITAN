@@ -204,6 +204,23 @@ export function referenceTitleCoverage(query: string, title: string): number {
   return wanted.length ? wanted.filter((word) => actual.has(word)).length / wanted.length : 0
 }
 
+/**
+ * «Retouched with AI-assisted tools (Higgsfield)» names a tool, not the subject.
+ * A named subject (a brand, a place) must be in the file's title, or appear in
+ * its description other than as the software it was made with.
+ */
+export function namedSubjectInFile(topic: string, fileTitle: string, description: string): boolean {
+  if (!/\p{Lu}/u.test(topic)) return true
+  if (referenceTitleCoverage(topic, fileTitle) >= 0.5) return true
+  const text = description.replace(/<[^>]*>/gu, " ").replace(/\s+/gu, " ")
+  const words = titleWords(topic).filter((word) => word.length >= 3)
+  return words.length > 0 && words.every((word) => {
+    const at = text.toLowerCase().indexOf(word)
+    if (at < 0) return false
+    return !/(?:retouch\p{L}*|edit\p{L}*|made|creat\p{L}*|generat\p{L}*|process\p{L}*|enhanc\p{L}*|upscal\p{L}*|render\p{L}*|tools?|software|app(?:lication)?|using|via|обработ\p{L}*|создан\p{L}*|сгенерир\p{L}*)\b[^.]{0,60}$/iu.test(text.slice(Math.max(0, at - 80), at))
+  })
+}
+
 export function referenceTopicMatches(query: string, metadata: string): boolean {
   const descriptors = new Set(["photo", "photos", "image", "images", "picture", "pictures", "diagram", "illustration", "фото", "фотографии", "схема"])
   const wanted = titleWords(query).filter((word) => !descriptors.has(word))
@@ -443,6 +460,7 @@ export async function lookupReferenceImages(plan: ReferenceVisualPlan, signal?: 
         if (!referenceContextMatches(plan, fileTitle + " " + (media?.extmetadata?.ImageDescription?.value || ""))) return []
         if (plan.entity && (unrelatedNamesake(topic, fileTitle) || referenceTitleScore(topic, fileTitle) === 0)) return []
         if (!plan.entity && plan.kind !== "tutorial" && !referenceTopicMatches(topic, fileTitle + " " + (media?.extmetadata?.ImageDescription?.value || ""))) return []
+        if (!plan.entity && plan.kind !== "tutorial" && !namedSubjectInFile(topic, String(page.title || ""), String(media?.extmetadata?.ImageDescription?.value || ""))) return []
         if (plan.kind === "tutorial" && (!plan.visualDevice?.some((term) => fileTitle.includes(term))
           || !plan.visualTerms?.some((term) => fileTitle.includes(term)))) return []
         // Never fall back to the multi-megabyte original when a thumbnail is missing.

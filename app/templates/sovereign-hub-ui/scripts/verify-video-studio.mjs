@@ -5,7 +5,11 @@ import assert from "node:assert/strict"
 import fs from "node:fs"
 import { inspectVideoBytes, videoProbeVerdict } from "@/lib/media/video-file-check"
 import { deliverGeneratedVideo, VideoDeliveryError } from "@/lib/media/browser-video-qa"
-import { normalizeColloquial } from "@/lib/ai/colloquial"
+import { latinBrandName, normalizeColloquial, withLatinBrand } from "@/lib/ai/colloquial"
+import { normalizeWebSearchQuery } from "@/lib/ai/web-search-query"
+import { namedSubjectInFile } from "@/lib/media/reference-catalog"
+import { sourceReferencePhotos } from "@/lib/media/source-reference-photos"
+import { normalizeFactAudit, worthFactAuditPanel } from "@/lib/ai/fact-audit"
 import { shouldUseWeb } from "@/lib/ai/web-search-policy"
 import { classifyFreshness } from "@/lib/ai/freshness-intent"
 import { allowsAnswerPhotoHints, latinBrandTopic, planReferenceVisuals } from "@/lib/ai/reference-visual-policy"
@@ -179,6 +183,43 @@ await check("one-word answers do not start an irrelevant photo search", () => {
     assert.equal(allowsAnswerPhotoHints(question), false, question)
   }
   assert.ok(planReferenceVisuals("а щя га скоко оценивается хиггсфиелд ии"), "real world topics still show photos")
+})
+
+await check("a slang question about a Cyrillic-typed brand is searched by its Latin name", () => {
+  assert.equal(latinBrandName("а щя га скоко оценивается хиггсфиелд ии"), "Higgsfield AI")
+  assert.equal(latinBrandName("расскажи про мистраль аи"), "Mistral AI")
+  assert.equal(latinBrandName("что такое ии"), null)
+  assert.match(withLatinBrand("скоко оценивается хиггсфиелд ии"), /Higgsfield AI$/)
+  assert.equal(normalizeWebSearchQuery("а щя скоко стоит биткоин"), "сейчас сколько стоит биткоин")
+  const router = fs.readFileSync("lib/malik-god-router.ts", "utf8")
+  assert.match(router, /valuation funding round/)
+  assert.match(router, /const prompt = withLatinBrand\(question\)/, "ranking sees the Latin name")
+})
+
+await check("a photo is of its subject, not of something retouched with it", () => {
+  // The real Commons hit for «Higgsfield AI» on 2026-11-08.
+  assert.equal(namedSubjectInFile("Higgsfield AI", "File:Ryan Hofmann (2026).png", "Portrait of Ryan Hofmann, founder of Alterra Studio, Seattle, 2026. Retouched with AI-assisted tools (Adobe Photoshop, Higgsfield)."), false)
+  assert.equal(namedSubjectInFile("Medeu", "File:DSC 1234.jpg", "The Medeu skating rink in winter"), true)
+  assert.equal(namedSubjectInFile("Medeu", "File:Medeu rink.jpg", ""), true)
+  assert.equal(namedSubjectInFile("горы", "File:x.jpg", ""), true, "generic topics keep the old rule")
+})
+
+
+await check("a web answer about a company gets a grid of photos from the articles it read", () => {
+  const plan = planReferenceVisuals("а щя га скоко оценивается хиггсфиелд ии")
+  const source = (host, path) => ({ title: "Higgsfield AI raises $50M, valued at $1.3 billion", url: `https://${host}/${path}`, domain: host, image: `https://${host}/media/${path}.jpg` })
+  const photos = sourceReferencePhotos(plan, [source("www.reuters.com", "a"), source("www.reuters.com", "b"), source("techcrunch.com", "c"), source("www.forbes.com", "d"), source("www.theverge.com", "e"), source("www.wired.com", "f")])
+  assert.equal(photos.length, 4, "up to four")
+  assert.deepEqual(photos.map((photo) => new URL(photo.sourceUrl).hostname), ["www.reuters.com", "techcrunch.com", "www.forbes.com", "www.theverge.com"], "one per site")
+  assert.equal(photos[0].alt, "Higgsfield AI", "named by the brand, not the slang")
+})
+
+await check("a one-number answer gets no fact-check frame; an unsupported fact keeps it", () => {
+  const unchecked = normalizeFactAudit({ status: "unchecked", checked: 1, supported: 0, summary: "x", claims: [{ id: "c1", kind: "figure", value: "391", sentence: "391", verdict: "unchecked" }] })
+  assert.equal(worthFactAuditPanel(unchecked, "391"), false)
+  const bad = normalizeFactAudit({ checked: 1, supported: 0, summary: "x", claims: [{ id: "c1", kind: "citation", value: "[3]", sentence: "x [3]", verdict: "bad-citation" }] })
+  assert.equal(worthFactAuditPanel(bad, "Цена $97 000 [3]"), true, "a broken citation is always shown")
+  assert.equal(worthFactAuditPanel(unchecked, "x".repeat(400)), true, "long answers keep the panel")
 })
 
 if (failures) { console.error(`\n${failures} check(s) failed`); process.exit(1) }

@@ -19,6 +19,8 @@ const deps = {
   ...domain, ...load("lib/ai/conversation-intent.ts"), ...load("lib/ai/conversation-focus.ts"), ...load("lib/ai/conversation-history.ts"),
   ...load("lib/ai/attribution-evidence.ts"),
   ...load("lib/ai/freshness-intent.ts"), ...load("lib/ai/web-search-policy.ts"), ...load("lib/server/domain-planner.ts"),
+  // The coordinator now picks a compact shape for simple chats (lib/ai/request-kind.ts).
+  ...load("lib/ai/request-kind.ts"),
   extractPrompt: b => b.prompt, conversationRepairInstruction: empty,
   detectMalikSuperpowers: () => [], superpowerOutputBudget: () => 1000,
   requestedFusionConnectors: () => [], instantReply: () => null,

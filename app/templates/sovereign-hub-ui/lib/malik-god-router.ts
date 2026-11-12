@@ -24,7 +24,8 @@ import { fetchPageText } from "@/lib/malik-research/fetch-page"
 import { runStrictMalikModel } from "@/lib/server/malik-model-router"
 import { chatWebsiteInstruction } from "@/lib/server/chat-website-design"
 import { fetchEiaSpotEvidence } from "@/lib/server/petroleum-eia"
-import { classifyFreshness, freshnessMode, isModelLeaderboardRequest, NO_WEB, publicSearchText, type FreshnessMode, type FreshnessIntent } from "@/lib/ai/freshness-intent"
+import { asksCompanyMoney, classifyFreshness, freshnessMode, isModelLeaderboardRequest, NO_WEB, publicSearchText, type FreshnessMode, type FreshnessIntent } from "@/lib/ai/freshness-intent"
+import { latinBrandName, withLatinBrand } from "@/lib/ai/colloquial"
 import { assessSources, currentEvidenceAvailable, currentNewsSources, finalizeFreshAnswer, freshnessCheckLine, freshnessEvidenceInstruction, safeEvidenceUrl, sourceDisagreements, unavailableFreshAnswer } from "@/lib/live-intelligence/evidence"
 import { searchTimeFilters } from "@/lib/live-intelligence/search-time-filters"
 import { searchNewsFeed } from "@/lib/live-intelligence/news-search"
@@ -570,6 +571,15 @@ function knownPersonSearchName(value: string) {
 function buildQueries(prompt: string) {
   const year = currentResearchDate().slice(0, 4)
   const q = normalizeWebSearchQuery(prompt)
+  // «хиггсфиелд ии» is searched as Higgsfield AI: engines know brands by their Latin names.
+  const brand = latinBrandName(prompt)
+  if (brand) {
+    return Array.from(new Set([
+      asksCompanyMoney(prompt) ? `${brand} valuation funding round ${year}` : `${brand} ${year}`,
+      asksCompanyMoney(prompt) ? `${brand} оценка компании инвестиции` : `${brand} official`,
+      q,
+    ])).slice(0, Math.max(1, Math.min(3, Number(process.env.MALIK_GOD_MAX_SEARCH_QUERIES || 3))))
+  }
   // Historical founding questions need an entity-first query, not the entire
   // long request containing instructions about a ledger or source formatting.
   const foundedOrganization = /(?:основа\p{L}*|found\p{L}*|co-?found\p{L}*)/iu.test(prompt)
@@ -701,7 +711,10 @@ function rankSourcesForPrompt(prompt: string, sources: SourceItem[]) {
   return scored.filter((item) => item.relevant).map((item) => item.source)
 }
 
-async function gatherSources(prompt: string, emit?: ResearchEmitter, activity?: ExecutionReporter, signal?: AbortSignal, mode: FreshnessMode = "fast"): Promise<SourceItem[]> {
+async function gatherSources(question: string, emit?: ResearchEmitter, activity?: ExecutionReporter, signal?: AbortSignal, mode: FreshnessMode = "fast"): Promise<SourceItem[]> {
+  // Ranking and relevance checks compare sources with this text: the brand's
+  // Latin name must be in it, or every English source about it looks off-topic.
+  const prompt = withLatinBrand(question)
   const started = Date.now()
   const budget = AbortSignal.any([AbortSignal.timeout(22_000), ...(signal ? [signal] : [])])
   const intent = classifyFreshness(prompt)

@@ -107,7 +107,7 @@ function researchFixture({indexOnly=false,indexFails=false,searchFails=false,rea
  const activity=receipts.createExecutionReporter(()=>{}),events=[],controller=new AbortController()
  const item=source('fact'),fallback=()=>[]
  const deps={
-  classifyFreshness:()=>({needsSearch:true}),buildQueries:()=>['query'],publicSearchText:text=>text,
+  classifyFreshness:()=>({needsSearch:true}),buildQueries:()=>['query'],publicSearchText:text=>text,withLatinBrand:text=>text,
   env:()=>'',needsCurrentEvidence:()=>false,KNOWLEDGE_FEEDS:[],
   compactSearchReceipt,
   searchOfficialReleases:fallback,searchSerper:fallback,searchTavily:fallback,searchBrave:fallback,searchOfficialFeed:fallback,

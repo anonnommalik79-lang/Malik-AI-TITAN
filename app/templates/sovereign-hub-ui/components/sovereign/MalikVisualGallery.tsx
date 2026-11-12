@@ -5,10 +5,10 @@ import { ChevronLeft, ChevronRight, ExternalLink, X } from "lucide-react"
 import { preconnect } from "react-dom"
 import { isReferenceImageRequest } from "@/lib/ai/image-intent"
 
-import { planReferenceVisuals, referenceSearchTopic, type ReferenceVisualPlan } from "@/lib/ai/reference-visual-policy"
+import { latinBrandTopic, planReferenceVisuals, referenceSearchTopic, type ReferenceVisualPlan } from "@/lib/ai/reference-visual-policy"
 import { isSafeVisualUrl, type MalikVisualImage } from "@/lib/media/reference-catalog"
 import { invalidateReferenceImages, referenceCacheKey, reportReferenceImageFailure, subscribeReferenceImages } from "@/lib/media/client-reference-cache"
-import { sourceReferencePhoto } from "@/lib/media/source-reference-photos"
+import { sourceReferencePhoto, sourceReferencePhotos } from "@/lib/media/source-reference-photos"
 import type { MalikCitation } from "@/lib/ai/citation-names"
 import "./answer-blocks.css"
 export { isSafeVisualUrl, type MalikVisualImage } from "@/lib/media/reference-catalog"
@@ -139,7 +139,9 @@ export function MalikReferenceImages({ question, previousQuestion = "", hasAttac
   const key = plan ? referenceCacheKey(plan) : ""
   const active = isLatest || nearViewport
   const collection = Boolean(plan?.subjects?.length)
-  const sourcePhoto = plan && !collection ? sourceReferencePhoto(plan, sources.filter((source) => !failedSourceUrls.includes(source.image || ""))) : null
+  // A hero shows a grid like a search answer: the photos of the articles read.
+  const sourcePhotos = plan && !collection ? sourceReferencePhotos(plan, sources.filter((source) => !failedSourceUrls.includes(source.image || "")), hero ? 4 : 1) : []
+  const sourcePhoto = sourcePhotos[0] || null
   const sourcePhotoUrl = sourcePhoto?.url || ""
   useEffect(() => {
     const node = container.current
@@ -162,14 +164,14 @@ export function MalikReferenceImages({ question, previousQuestion = "", hasAttac
     return () => window.removeEventListener("online", recover)
   }, [plan, active, collection, result, key])
   if (!plan) return children || null
-  const images = sourcePhoto ? [sourcePhoto] : result?.key === key ? result.images : null
+  const images = sourcePhotos.length ? sourcePhotos : result?.key === key ? result.images : null
   const shown = (url?: string) => Boolean(url && loadedUrl === url)
   // The newest answer's first photo is fetched at once, not when scrolled to.
   const priority = isLatest ? { loading: "eager" as const, fetchPriority: "high" as const } : { loading: "lazy" as const }
   const retry = () => { invalidateReferenceImages(plan); setResult(null); setAttempt((value) => value + 1) }
   const failed = (url: string) => {
     setSelected(null)
-    if (sourcePhoto?.url === url) { setFailedSourceUrls((current) => [...new Set([...current, url])].slice(-12)); return }
+    if (sourcePhotos.some((photo) => photo.url === url)) { setFailedSourceUrls((current) => [...new Set([...current, url])].slice(-12)); return }
     if (reportReferenceImageFailure(plan, url)) retry()
     else setResult((current) => current?.key === key ? { key, images: current.images.filter((image) => image.url !== url) } : current)
   }
@@ -239,7 +241,7 @@ export function MalikReferenceImages({ question, previousQuestion = "", hasAttac
             onLoad={() => setLoadedUrl(images[0].url)} onError={() => failed(images[0].url)} />
         </button>
         <figcaption className="mt-2 flex min-w-0 flex-wrap items-baseline justify-between gap-x-3 gap-y-1 text-sm">
-          <strong className="font-bold text-white">{plan.topic}</strong>
+          <strong className="font-bold text-white">{latinBrandTopic(plan.topic) || plan.topic}</strong>
           <a href={safeSourceUrl(images[0].sourceUrl) || images[0].url} target="_blank" rel="noopener noreferrer"
             className="inline-flex min-w-0 items-center gap-1 text-xs text-zinc-400 hover:text-white">
             <span className="truncate">{[images[0].credit, images[0].license].filter(Boolean).join(" · ") || "Источник фото"}</span><ExternalLink className="h-3 w-3 shrink-0" aria-hidden="true" />
@@ -248,7 +250,7 @@ export function MalikReferenceImages({ question, previousQuestion = "", hasAttac
         {plan.caption ? <p className="mt-2 text-sm leading-6 text-zinc-300" data-malik-photo-caption>{plan.caption}</p> : null}
       </figure> : null}
       {cover && images && images.length > 1 ? <div className="malik-answer-photo-thumbs" aria-label="Другие фотографии">
-        {images.slice(1, 3).map((image) => <ReferenceCard key={image.url} image={image} portrait={false} onOpen={() => setSelected(image)} onFailure={failed} />)}
+        {images.slice(1, 4).map((image) => <ReferenceCard key={image.url} image={image} portrait={false} onOpen={() => setSelected(image)} onFailure={failed} />)}
       </div> : null}
       {children ? <div className="min-w-0">{children}</div> : null}
       {!images?.length && active ? status : null}

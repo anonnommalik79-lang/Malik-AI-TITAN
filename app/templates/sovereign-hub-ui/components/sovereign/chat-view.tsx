@@ -60,6 +60,7 @@ import type { AIPlan } from "@/lib/ai/types"
 import type { MalikMessageResearch, MalikResearchStep, MalikWebSource } from "@/lib/ai/web-research-types"
 import { fixWrongKeyboardLayout } from "@/lib/ai/keyboard-layout"
 import type { MalikFactAudit, MalikFactClaim } from "@/lib/ai/fact-audit"
+import { worthFactAuditPanel } from "@/lib/ai/fact-audit"
 import { ClaimLedgerPanel } from "./ClaimLedgerPanel"
 import { DEFAULT_MALIK_MODEL_ID, getMalikModel, type MalikModelId } from "@/lib/ai/malik-models"
 import { clientFetchWithTimeout } from "@/lib/api-client"
@@ -1974,7 +1975,7 @@ function MessageBubble({
           ) : null}
           {/* The verdict on the text above comes before the reading list it was
               written from. */}
-          {!isUser && !streaming && message.research?.factAudit ? (
+          {!isUser && !streaming && message.research?.factAudit && worthFactAuditPanel(message.research.factAudit, displayContent) ? (
             <FactAuditPanel
               audit={message.research.factAudit}
               sources={message.research.sources}
