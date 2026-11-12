@@ -8,7 +8,8 @@ import { deliverGeneratedVideo, VideoDeliveryError } from "@/lib/media/browser-v
 import { normalizeColloquial } from "@/lib/ai/colloquial"
 import { shouldUseWeb } from "@/lib/ai/web-search-policy"
 import { classifyFreshness } from "@/lib/ai/freshness-intent"
-import { latinBrandTopic, planReferenceVisuals } from "@/lib/ai/reference-visual-policy"
+import { allowsAnswerPhotoHints, latinBrandTopic, planReferenceVisuals } from "@/lib/ai/reference-visual-policy"
+import { videoModelConfigured } from "@/lib/ai/env"
 
 globalThis.window ??= globalThis
 let failures = 0
@@ -134,6 +135,50 @@ await check("a brand typed in Cyrillic gets photos under its Latin name", () => 
   assert.deepEqual(planReferenceVisuals("а щя га скоко оценивается хиггсфиелд ии")?.queries[0], "Higgsfield AI")
   assert.equal(planReferenceVisuals("чем занимается Higgsfield")?.queries[0], "Higgsfield")
   assert.equal(planReferenceVisuals("сколько будет 2+2"), null)
+})
+
+await check("public video readiness includes actual video-studio providers without treating names as verified live", () => {
+  // Snapshot only in-process variables. Nothing touches Render or provider APIs.
+  const names = [
+    "BEDROCK_VIDEO_MODEL_ID", "BEDROCK_VIDEO_FALLBACK_MODEL_ID", "AWS_BEDROCK_VIDEO_MODEL",
+    "RUNWAY_API_KEY", "RUNWAYML_API_SECRET", "LUMA_API_KEY", "FAL_KEY", "FAL_API_KEY",
+    "GOOGLE_VEO_API_KEY", "VEO_API_KEY", "DASHSCOPE_API_KEY",
+    "NOVAI_API_KEY", "MAGIC_HOUR_API_KEY", "PIXAZO_API_KEY", "PIXAZO_API_KEY_1",
+    "PIXAZO_API_KEY_2", "PIXAZO_API_KEY_3", "PIXAZO_API_KEY_4", "CLIPTAPS_API_KEY",
+    "POLLO_API_KEY", "POLLO_VIDEO_ENABLED", "HF_TOKEN", "MALIKVIDEO_HF_TOKEN",
+    "MALIKVIDEO_H3_MODE", "MALIKVIDEO_H3_ENABLED", "MALIKVIDEO_H3_BASE_URL",
+  ]
+  const saved = Object.fromEntries(names.map((name) => [name, process.env[name]]))
+  const configured = (values) => {
+    for (const name of names) delete process.env[name]
+    for (const [name, value] of Object.entries(values)) process.env[name] = value
+    return videoModelConfigured()
+  }
+  try {
+    assert.equal(configured({}), false)
+    for (const key of ["NOVAI_API_KEY", "MAGIC_HOUR_API_KEY", "PIXAZO_API_KEY_4", "CLIPTAPS_API_KEY", "DASHSCOPE_API_KEY", "RUNWAYML_API_SECRET", "GOOGLE_VEO_API_KEY"]) {
+      assert.equal(configured({ [key]: "fixture-key" }), true, key)
+    }
+    assert.equal(configured({ POLLO_API_KEY: "fixture-key" }), false, "Pollo requires explicit enable")
+    assert.equal(configured({ POLLO_API_KEY: "fixture-key", POLLO_VIDEO_ENABLED: "true" }), true)
+    assert.equal(configured({ MALIKVIDEO_H3_ENABLED: "true" }), false, "H3 worker requires real URL config")
+    assert.equal(configured({ MALIKVIDEO_H3_ENABLED: "true", MALIKVIDEO_H3_BASE_URL: "https://worker.example" }), true)
+    assert.equal(configured({ HF_TOKEN: "fixture-key" }), true, "H3 HF mode uses HF_TOKEN")
+    assert.equal(configured({ HF_TOKEN: "fixture-key", MALIKVIDEO_H3_MODE: "worker" }), false, "forced worker mode must not report HF configured")
+  } finally {
+    for (const name of names) {
+      if (saved[name] === undefined) delete process.env[name]
+      else process.env[name] = saved[name]
+    }
+  }
+})
+
+await check("one-word answers do not start an irrelevant photo search", () => {
+  for (const question of ["Ответь только словом: ОК", "Скажи одним словом: да", "Reply only OK"]) {
+    assert.equal(planReferenceVisuals(question), null, question)
+    assert.equal(allowsAnswerPhotoHints(question), false, question)
+  }
+  assert.ok(planReferenceVisuals("а щя га скоко оценивается хиггсфиелд ии"), "real world topics still show photos")
 })
 
 if (failures) { console.error(`\n${failures} check(s) failed`); process.exit(1) }

@@ -67,9 +67,15 @@ function localeFor(text: string): CognitiveLocale {
   return "en"
 }
 
-function classifyRequest(raw: string): CognitiveMode {
+export function classifyRequest(raw: string): CognitiveMode {
   const text = String(raw || "").toLowerCase().trim()
   if (!text) return "direct"
+  // A mnemonic/security/test code is plain chat context, not software.
+  // Do not label a remembered code as programming just because it says "код".
+  if (text.length <= 240
+    && /^(?:запомни|сохрани|какой|напомни|повтори|вспомни|назови|помнишь|remember|recall|what\s+(?:is|was))(?=\s|[,:!?]|$)/u.test(text)
+    && /(?:код(?:а|е|у|ом|ы)?|code|passcode)/u.test(text)
+    && !/(?:javascript|typescript|python|react|html|css|sql|api|функци|скрипт|алгоритм|source\s+code|debug|исправь\s+код|напиши\s+код)/u.test(text)) return "direct"
 
   if (/не работает|ошибк|сломал|исправ|почин|debug|\bfix\b|failed|error|issue/u.test(text)) return "troubleshoot"
   if (/стоит ли|что выбрать|какой выбрать|лучше|рекоменду|решени|should i|choose|recommend|best option/u.test(text)) return "decision"
