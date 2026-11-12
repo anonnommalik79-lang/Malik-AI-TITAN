@@ -28,6 +28,8 @@ export type StrictMalikResult = {
   selectedModelId: MalikModelId
   latencyMs: number
   usage?: any
+  /** An explicitly selected model was unavailable; the real answering route is exposed. */
+  modelFallback?: { requestedModelId: MalikModelId; actualProvider: string; actualModel: string }
   /** Set when the engine had to stop before the answer was finished. */
   incomplete?: AnswerIncomplete
 }
@@ -729,12 +731,14 @@ async function runFallback(input: {
 
       if (isCodeRequest(input.prompt) && codeAnswerNeedsMore(completed.content, input.prompt)) {
         console.warn("[MALIK_MODEL_ROUTE] fallback incomplete", fallbackModelId)
-        if (fallbackStreamed) return { ...completed, selectedModelId: input.originalModelId }
+        if (fallbackStreamed) return { ...completed, selectedModelId: input.originalModelId,
+          modelFallback: { requestedModelId: input.originalModelId, actualProvider: completed.provider, actualModel: completed.model } }
         continue
       }
 
       console.info("[MALIK_MODEL_ROUTE]", JSON.stringify({ selectedModelId: input.originalModelId, fallbackModelId, provider: completed.provider, providerModel: completed.model, stage: "fallback-success", codeMode: isCodeRequest(input.prompt) }))
-      return { ...completed, selectedModelId: input.originalModelId }
+      return { ...completed, selectedModelId: input.originalModelId,
+        modelFallback: { requestedModelId: input.originalModelId, actualProvider: completed.provider, actualModel: completed.model } }
     } catch (error) {
       console.warn("[MALIK_MODEL_ROUTE] fallback failed", fallbackModelId, error instanceof Error ? error.message : String(error))
       if (fallbackStreamed) throw error
@@ -947,7 +951,8 @@ export async function runStrictMalikModel(input: {
       }
       try {
         const rescued = await engine.runMalikMax({ ...engineInput, publicLabel: model.label })
-        return { ...rescued, selectedModelId: model.id }
+        return { ...rescued, selectedModelId: model.id,
+          modelFallback: { requestedModelId: model.id, actualProvider: rescued.provider, actualModel: rescued.model } }
       } catch (error) {
         if (error instanceof MalikModelRouteError) {
           throw new MalikModelRouteError(error.code, error.message, error.status, model.id)

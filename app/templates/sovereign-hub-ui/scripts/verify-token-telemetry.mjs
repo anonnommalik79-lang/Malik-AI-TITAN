@@ -9,6 +9,16 @@ test("exact OpenAI / OpenRouter usage is preserved", () => {
   }), { inputTokens: 1337, outputTokens: 490, totalTokens: 1827 })
 })
 
+test("provider usage preserves and explains totals above input plus output", () => {
+  assert.deepEqual(normalizeProviderTokenUsage({
+    prompt_tokens: 5388, completion_tokens: 12, total_tokens: 5681,
+  }), { inputTokens: 5388, outputTokens: 12, totalTokens: 5681, unattributedTokens: 281 })
+  assert.deepEqual(normalizeProviderTokenUsage({
+    primary: { prompt_tokens: 400, completion_tokens: 20, total_tokens: 470 },
+    continuation: { prompt_tokens: 150, completion_tokens: 10, total_tokens: 160 },
+  }), { inputTokens: 550, outputTokens: 30, totalTokens: 630, unattributedTokens: 50 })
+})
+
 test("Gemini-native provider counts are supported", () => {
   assert.deepEqual(normalizeProviderTokenUsage({
     promptTokenCount: 321, candidatesTokenCount: 80, totalTokenCount: 401,
@@ -57,6 +67,14 @@ test("partial continuation receipts are unknown, not deceptively cheap", () => {
     previous: { total_tokens: 300 },
     continuation: {},
   }), undefined)
+})
+
+test("fallback provenance survives valid history and rejects malformed values", () => {
+  assert.deepEqual(readResponseMetrics({
+    tookMs: 2100,
+    modelFallback: { requestedModelId: "malik-27b", actualProvider: "groq", actualModel: "gpt-oss-120b" },
+  }), { tookMs: 2100, modelFallback: { requestedModelId: "malik-27b", actualProvider: "groq", actualModel: "gpt-oss-120b" } })
+  assert.deepEqual(readResponseMetrics({ tookMs: 2100, modelFallback: { requestedModelId: "malik-27b", actualProvider: 3, actualModel: "" } }), { tookMs: 2100 })
 })
 
 test("fast chat keeps context below 12k chars without altering stored history", () => {

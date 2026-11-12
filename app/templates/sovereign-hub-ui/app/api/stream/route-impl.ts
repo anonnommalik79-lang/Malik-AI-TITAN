@@ -1380,6 +1380,7 @@ function liveSseResponse(
           provider: answer.provider,
           model: answer.model,
           selectedModelId: answer.selectedModelId,
+          modelFallback: "modelFallback" in answer ? answer.modelFallback : undefined,
           usedWeb: answer.usedWeb,
           sources: answer.sources,
           webSourceCount: answer.sources.length,

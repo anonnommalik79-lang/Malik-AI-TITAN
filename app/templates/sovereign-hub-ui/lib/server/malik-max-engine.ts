@@ -12,6 +12,7 @@ import {
   type MalikModelId,
 } from "@/lib/ai/malik-models"
 import { analyzeMalikBrainV1 } from "@/lib/ai/brain-v1"
+import { isTinyCodeRequest, wantsFullShape } from "@/lib/ai/request-kind"
 import {
   buildMessages,
   codeAnswerNeedsMore,
@@ -1442,8 +1443,15 @@ export async function runMalikMax(input: MaxInput, deps: { fetcher?: typeof fetc
     && answerContainsCode(input.history?.filter(message => message.role === "assistant").at(-1)?.content || "")
   let codeMode = isCodeRequest(taskPrompt) || continuingCode || hasOpenFence(resumed) || answerContainsCode(resumed)
   let fastMode = !resumed && !codeMode && isFastChatRequest(taskPrompt, input.attachments)
+  const microCode = !resumed && codeMode && isTinyCodeRequest(taskPrompt, input.attachments)
+  const quickPath = microCode || (fastMode && !wantsFullShape(taskPrompt))
   const needsVision = (input.attachments || []).some((item) => item?.kind === "image" || String(item?.mime || "").startsWith("image/"))
   const lanes = deps.lanes || await buildMaxLanes({ prompt: input.prompt, attachments: input.attachments, codeMode, fastMode, needsVision })
+  // For short direct replies, responsive pools race immediately. The
+  // strongest-first gate remains intact for full comparisons and complex jobs.
+  const responsiveLanes = quickPath
+    ? [...lanes].sort((a, b) => Number(FAST_PROVIDERS.has(b.provider)) - Number(FAST_PROVIDERS.has(a.provider)))
+    : lanes
   if (!lanes.length) {
     throw new MalikModelRouteError(
       "MAX_NOT_CONFIGURED",
@@ -1463,9 +1471,11 @@ export async function runMalikMax(input: MaxInput, deps: { fetcher?: typeof fetc
   // Leaderboard answers must fit a bounded model call instead of spending the
   // entire HTTP deadline on an uncontrolled essay. Other tasks are unaffected.
   const rankingRequest = !codeMode && isModelLeaderboardRequest(taskPrompt)
-  const perCall = (spent: number) => Math.max(1, Math.min(fastMode ? 1_500 : !codeMode && rankingRequest ? 2_800 : 16_000, budget - spent))
-  const timing = () => fastMode
-    ? { hedgeMs: 1_500, firstTokenMs: 13_000, firstDeadlineMs: 40_000, idleMs: 22_000 }
+  const perCall = (spent: number) => Math.max(1, Math.min(microCode ? 1_400 : fastMode ? 1_500 : !codeMode && rankingRequest ? 2_800 : 16_000, budget - spent))
+  const timing = () => quickPath
+    ? { hedgeMs: 900, firstTokenMs: 8_000, firstDeadlineMs: 20_000, idleMs: 15_000 }
+    : fastMode
+      ? { hedgeMs: 1_500, firstTokenMs: 13_000, firstDeadlineMs: 40_000, idleMs: 22_000 }
     : codeMode
       ? { hedgeMs: 12_000, firstTokenMs: 120_000, firstDeadlineMs: 180_000, idleMs: 90_000 }
       : { hedgeMs: 8_000, firstTokenMs: 75_000, firstDeadlineMs: 150_000, idleMs: 60_000 }
@@ -1523,7 +1533,7 @@ export async function runMalikMax(input: MaxInput, deps: { fetcher?: typeof fetc
   // line (59 lines in 237 s, then «по лимиту времени»). It streams from the
   // strongest lane instead, and unfinished code is carried on automatically.
   const largeCode = codeMode && budget >= 6_000
-  const panel = !resumed && !input.wallMs && !deps.lanes && !fastMode && !largeCode && budget >= 2_500
+  const panel = !resumed && !input.wallMs && !deps.lanes && !fastMode && !microCode && !largeCode && budget >= 2_500
     ? await runExpertPanel({
         lanes, call: base, totalMs: Math.max(0, timeLeft() - 17_000),
         codeMode, fetcher: deps.fetcher, signal: input.signal, activity: input.activity,
@@ -1533,13 +1543,13 @@ export async function runMalikMax(input: MaxInput, deps: { fetcher?: typeof fetc
     ? { lane: lanes[0], content: resumed, finishReason: "length", interrupted: false, firstTokenMs: 0 }
     : panel
       ? (emit(panel.content), panel)
-      : await (deps.lanes ? raceLanes : raceStrongFirst)({
-      lanes,
+      : await (deps.lanes || quickPath ? raceLanes : raceStrongFirst)({
+      lanes: responsiveLanes,
       call: base,
       onToken: emit,
       ...boundedTiming(true),
-      minFlush: fastMode ? 2 : 24,
-      maxParallel: fastMode ? 2 : MAX_PARALLEL,
+      minFlush: fastMode || microCode ? 2 : 24,
+      maxParallel: fastMode || microCode ? 2 : MAX_PARALLEL,
       fetcher: deps.fetcher,
       signal: input.signal,
     })
