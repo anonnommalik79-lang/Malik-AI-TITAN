@@ -68,15 +68,40 @@ export function photoModelConfigured(): boolean {
   )
 }
 
+/** Same credential/enable checks as the active video studio's public model catalogue.
+ * These indicate configuration only; they do not claim a provider can currently render.
+ * Keep this dependency-free because public proof/status pages use this env helper.
+ */
 export function videoModelConfigured(): boolean {
+  const hfToken = envPresent("HF_TOKEN") || envPresent("MALIKVIDEO_HF_TOKEN")
+  const h3Mode = process.env.MALIKVIDEO_H3_MODE?.trim().toLowerCase()
+  const h3Hf = h3Mode === "hf" || (!["worker", "sglang"].includes(h3Mode || "") && hfToken)
+  const h3Configured = h3Hf
+    ? hfToken
+    : process.env.MALIKVIDEO_H3_ENABLED?.trim().toLowerCase() === "true" && envPresent("MALIKVIDEO_H3_BASE_URL")
+
   return (
     envPresent("BEDROCK_VIDEO_MODEL_ID") ||
     envPresent("BEDROCK_VIDEO_FALLBACK_MODEL_ID") ||
     envPresent("AWS_BEDROCK_VIDEO_MODEL") ||
     envPresent("RUNWAY_API_KEY") ||
+    envPresent("RUNWAYML_API_SECRET") ||
     envPresent("LUMA_API_KEY") ||
     envPresent("FAL_KEY") ||
-    envPresent("FAL_API_KEY")
+    envPresent("FAL_API_KEY") ||
+    envPresent("GOOGLE_VEO_API_KEY") ||
+    envPresent("VEO_API_KEY") ||
+    envPresent("DASHSCOPE_API_KEY") ||
+    envPresent("NOVAI_API_KEY") ||
+    envPresent("MAGIC_HOUR_API_KEY") ||
+    envPresent("PIXAZO_API_KEY") ||
+    envPresent("PIXAZO_API_KEY_1") ||
+    envPresent("PIXAZO_API_KEY_2") ||
+    envPresent("PIXAZO_API_KEY_3") ||
+    envPresent("PIXAZO_API_KEY_4") ||
+    envPresent("CLIPTAPS_API_KEY") ||
+    (envPresent("POLLO_API_KEY") && process.env.POLLO_VIDEO_ENABLED === "true") ||
+    h3Configured
   )
 }
 
