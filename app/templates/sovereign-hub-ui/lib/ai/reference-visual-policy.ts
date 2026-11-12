@@ -153,6 +153,8 @@ export function referenceSearchTopic(topic: string): string {
 }
 
 const TEXT_TASK = /^(?:напиши|пиши|продолжай|перепиши|исправь|улучши|переведи|сократи|сочини|реши|вычисли|посчитай|write|rewrite|translate|calculate|solve|аудар|есепте)(?![\p{L}\p{N}_])/iu
+/** Direct format-only answers do not name a subject to photograph. */
+const FORMAT_ONLY_ANSWER = /^(?:ответь(?:те)?|скажи(?:те)?|reply|respond|answer|say)\s+(?:(?:мне|please)\s+)?(?:только|одним\s+словом|одной\s+фразой|one\s+word|in\s+one\s+word|only|just)(?![\p{L}\p{N}_])/iu
 const NON_VISUAL = /^(?:привет|салам|сәлем|спасибо|рахмет|ок|окей|okay|ok|hi|hello|ты\s+кто|кто\s+ты|да|нет|yes|no|как\s+(?:дела|ты|сам|поживаешь)|қалайсың|how\s+are\s+you|понятно|ясно|хорошо|отлично|круто|класс|супер)[!?\s.)]*$/iu
 const STRUCTURED_TASK = /(?:чек[ -]?лист|checklist|таблиц|spreadsheet|\btable\b|дв[еу]\s+колонк|two\s+columns|\b(?:python|javascript|typescript|sql)\b|\bкод\b|\bcode\b)/iu
 
@@ -164,7 +166,7 @@ const ORDER_NOT_LOOKUP = /^(?:(?:ну|да|давай|так|же|блин|по�
 export function allowsAnswerPhotoHints(question: string, hasAttachment = false, previousQuestion = ""): boolean {
   if (routePetroleum(question).engine === "petroleum") return false
   const text = question.trim()
-  if (ORDER_NOT_LOOKUP.test(text)) return false
+  if (ORDER_NOT_LOOKUP.test(text) || FORMAT_ONLY_ANSWER.test(text)) return false
   const domain = resolveDomainPlan({ prompt: question, messages: previousQuestion ? [{ role: "user", content: previousQuestion }, { role: "assistant", content: "" }] : [] })
   if (domain.context.followUp && domain.visuals.mode === "off") return false
   if (domain.delivery !== "text" || domain.presentation.tables === "off" || ["translate", "summarize", "modify", "calculate", "converse"].includes(domain.goal)) return false
@@ -229,7 +231,7 @@ export function planReferenceVisuals(question: string, previousQuestion = "", ha
     ? raw.split(/\r?\n/u, 1)[0].slice(0, 220).split(/(?<=[.!?])\s+/u, 1)[0].trim()
     : raw
   if (!text) return null
-  if (/^\//u.test(text) || isExplicitImageGenerationRequest(text) || NON_VISUAL.test(text) || TEXT_TASK.test(text) || ORDER_NOT_LOOKUP.test(text)) return null
+  if (/^\//u.test(text) || isExplicitImageGenerationRequest(text) || NON_VISUAL.test(text) || TEXT_TASK.test(text) || FORMAT_ONLY_ANSWER.test(text) || ORDER_NOT_LOOKUP.test(text)) return null
   if (STRUCTURED_TASK.test(text) && !/(?:фото(?:граф|к)?|картинк|изображени|\bphotos?\b|\bimages?\b|\bpictures?\b|сурет)/iu.test(text)) return null
   const tutorial = planTutorialVisuals(text)
   if (tutorial) return tutorial
