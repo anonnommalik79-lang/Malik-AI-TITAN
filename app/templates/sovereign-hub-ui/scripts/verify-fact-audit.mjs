@@ -410,7 +410,7 @@ check("the dashboard keeps the audit on the message it belongs to", () => {
 check("the chat renders the audit above the source list", () => {
   const view = read("components/sovereign/chat-view.tsx")
   assert.match(view, /function FactAuditPanel\(/)
-  assert.match(view, /message\.research\?\.factAudit \? \(\s*<FactAuditPanel/)
+  assert.match(view, /message\.research\?\.factAudit && worthFactAuditPanel\(message\.research\.factAudit, displayContent\) \? \(\s*<FactAuditPanel/)
   assert.ok(
     view.indexOf("<FactAuditPanel") < view.lastIndexOf("<SourceDeck research={message.research} />"),
     "the verdict must come before the reading list",

@@ -627,15 +627,17 @@ export class ThinkFilter {
   }
 }
 
-type StreamEvent = { text: string; activity: boolean; finishReason?: string; usage?: unknown; error?: string }
+type StreamEvent = { text: string; activity: boolean; finishReason?: string; usage?: unknown; error?: string; terminal?: boolean }
 
 /** One parsed line of a provider's stream, in any of the three protocols. */
 export function parseStreamLine(protocol: Protocol, line: string): StreamEvent | null {
   const raw = line.trim().replace(/^data:\s*/, "")
-  if (!raw || raw === "[DONE]" || raw.startsWith(":") || raw.startsWith("event:")) return null
+  if (!raw || raw.startsWith(":") || raw.startsWith("event:")) return null
+  if (raw === "[DONE]") return { text: "", activity: false, terminal: true }
   let event: any
   try { event = JSON.parse(raw) } catch { return null }
   if (protocol === "anthropic") {
+    if (event?.type === "message_stop") return { text: "", activity: false, terminal: true }
     if (event?.type === "content_block_delta") {
       if (event.delta?.type === "text_delta") return { text: String(event.delta.text || ""), activity: true }
       return { text: "", activity: true }
@@ -1030,7 +1032,8 @@ export function raceLanes(options: RaceOptions): Promise<RaceResult> {
       full: string
       startedAt: number
       firstAt: number
-      lastActivity: number
+      lastVisibleAt: number
+      reader?: ReadableStreamDefaultReader<Uint8Array>
       thinking: boolean
       finishReason?: string
       usage?: unknown
@@ -1044,6 +1047,7 @@ export function raceLanes(options: RaceOptions): Promise<RaceResult> {
       if (idleTimer) clearInterval(idleTimer)
       if (totalTimer) clearTimeout(totalTimer)
       clearTimeout(firstDeadline)
+      options.signal?.removeEventListener("abort", cancel)
       for (const attempt of running) {
         if (attempt.firstTimer) clearTimeout(attempt.firstTimer)
       }
@@ -1056,6 +1060,7 @@ export function raceLanes(options: RaceOptions): Promise<RaceResult> {
       if (attempt.firstTimer) clearTimeout(attempt.firstTimer)
       running.delete(attempt)
       attempt.controller.abort()
+      void attempt.reader?.cancel().catch(() => undefined)
     }
 
     const finish = (result: RaceResult) => {
@@ -1064,6 +1069,29 @@ export function raceLanes(options: RaceOptions): Promise<RaceResult> {
       cleanup()
       for (const attempt of [...running]) if (attempt !== winner) retire(attempt)
       resolve(result)
+    }
+
+    const finishWinner = (attempt: Attempt, interrupted: boolean) => {
+      finish({
+        lane: attempt.lane,
+        content: attempt.full,
+        finishReason: attempt.finishReason,
+        usage: attempt.usage,
+        interrupted,
+        firstTokenMs: attempt.firstAt - attempt.startedAt,
+        outputLimit: attempt.outputLimit,
+      })
+    }
+
+    const interruptWinner = (attempt: Attempt, stalled: boolean) => {
+      if (settled || attempt.done) return
+      const interrupted = !attempt.finishReason
+      if (stalled && interrupted) {
+        recordFail(attempt.lane, "stalled")
+        rest(attempt.lane, 45_000, "stalled")
+      }
+      retire(attempt)
+      finishWinner(attempt, interrupted)
     }
 
     const fail = () => {
@@ -1082,7 +1110,7 @@ export function raceLanes(options: RaceOptions): Promise<RaceResult> {
       console.warn("[MALIK_MAX] no lane answered", JSON.stringify({ tried: errors.length, errorTypes: [...new Set([...errors, ...recorded].map((reason) => reason.includes("payment-required") ? "billing" : reason.includes("http-403") ? "permission" : "unavailable"))] }))
     }
 
-    const firstDeadline = setTimeout(() => { if (!winner) fail() }, options.firstDeadlineMs)
+    const firstDeadline = setTimeout(() => { if (!winner) fail() }, Math.min(options.firstDeadlineMs, options.totalMs))
 
     const cancel = () => {
       if (settled) return
@@ -1109,10 +1137,7 @@ export function raceLanes(options: RaceOptions): Promise<RaceResult> {
 
     const drop = (attempt: Attempt, reason: string, restMs?: number) => {
       if (attempt.done) return
-      attempt.done = true
-      if (attempt.firstTimer) clearTimeout(attempt.firstTimer)
-      running.delete(attempt)
-      attempt.controller.abort()
+      retire(attempt)
       errors.push(`${attempt.lane.id}: ${reason}`)
       recordFail(attempt.lane, reason)
       if (restMs) rest(attempt.lane, restMs, reason)
@@ -1131,6 +1156,7 @@ export function raceLanes(options: RaceOptions): Promise<RaceResult> {
       if (hedgeTimer) clearTimeout(hedgeTimer)
       clearTimeout(firstDeadline)
       attempt.firstAt = Date.now()
+      attempt.lastVisibleAt = attempt.firstAt
       recordOk(attempt.lane, attempt.firstAt - attempt.startedAt)
       for (const other of [...running]) if (other !== attempt) retire(other)
       console.info("[MALIK_MAX] winner", JSON.stringify({ lane: attempt.lane.id, firstTokenMs: attempt.firstAt - attempt.startedAt, raced: errors.length + running.size }))
@@ -1139,12 +1165,12 @@ export function raceLanes(options: RaceOptions): Promise<RaceResult> {
       attempt.full = first
       if (first) options.onToken(first)
       idleTimer = setInterval(() => {
-        if (Date.now() - attempt.lastActivity > options.idleMs) {
-          rest(attempt.lane, 45_000, "stalled")
-          attempt.controller.abort()
-        }
-      }, 2_000)
-      totalTimer = setTimeout(() => attempt.controller.abort(), Math.max(1_000, options.totalMs - (Date.now() - started)))
+        if (Date.now() - attempt.lastVisibleAt >= options.idleMs) interruptWinner(attempt, true)
+      }, Math.min(2_000, options.idleMs))
+      totalTimer = setTimeout(
+        () => interruptWinner(attempt, false),
+        Math.max(0, options.totalMs - (Date.now() - started)),
+      )
     }
 
     const run = async (attempt: Attempt) => {
@@ -1175,6 +1201,10 @@ export function raceLanes(options: RaceOptions): Promise<RaceResult> {
         if (!attempt.done) drop(attempt, error instanceof Error ? error.message : "network", attempt.controller.signal.aborted ? undefined : 20_000)
         return
       }
+      if (attempt.done) {
+        void response.body?.cancel().catch(() => undefined)
+        return
+      }
       if (!response.ok) {
         const detail = await upstreamError(response)
         const verdict = classifyMaxProviderFailure(response.status, detail)
@@ -1193,13 +1223,11 @@ export function raceLanes(options: RaceOptions): Promise<RaceResult> {
 
       const receive = (text: string, activity: boolean) => {
         if (attempt.done) return
-        if (activity) {
-          attempt.lastActivity = Date.now()
-          if (!text && !attempt.buffer) attempt.thinking = true
-        }
+        if (activity && !text && !attempt.buffer) attempt.thinking = true
         if (!text) return
         const visible = filter.push(text)
         if (!visible) return
+        if (visible.trim()) attempt.lastVisibleAt = Date.now()
         if (winner === attempt) {
           attempt.full += visible
           options.onToken(visible)
@@ -1222,15 +1250,7 @@ export function raceLanes(options: RaceOptions): Promise<RaceResult> {
         if (winner === attempt) {
           attempt.done = true
           running.delete(attempt)
-          finish({
-            lane,
-            content: attempt.full,
-            finishReason: attempt.finishReason,
-            usage: attempt.usage,
-            interrupted,
-            firstTokenMs: attempt.firstAt - attempt.startedAt,
-            outputLimit: attempt.outputLimit,
-          })
+          finishWinner(attempt, interrupted)
           return
         }
         drop(attempt, interrupted ? "interrupted-before-text" : "empty-answer", interrupted ? 20_000 : 2 * 60 * 1000)
@@ -1251,38 +1271,47 @@ export function raceLanes(options: RaceOptions): Promise<RaceResult> {
           return
         }
         const reader = response.body.getReader()
+        attempt.reader = reader
         const decoder = new TextDecoder()
         let pending = ""
         const consume = (line: string) => {
           const event = parseStreamLine(lane.protocol, line)
-          if (!event) return
+          if (!event) return false
           if (event.error) throw new Error(event.error)
           if (event.finishReason) attempt.finishReason = event.finishReason
           if (event.usage) attempt.usage = event.usage
           receive(event.text, event.activity)
+          return event.terminal === true
         }
-        while (true) {
+        while (!attempt.done) {
           const { value, done } = await reader.read()
-          if (done) break
+          if (attempt.done || done) break
           pending += decoder.decode(value, { stream: true })
           const lines = pending.split(/\r?\n/)
           pending = lines.pop() || ""
-          for (const line of lines) consume(line)
-          if (attempt.done) {
-            await reader.cancel().catch(() => undefined)
+          const terminal = lines.some(consume)
+          if (attempt.done) return
+          if (terminal) {
+            end(false)
+            void reader.cancel().catch(() => undefined)
             return
           }
         }
+        if (attempt.done) return
         pending += decoder.decode()
         if (pending.trim()) consume(pending)
         end(false)
       } catch (error) {
         if (attempt.done) return
         if (winner === attempt) {
-          end(true)
+          end(!attempt.finishReason)
+          void attempt.reader?.cancel().catch(() => undefined)
           return
         }
         drop(attempt, error instanceof Error ? error.message : "stream-error", attempt.controller.signal.aborted ? undefined : 20_000)
+      } finally {
+        attempt.reader?.releaseLock()
+        attempt.reader = undefined
       }
     }
 
@@ -1298,7 +1327,7 @@ export function raceLanes(options: RaceOptions): Promise<RaceResult> {
           full: "",
           startedAt: Date.now(),
           firstAt: 0,
-          lastActivity: Date.now(),
+          lastVisibleAt: 0,
           thinking: false,
           firstTimer: null,
           done: false,

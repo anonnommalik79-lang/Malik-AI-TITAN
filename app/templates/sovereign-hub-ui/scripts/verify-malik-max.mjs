@@ -144,6 +144,76 @@ function makeFetcher(log = []) {
 const raceTiming = { hedgeMs: 250, firstTokenMs: 4_000, firstDeadlineMs: 6_000, idleMs: 3_000, totalMs: 20_000 }
 const call = { prompt: "Explain something", systemPrompt: "Be helpful.", maxTokens: 800, codeMode: false, fastMode: false }
 
+function pendingProviderStream(lines, recurringLine) {
+  const encoder = new TextEncoder()
+  let safetyTimer
+  let recurringTimer
+  let cancelled = false
+  const stopTimers = () => {
+    clearTimeout(safetyTimer)
+    clearInterval(recurringTimer)
+  }
+  const response = new Response(new ReadableStream({
+    start(controller) {
+      const enqueue = (line) => controller.enqueue(encoder.encode(line + "\n\n"))
+      lines.forEach(enqueue)
+      if (recurringLine) recurringTimer = setInterval(() => enqueue(recurringLine), 20)
+      // Let the test fail rather than hang when cancellation is broken.
+      safetyTimer = setTimeout(() => { stopTimers(); controller.close() }, 1_000)
+    },
+    cancel() {
+      cancelled = true
+      stopTimers()
+    },
+  }), { headers: { "content-type": "text/event-stream" } })
+  return { response, wasCancelled: () => cancelled }
+}
+
+await check("a finished provider stream releases its reader even when the connection stays open", async () => {
+  const answer = "The provider finished the complete answer."
+  const usage = { prompt_tokens: 7, completion_tokens: 4, total_tokens: 11 }
+  const upstream = pendingProviderStream([
+    openaiChunk(answer),
+    openaiChunk("", "stop"),
+    "data: " + JSON.stringify({ choices: [], usage }),
+    "data: [DONE]",
+  ])
+  const result = await engine.raceLanes({
+    lanes: [lane("finished-open-connection")], call, onToken: () => {}, minFlush: 2,
+    fetcher: async () => upstream.response, ...raceTiming,
+  })
+  assert.equal(result.content, answer)
+  assert.equal(result.interrupted, false)
+  assert.deepEqual(result.usage, usage)
+  assert.equal(upstream.wasCancelled(), true)
+})
+
+await check("hidden reasoning cannot keep a stalled visible answer open", async () => {
+  const prefix = "This is the part that the reader already saw."
+  const reasoning = 'data: {"choices":[{"delta":{"reasoning_content":"working"}}]}'
+  const upstream = pendingProviderStream([openaiChunk(prefix)], reasoning)
+  let visible = ""
+  const result = await engine.raceLanes({
+    lanes: [lane("reasoning-after-prefix")], call, onToken: (chunk) => { visible += chunk }, minFlush: 2,
+    fetcher: async () => upstream.response, ...raceTiming, idleMs: 100,
+  })
+  assert.equal(visible, prefix)
+  assert.equal(result.content, prefix)
+  assert.equal(result.interrupted, true)
+  assert.equal(upstream.wasCancelled(), true)
+})
+
+await check("the total deadline settles a provider that ignores the abort signal", async () => {
+  const upstream = pendingProviderStream([openaiChunk("Beginning. ")], openaiChunk("More text. "))
+  const result = await engine.raceLanes({
+    lanes: [lane("still-writing-at-deadline")], call, onToken: () => {}, minFlush: 2,
+    fetcher: async () => upstream.response, ...raceTiming, idleMs: 500, totalMs: 120,
+  })
+  assert.match(result.content, /^Beginning\./)
+  assert.equal(result.interrupted, true)
+  assert.equal(upstream.wasCancelled(), true)
+})
+
 await check("the first lane to write wins; a slower stronger lane is cancelled, not blamed", async () => {
   const slow = lane("slow-strong", { power: 95 })
   const fast = lane("fast-weaker", { power: 70 })
@@ -361,7 +431,8 @@ await check("every key of every provider becomes a lane, strongest first", async
 await check("streams are parsed line by line for all three protocols", () => {
   assert.equal(engine.parseStreamLine("openai", openaiChunk("hi")).text, "hi")
   assert.equal(engine.parseStreamLine("openai", 'data: {"choices":[{"delta":{"reasoning_content":"x"}}]}').activity, true)
-  assert.equal(engine.parseStreamLine("openai", "data: [DONE]"), null)
+  assert.equal(engine.parseStreamLine("openai", "data: [DONE]").terminal, true)
+  assert.equal(engine.parseStreamLine("anthropic", 'data: {"type":"message_stop"}').terminal, true)
   assert.equal(engine.parseStreamLine("google", `data: ${JSON.stringify({ candidates: [{ content: { parts: [{ text: "a", thought: true }, { text: "b" }] }, finishReason: "MAX_TOKENS" }] })}`).text, "b")
   assert.equal(engine.parseStreamLine("anthropic", `data: ${JSON.stringify({ type: "message_delta", delta: { stop_reason: "max_tokens" } })}`).finishReason, "max_tokens")
 })
