@@ -1,5 +1,6 @@
 import assert from "node:assert/strict"
 import fs from "node:fs"
+import ts from "typescript"
 
 let failures = 0
 function check(name, fn) {
@@ -182,6 +183,28 @@ check("one complete answer, no duplicate A/B answer cards", () => {
   assert.doesNotMatch(runtime, /function (?:addDualAnswer|focusedClone|makeCandidate)\(/, "no A/B candidates may be created")
   assert.doesNotMatch(runtime, /markdown\.cloneNode\(|const DUAL_COPY/, "do not clone or shorten the finished answer")
   assert.doesNotMatch(cognitiveCss, /malik-dual-/, "legacy double-answer CSS must not hide the original response")
+})
+
+check("mnemonic and test codes get direct UI treatment, not programming mode", () => {
+  const source = fs.readFileSync("components/sovereign/MalikCognitiveResponseRuntime.tsx", "utf8")
+  const js = ts.transpileModule(source, {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+  }).outputText
+  const mod = { exports: {} }
+  new Function("require", "module", "exports", js)((name) => {
+    if (name === "react") return { useEffect() {} }
+    throw new Error("Unexpected import " + name)
+  }, mod, mod.exports)
+  const classify = mod.exports.classifyRequest
+  assert.equal(typeof classify, "function")
+  for (const message of [
+    "Запомни проверочный код: ALPHA927. Ответь только: принято.",
+    "Какой проверочный код я дал?",
+    "Напомни код доступа",
+  ]) assert.equal(classify(message), "direct", message)
+  for (const message of ["Напиши код на Python", "Исправь JavaScript код"]) {
+    assert.equal(classify(message) === "direct", false, message)
+  }
 })
 
 console.log(failures ? `\n${failures} check(s) failed\n` : "\nchat monochrome: all checks passed\n")
