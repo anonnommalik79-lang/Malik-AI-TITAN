@@ -67,7 +67,7 @@ function localeFor(text: string): CognitiveLocale {
   return "en"
 }
 
-function classifyRequest(raw: string): CognitiveMode {
+export function classifyRequest(raw: string): CognitiveMode {
   const text = String(raw || "").toLowerCase().trim()
   if (!text) return "direct"
   // A mnemonic/security/test code is plain chat context, not software.
