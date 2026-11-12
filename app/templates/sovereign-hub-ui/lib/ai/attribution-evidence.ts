@@ -13,6 +13,7 @@ export type AttributionSource = {
   authority?: string
 }
 export type AttributionKind = "identity" | "founding-date" | "biographical-date"
+import { deniesPremise, evidenceDigest, keepEvidencedSentences } from "./premise-check"
 
 const ROLE = /(?:основател|основа[лтн]|создал|создат|организатор|лидер|руковод|возглав|глав[ауы]|предводител|founder|founded|created|leader|headed|led\b|басшы|негізін\s+қал|жетекш)/iu
 const CREATION = /(?:основа[нлт]|созда[нлт]|образова|организова|возник|появил|начал.{0,12}существ|found(?:ed)?|establish|formed|created|құрылған|құрды)/iu
@@ -156,7 +157,21 @@ export function gateAttributionAnswer(input: {
   // A search hit about a different company is not evidence about this one.
   const usable = input.sources.filter(source => hostOf(source) && textOf(source).length >= 50
     && (!subject || [textOf(source), source.url || ""].some(text => text.toLowerCase().includes(subject))))
+  // «Когда X создал Y?» where Y never happened: the denial is the answer. Its
+  // context years must still appear in the evidence; sentences with other
+  // years are dropped rather than the whole answer. With no evidence at all
+  // only year-free sentences survive.
+  if (kind !== "identity" && deniesPremise(input.answer)) {
+    const kept = keepEvidencedSentences(input.answer, usable.map(textOf).join("\n"))
+    if (kept) return { content: kept, withheld: false, reason: kept === input.answer.trim() ? "premise-denied" : "premise-denied-trimmed" }
+  }
   if (!usable.length) return { content: attributionUnavailable(kind, "missing"), withheld: true, reason: "no-sources" }
+
+  // A withheld claim still leaves the person with what the pages do say.
+  const unsupported = (reason: string) => ({
+    content: [attributionUnavailable(kind, "unsupported"), evidenceDigest(usable)].filter(Boolean).join("\n\n"),
+    withheld: true, reason,
+  })
 
   const answer = input.answer.slice(0, 2400)
   const names = attributedPeople(answer, input.question)
@@ -165,12 +180,12 @@ export function gateAttributionAnswer(input: {
   if (kind === "identity" && !names.length) {
     return unsure
       ? { content: input.answer, withheld: false }
-      : { content: attributionUnavailable(kind, "unsupported"), withheld: true, reason: "no-full-name" }
+      : unsupported("no-full-name")
   }
   if (kind !== "identity" && !years.length) {
     return unsure
       ? { content: input.answer, withheld: false }
-      : { content: attributionUnavailable(kind, "unsupported"), withheld: true, reason: "no-year" }
+      : unsupported("no-year")
   }
 
   const supportedNames = names.filter(name => independentlySupported(usable, source => namedRoleEvidence(source,name)))
@@ -181,7 +196,7 @@ export function gateAttributionAnswer(input: {
         ".\n\nДругие упомянутые имена пока не подтверждены достаточными источниками. Полный список требует проверки.",
       withheld: true, reason: "partial-identity",
     }
-    return { content: attributionUnavailable(kind,"unsupported"), withheld: true, reason:"unsupported-name" }
+    return unsupported("unsupported-name")
   }
   for (const year of years) {
     const supported = independentlySupported(usable, source => {
@@ -193,7 +208,7 @@ export function gateAttributionAnswer(input: {
       return Boolean(subject) && textOf(source).split(/[.!?;]+(?:\s+|$)|\n+/u).some(sentence =>
         sentence.includes(year) && sentence.toLowerCase().includes(subject) && CREATION.test(sentence))
     })
-    if (!supported) return { content: attributionUnavailable(kind, "unsupported"), withheld: true, reason: "unsupported-year" }
+    if (!supported) return unsupported("unsupported-year")
   }
   return { content: input.answer, withheld: false }
 }
