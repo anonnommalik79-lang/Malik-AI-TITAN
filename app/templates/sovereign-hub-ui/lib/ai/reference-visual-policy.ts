@@ -219,7 +219,11 @@ function contextualVisualSubject(input: string): { topic: string; person: boolea
 /** Evaluate every explanatory answer; never require the user to ask for photos. */
 export function planReferenceVisuals(question: string, previousQuestion = "", hasAttachment = false, previousAnswer = ""): ReferenceVisualPlan | null {
   // «а щя скоко оценивается хиггсфиелд» names its subject like any other question.
-  const raw = normalizeColloquial(String(question || "").trim()) || String(question || "").trim()
+  const original = String(question || "").trim()
+  // Colloquial normalization may change imperative phrasing. Match the user's
+  // original format-only instruction before planning any reference photo.
+  if (FORMAT_ONLY_ANSWER.test(original)) return null
+  const raw = normalizeColloquial(original) || original
   if (!raw || raw.length > 80_000 || hasAttachment || NO_VISUAL.test(raw)) return null
   const domain = resolveDomainPlan({ prompt: raw, messages: previousQuestion ? [{ role: "user", content: previousQuestion }, { role: "assistant", content: previousAnswer }] : [] })
   if (domain.delivery !== "text" || domain.presentation.tables === "off" || ["translate", "summarize", "modify", "calculate", "converse"].includes(domain.goal)
