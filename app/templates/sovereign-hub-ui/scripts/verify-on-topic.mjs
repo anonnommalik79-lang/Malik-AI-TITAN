@@ -89,7 +89,7 @@ check("real coding requests are still code", () => {
 })
 
 check("remembered codes use fast chat, real code still routes to programming", () => {
-  for (const prompt of ["Запомни код теста: ОРБИТА-74. Ответь одним словом.", "Какой код я дал?", "Напомни код доступа", "What was the code?"]) {
+  for (const prompt of ["Запомни код теста: ОРБИТА-74. Ответь одним словом.", "Запомни проверочный код: ALPHA927. Ответь только: принято.", "Какой проверочный код я дал?", "Какой код я дал?", "Напомни код доступа", "What was the code?"]) {
     assert.equal(isCodeRequest(prompt), false, prompt)
     assert.equal(isFastChatRequest(prompt), true, prompt)
   }
