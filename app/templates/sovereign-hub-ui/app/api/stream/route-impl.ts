@@ -1,3 +1,4 @@
+import { enterPremiumAccess } from "@/lib/server/claude-premium"
 import { asPlainText, malikGodAnswer, malikRescueAnswer, gatherSourcesForPrompt, sourceContext, type PreparedLiveEvidence } from "@/lib/malik-god-router"
 import { chatAnswerDeadline, withinChatDeadline } from "@/lib/ai/chat-deadline"
 import { withSiteCinemaInAnswer } from "@/lib/website/cinema"
@@ -1507,6 +1508,8 @@ async function handlePOST(request: Request) {
     const selection = await resolveStrictMalikSelection(request, body)
     if (routePetroleum(coderPrompt(body), body?.selectedSkillId).engine === "petroleum") { body.isProjectRequest = false; body.forceCanvas = false; body.responseMode = "chat"; body.isCodeRequest = false }
     const entitlement = selection?.entitlement ?? await resolveRequestEntitlement(request)
+    // MalikLLM MAX answers owner and PRO accounts with Claude; it reads the plan from here.
+    enterPremiumAccess(entitlement.plan)
     // A stack-less new site is authored by the selected model in chat.
     // Only an explicit framework/backend/package needs the checked ZIP
     // builder. Existing Forge plan edits retain their original update path.

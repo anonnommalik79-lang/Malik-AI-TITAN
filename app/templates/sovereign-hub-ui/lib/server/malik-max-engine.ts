@@ -1,3 +1,5 @@
+import Anthropic from "@anthropic-ai/sdk"
+import { claudePremiumAllowed, claudePremiumModel, runClaudePremium } from "./claude-premium"
 import { missingBriefItems, briefMissingMarker, briefNeedsDeep } from "@/lib/ai/brief-quality"
 import { isModelLeaderboardRequest } from "@/lib/ai/freshness-intent"
 import { assessAnswerCompletion, hasOpenFence, type AnswerIncompleteReason } from "@/lib/ai/answer-completion"
@@ -726,6 +728,126 @@ type CallInput = {
   publicLabel?: string
 }
 
+/** The engine's chat messages in Claude's shape: one system text, user/assistant turns. */
+export function toClaudeMessages(messages: ProviderMessage[]): { system: string; turns: Anthropic.Beta.BetaMessageParam[] } {
+  const system = messages.filter((message) => message.role === "system").map((message) => contentPart(message.content)).join("\n\n")
+  const turns: Anthropic.Beta.BetaMessageParam[] = []
+  for (const message of messages) {
+    if (message.role === "system") continue
+    const role = message.role === "assistant" ? "assistant" : "user"
+    const content: Anthropic.Beta.BetaContentBlockParam[] = typeof message.content === "string"
+      ? [{ type: "text", text: message.content }]
+      : message.content.flatMap((part): Anthropic.Beta.BetaContentBlockParam[] => {
+          if (part.type === "text") return part.text ? [{ type: "text", text: part.text }] : []
+          const match = part.image_url.url.match(/^data:(image\/(?:png|jpeg|gif|webp));base64,(.+)$/)
+          return [match
+            ? { type: "image", source: { type: "base64", media_type: match[1] as "image/png", data: match[2] } }
+            : { type: "image", source: { type: "url", url: part.image_url.url } }]
+        })
+    if (!content.length || content.every((block) => block.type === "text" && !block.text.trim())) continue
+    turns.push({ role, content })
+  }
+  // A conversation starts with the person.
+  while (turns.length && turns[0].role !== "user") turns.shift()
+  return { system, turns }
+}
+
+const CLAUDE_REFUSAL_TEXT = "С этим запросом я помочь не могу. Если задача другая, опишите её подробнее."
+
+/**
+ * Owner and PRO answers come from Claude. Returns null when Claude failed
+ * before writing anything, so the free pool answers instead; a partial answer
+ * is returned as interrupted and the continuation loop finishes it. A refusal
+ * is final: it is never re-asked of a model without Claude's safeguards.
+ */
+async function runPremiumAnswer(call: CallInput, options: {
+  emit: (chunk: string) => void
+  budget: number
+  codeMode: boolean
+  quickPath: boolean
+  timeLeft: () => number
+  signal?: AbortSignal
+  activity?: ExecutionReporter
+  run?: typeof runClaudePremium
+}): Promise<RaceResult | null> {
+  const model = claudePremiumModel()
+  const lane: MaxLane = {
+    id: `claude-premium:${model}`,
+    provider: "anthropic",
+    providerModel: model,
+    label: model,
+    protocol: "anthropic",
+    keyIndex: 0,
+    key: "",
+    def: pseudoDefinition(`max:anthropic:${model}`, model, "anthropic", model, true),
+    power: lanePower(model),
+    vision: true,
+  }
+  const { system, turns } = toClaudeMessages(buildMessages({
+    model: lane.def,
+    prompt: call.prompt,
+    systemPrompt: call.systemPrompt,
+    history: call.history,
+    attachments: call.attachments,
+    publicModelLabel: call.publicLabel || "MalikLLM MAX",
+    fastMode: call.fastMode,
+    taskPrompt: call.taskPrompt,
+  }))
+  if (!turns.length) return null
+  // Thinking counts against max_tokens, so even a short answer gets room.
+  const maxTokens = Math.max(1, Math.min(options.budget, options.codeMode ? 32_000 : options.quickPath ? 4_000 : 16_000))
+  const startedAt = Date.now()
+  let firstAt = 0
+  let partial = ""
+  const step = options.activity?.start("Отвечает Claude", "model", "claude.premium", { model })
+  try {
+    const answer = await (options.run || runClaudePremium)({
+      system,
+      messages: turns,
+      maxTokens,
+      effort: options.codeMode ? "high" : options.quickPath ? "low" : "medium",
+      onText: (delta) => {
+        if (!firstAt) firstAt = Date.now()
+        partial += delta
+        options.emit(delta)
+      },
+      signal: options.signal,
+      timeoutMs: Math.max(5_000, options.timeLeft()),
+    })
+    console.info("[MALIK_MAX] claude", JSON.stringify({
+      model: answer.model, stop: answer.stopReason,
+      input: answer.usage.input_tokens, output: answer.usage.output_tokens,
+      cacheRead: answer.usage.cache_read_input_tokens, cacheWrite: answer.usage.cache_creation_input_tokens,
+    }))
+    if (answer.refused) {
+      if (!partial) options.emit(CLAUDE_REFUSAL_TEXT)
+      options.activity?.finish(step, { refused: true }, "completed")
+      return { lane: { ...lane, providerModel: answer.model }, content: partial || CLAUDE_REFUSAL_TEXT, finishReason: "stop", usage: answer.usage, interrupted: false, firstTokenMs: firstAt ? firstAt - startedAt : 0, outputLimit: maxTokens }
+    }
+    if (!partial.trim()) {
+      options.activity?.finish(step, undefined, "failed", "Claude не вернул текст")
+      return null
+    }
+    options.activity?.finish(step, { characters: partial.length }, "completed")
+    return {
+      lane: { ...lane, providerModel: answer.model },
+      content: partial,
+      finishReason: answer.stopReason === "max_tokens" ? "length" : "stop",
+      usage: answer.usage,
+      interrupted: false,
+      firstTokenMs: firstAt ? firstAt - startedAt : 0,
+      outputLimit: maxTokens,
+    }
+  } catch (error) {
+    if (options.signal?.aborted) throw error
+    const status = error instanceof Anthropic.APIError ? error.status : undefined
+    console.warn("[MALIK_MAX] claude failed", JSON.stringify({ status: status ?? null, name: error instanceof Error ? error.name : "error", written: partial.length }))
+    options.activity?.finish(step, undefined, "failed", "Claude недоступен, отвечает резервная модель")
+    if (!partial.trim()) return null
+    return { lane, content: partial, finishReason: "error", interrupted: true, firstTokenMs: firstAt ? firstAt - startedAt : 0, outputLimit: maxTokens }
+  }
+}
+
 function anthropicBody(messages: ProviderMessage[], model: string, maxTokens: number, temperature: number) {
   const system = messages.filter((message) => message.role === "system").map((message) => contentPart(message.content)).join("\n\n")
   const turns = messages.filter((message) => message.role !== "system").map((message) => ({
@@ -1435,7 +1557,7 @@ export type MaxInput = {
   wallMs?: number
 }
 
-export async function runMalikMax(input: MaxInput, deps: { fetcher?: typeof fetch; lanes?: MaxLane[] } = {}): Promise<StrictMalikResult> {
+export async function runMalikMax(input: MaxInput, deps: { fetcher?: typeof fetch; lanes?: MaxLane[]; claude?: typeof runClaudePremium } = {}): Promise<StrictMalikResult> {
   const started = Date.now()
   const taskPrompt = input.taskPrompt || input.prompt
   const resumed = String(input.resumeFrom || "")
@@ -1452,7 +1574,7 @@ export async function runMalikMax(input: MaxInput, deps: { fetcher?: typeof fetc
   const responsiveLanes = quickPath
     ? [...lanes].sort((a, b) => Number(FAST_PROVIDERS.has(b.provider)) - Number(FAST_PROVIDERS.has(a.provider)))
     : lanes
-  if (!lanes.length) {
+  if (!lanes.length && !claudePremiumAllowed()) {
     throw new MalikModelRouteError(
       "MAX_NOT_CONFIGURED",
       needsVision ? "MalikLLM MAX: нет модели с поддержкой изображений." : "MalikLLM MAX: не настроен ни один API-ключ модели.",
@@ -1533,7 +1655,11 @@ export async function runMalikMax(input: MaxInput, deps: { fetcher?: typeof fetc
   // line (59 lines in 237 s, then «по лимиту времени»). It streams from the
   // strongest lane instead, and unfinished code is carried on automatically.
   const largeCode = codeMode && budget >= 6_000
-  const panel = !resumed && !input.wallMs && !deps.lanes && !fastMode && !microCode && !largeCode && budget >= 2_500
+  // Owner and PRO accounts: Claude answers (lib/server/claude-premium.ts).
+  const premium = !resumed && (deps.claude || !deps.lanes) && claudePremiumAllowed()
+    ? await runPremiumAnswer(base, { emit, budget, codeMode, quickPath, timeLeft, signal: input.signal, activity: input.activity, run: deps.claude })
+    : null
+  const panel = !premium && !resumed && !input.wallMs && !deps.lanes && !fastMode && !microCode && !largeCode && budget >= 2_500
     ? await runExpertPanel({
         lanes, call: base, totalMs: Math.max(0, timeLeft() - 17_000),
         codeMode, fetcher: deps.fetcher, signal: input.signal, activity: input.activity,
@@ -1541,6 +1667,8 @@ export async function runMalikMax(input: MaxInput, deps: { fetcher?: typeof fetc
     : null
   let result: RaceResult = resumed
     ? { lane: lanes[0], content: resumed, finishReason: "length", interrupted: false, firstTokenMs: 0 }
+    : premium
+      ? premium
     : panel
       ? (emit(panel.content), panel)
       : await (deps.lanes || quickPath ? raceLanes : raceStrongFirst)({
