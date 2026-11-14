@@ -41,6 +41,7 @@ jobs:
           cache-dependency-path: app/templates/sovereign-hub-ui/package-lock.json
 
       - name: Install
+        id: dependencies
         run: npm ci --legacy-peer-deps
 
       - name: Verify short-chat token budgets and exact provider usage
@@ -86,12 +87,14 @@ jobs:
         run: npm run test:live-intelligence
 
       - name: Typecheck
+        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
         run: npm run typecheck
 
       - name: Work repository runtime and public GitHub boundary (fixtures only)
         run: npm run test:work-runtime && npm run test:work-github-snapshot
 
       - name: Production build
+        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
         run: npm run clean && npm run build
 
       - name: Verify Malik model registry

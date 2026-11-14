@@ -1,0 +1,69 @@
+name: Olympus chat browser check
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'app/templates/sovereign-hub-ui/scripts/verify-chat-streaming-live.mjs'
+      - 'app/templates/sovereign-hub-ui/scripts/verify-olympus-http.mjs'
+      - '.github/workflows/olympus-chat-browser.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'app/templates/sovereign-hub-ui/scripts/verify-chat-streaming-live.mjs'
+      - 'app/templates/sovereign-hub-ui/scripts/verify-olympus-http.mjs'
+      - '.github/workflows/olympus-chat-browser.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  chromium:
+    runs-on: ubuntu-latest
+    timeout-minutes: 24
+    defaults:
+      run:
+        working-directory: app/templates/sovereign-hub-ui
+    env:
+      NEXT_TELEMETRY_DISABLED: '1'
+      WORKOS_COOKIE_PASSWORD: 'olympus-browser-fixture-cookie-password-only'
+      NEXT_PUBLIC_WORKOS_REDIRECT_URI: 'http://127.0.0.1:3017/callback'
+      MALIK_QA_BASE_URL: 'http://127.0.0.1:3017'
+      MALIK_QA_WIDTHS: '390,1440'
+      MALIK_QA_OUTPUT: '.data/olympus-browser'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/templates/sovereign-hub-ui/package-lock.json
+      - run: npm ci --legacy-peer-deps
+      - name: Production bundle for browser tests
+        run: npx --no-install next build
+      - run: npm install --no-save --legacy-peer-deps playwright@1.58.0
+      - run: npx playwright install --with-deps chromium
+      - name: Run local chat in Chromium
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$MALIK_QA_OUTPUT"
+          node scripts/verify-olympus-http.mjs --serve > "$MALIK_QA_OUTPUT/provider-fixture.log" 2>&1 &
+          fixture=$!
+          MISTRAL_API_KEY=olympus-fixture-local-only MISTRAL_BASE_URL=http://127.0.0.1:3018/v1 \
+            node node_modules/next/dist/bin/next start --hostname 127.0.0.1 --port 3017 > "$MALIK_QA_OUTPUT/app.log" 2>&1 &
+          app=$!
+          trap 'kill "$app" "$fixture" 2>/dev/null || true' EXIT
+          for i in {1..40}; do
+            if curl -fsS "$MALIK_QA_BASE_URL/api/health" -o /dev/null; then break; fi
+            sleep 2
+          done
+          curl -fsS "$MALIK_QA_BASE_URL/api/health" -o /dev/null
+          node scripts/verify-olympus-http.mjs
+          node scripts/verify-chat-streaming-live.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: olympus-chat-browser
+          path: app/templates/sovereign-hub-ui/.data/olympus-browser/
+          if-no-files-found: ignore
