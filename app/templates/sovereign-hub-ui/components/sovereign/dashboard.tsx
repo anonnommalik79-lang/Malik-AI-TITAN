@@ -209,7 +209,7 @@ import { isStoredGeneratedImageUrl, persistGeneratedImageReference, persistGener
 import type { MalikMessageResearch, MalikResearchProgress, MalikResearchStep, MalikWebSource } from "@/lib/ai/web-research-types"
 import { normalizeWebSource, upsertWebSource } from "@/lib/ai/source-evidence"
 import { snapshotChatAnswer, type ChatAnswerVersion } from "@/lib/ai/chat-answer-version"
-import { readChatArchive, type ChatArchive } from "@/lib/ai/chat-archive"
+import { readChatArchive, type ChatArchive } from "@/lib/ai/account-chat-state-merge"
 import { normalizeFactAudit } from "@/lib/ai/fact-audit"
 import { extractSlideCount, isPresentationCreationRequest, presentationTopic } from "@/lib/presentations/deck"
 import { routeWorkRequest } from "@/lib/work/orchestrator"

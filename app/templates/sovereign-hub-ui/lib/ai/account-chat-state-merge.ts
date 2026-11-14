@@ -1,5 +1,3 @@
-import { readChatArchive } from "./chat-archive.ts"
-
 /** Shared, deterministic conflict resolution for account chat history.
  * A newer snapshot may add chats/messages, while explicit tombstones keep
  * deleted chats deleted. This never invokes a provider or a network request.
@@ -8,6 +6,14 @@ type JsonRecord = Record<string, unknown>
 const record = (v: unknown): JsonRecord => v && typeof v === "object" && !Array.isArray(v) ? v as JsonRecord : {}
 const rows = (v: unknown): JsonRecord[] => Array.isArray(v) ? v.filter(x => x && typeof x === "object" && !Array.isArray(x)) : []
 const validId = (v: unknown): v is string => typeof v === "string" && v.length > 0 && v.length <= 200
+
+export type ChatArchive = { archived: boolean; changedAt: number }
+
+export function readChatArchive(value: unknown): ChatArchive | undefined {
+  const { archived, changedAt } = record(value)
+  return typeof archived === "boolean" && typeof changedAt === "number" && Number.isSafeInteger(changedAt) && changedAt > 0
+    ? { archived, changedAt } : undefined
+}
 
 function uniqueMessages(remote: JsonRecord[], incoming: JsonRecord[]): JsonRecord[] {
   const byId = new Map<string, JsonRecord>()
