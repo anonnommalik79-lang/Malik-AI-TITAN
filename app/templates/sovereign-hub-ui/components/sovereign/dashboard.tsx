@@ -7216,6 +7216,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
         mode: isProjReq ? "pro" : isCodeReq ? "code" : "fast",
         responseMode: mode,
         model: selectedModelId,
+        chatId, // Stable across turns; Flash must not mix Google AI Mode sessions.
         forceCanvas: isProjReq,
         isProjectRequest: isProjReq,
         isCodeRequest: isCodeReq,
