@@ -46,5 +46,5 @@ test("Full text and cited sources enter the standard MALIKII chat response pipel
   assert.match(stream, /const answer = await runMalikFlashBrowser/)
   assert.match(stream, /onToken\?\.\(answer\.content\)/)
   assert.match(bridge, /return \{\s*content: verified\.answer/)
-  assert.match(bridge, /provider: "google-ai-mode-browser"/)
+  assert.match(bridge, /provider: "malik-flash"/)
 })
