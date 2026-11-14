@@ -21,12 +21,12 @@ export function imageSignature(candidate) {
 export function newImageCandidates(previous, current) {
   const before = new Set((previous || []).map(imageSignature));
   return (current || [])
-    .filter(item => item && !before.has(imageSignature(item)) && item.width * item.height >= MIN_DISPLAY_AREA)
+    .filter(item => item && !item.isExternalLink && !before.has(imageSignature(item)) && item.width * item.height >= MIN_DISPLAY_AREA)
     .sort((a, b) => scoreImage(b) - scoreImage(a));
 }
 
 function scoreImage(item) {
-  const hint = /generated|created|result|output|сгенерирован|создан|результат|готово/i.test(item.alt || "") ? 1_000_000 : 0;
+  const hint = /generated|created|result|output|сгенерирован|создан|результат|готово|сурет дайын/i.test([item.alt, item.context].filter(Boolean).join(" ")) ? 1_000_000 : 0;
   return hint + (Math.min(item.width * item.height, 1_000_000) * Math.min(item.naturalWidth * item.naturalHeight, 4_000_000)) / 2_000_000;
 }
 
@@ -46,6 +46,18 @@ export async function readVisibleImages(page) {
         index: i,
         src: el.currentSrc || el.src,
         alt: el.getAttribute("alt") || el.getAttribute("aria-label") || "",
+        context: [
+          el.closest("figure")?.innerText || "",
+          el.parentElement?.parentElement?.innerText || "",
+        ].join(" ").slice(0, 240),
+        // Search-result recommendation thumbnails often lead to third-party
+        // websites; they must not be returned as newly generated artwork.
+        isExternalLink: (() => {
+          const href = el.closest("a[href]")?.href;
+          if (!href) return false;
+          try { const u = new URL(href); return !/(^|\.)google\.[a-z.]+$/i.test(u.hostname) && !u.hostname.endsWith(".googleusercontent.com"); }
+          catch { return false; }
+        })(),
         width: Math.round(rect.width),
         height: Math.round(rect.height),
         naturalWidth: el.naturalWidth,
