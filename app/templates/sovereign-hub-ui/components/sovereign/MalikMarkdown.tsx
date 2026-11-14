@@ -181,9 +181,8 @@ function ProjectArtifactLink({ href, label }: { href: string; label: string }) {
 }
 
 /**
- * A Markdown link. In a web answer it opens only pages on the sites its
- * sources are on - an invented address stays plain text - and an outside
- * page is marked with ↗ like ChatGPT's links.
+ * A Markdown link in a web answer opens the exact evidence page. A model
+ * cannot turn another page on the same host into an active citation.
  */
 function MarkdownLink({ href, label }: { href: string; label: string }) {
   const sources = useContext(CitationContext)

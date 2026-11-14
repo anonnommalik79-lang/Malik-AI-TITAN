@@ -178,7 +178,7 @@ check("a marker without a matching source disappears; without sources text stays
   const plain = render("Список [1] остаётся.")
   assert(plain.includes("[1]"))
   // A Markdown link is still a link, not a citation.
-  const link = render("[1](https://example.com/x)", { citations: [{ url: "https://example.com/a" }] })
+  const link = render("[1](https://example.com/x)", { citations: [{ url: "https://example.com/x" }] })
   assert(/class="malik-md-link[^"]*"/.test(link) && !link.includes("malik-md-cite"))
 })
 const CARD_SOURCES = [
@@ -218,8 +218,9 @@ check("hero, options, dates and actions render as panels and buttons", () => {
   assert(options.includes("Последний день подачи") && options.includes("2 ноября 2026") && options.includes("$30 млн"))
   const dates = render(cardsFence({ version: 1, type: "dates", title: "Supernova", items: [{ label: "Дедлайн", value: "1 мая 2027" }, { label: "Финал", value: "8 июня 2027" }] }))
   assert(dates.includes("malik-card-dates is-2") && dates.includes("1 мая 2027"))
-  const actions = render(cardsFence({ version: 1, type: "actions", items: [{ label: "Заявка Supernova", url: "https://www.gitex.com/kazakhstan/supernova", primary: true }, { label: "Фейк", url: "https://evil.example/" }] }), { citations: CARD_SOURCES })
-  assert(actions.includes("Заявка Supernova") && actions.includes("is-primary is-inline") && !actions.includes("evil.example"))
+  const application = "https://www.gitex.com/kazakhstan/supernova"
+  const actions = render(cardsFence({ version: 1, type: "actions", items: [{ label: "Заявка Supernova", url: application, primary: true }, { label: "Фейк", url: "https://www.gitex.com/kazakhstan/nonexistent" }] }), { citations: [...CARD_SOURCES, { url: application }] })
+  assert(actions.includes("Заявка Supernova") && actions.includes("is-primary is-inline") && !actions.includes("nonexistent"))
 })
 check("without web sources a card keeps only front-page links", () => {
   const html = render(cardsFence({ version: 1, type: "cards", items: [{ title: "Python", url: "https://www.python.org/" }, { title: "Deep page", url: "https://www.python.org/made/up/page" }] }))
@@ -229,10 +230,10 @@ check("a half-written card fence shows a status while streaming and nothing raw"
   const html = render("Ответ.\n\n```malik-cards\n{\"version\":1,\"type\":\"cards\",\"items\":[{\"title\":\"Gr", { visualContext: { question: "события", streaming: true } })
   assert(html.includes("Собираю карточки") && !html.includes("&quot;title&quot;"))
 })
-check("in a web answer an outside link gets ↗, an invented one stays plain text", () => {
-  const html = render("Сайт [Astana Hub](https://astanahub.com/ru/) и [выдуманный](https://fake.example/x).", { citations: CARD_SOURCES })
+check("in a web answer an evidence link gets ↗, an invented same-domain page stays plain text", () => {
+  const html = render("Сайт [Astana Hub](https://astanahub.com/ru/event/alem-battle) и [выдуманный](https://astanahub.com/ru/event/made-up).", { citations: CARD_SOURCES })
   assert(html.includes('class="malik-md-link is-external"') && html.includes("↗"))
-  assert(!html.includes("fake.example") && html.includes("выдуманный"))
+  assert(!html.includes("made-up") && html.includes("выдуманный"))
 })
 check("a citation pointing at a non-web URL is never linked", () => {
   const html = render("Факт [1].", { citations: [{ url: "javascript:alert(1)", domain: "x" }] })
