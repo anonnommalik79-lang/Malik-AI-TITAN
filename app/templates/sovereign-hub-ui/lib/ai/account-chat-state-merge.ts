@@ -1,4 +1,4 @@
-import { readChatArchive } from "./chat-archive"
+import { readChatArchive } from "./chat-archive.ts"
 
 /** Shared, deterministic conflict resolution for account chat history.
  * A newer snapshot may add chats/messages, while explicit tombstones keep

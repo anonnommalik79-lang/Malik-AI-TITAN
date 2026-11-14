@@ -26,6 +26,7 @@ jobs:
         working-directory: app/templates/sovereign-hub-ui
     env:
       NEXT_TELEMETRY_DISABLED: '1'
+      WORKOS_CLIENT_ID: 'client_olympus_fixture_only'
       WORKOS_COOKIE_PASSWORD: 'olympus-browser-fixture-cookie-password-only'
       NEXT_PUBLIC_WORKOS_REDIRECT_URI: 'http://127.0.0.1:3017/callback'
       MALIK_QA_BASE_URL: 'http://127.0.0.1:3017'
@@ -54,11 +55,14 @@ jobs:
             node node_modules/next/dist/bin/next start --hostname 127.0.0.1 --port 3017 > "$MALIK_QA_OUTPUT/app.log" 2>&1 &
           app=$!
           trap 'kill "$app" "$fixture" 2>/dev/null || true' EXIT
-          for i in {1..40}; do
+          for i in {1..20}; do
             if curl -fsS "$MALIK_QA_BASE_URL/api/health" -o /dev/null; then break; fi
             sleep 2
           done
-          curl -fsS "$MALIK_QA_BASE_URL/api/health" -o /dev/null
+          if ! curl -fsS "$MALIK_QA_BASE_URL/api/health" -o /dev/null; then
+            tail -30 "$MALIK_QA_OUTPUT/app.log"
+            exit 1
+          fi
           node scripts/verify-olympus-http.mjs
           node scripts/verify-chat-streaming-live.mjs
       - uses: actions/upload-artifact@v4
