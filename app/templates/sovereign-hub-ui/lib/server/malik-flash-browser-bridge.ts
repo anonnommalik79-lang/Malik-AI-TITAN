@@ -80,7 +80,9 @@ export async function runMalikFlashBrowser(input: {
     throw new FlashBrowserError("FLASH_WORKER_URL_INVALID", "Для браузерного сервиса требуется защищённое соединение.")
   if (!input.chatId || !input.userId) throw new FlashBrowserError("FLASH_SESSION_MISSING", "Неизвестен пользователь или идентификатор чата.")
 
-  const images = (input.images || []).filter((item) => item && typeof item.base64 === "string")
+  const providedImages = input.images || []
+  const images = providedImages.filter((item) => item && typeof item.base64 === "string")
+  if (providedImages.length !== images.length) throw new FlashBrowserError("FLASH_IMAGE_MISSING", "Одна или несколько фотографий не были переданы в браузерный сервис.")
   if (images.length > 4 || images.some((image) =>
     !/^image\/(?:png|jpeg|webp)$/i.test(image.mime || "") ||
     !/^[a-zA-Z0-9+/]+={0,2}$/.test(image.base64 || "") ||
