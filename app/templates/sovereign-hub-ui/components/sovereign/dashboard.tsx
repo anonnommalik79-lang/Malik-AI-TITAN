@@ -6880,7 +6880,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
             ? `${inlineMediaApiPrompt}\n\nVisual style: ${options.imageStyle}`
             : inlineMediaApiPrompt,
           operation: editingImage ? "edit" : "generate",
-          chatModelId: selectedModelId, // Keep Flash image routing inside the native MALIKII media UI.
+          chatModelId: inlineMediaKind === "image" ? selectedModelId : undefined, // Keep media video unaffected.
           chatId, // Persistent per-chat browser conversation, never client-provided account ownership.
           // The picture must match the line the user was just shown.
           understood: understood || undefined,
