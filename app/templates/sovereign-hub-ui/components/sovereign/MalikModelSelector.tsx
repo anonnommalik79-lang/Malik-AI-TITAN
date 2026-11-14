@@ -59,12 +59,13 @@ function brandFor(model: MalikModelDefinition): BrandIcon {
 function ModelBrandIcon({ model, compact = false }: { model: MalikModelDefinition; compact?: boolean }) {
   const [sourceIndex, setSourceIndex] = useState(0)
   const brand = brandFor(model)
+  const iconLabel = model.id === "malik-flash" ? "MalikLLM Flash · official Malik AI icon" : brand.label
   useEffect(() => setSourceIndex(0), [model.id])
   const source = brand.urls[sourceIndex]
   return (
-    <span className={cn("malik-model-selector__brand", compact && "is-compact")} aria-label={brand.label} title={brand.label}>
+    <span className={cn("malik-model-selector__brand", compact && "is-compact")} aria-label={iconLabel} title={iconLabel}>
       {source ? (
-        <img src={source} alt={brand.label} loading="eager" referrerPolicy="no-referrer" onError={() => setSourceIndex((index) => index + 1)} />
+        <img src={source} alt={iconLabel} loading="eager" referrerPolicy="no-referrer" onError={() => setSourceIndex((index) => index + 1)} />
       ) : (
         <span className="malik-model-selector__brand-fallback" aria-hidden="true">{brand.fallback}</span>
       )}
