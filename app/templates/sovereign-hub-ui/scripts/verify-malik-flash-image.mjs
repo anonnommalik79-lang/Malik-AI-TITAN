@@ -48,7 +48,7 @@ test("account isolation and resource caps remain intact",()=>{
 });
 test("no technical Chrome/Google labels appear in new client-side image path",()=>{
   assert.doesNotMatch(ui.match(/chatModelId: inlineMediaKind[\s\S]{0,1100}/)?.[0]||"",/Google AI Mode|Chrome/);
-  assert.match(route,/engine: resolvedImageModel\?\.label \|\| \(flashRequested \? "MalikLLM Flash"/);
+  assert.match(route,/engine: flashSelected \? "MalikLLM Flash"/);
   assert.match(types,/ImageProviderId = [^\n]*"malik-flash"/);
 });
 test("coding, websites, games, deeper reasoning use MAX on Flash",()=>{
