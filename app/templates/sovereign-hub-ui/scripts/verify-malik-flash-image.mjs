@@ -58,3 +58,22 @@ test("coding, websites, games, deeper reasoning use MAX on Flash",()=>{
   assert.match(stream,/briefNeedsDeep\(flashPrompt\)/);
   assert.match(stream,/modelId: "malik-max"/);
 });
+
+test("actual image-generator identity is preserved separately from the selected chat model",()=>{
+  assert.match(route,/generatorProvider: result\.provider/);
+  assert.match(route,/generatorModel: result\.providerModel \|\| result\.generationSource/);
+  assert.match(ui,/generatorProvider\?: string/);
+  assert.match(ui,/generatorModel\?: string/);
+  assert.match(ui,/generatorProvider: typeof message\.generatedMedia\.generatorProvider/);
+  assert.match(ui,/generatorModel: typeof message\.generatedMedia\.generatorModel/);
+  assert.match(ui,/generatorProvider: inlineMediaKind === "image"/);
+  assert.match(ui,/generatorModel: inlineMediaKind === "image"/);
+});
+test("questions about the generator use the previous image receipt, not web search",()=>{
+  assert.match(ui,/function asksWhichModelGeneratedImage/);
+  assert.match(ui,/function imageGeneratorReceiptAnswer/);
+  assert.match(ui,/if \(asksWhichModelGeneratedImage\(cleanContent\)\)/);
+  assert.match(ui,/finalizeAssistant\(imageGeneratorReceiptAnswer\(messages\)\)/);
+  assert.match(ui,/Точное название модели не было возвращено сервисом/);
+  assert.match(ui,/Нельзя достоверно назвать её MalikLLM MAX или Google AI Mode/);
+});
