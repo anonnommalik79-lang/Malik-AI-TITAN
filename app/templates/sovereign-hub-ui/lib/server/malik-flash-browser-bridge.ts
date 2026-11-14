@@ -9,7 +9,7 @@
 import { createHmac } from "node:crypto"
 
 export type FlashBrowserImage = { mime?: string; base64?: string; name?: string }
-export type FlashBrowserSource = { url: string; title: string }
+export type FlashBrowserSource = { url: string; title: string; domain: string; provider: "google-ai-mode-browser" }
 export type FlashBrowserAnswer = {
   content: string
   provider: "malik-flash-browser"
@@ -46,7 +46,7 @@ export function flashSources(input: unknown): FlashBrowserSource[] {
       url.hash = ""
       if (seen.has(url.href)) continue
       seen.add(url.href)
-      result.push({ url: url.href, title: typeof entry.title === "string" ? entry.title.slice(0, 160) : url.hostname })
+      result.push({ url: url.href, title: typeof entry.title === "string" ? entry.title.slice(0, 160) : url.hostname, domain: url.hostname, provider: "google-ai-mode-browser" })
       if (result.length >= 16) break
     } catch { /* malformed source */ }
   }
