@@ -9,8 +9,8 @@ const bridge = read("lib/server/malik-flash-image-worker.ts");
 const stream = read("app/api/stream/route-impl.ts");
 const models = read("lib/ai/malik-models.ts");
 const types = read("lib/media/types.ts");
-const worker = read("../../tools/malik-flash-worker/browser.mjs");
-const image = read("../../tools/malik-flash-worker/image-result.mjs");
+const worker = read("../../../tools/malik-flash-worker/browser.mjs");
+const image = read("../../../tools/malik-flash-worker/image-result.mjs");
 
 test("Flash is free but feature-gated, MAX keeps a paid selector option",()=>{
   assert.match(models,/MALIK_FLASH_PREVIEW_ENABLED = process\.env\.NEXT_PUBLIC_MALIK_FLASH_PREVIEW === "1"/);
