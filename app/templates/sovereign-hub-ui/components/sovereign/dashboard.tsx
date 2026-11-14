@@ -377,6 +377,9 @@ type InlineMediaGeneration = {
   status: InlineMediaGenerationStatus
   prompt: string
   provider?: string
+  /** Verified image engine identity from the server, independent of chat model. */
+  generatorProvider?: string
+  generatorModel?: string
   progress?: number
   url?: string
   /** Provider-direct images exist only for the current browser session. */
@@ -409,6 +412,36 @@ function describeReadyMediaAction(media?: InlineMediaGeneration) {
     return prompt ? `Создал видео по запросу: ${prompt}` : "Создал видео."
   }
   return prompt ? `Создал изображение по запросу: ${prompt}` : "Создал изображение."
+}
+
+/** Answer image-model provenance from the actual finished image receipt, not
+ * a language model hallucination or an irrelevant web citation. */
+function asksWhichModelGeneratedImage(value: string) {
+  const question = String(value || "").trim()
+  return question.length <= 260 &&
+    /(?:какая|какой|какую|что за|кто|кем|чем|which|what)\b.{0,70}(?:модел|генератор|движок|провайдер|сгенерир|генерирова|создал|создан|нарисовал|generated|model)|(?:эт[оау]|картинк|изображени|фото).{0,40}(?:какая модель|какой моделью|кем создан)/iu.test(question) &&
+    /(?:эт[оау]|последн|фото|картинк|изображени|генерирова|сгенерир|создал|создан|нарисовал|generated|made)/iu.test(question)
+}
+
+function imageGeneratorReceiptAnswer(messages: Message[]) {
+  const media = [...messages].reverse().find(message =>
+    message.generatedMedia?.kind === "image" && message.generatedMedia.status === "ready"
+  )?.generatedMedia
+  if (!media) return "В этом чате нет готового изображения с подтверждёнными данными генерации."
+  const generatorModel = String(media.generatorModel || "").trim().slice(0, 180)
+  const generatorProvider = String(media.generatorProvider || "").trim().slice(0, 100)
+  if (generatorModel) {
+    return "Последнее изображение создано через медиадвижок MALIKII. Фактическая модель генерации: **" +
+      generatorModel + "**" + (generatorProvider ? " (провайдер: " + generatorProvider + ")." : ".") +
+      "\n\n**MalikLLM Flash** — выбранная модель чата, а не подтверждённый генератор изображения."
+  }
+  if (generatorProvider) {
+    return "Последнее изображение создано через медиадвижок MALIKII (провайдер: **" +
+      generatorProvider + "**). Точное название модели не было возвращено сервисом. " +
+      "MalikLLM Flash — выбранная модель чата, а не подтверждённый генератор изображения."
+  }
+  return "Изображение создано медиадвижком MALIKII, но в сохранённой истории нет проверенной информации " +
+    "о конкретной модели. Нельзя достоверно назвать её MalikLLM MAX или Google AI Mode."
 }
 
 function recentReadyMediaActions(messages: Message[], limit = 6) {
@@ -1506,6 +1539,8 @@ function reviveMessage(message: any): Message {
           status: ["queued", "thinking", "generating", "rendering", "ready", "failed"].includes(message.generatedMedia.status) ? message.generatedMedia.status : "ready",
           prompt: String(message.generatedMedia.prompt || ""),
           provider: typeof message.generatedMedia.provider === "string" ? message.generatedMedia.provider : undefined,
+          generatorProvider: typeof message.generatedMedia.generatorProvider === "string" ? message.generatedMedia.generatorProvider.slice(0, 100) : undefined,
+          generatorModel: typeof message.generatedMedia.generatorModel === "string" ? message.generatedMedia.generatorModel.slice(0, 180) : undefined,
           progress: typeof message.generatedMedia.progress === "number" ? message.generatedMedia.progress : undefined,
           url: typeof message.generatedMedia.url === "string" ? message.generatedMedia.url : undefined,
           ephemeral: message.generatedMedia.ephemeral === true,
@@ -6827,6 +6862,14 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
     return
   }
 
+  if (asksWhichModelGeneratedImage(cleanContent)) {
+    finalizeAssistant(imageGeneratorReceiptAnswer(messages))
+    setIsGeneratingTerminal(false)
+    setIsLoading(false)
+    setStreamingText("")
+    return
+  }
+
   if (asksAboutMalikMediaActions(cleanContent)) {
     const factualMediaAnswer = buildMalikMediaActionAnswer(messages)
     if (factualMediaAnswer) {
@@ -7065,6 +7108,10 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
           undefined,
         statusUrl: statusUrl || finalPayload?.statusUrl || undefined,
         jobId: finalPayload?.jobId || jobId || undefined,
+        generatorProvider: inlineMediaKind === "image" && typeof finalPayload?.generatorProvider === "string"
+          ? finalPayload.generatorProvider.slice(0, 100) : undefined,
+        generatorModel: inlineMediaKind === "image" && typeof finalPayload?.generatorModel === "string"
+          ? finalPayload.generatorModel.slice(0, 180) : undefined,
         provider:
           finalPayload?.engine ||
           finalPayload?.providerTitle ||
