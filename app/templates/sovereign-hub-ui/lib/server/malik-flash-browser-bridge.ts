@@ -63,6 +63,22 @@ export function readFlashWorkerAnswer(payload: unknown, hasImages = false): { an
   return { answer: body.answer, sources: flashSources(body.sources) }
 }
 
+/** Only a real, isolated, HTTPS worker can make Google-browser calls.
+ * In its absence the Flash beta is serviced by existing MALIKII model and
+ * image routes, not falsely represented as Google AI Mode output.
+ */
+export function isMalikFlashBrowserReady(): boolean {
+  const endpoint = process.env.MALIK_FLASH_WORKER_URL
+  const secret = process.env.MALIK_FLASH_WORKER_SECRET
+  if (process.env.MALIK_FLASH_ISOLATED_WORKER !== "1" || !endpoint || !secret || secret.length < 24) return false
+  try {
+    const url = new URL(endpoint)
+    return url.protocol === "https:" ||
+      (process.env.NODE_ENV !== "production" && url.protocol === "http:" &&
+        ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname))
+  } catch { return false }
+}
+
 export async function runMalikFlashBrowser(input: {
   question: string
   userId: string
