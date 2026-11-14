@@ -1533,7 +1533,19 @@ async function handlePOST(request: Request) {
   }
 
   try {
-    const selection = await resolveStrictMalikSelection(request, body)
+    const requestedSelection = await resolveStrictMalikSelection(request, body)
+    // Flash's product contract: ALL programming/build/game turns use MAX, even
+    // when the free Flash conversation was selected. This is server-side,
+    // verified intent routing; direct PRO selection remains entitlement-gated.
+    const flashPrompt = coderPrompt(body)
+    const flashUsesMax = requestedSelection?.modelId === "malik-flash"
+      && (isCodeRequest(flashPrompt)
+        || isProjectBuildRequest(body)
+        || Boolean(gameStudioTurn(flashPrompt, { messages: body?.messages || body?.history, attachments: body?.attachments }))
+        || Boolean(websiteIntent(flashPrompt)))
+    const selection = flashUsesMax && requestedSelection
+      ? { ...requestedSelection, modelId: "malik-max" }
+      : requestedSelection
     if (routePetroleum(coderPrompt(body), body?.selectedSkillId).engine === "petroleum") { body.isProjectRequest = false; body.forceCanvas = false; body.responseMode = "chat"; body.isCodeRequest = false }
     const entitlement = selection?.entitlement ?? await resolveRequestEntitlement(request)
     // MalikLLM MAX answers owner and PRO accounts with Claude; it reads the plan from here.
