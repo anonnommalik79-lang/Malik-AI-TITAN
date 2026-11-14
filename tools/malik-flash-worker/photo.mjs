@@ -34,6 +34,8 @@ export function normalizePhotos(images) {
 }
 
 async function firstFileInput(page) {
+  const photoInput = page.locator('input[type="file"][accept*="image"]');
+  if (await photoInput.count()) return photoInput.first();
   const input = page.locator('input[type="file"]');
   return await input.count() ? input.first() : null;
 }
@@ -62,6 +64,12 @@ export async function uploadPhotosToChrome(page, photos) {
       }
       const chooserPromise = page.waitForEvent("filechooser", { timeout: 7000 }).catch(() => null);
       await trigger.click({ timeout: 7000 });
+      // Some Google UI variants use a two-step Image -> Upload image menu.
+      await page.waitForTimeout(150);
+      const chooseUpload = /(?:upload image|upload photo|upload from computer|загрузить изображение|загрузить фото|загрузить файл)/i;
+      const menu = page.getByRole("menuitem", { name: chooseUpload }).first();
+      const second = await menu.count() ? menu : page.getByRole("button", { name: chooseUpload }).first();
+      if (await second.count() && await second.isVisible().catch(() => false)) await second.click({ timeout: 7000 });
       const chooser = await chooserPromise;
       if (chooser) {
         await chooser.setFiles([photos[index]], { timeout: 10000 });
