@@ -30,7 +30,7 @@ test("Each chat sends a stable chat ID, not a fresh ID per turn", () => {
 test("Code selected in Flash routes into MAX", () => {
   assert.match(stream, /const flashUsesMax = requestedSelection\?\.modelId === "malik-flash"/)
   assert.match(stream, /isCodeRequest\(flashPrompt\)/)
-  assert.match(stream, /"malik-max"\s*:\s*requestedModelId/)
+  assert.match(stream, /const selectedModelId = requestedModelId === "malik-flash"\s*\? "malik-max"/)
 })
 test("Worker requires per-user isolation and HTTPS", () => {
   assert.match(bridge, /MALIK_FLASH_ISOLATED_WORKER !== "1"/)
