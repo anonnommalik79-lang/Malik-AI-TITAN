@@ -35,6 +35,27 @@ test("calls actual Playwright setInputFiles with bytes, without fake response", 
   assert.ok(Buffer.isBuffer(received[0][0].buffer));
 });
 
+test("supports Google two-stage Image -> Upload image chooser", async () => {
+  let openedMenu = 0, clickedUpload = 0, uploaded = 0;
+  const page = {
+    locator: () => ({ count: async () => 0 }),
+    getByRole: (role) => ({
+      first: () => ({
+        count: async () => role === "button" || role === "menuitem" ? 1 : 0,
+        isVisible: async () => true,
+        click: async () => { if (role === "menuitem") clickedUpload++; else openedMenu++; },
+      }),
+    }),
+    waitForEvent: async () => ({ setFiles: async photos => { uploaded += photos.length; } }),
+    waitForTimeout: async () => {},
+  };
+  const result = await uploadPhotosToChrome(page, normalizePhotos([{ mime: "image/png", base64: tinyPng }]));
+  assert.equal(openedMenu, 1);
+  assert.equal(clickedUpload, 1);
+  assert.equal(uploaded, 1);
+  assert.equal(result, 1);
+});
+
 test("exposes a clear error instead of claiming photo transfer", async () => {
   const page = {
     locator: () => ({ count: async () => 0 }),
