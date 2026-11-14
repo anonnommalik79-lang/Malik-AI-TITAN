@@ -1027,7 +1027,7 @@ async function runSelectedAnswerUnchecked(
     const selectedModelId = requestedModelId === "malik-flash"
       ? "malik-max" // Native MALIKII beta path until isolated browser service is ready.
       : requestedModelId
-    if (selectedModelId !== requestedModelId) onProgress?.({ phase: "model", text: "Задача по программированию — подключаю MalikLLM MAX" })
+    if (selectedModelId !== requestedModelId && isCodeRequest(coderPrompt(executionBody))) onProgress?.({ phase: "model", text: "Готовлю решение для программирования" })
     const answer = await malikGodAnswer(
       selectedBody,
       {
