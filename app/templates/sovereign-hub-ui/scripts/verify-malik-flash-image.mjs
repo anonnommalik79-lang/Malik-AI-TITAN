@@ -1,79 +1,46 @@
-import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import test from "node:test";
+import assert from "node:assert/strict"
+import { readFileSync } from "node:fs"
+import { createRequire } from "node:module"
+import test from "node:test"
+import { workTestLoader } from "./work-test-loader.mjs"
 
-const read = path => readFileSync(path,"utf8");
-const route = read("lib/media/generate-photo-route.ts");
-const ui = read("components/sovereign/dashboard.tsx");
-const bridge = read("lib/server/malik-flash-image-worker.ts");
-const stream = read("app/api/stream/route-impl.ts");
-const models = read("lib/ai/malik-models.ts");
-const types = read("lib/media/types.ts");
-const worker = read("../../../tools/malik-flash-worker/browser.mjs");
-const image = read("../../../tools/malik-flash-worker/image-result.mjs");
+const require = createRequire(import.meta.url)
+const sharp = require("sharp")
+const load = workTestLoader()
+const { validateFlashImage, verifyMalikFlashImagePayload } = load("lib/server/malik-flash-image-worker.ts")
+const base = { origin: "google-ai-mode-browser", imageOrigin: "confirmed-generated-output", kind: "image_edit", complete: true, imagesProcessed: true }
 
-test("Flash is free but feature-gated, MAX keeps a paid selector option",()=>{
-  assert.match(models,/MALIK_FLASH_PREVIEW_ENABLED = process\.env\.NEXT_PUBLIC_MALIK_FLASH_PREVIEW === "1"/);
-  assert.match(models,/id: "malik-flash"[\s\S]*?tier: "free"/);
-  assert.match(models,/tier: MALIK_FLASH_PREVIEW_ENABLED \? "pro" : "free"/);
-});
-test("selected Flash sends image tasks into the existing MALIKII image UI and server",()=>{
-  assert.match(ui,/chatModelId: inlineMediaKind === "image" \? selectedModelId : undefined/);
-  assert.match(ui,/chatId,/);
-  assert.match(ui,/patchInlineMedia\(\{ status: "generating", progress: 36 \}\)/);
-  assert.match(ui,/finalizeInlineMedia/);
-  assert.match(route,/body\?\.chatModelId === "malik-flash"/);
-  assert.match(route,/runMalikFlashImage\(\{/);
-  assert.match(route,/postProcessGeneratedImage\(\{ imageUrl: result\.imageUrl/);
-  assert.match(route,/uploadMediaAsset\(\{/);
-});
-test("image generation and editing both require authentic Chrome image output",()=>{
-  assert.match(route,/task: editing \? "image_edit" : "image_generate"/);
-  assert.match(worker,/waitForGeneratedImage\(page, imagesBefore\)/);
-  assert.match(worker,/uploadPhotosToChrome\(page, photos\)/);
-  assert.match(worker,/await submitQuestion\(page, imagePrompt\)/);
-  assert.match(image,/newImageCandidates\(before, await readVisibleImages\(page\)\)/);
-  assert.match(image,/verifyImageDataUrl\(dataUrl\)/);
-  assert.match(bridge,/response\.complete !== true \|\| response\.kind !== task/);
-  assert.match(bridge,/task === "image_edit" && response\.imagesProcessed !== true/);
-});
-test("account isolation and resource caps remain intact",()=>{
-  assert.match(bridge,/input\.userId\.startsWith\("guest:"\)/);
-  assert.match(bridge,/flashScopedId\(secret, "user", input\.userId\)/);
-  assert.match(bridge,/flashScopedId\(secret, "chat:" \+ input\.userId, input\.chatId\)/);
-  assert.match(bridge,/MALIK_FLASH_ISOLATED_WORKER !== "1"/);
-  assert.match(route,/checkImageCreditLimit\(\{/);
-  assert.match(route,/recordImageCreditUsage\(user\.userId, imageSize\)/);
-  assert.match(route,/acquireImageGenerationLock\(user\.userId\)/);
-});
-test("no technical Chrome/Google labels appear in new client-side image path",()=>{
-  assert.doesNotMatch(ui.match(/chatModelId: inlineMediaKind[\s\S]{0,1100}/)?.[0]||"",/Google AI Mode|Chrome/);
-  assert.match(route,/engine: flashSelected \? "MalikLLM Flash"/);
-  assert.match(types,/ImageProviderId = [^\n]*"malik-flash"/);
-});
-test("coding, websites, games, deeper reasoning use MAX on Flash",()=>{
-  assert.match(stream,/flashUsesMax/);
-  assert.match(stream,/isCodeRequest\(flashPrompt\)/);
-  assert.match(stream,/websiteIntent\(flashPrompt\)/);
-  assert.match(stream,/briefNeedsDeep\(flashPrompt\)/);
-  assert.match(stream,/modelId: "malik-max"/);
-});
+test("original PNG, JPEG and WebP bytes survive upload validation", async () => {
+  for (const format of ["png", "jpeg", "webp"]) {
+    const input = await sharp({ create: { width: 80, height: 60, channels: 3, background: "red" } }).toFormat(format).toBuffer()
+    const mime = "image/" + format
+    const verified = await validateFlashImage({ mime, base64: input.toString("base64") })
+    assert.deepEqual(verified.bytes, input)
+    assert.equal(verified.width, 80)
+    assert.equal(verified.height, 60)
+    await assert.rejects(validateFlashImage({ mime, base64: input.subarray(0, 14).toString("base64") }), { code: "FLASH_IMAGE_INVALID" })
+  }
+})
 
-test("actual image-generator identity is preserved separately from the selected chat model",()=>{
-  assert.match(route,/generatorProvider: result\.provider/);
-  assert.match(route,/generatorModel: result\.providerModel \|\| result\.generationSource/);
-  assert.match(ui,/generatorProvider\?: string/);
-  assert.match(ui,/generatorModel\?: string/);
-  assert.match(ui,/generatorProvider: typeof message\.generatedMedia\.generatorProvider/);
-  assert.match(ui,/generatorModel: typeof message\.generatedMedia\.generatorModel/);
-  assert.match(ui,/generatorProvider: inlineMediaKind === "image"/);
-  assert.match(ui,/generatorModel: inlineMediaKind === "image"/);
-});
-test("questions about the generator use the previous image receipt, not web search",()=>{
-  assert.match(ui,/function asksWhichModelGeneratedImage/);
-  assert.match(ui,/function imageGeneratorReceiptAnswer/);
-  assert.match(ui,/if \(asksWhichModelGeneratedImage\(cleanContent\)\)/);
-  assert.match(ui,/finalizeAssistant\(imageGeneratorReceiptAnswer\(messages\)\)/);
-  assert.match(ui,/Точное название модели не было возвращено сервисом/);
-  assert.match(ui,/Нельзя достоверно назвать её MalikLLM MAX или Google AI Mode/);
-});
+test("a successful edit needs a completed real image receipt and accepted source", async () => {
+  const png = await sharp({ create: { width: 80, height: 60, channels: 3, background: "blue" } }).png().toBuffer()
+  const success = { ...base, image: { mime: "image/png", base64: png.toString("base64") } }
+  assert.deepEqual((await verifyMalikFlashImagePayload(success, "image_edit")).bytes, png)
+  await assert.rejects(verifyMalikFlashImagePayload({ ...success, imagesProcessed: false }, "image_edit"), { code: "FLASH_SOURCE_NOT_PROCESSED" })
+  await assert.rejects(verifyMalikFlashImagePayload({ ...success, imageOrigin: "search-thumbnail" }, "image_edit"), { code: "FLASH_IMAGE_INCOMPLETE" })
+  await assert.rejects(verifyMalikFlashImagePayload({ ...success, kind: "image_generate" }, "image_edit"), { code: "FLASH_IMAGE_INCOMPLETE" })
+})
+
+test("Flash image uses the native card without preflight providers or native fallback", () => {
+  const route = readFileSync("lib/media/generate-photo-route.ts", "utf8")
+  const dashboard = readFileSync("components/sovereign/dashboard.tsx", "utf8")
+  const implementation = readFileSync("lib/server/malik-flash-media.ts", "utf8")
+  assert.match(route, /flashRequested = body\?\.chatModelId === "malik-flash"/u)
+  assert.match(route, /if \(flashRequested\) \{[\s\S]*?return Response.json\([\s\S]*?catch \(error\) \{[\s\S]*?return Response.json\(/u)
+  assert.match(route, /await recordImageCreditUsage\(user.userId, imageSize\)/)
+  assert.match(dashboard, /else if \(inlineMediaKind === "image" && !flashImageRequest\)/)
+  assert.match(dashboard, /finalizeInlineMedia\(readyMedia\)/)
+  assert.match(implementation, /canReadFlashAsset\(account.userId, turn.chatId, requested\)/)
+  assert.match(implementation, /operation: editing \? "edit" : "generate", parentId/)
+  assert.match(implementation, /generatorProvider: provider/)
+})

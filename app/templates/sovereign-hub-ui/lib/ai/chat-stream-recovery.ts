@@ -36,6 +36,9 @@ export type ChatStreamTimings = { firstTextMs: number; idleMs: number; recoveryM
  * so the server always finishes first and reports its real result.
  */
 export function chatStreamTimings(body: Record<string, unknown>): ChatStreamTimings {
+  if (body.model === "malik-flash" && !body.isProjectRequest && !body.isCodeRequest) {
+    return { firstTextMs: 125_000, idleMs: 60_000, recoveryMs: 125_000, headersMs: 115_000 }
+  }
   const retryable = canRetryChat(body)
   const prompt = String(body.originalQuestion || body.question || body.prompt || "")
   const largeBrief = briefNeedsDeep(prompt)
@@ -124,7 +127,8 @@ export async function fetchRecoverableChat(input: RequestInfo | URL, init: Reque
   const signal = init.signal
   let body: Record<string, unknown> = {}
   try { body = JSON.parse(String(init.body || "{}")) } catch {}
-  const retryable = canRetryChat(body)
+  const flash = body.model === "malik-flash"
+  const retryable = !flash && canRetryChat(body)
   const defaults = chatStreamTimings(body)
   const firstTextMs = options.firstTextMs ?? defaults.firstTextMs
   const idleMs = options.idleMs ?? defaults.idleMs
@@ -154,6 +158,7 @@ export async function fetchRecoverableChat(input: RequestInfo | URL, init: Reque
     }
   }
   // Permission and quota failures are terminal; never retry or disguise them.
+  if (flash && !response.ok) return response
   if (!response.ok && ![502, 503, 504].includes(response.status)) return response
   if (!response.headers.get("content-type")?.includes("text/event-stream") && response.ok) return response
   const encoder = new TextEncoder()

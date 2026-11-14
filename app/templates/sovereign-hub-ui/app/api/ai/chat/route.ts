@@ -1,5 +1,5 @@
 import { asJson, extractPrompt, malikGodAnswer } from "@/lib/malik-god-router"
-import { DEFAULT_MALIK_MODEL_ID, hasMalikProAccess } from "@/lib/ai/malik-models"
+import { DEFAULT_MALIK_MODEL_ID, hasMalikProAccess, selectsMalikFlash } from "@/lib/ai/malik-models"
 import { withFounderRequestAudit } from "@/lib/server/founder-request-audit"
 import { parsePluginCommandFromBody } from "@/lib/server/plugin-runtime"
 import { runPluginModelAnswer } from "@/lib/server/plugin-model-answer"
@@ -25,6 +25,10 @@ export const POST = withFounderRequestAudit(withCompute(addressedHandlePOST, asy
 
 async function addressedHandlePOST(request: Request) {
   const requestBody = await request.clone().json().catch(() => ({}))
+  if (selectsMalikFlash(requestBody)) {
+    const { handleFlashJsonChat } = await import("../../stream/route-impl")
+    return handleFlashJsonChat(request)
+  }
   const response = await handlePOST(request)
   return addressChatResponse(response, await resolveRequestEntitlement(request), requestBody)
 }

@@ -24,6 +24,7 @@ import { accuracyInstruction, finalizeAccuracy, type AccuracyReport } from "@/li
 import { accuracyTokenGate } from "@/lib/ai/accuracy/stream"
 import { fetchPageText } from "@/lib/malik-research/fetch-page"
 import { runStrictMalikModel } from "@/lib/server/malik-model-router"
+import { FlashBrowserError } from "@/lib/server/malik-flash-browser-bridge"
 import { chatWebsiteInstruction } from "@/lib/server/chat-website-design"
 import { fetchEiaSpotEvidence } from "@/lib/server/petroleum-eia"
 import { asksCompanyMoney, classifyFreshness, freshnessMode, isModelLeaderboardRequest, NO_WEB, publicSearchText, type FreshnessMode, type FreshnessIntent } from "@/lib/ai/freshness-intent"
@@ -1059,6 +1060,10 @@ export async function malikGodAnswer(
   signal?: AbortSignal,
   preparedEvidence?: PreparedLiveEvidence,
 ): Promise<GodAnswer> {
+  // Browser-backed Flash is handled before model routing or local replies.
+  if (selection?.modelId === "malik-flash") {
+    throw new FlashBrowserError("FLASH_WORKER_NOT_READY", "Для Flash требуется персональная сессия Google AI Mode.")
+  }
   const prompt = extractPrompt(body)
   const requestPrompt = preparedEvidence?.prompt || prompt
   // Attachment extraction may augment `prompt` with untrusted document text.

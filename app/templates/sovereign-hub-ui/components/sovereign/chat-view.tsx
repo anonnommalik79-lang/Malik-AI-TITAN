@@ -235,6 +235,7 @@ export type InlineMediaGeneration = {
   prompt: string
   provider?: string
   progress?: number
+  indeterminate?: boolean
   url?: string
   /** Provider-direct images exist only for the current browser session. */
   ephemeral?: boolean
@@ -420,7 +421,7 @@ async function captureVideoAnalysisFrames(file: File) {
   }
 }
 
-async function fileToAttachment(file: File): Promise<ChatAttachment> {
+async function fileToAttachment(file: File, preservePhoto = false): Promise<ChatAttachment> {
   const mime = inferUploadMime(file)
   const ext = uploadExtension(file.name)
   const textLike = mime.startsWith("text/") || mime === "application/json" || TEXT_UPLOAD_EXTENSIONS.has(ext)
@@ -443,6 +444,19 @@ async function fileToAttachment(file: File): Promise<ChatAttachment> {
   }
 
   if (mime.startsWith("image/")) {
+    if (preservePhoto) {
+      if (!/^image\/(?:png|jpeg|webp)$/u.test(mime) || !file.size || file.size > 5 * 1024 * 1024) {
+        throw new Error("Flash принимает оригиналы PNG, JPEG и WebP до 5 МБ.")
+      }
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () => resolve(String(reader.result))
+        reader.onerror = reject
+        reader.readAsDataURL(file)
+      })
+      return { id: crypto.randomUUID(), kind: "image", name: file.name, mime, size: file.size,
+        base64: dataUrl.slice(dataUrl.indexOf(",") + 1), url: URL.createObjectURL(file) }
+    }
     const normalized = await normalizeClientImage(file)
     return {
       id: crypto.randomUUID(),
@@ -795,6 +809,7 @@ function GeminiMediaGenerationCard({ media }: { media: InlineMediaGeneration }) 
         ephemeral={liveMedia.ephemeral}
         failed={isFailed}
         error={liveMedia.error}
+        indeterminate={liveMedia.indeterminate}
       />
     )
   }
@@ -2255,7 +2270,7 @@ export function ChatView({ messages, workspaceMode = "chat", onSendMessage, onIm
 
     const extension = blob.type.includes("png") ? "png" : blob.type.includes("webp") ? "webp" : "jpg"
     const file = new File([blob], `malik-editor-source-${Date.now()}.${extension}`, { type: blob.type })
-    return fileToAttachment(file)
+    return fileToAttachment(file, selectedModelId === "malik-flash")
   }
 
   useEffect(() => {
@@ -2270,7 +2285,10 @@ export function ChatView({ messages, workspaceMode = "chat", onSendMessage, onIm
       void (async () => {
         try {
           setLocalError(null)
-          const sourceAttachment = await attachmentFromEditorSource(detail.sourceSrc)
+          const sourceId = selectedModelId === "malik-flash"
+            ? /^\/api\/chat\/flash-image\/[^/]+\/([0-9a-f]{32})$/u.exec(detail.sourceSrc)?.[1]
+            : undefined
+          const sourceAttachment = sourceId ? undefined : await attachmentFromEditorSource(detail.sourceSrc)
           const selection = detail.selection
           const selectedRegionInstruction = selection
             ? [
@@ -2286,10 +2304,11 @@ export function ChatView({ messages, workspaceMode = "chat", onSendMessage, onIm
           setLastSubmittedPrompt(prompt)
           try { window.localStorage.setItem(`malik_${workspaceMode}_last_user_prompt`, prompt) } catch {}
 
-          onSendMessage(`/image ${prompt}`, [sourceAttachment], {
+          onSendMessage(`/image ${prompt}`, sourceAttachment ? [sourceAttachment] : [], {
             responseDepth,
             imageSize: detail.imageSize || "1K",
             imageAspectRatio: detail.imageAspectRatio,
+            flashSourceId: sourceId,
           })
         } catch (error) {
           setLocalError(error instanceof Error ? error.message : "Не удалось открыть изображение в редакторе.")
@@ -2299,7 +2318,7 @@ export function ChatView({ messages, workspaceMode = "chat", onSendMessage, onIm
 
     window.addEventListener(MALIK_IMAGE_EDITOR_REQUEST_EVENT, onEditorRequest)
     return () => window.removeEventListener(MALIK_IMAGE_EDITOR_REQUEST_EVENT, onEditorRequest)
-  }, [isLoading, onSendMessage, responseDepth])
+  }, [isLoading, onSendMessage, responseDepth, selectedModelId])
 
   // ---- Following the newest line ------------------------------------------
   // The thread sticks to the bottom only while the reader is already there.
@@ -2562,7 +2581,7 @@ export function ChatView({ messages, workspaceMode = "chat", onSendMessage, onIm
     let firstError = ""
     for (const file of Array.from(files).slice(0, room)) {
       try {
-        parsed.push(await fileToAttachment(file))
+        parsed.push(await fileToAttachment(file, selectedModelId === "malik-flash"))
       } catch (error) {
         if (!firstError) firstError = error instanceof Error ? error.message : "Ошибка файла"
       }
@@ -3014,7 +3033,7 @@ export function ChatView({ messages, workspaceMode = "chat", onSendMessage, onIm
     }
     let failed = 0
     for (const file of prepared.media) {
-      try { added.push(await fileToAttachment(file)) } catch { failed += 1 }
+      try { added.push(await fileToAttachment(file, selectedModelId === "malik-flash")) } catch { failed += 1 }
     }
     setAttachments((previous) => [...previous, ...added].slice(0, MAX_CHAT_ATTACHMENTS))
     setComposerNotice(prepared.notice + (failed ? ` Не прочитались: ${failed}.` : ""))

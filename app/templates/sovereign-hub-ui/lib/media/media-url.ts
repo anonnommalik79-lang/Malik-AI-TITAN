@@ -11,6 +11,7 @@
 
 /** Progress endpoints. A status report, never the picture itself. */
 export function isJobStatusUrl(url: string) {
+  if (isFlashImageUrl(url)) return false
   const value = String(url || "").toLowerCase()
   return (
     value.includes("/status") ||
@@ -25,7 +26,11 @@ export function isJobStatusUrl(url: string) {
  * `/api/media/asset/<id>` (Node) and `/api/storage/photos/<file>` (Flask).
  */
 export function isMediaFileRoute(url: string) {
-  return /(^|\/)api\/(media\/asset|storage\/(photos|images|videos))\/[^/]+/i.test(String(url || ""))
+  return /(^|\/)api\/(media\/asset|storage\/(photos|images|videos))\/[^/]+/i.test(String(url || "")) || isFlashImageUrl(url)
+}
+
+export function isFlashImageUrl(url?: string) {
+  return typeof url === "string" && /^\/api\/chat\/flash-image\/[a-z0-9._:%-]{1,450}\/[0-9a-f]{32}$/iu.test(url)
 }
 
 export function isDataSvgUrl(url?: string) {

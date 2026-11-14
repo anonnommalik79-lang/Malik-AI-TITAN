@@ -145,6 +145,7 @@ try {
     after: (callback) => callbacks.push(callback), createExecutionReporter, DEFAULT_MALIK_MODEL_ID: "malik-max",
     isProjectBuildRequest: () => false, runSelectedAnswer: (...args) => modelRun(...args),
     skillChatRequest: load("lib/skills/chat-intent.ts").skillChatRequest, SkillError: load("lib/skills/types.ts").SkillError,
+    FlashBrowserError: load("lib/server/malik-flash-browser-bridge.ts").FlashBrowserError,
     estimateMultimodalTokens: () => 0, hasMalikAttachments: () => false,
     recordDailyMultimodalTokens: () => {}, observeComputeResult: () => {}, asPlainText: (answer) => answer.content,
     recordChatUsage: () => usage, persistFounderChatTurn: () => history,

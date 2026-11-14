@@ -29,7 +29,7 @@ const stubs = {
     },
     asJson: (answer) => answer,
   },
-  "@/lib/ai/malik-models": { DEFAULT_MALIK_MODEL_ID: "test-model", hasMalikProAccess: () => true },
+  "@/lib/ai/malik-models": { DEFAULT_MALIK_MODEL_ID: "test-model", hasMalikProAccess: () => true, selectsMalikFlash: () => false },
   "@/lib/server/founder-message-log": { appendFounderMessage: async () => {} },
   "@/lib/server/malik-model-router": {
     resolveStrictMalikSelection: async () => ({ modelId: "test-model", entitlement: { plan: "plus", userId: "test-user" } }),

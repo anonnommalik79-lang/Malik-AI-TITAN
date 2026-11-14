@@ -114,7 +114,7 @@ export const MALIK_FLASH_MODEL: MalikModelDefinition = {
   capabilities: ["text", "vision", "tools", "reasoning"],
   brand: "malik",
   access: "free",
-  autoEligible: true,
+  autoEligible: false,
 }
 
 export const MALIK_MAX_MODEL: MalikModelDefinition = {
@@ -251,6 +251,10 @@ export const MALIK_MODELS: readonly MalikModelDefinition[] = [
 
 export const PUBLIC_MALIK_MODELS = MALIK_MODELS.filter((model) => !model.hidden)
 export const DEFAULT_MALIK_MODEL_ID: MalikModelId = MALIK_FLASH_PREVIEW_ENABLED ? "malik-flash" : "malik-max"
+
+export function selectsMalikFlash(body: { model?: unknown; modelId?: unknown } | null | undefined) {
+  return (body?.model || body?.modelId) === "malik-flash"
+}
 export const FREE_MALIK_MODELS = PUBLIC_MALIK_MODELS.filter((model) => model.tier === "free")
 export const PRO_MALIK_MODELS = PUBLIC_MALIK_MODELS.filter((model) => model.tier === "pro")
 
