@@ -49,12 +49,14 @@ const REGENERATED = "Новый вариант ответа после пере�
  */
 function installFakeStream() {
   const realFetch = window.fetch.bind(window)
-  const qa = window.__qa = { queue: [], requests: 0, aborted: 0, stops: 0 }
+  const qa = window.__qa = { queue: [], requests: 0, aborted: 0, stops: 0, restored: {}, recoveryReads: 0 }
   window.fetch = (input, init = {}) => {
     const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url
     const method = String(init.method || (typeof input === "object" && "method" in input ? input.method : "GET")).toUpperCase()
     if (/\/api\/stream\/background\/[^/?]+/.test(url)) {
       if (method === "DELETE") qa.stops += 1
+      const saved = qa.restored[new URL(url, location.href).pathname.split("/").at(-1)]
+      if (method === "GET" && saved) { qa.recoveryReads++; return Promise.resolve(Response.json({ turn: saved })) }
       return Promise.resolve(new Response(null, { status: method === "DELETE" ? 204 : 404 }))
     }
     if (!/\/api\/stream(?:\/background)?(?:\?|$)/.test(url) || method !== "POST") return realFetch(input, init)
@@ -65,6 +67,7 @@ function installFakeStream() {
     const encoder = new TextEncoder()
     const traceId = `qa-${qa.requests}`
     const startedAt = Date.now()
+    if (plan.restore) qa.restored[traceId] = { status: "complete", content: plan.restore, tookMs: 1 }
     const stream = new ReadableStream({
       async start(controller) {
         const send = (event, data) => controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`))
@@ -80,6 +83,7 @@ function installFakeStream() {
           send("activity", { type: "activity", traceId, startedAt, step: step(1, "Обработка запроса", "running") })
           send("status", { type: "status", text: "Malik AI принял запрос" })
           send("progress", { type: "progress", phase: "thinking", text: "Думает…" })
+          for (const source of plan.sources || []) send("progress", { type: "progress", kind: "source", text: "Найден источник", source })
           await wait(plan.thinkMs ?? 500)
           send("activity", { type: "activity", traceId, startedAt, step: step(2, "Ответ поступает в чат", "completed") })
           send("progress", { type: "progress", phase: "writing", text: "Пишет ответ…" })
@@ -94,7 +98,7 @@ function installFakeStream() {
           }
           if (plan.cut) { controller.close(); return }
           const endedAt = Date.now()
-          send("done", { type: "done", tookMs: endedAt - startedAt, execution: { version: 1, id: traceId, startedAt, endedAt, state: "completed", steps: [{ ...step(1, "Обработка запроса", "completed"), endedAt }, step(2, "Ответ поступает в чат", "completed")] } })
+          send("done", { type: "done", tookMs: endedAt - startedAt, ...(plan.sources?.length ? { sources: plan.sources, usedWeb: true } : {}), execution: { version: 1, id: traceId, startedAt, endedAt, state: "completed", steps: [{ ...step(1, "Обработка запроса", "completed"), endedAt }, step(2, "Ответ поступает в чат", "completed")] } })
           controller.close()
         } catch (error) {
           qa.aborted += 1
@@ -102,7 +106,7 @@ function installFakeStream() {
         }
       },
     })
-    return Promise.resolve(new Response(stream, { status: 200, headers: { "content-type": "text/event-stream; charset=utf-8" } }))
+    return Promise.resolve(new Response(stream, { status: 200, headers: { "content-type": "text/event-stream; charset=utf-8", ...(plan.restore ? { "x-malik-background-turn-id": traceId } : {}) } }))
   }
 
   // The answer's own text: photo captions, galleries and editorial section
@@ -475,6 +479,86 @@ for (const width of WIDTHS) {
     assert.match(await assistant(page).locator(".malik-md").innerText(), /Новый вариант ответа/)
     assert.equal(await page.evaluate(() => window.__qa.requests), 2)
     await shot(page, `regenerated-${width}`)
+  })
+
+  await check("Olympus: sources, chart gaps, flow and sortable table", width, async (page) => {
+    const sources = [
+      { title: "Monthly report", url: "https://example.org/actual-table", domain: "example.org", snippet: "Jan: 12 units. Mar: 30 units.", publishedAt: "2026-01-12", checkedAt: "2026-01-13", readAt: "2026-01-13" },
+      { title: "Only a search result", url: "https://example.net/archive", domain: "example.net", snippet: "An ordinary search excerpt.", checkedAt: "2026-01-13" },
+    ]
+    const blocks = [
+      { type: "chart", kind: "line", title: "Помесячно", origin: "sources", sourceRefs: [1], labels: ["Jan", "Feb", "Mar"], series: [{ name: "Продажи", values: [12, null, 30] }] },
+      { type: "flow", nodes: [{ id: "raw", label: "Данные" }, { id: "chart", label: "График" }], edges: [{ from: "raw", to: "chart" }] },
+      { type: "table", columns: [{ key: "m", label: "Месяц" }, { key: "s", label: "Продажи" }], rows: [["Mar", 30], ["Jan", 12]], sortable: true },
+    ]
+    const answer = `По отчёту [1]. [Выдуманный путь](https://example.org/invented).\n\n\`\`\`malik-ui\n${JSON.stringify({ v: 1, blocks })}\n\`\`\``
+    await send(page, "Покажи динамику продаж, таблицу и схему обработки", { chunks: [answer], sources })
+    await assistant(page).locator(".mgu-chart .recharts-wrapper").waitFor({ timeout: 30_000 })
+    const row = assistant(page)
+    assert.match(await row.locator(".mgu-chart").getAttribute("aria-label"), /Feb — —/u)
+    assert.equal(await row.locator('a[href="https://example.org/invented"]').count(), 0)
+    assert.equal(await row.locator(".mgu-flow svg path.mgu-flow__edge").count(), 1)
+    await row.getByRole("button", { name: "Сортировать по «Продажи»" }).click()
+    assert.match(await row.locator(".mgu-table tbody tr").first().innerText(), /Jan/u)
+    await row.getByRole("button", { name: "Открыть 2 источников" }).click()
+    const drawer = page.getByRole("dialog", { name: "Источники" })
+    assert.match(await drawer.locator("header p").innerText(), /2 найдено · 1 прочитано/u)
+    await drawer.locator('[data-source-access="read"] summary').click()
+    assert.match(await drawer.locator('details[open] blockquote').innerText(), /Mar: 30/u)
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true)
+    await shot(page, `olympus-evidence-${width}`)
+  })
+
+  await check("Olympus: regenerated answer evidence survives reload", width, async (page) => {
+    const source = suffix => ({ title: `История ${suffix}`, domain: `${suffix}.example`, url: `https://${suffix}.example/report`, snippet: `История ${suffix}.` })
+    await send(page, "Расскажи о городском парке", { chunks: ["Первый ответ [1]."], sources: [source("first")] })
+    await assistant(page).getByRole("button", { name: "Перегенерировать ответ" }).waitFor()
+    await page.evaluate(plan => window.__qa.queue.push(plan), { chunks: ["Второй ответ [1]."], sources: [source("second")] })
+    await assistant(page).getByRole("button", { name: "Перегенерировать ответ" }).click()
+    await assistant(page).getByText(/Второй ответ/u).waitFor()
+    await assistant(page).getByRole("button", { name: "Предыдущая версия" }).click()
+    assert.equal(await assistant(page).locator('.malik-md a[href="https://first.example/report"]').count(), 1)
+    assert.equal(await assistant(page).locator('.malik-md a[href="https://second.example/report"]').count(), 0)
+    await page.waitForFunction(() => Object.keys(localStorage).some(key => localStorage.getItem(key)?.includes("Второй ответ")))
+    await page.reload({ waitUntil: "domcontentloaded" })
+    await assistant(page).getByText(/Второй ответ/u).waitFor()
+    await assistant(page).getByRole("button", { name: "Предыдущая версия" }).click()
+    await assistant(page).locator('.malik-md a[href="https://first.example/report"]').waitFor()
+    await shot(page, `olympus-versions-${width}`)
+  })
+
+  await check("Olympus: editing makes a new branch and preserves the original", width, async (page) => {
+    await send(page, "Начальная формулировка", { chunks: ["Исходный ответ."] })
+    const oldQuestion = page.locator('[data-malik-message="user"]').last()
+    await assistant(page).getByRole("button", { name: "Перегенерировать ответ" }).waitFor()
+    await oldQuestion.hover()
+    await oldQuestion.getByRole("button", { name: "Изменить сообщение и создать ветку" }).click()
+    await send(page, "Формулировка в новой ветке", { chunks: ["Ответ в новой ветке."] })
+    await assistant(page).getByText("Ответ в новой ветке.").waitFor()
+    assert.equal(await page.locator('[data-malik-message="user"]').count(), 1)
+    await page.waitForFunction(() => Object.keys(localStorage).some(key => {
+      const value = localStorage.getItem(key) || ""
+      return value.includes("Исходный ответ.") && value.includes("Ответ в новой ветке.")
+    }))
+  })
+
+  await check("Olympus: interrupted stream restores the same turn without a second POST", width, async (page) => {
+    await send(page, "Объясни, как устроен словарь", { chunks: ["Начало примера. "], cut: true, restore: "Начало примера. Восстановленное завершение." })
+    await assistant(page).getByText(/Восстановленное завершение/u).waitFor()
+    assert.deepEqual(await page.evaluate(() => [window.__qa.requests, window.__qa.recoveryReads]), [1, 1])
+    assert.equal(await page.locator('[data-malik-message="assistant"]').count(), 1)
+  })
+
+  await check("Olympus: file selection submits the actual attachment", width, async (page) => {
+    await send(page, "Начнём работу с текстом", { chunks: ["Текстовый ответ."] })
+    await assistant(page).getByRole("button", { name: "Перегенерировать ответ" }).waitFor()
+    await page.locator('input[type="file"][multiple]').last().setInputFiles({ name: "olympus-note.txt", mimeType: "text/plain", buffer: Buffer.from("куб и призма") })
+    await page.getByText("olympus-note.txt", { exact: true }).first().waitFor()
+    await send(page, "Кратко перескажи приложенный файл", { chunks: ["В тексте упомянуты куб и призма."] })
+    await assistant(page).getByText(/куб и призма/u).waitFor()
+    const sent = await page.evaluate(() => window.__qa.lastRequest.attachments)
+    const note = sent?.find(item => item.name === "olympus-note.txt")
+    assert.ok(note && /куб и призма/u.test(JSON.stringify(note)), "the request must contain the file contents")
   })
 
   await check("an error is said plainly, with no pretend thinking left behind", width, async (page) => {
