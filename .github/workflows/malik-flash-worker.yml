@@ -31,4 +31,5 @@ jobs:
       - name: Photo transfer and isolation unit tests (mocked Google)
         run: node --test tools/malik-flash-worker/test/*.test.mjs
       - name: App integration contract
-        run: node --test app/templates/sovereign-hub-ui/scripts/verify-malik-flash-preview.mjs
+        working-directory: app/templates/sovereign-hub-ui
+        run: node --test scripts/verify-malik-flash-preview.mjs
