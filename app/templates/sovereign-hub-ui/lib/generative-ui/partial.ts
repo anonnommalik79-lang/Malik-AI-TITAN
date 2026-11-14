@@ -1,5 +1,5 @@
 import { BLOCK_TYPES, UI_LIMITS } from "./protocol"
-import { validateUi, type UiCheck, type UiSource } from "./validate"
+import { validateUi, type UiCheck, type UiValidationOptions } from "./validate"
 
 /**
  * Streaming: while a ```malik-ui fence is still arriving, its JSON is
@@ -14,7 +14,7 @@ import { validateUi, type UiCheck, type UiSource } from "./validate"
 
 export type PartialUi = UiCheck & { complete: number; pendingType?: string }
 
-export function parsePartialUi(text: string, options: { sources?: UiSource[] } = {}): PartialUi {
+export function parsePartialUi(text: string, options: UiValidationOptions = {}): PartialUi {
   const source = String(text || "").slice(0, UI_LIMITS.bytes)
   const stack: string[] = []
   let inString = false

@@ -1292,7 +1292,7 @@ export async function malikGodAnswer(
       usedWeb: usedEvidence,
       sources,
       accuracy: verified.report,
-      factAudit: auditGroundedAnswer(answerCardsToText(content), sources, prompt, verified.report, freshness.needsSearch ? freshnessCheckLine(freshness) : undefined),
+      factAudit: auditGroundedAnswer(answerCardsToText(content, { sources, userText: requestPrompt }), sources, prompt, verified.report, freshness.needsSearch ? freshnessCheckLine(freshness) : undefined),
       ...(result.incomplete ? { incomplete: result.incomplete } : {}),
       usage: result.usage,
       attempts: [{
@@ -1368,7 +1368,7 @@ export async function malikGodAnswer(
       usedWeb: usedEvidence,
       sources,
       accuracy: verified.report,
-      factAudit: auditGroundedAnswer(answerCardsToText(content), sources, prompt, verified.report, freshness.needsSearch ? freshnessCheckLine(freshness) : undefined),
+      factAudit: auditGroundedAnswer(answerCardsToText(content, { sources, userText: requestPrompt }), sources, prompt, verified.report, freshness.needsSearch ? freshnessCheckLine(freshness) : undefined),
       attempts: result.attempts,
     }
   } else {
@@ -1434,7 +1434,7 @@ export async function malikRescueAnswer(
     usedWeb: sources.length > 0,
     sources,
     accuracy: verified.report,
-    factAudit: auditGroundedAnswer(answerCardsToText(content), sources, prompt, verified.report, freshness.needsSearch ? freshnessCheckLine(freshness) : undefined),
+    factAudit: auditGroundedAnswer(answerCardsToText(content, { sources, userText: prompt }), sources, prompt, verified.report, freshness.needsSearch ? freshnessCheckLine(freshness) : undefined),
     ...(result.incomplete ? { incomplete: result.incomplete } : {}),
     usage: result.usage,
     attempts: [{ provider: result.provider, model: result.model, ok: true, status: 200, latencyMs: result.latencyMs }],

@@ -1622,7 +1622,7 @@ export function MalikMarkdown({ text, className, allowImages = true, referencePh
             {plans.map((plan) => <MalikReferenceImages key={plan.topic} question="" planOverride={plan} row={!singleVisualSubject} hero={singleVisualSubject} isLatest={visualContext?.isLatest} />)}
           </section>
         }
-        if (block.kind === "ui") return <MalikGenerativeUi key={key} raw={block.raw} closed={block.closed} streaming={streaming} sources={citations} stateKey={visualContext?.messageId ? `${visualContext.messageId}:${key}` : undefined} renderMarkdown={(markdown) => <MalikMarkdown text={markdown} citations={citations} allowImages={false} referencePhotos={false} />} />
+        if (block.kind === "ui") return <MalikGenerativeUi key={key} raw={block.raw} closed={block.closed} streaming={streaming} sources={citations} userText={visualContext?.question || undefined} stateKey={visualContext?.messageId ? `${visualContext.messageId}:${key}` : undefined} renderMarkdown={(markdown) => <MalikMarkdown text={markdown} citations={citations} allowImages={false} referencePhotos={false} />} />
         if (block.kind === "cards") {
           if (block.block) return <MalikAnswerCards key={key} block={block.block} sources={citations} question={question} previousQuestion={previousQuestion} hasAttachment={hasAttachment} autoPhotos={allowsAnswerPhotoHints(question, hasAttachment, previousQuestion)} />
           return streaming ? <p key={key} className="malik-md-p" role="status">Собираю карточки…</p> : null

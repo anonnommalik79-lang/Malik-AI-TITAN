@@ -1,6 +1,6 @@
 import { evaluate, type ExprScope } from "./expr"
 import { parsePartialUi } from "./partial"
-import { validateUi } from "./validate"
+import { validateUi, type UiValidationOptions } from "./validate"
 import type { Block, UiDocument, Value } from "./protocol"
 
 /**
@@ -38,7 +38,7 @@ function blockText(block: Block, scope: ExprScope, out: string[]) {
     case "progress": out.push(`**${block.label}:** ${plain(block.value, scope)} / ${block.max ?? 100}`); return
     case "code": out.push(`\`\`\`${block.language || ""}\n${block.code}\n\`\`\``); return
     case "file": out.push(`📄 ${block.name}${block.note ? ` — ${block.note}` : ""}`); return
-    case "citation": out.push(block.ref ? `[${block.ref}]` : block.url ? `[${block.label || block.url}](${block.url})` : ""); return
+    case "citation": out.push(block.ref ? `[${block.ref}]` : block.url && !block.unverified ? `[${block.label || block.url}](${block.url})` : ""); return
     case "table": {
       const head = `| ${block.columns.map((column) => cell(column.label)).join(" | ")} |`
       const rule = `| ${block.columns.map(() => "---").join(" | ")} |`
@@ -48,7 +48,8 @@ function blockText(block: Block, scope: ExprScope, out: string[]) {
     }
     case "chart": {
       const lines = block.labels.map((label, index) => `- ${label}: ${block.series.map((series) => `${block.series.length > 1 ? `${series.name} ` : ""}${plain(series.values[index], scope)}${block.unit ? ` ${block.unit}` : ""}`).join(", ")}`)
-      out.push([`**${block.title || "График"}**${block.origin === "illustrative" ? " (иллюстрация, не измеренные данные)" : ""}`, ...lines].join("\n"))
+      const sources = block.sourceRefs?.length ? ` ${block.sourceRefs.map(ref => `[${ref}]`).join(" ")}` : ""
+      out.push([`**${block.title || "График"}**${block.origin === "illustrative" ? " (иллюстрация, не измеренные данные)" : ""}${sources}`, ...lines].join("\n"))
       return
     }
     case "timeline": out.push(block.items.map((item) => `- **${item.date ? `${item.date} — ` : ""}${item.title}**${item.text ? `: ${item.text}` : ""}`).join("\n")); return
@@ -108,13 +109,13 @@ const UI_FENCE_PATTERN = /^[ \t]*```malik-ui[ \t]*\r?\n([\s\S]*?)(?:\r?\n[ \t]*`
  * reading aloud, sharing, export and for checking the figures against the
  * sources. An unfinished fence keeps its complete blocks.
  */
-export function uiFencesToText(answer: string): string {
+export function uiFencesToText(answer: string, options: UiValidationOptions = {}): string {
   return String(answer || "").replace(UI_FENCE_PATTERN, (_whole, body: string) => {
     try {
-      const check = validateUi(JSON.parse(body))
+      const check = validateUi(JSON.parse(body), options)
       if (check.doc) return uiToText(check.doc)
     } catch { /* unfinished or broken: read what is complete */ }
-    const partial = parsePartialUi(body)
+    const partial = parsePartialUi(body, options)
     return partial.doc ? uiToText(partial.doc) : rawFallbackText(body)
   })
 }

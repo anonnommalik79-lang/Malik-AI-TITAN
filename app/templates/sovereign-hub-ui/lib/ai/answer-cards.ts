@@ -13,6 +13,7 @@
 
 import { answerVisualsToText } from "./answer-visuals"
 import { uiFencesToText } from "@/lib/generative-ui/fallback"
+import type { UiValidationOptions } from "@/lib/generative-ui/validate"
 
 export type CardLink = { label: string; url: string }
 export type CardFact = { label: string; value: string }
@@ -183,8 +184,8 @@ function cardText(item: AnswerCard): string {
  * copying, reading aloud, sharing and for checking the cards' figures and [n]
  * markers against the sources.
  */
-export function answerCardsToText(answer: string): string {
-  return answerVisualsToText(uiFencesToText(String(answer || "")).replace(FENCE, (whole, body: string) => {
+export function answerCardsToText(answer: string, evidence?: UiValidationOptions): string {
+  return answerVisualsToText(uiFencesToText(String(answer || ""), evidence).replace(FENCE, (whole, body: string) => {
     const block = parseAnswerCards(body)
     if (!block) return ""
     if (block.type === "hero") return cardText(block.item)

@@ -1,4 +1,6 @@
 import { exprVariables, parseExpr } from "./expr"
+import { evidenceUrlMatches } from "../ai/source-evidence"
+import { chartSourceEvidence, checkedSourceRefs, evidenceNumbers, type UiEvidenceSource } from "./evidence"
 import { BLOCK_TYPES, UI_LIMITS, UI_VERSION, type Block, type BlockType, type DataOrigin, type Format, type ImageRef, type UiDocument, type Value } from "./protocol"
 
 /**
@@ -12,10 +14,11 @@ import { BLOCK_TYPES, UI_LIMITS, UI_VERSION, type Block, type BlockType, type Da
  * what cannot be repaired is removed. Pure: the server and the browser run it.
  */
 
-export type UiSource = { url?: string; title?: string }
+export type UiSource = UiEvidenceSource
+export type UiValidationOptions = { sources?: readonly UiSource[]; userText?: string; trustedCalculationText?: string }
 export type UiCheck = { doc: UiDocument | null; issues: string[]; fixes: string[] }
 
-type Ctx = { issues: string[]; fixes: string[]; state: Record<string, number | string | boolean>; blocks: number; images: number; sources: UiSource[] }
+type Ctx = { issues: string[]; fixes: string[]; state: Record<string, number | string | boolean>; blocks: number; images: number; sources: readonly UiSource[]; userText?: string; trustedCalculationText?: string }
 
 // eslint-disable-next-line no-control-regex -- control characters are removed on purpose
 const CONTROL = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/gu
@@ -23,7 +26,11 @@ const str = (value: unknown, max: number) => (typeof value === "string" || typeo
 const obj = (value: unknown): Record<string, unknown> => (value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {})
 const arr = (value: unknown): unknown[] => (Array.isArray(value) ? value : [])
 const oneOf = <T extends string | number>(value: unknown, options: readonly T[], fallback?: T): T | undefined => ((options as readonly unknown[]).includes(value) ? value as T : fallback)
-const finite = (value: unknown) => (typeof value === "number" && Number.isFinite(value) ? value : typeof value === "string" && /^-?\d+(?:\.\d+)?$/u.test(value.trim()) ? Number(value) : null)
+const finite = (value: unknown) => {
+  const parsed = typeof value === "number" ? value : typeof value === "string" && /^-?\d+(?:\.\d+)?$/u.test(value.trim()) ? Number(value) : NaN
+  return Number.isFinite(parsed) ? parsed : null
+}
+const safeStateKey = (key: string) => /^[\p{L}_][\p{L}\p{N}_]*$/u.test(key) && !["__proto__", "constructor", "prototype"].includes(key)
 
 const FORMATS: readonly Format[] = ["number", "percent", "currency", "compact", "text"]
 const ORIGINS: readonly DataOrigin[] = ["user", "sources", "computed", "illustrative"]
@@ -74,19 +81,9 @@ function safeHref(raw: unknown, allowAppPaths = false) {
   } catch { return undefined }
 }
 
-function sameSource(url: string, sources: UiSource[]) {
-  try {
-    const target = new URL(url)
-    return sources.some((source) => {
-      if (!source.url) return false
-      try { const known = new URL(source.url); return known.hostname.replace(/^www\./u, "") === target.hostname.replace(/^www\./u, "") && (known.pathname === target.pathname || target.pathname === "/" || known.pathname.startsWith(target.pathname)) } catch { return false }
-    })
-  } catch { return false }
-}
-
 function children(raw: unknown, ctx: Ctx, depth: number, where: string): Block[] {
   if (depth >= UI_LIMITS.depth) { if (arr(raw).length) ctx.fixes.push(`${where}: nested blocks below depth ${UI_LIMITS.depth} dropped`); return [] }
-  return arr(raw).map((item, index) => block(item, ctx, depth + 1, `${where}.${index}`)).filter((item): item is Block => Boolean(item))
+  return arr(raw).slice(0, UI_LIMITS.blocks).map((item, index) => block(item, ctx, depth + 1, `${where}.${index}`)).filter((item): item is Block => Boolean(item))
 }
 
 function block(raw: unknown, ctx: Ctx, depth: number, where: string): Block | null {
@@ -149,13 +146,13 @@ function block(raw: unknown, ctx: Ctx, depth: number, where: string): Block | nu
     case "citation": {
       const ref = finite(data.ref)
       if (ref !== null) {
-        if (ref >= 1 && ref <= ctx.sources.length) return { ...base, type, ref, ...(str(data.label, 120) ? { label: str(data.label, 120) } : {}) }
+        if (Number.isInteger(ref) && ref >= 1 && ref <= ctx.sources.length && safeHref(ctx.sources[ref - 1]?.url)) return { ...base, type, ref, ...(str(data.label, 120) ? { label: str(data.label, 120) } : {}) }
         ctx.issues.push(`${at("ref")}: source [${ref}] does not exist in this answer`)
         return null
       }
       const url = safeHref(data.url)
       if (!url) return null
-      const known = sameSource(url, ctx.sources)
+      const known = ctx.sources.some(source => evidenceUrlMatches(url, source.url))
       if (!known) ctx.fixes.push(`${at("url")}: link is not one of the answer's sources — shown as unverified`)
       return { ...base, type, url, ...(str(data.label, 120) ? { label: str(data.label, 120) } : {}), ...(known ? {} : { unverified: true }) }
     }
@@ -196,19 +193,39 @@ function block(raw: unknown, ctx: Ctx, depth: number, where: string): Block | nu
       }
       if (!labels.length || !series.length) { ctx.issues.push(`${at("data")}: a chart needs labels and at least one series`); return null }
       const fixedSeries = series.map((item) => {
-        let values = item.raw.slice(0, labels.length).map((raw, index) => value(raw, ctx, at(`${item.name}[${index}]`), 40))
+        let values = item.raw.slice(0, labels.length).map((raw, index) => raw === null ? null : finite(raw) ?? (typeof raw === "object" ? value(raw, ctx, at(`${item.name}[${index}]`), 40) : null))
         if (values.length < labels.length) { ctx.fixes.push(`${at("series")}: «${item.name}» padded to ${labels.length} points`); values = [...values, ...Array(labels.length - values.length).fill(null)] }
         if (item.raw.length > labels.length) ctx.fixes.push(`${at("series")}: «${item.name}» trimmed to ${labels.length} points`)
         const bad = values.filter((entry) => entry === null || (typeof entry === "string")).length
         if (bad) ctx.fixes.push(`${at("series")}: «${item.name}» has ${bad} missing or non-numeric values (gaps)`)
-        return { name: item.name, values: values.map((entry) => (entry === null || typeof entry === "string" ? 0 : entry)) as Value[] }
+        return { name: item.name, values: values.map((entry) => typeof entry === "string" ? null : entry) }
       })
-      if (fixedSeries.every((item) => item.values.every((entry) => entry === 0))) { ctx.issues.push(`${at("series")}: no numeric data — a chart without data is not drawn`); return null }
+      if (fixedSeries.every((item) => item.values.every((entry) => entry === null))) { ctx.issues.push(`${at("series")}: no numeric data — a chart without data is not drawn`); return null }
       let origin = oneOf(data.origin, ORIGINS)
       if (!origin) { origin = "illustrative"; ctx.fixes.push(`${at("origin")}: data origin not stated — labelled as an illustration, not measured data`) }
       const pie = kind === "pie" || kind === "donut"
+      const shownSeries = pie ? fixedSeries.slice(0, 1) : fixedSeries
+      const observations = shownSeries.flatMap(item => item.values)
+      const numeric = observations.filter((entry): entry is number => typeof entry === "number")
+      const hasExpressions = observations.some(entry => entry !== null && typeof entry === "object")
+      const refs = origin === "sources" && !hasExpressions
+        ? chartSourceEvidence(numeric, checkedSourceRefs(data.sourceRefs, ctx.sources), ctx.sources) : []
+      const inputNumbers = origin === "user" && ctx.userText !== undefined ? evidenceNumbers(ctx.userText) : null
+      const computedNumbers = origin === "computed" && numeric.length ? evidenceNumbers(ctx.trustedCalculationText || "") : null
+      const unsupported = origin === "sources" && !refs.length
+        || inputNumbers !== null && (hasExpressions || !numeric.every(entry => inputNumbers.has(entry)))
+        || computedNumbers !== null && !numeric.every(entry => computedNumbers.has(entry))
+      if (unsupported) {
+        ctx.issues.push(`${at("origin")}: numeric claims lack matching evidence`)
+        return { ...base, type: "callout", tone: "warning", title: str(data.title, 120) || "График", text: "Недостаточно подтверждённых данных для графика. Нужны исходные значения или источники с этими числами." }
+      }
+      if (pie && (hasExpressions || numeric.some(entry => entry < 0) || observations.some(entry => entry === null) || !numeric.some(entry => entry > 0))) {
+        ctx.issues.push(`${at("series")}: a part-to-whole chart needs complete, non-negative data and a positive total`)
+        return null
+      }
       return {
-        ...base, type, kind, labels, series: pie ? fixedSeries.slice(0, 1) : fixedSeries, origin,
+        ...base, type, kind, labels, series: shownSeries, origin,
+        ...(refs.length ? { sourceRefs: refs } : {}),
         ...(str(data.title, 120) ? { title: str(data.title, 120) } : {}), ...(str(data.unit, 16) ? { unit: str(data.unit, 16) } : {}),
         ...(oneOf(data.format, FORMATS) ? { format: oneOf(data.format, FORMATS) } : {}), ...(finite(data.digits) !== null ? { digits: Math.max(0, Math.min(6, finite(data.digits)!)) } : {}),
         ...(str(data.xLabel, 60) ? { xLabel: str(data.xLabel, 60) } : {}), ...(str(data.yLabel, 60) ? { yLabel: str(data.yLabel, 60) } : {}), ...(str(data.note, 200) ? { note: str(data.note, 200) } : {}),
@@ -238,7 +255,7 @@ function block(raw: unknown, ctx: Ctx, depth: number, where: string): Block | nu
         const label = str(o.label ?? o.title, 80)
         if (!label || count >= UI_LIMITS.treeNodes || level > 5) return null
         count += 1
-        const kids = arr(o.children).map((child) => walk(child, level + 1)).filter((child): child is NonNullable<typeof child> => Boolean(child))
+        const kids = arr(o.children).slice(0, UI_LIMITS.treeNodes).map((child) => walk(child, level + 1)).filter((child): child is NonNullable<typeof child> => Boolean(child))
         return { label, ...(str(o.detail ?? o.text, 160) ? { detail: str(o.detail ?? o.text, 160) } : {}), ...(kids.length ? { children: kids } : {}) }
       }
       const root = walk(data.root ?? data, 0)
@@ -248,7 +265,7 @@ function block(raw: unknown, ctx: Ctx, depth: number, where: string): Block | nu
       const kind = oneOf(data.kind, ["slider", "number", "select", "toggle", "segmented"] as const, "slider")!
       const bind = str(data.bind, 40)
       const label = str(data.label, 80)
-      if (!bind || !/^[\p{L}_][\p{L}\p{N}_]*$/u.test(bind) || !label) { ctx.issues.push(`${at("bind")}: a control needs a variable name and a label`); return null }
+      if (!safeStateKey(bind) || !label) { ctx.issues.push(`${at("bind")}: a control needs a safe variable name and a label`); return null }
       const options = arr(data.options).slice(0, 12).map(obj).map((option) => ({ label: str(option.label ?? option.value, 40), value: (typeof option.value === "number" ? option.value : str(option.value ?? option.label, 40)) as string | number })).filter((option) => option.label)
       let min = finite(data.min) ?? 0
       let max = finite(data.max) ?? 100
@@ -303,19 +320,19 @@ function block(raw: unknown, ctx: Ctx, depth: number, where: string): Block | nu
 }
 
 /** The model's JSON checked, repaired and limited. null when nothing drawable is left. */
-export function validateUi(raw: unknown, options: { sources?: UiSource[] } = {}): UiCheck {
+export function validateUi(raw: unknown, options: UiValidationOptions = {}): UiCheck {
   const data = obj(raw)
-  const ctx: Ctx = { issues: [], fixes: [], state: {}, blocks: 0, images: 0, sources: options.sources || [] }
+  const ctx: Ctx = { issues: [], fixes: [], state: {}, blocks: 0, images: 0, sources: options.sources || [], userText: options.userText, trustedCalculationText: options.trustedCalculationText }
   if (data.v !== undefined && data.v !== UI_VERSION) ctx.fixes.push(`version ${String(data.v)} read as ${UI_VERSION}`)
   for (const [key, entry] of Object.entries(obj(data.state)).slice(0, UI_LIMITS.stateKeys)) {
-    if (!/^[\p{L}_][\p{L}\p{N}_]*$/u.test(key)) { ctx.issues.push(`state: bad variable name «${key}»`); continue }
+    if (!safeStateKey(key)) { ctx.issues.push(`state: bad variable name «${key}»`); continue }
     if (typeof entry === "number" && Number.isFinite(entry)) ctx.state[key] = entry
     else if (typeof entry === "boolean") ctx.state[key] = entry
     else if (typeof entry === "string") ctx.state[key] = entry.slice(0, 80)
     else ctx.issues.push(`state: «${key}» must be a number, text or true/false`)
   }
   const rawBlocks = Array.isArray(raw) ? raw : arr(data.blocks)
-  const blocks = rawBlocks.map((item, index) => block(item, ctx, 0, `blocks.${index}`)).filter((item): item is Block => Boolean(item))
+  const blocks = rawBlocks.slice(0, UI_LIMITS.blocks).map((item, index) => block(item, ctx, 0, `blocks.${index}`)).filter((item): item is Block => Boolean(item))
   if (!blocks.length) return { doc: null, issues: ctx.issues.length ? ctx.issues : ["no drawable blocks"], fixes: ctx.fixes }
   const title = str(data.title, 160)
   return { doc: { v: UI_VERSION, ...(title ? { title } : {}), ...(Object.keys(ctx.state).length ? { state: ctx.state } : {}), blocks }, issues: ctx.issues, fixes: ctx.fixes }

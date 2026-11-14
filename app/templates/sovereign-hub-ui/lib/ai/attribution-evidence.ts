@@ -13,7 +13,7 @@ export type AttributionSource = {
   authority?: string
 }
 export type AttributionKind = "identity" | "founding-date" | "biographical-date"
-import { deniesPremise, evidenceDigest, keepEvidencedSentences } from "./premise-check"
+import { deniesPremise, evidenceDigest, keepEvidencedSentences, supportsPremiseSentence } from "./premise-check"
 
 const ROLE = /(?:основател|основа[лтн]|создал|создат|организатор|лидер|руковод|возглав|глав[ауы]|предводител|founder|founded|created|leader|headed|led\b|басшы|негізін\s+қал|жетекш)/iu
 const CREATION = /(?:основа[нлт]|созда[нлт]|образова|организова|возник|появил|начал.{0,12}существ|found(?:ed)?|establish|formed|created|құрылған|құрды)/iu
@@ -162,8 +162,11 @@ export function gateAttributionAnswer(input: {
   // years are dropped rather than the whole answer. With no evidence at all
   // only year-free sentences survive.
   if (kind !== "identity" && deniesPremise(input.answer)) {
-    const kept = keepEvidencedSentences(input.answer, usable.map(textOf).join("\n"))
+    const opening = input.answer.trim().split(/(?<=[.!?…])\s+|\n/u)[0]
+    const supported = independentlySupported(usable, source => supportsPremiseSentence(opening, textOf(source)))
+    const kept = supported ? keepEvidencedSentences(input.answer, usable.map(textOf).join("\n")) : ""
     if (kept) return { content: kept, withheld: false, reason: kept === input.answer.trim() ? "premise-denied" : "premise-denied-trimmed" }
+    return { content: ["По доступным источникам не удалось подтвердить, что это событие произошло. Поэтому точную дату назвать нельзя. Отсутствие подтверждения не доказывает, что события не было.", evidenceDigest(usable)].filter(Boolean).join("\n\n"), withheld: true, reason: "premise-unconfirmed" }
   }
   if (!usable.length) return { content: attributionUnavailable(kind, "missing"), withheld: true, reason: "no-sources" }
 

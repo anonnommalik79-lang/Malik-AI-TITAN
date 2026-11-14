@@ -65,10 +65,11 @@ export type ChartViewProps = {
   scatter?: ChartBlock["scatter"]
   xLabel?: string
   yLabel?: string
+  connectGaps?: boolean
 }
 
 /** The plot alone: axes, marks, tooltip. Shared by charts and dashboards. */
-export function ChartView({ kind, data, unit, height, hidden = [], seriesKinds, scatter, xLabel, yLabel }: ChartViewProps) {
+export function ChartView({ kind, data, unit, height, hidden = [], seriesKinds, scatter, xLabel, yLabel, connectGaps = true }: ChartViewProps) {
   const R = useRecharts()
   const rows = useMemo(() => rowsOf(data), [data])
   if (!R) return <Skeleton height={height} />
@@ -87,13 +88,13 @@ export function ChartView({ kind, data, unit, height, hidden = [], seriesKinds, 
   let chart: ReactNode = null
   if (kind === "line") {
     chart = <R.LineChart data={rows} margin={margin}>{grid}{xAxis}{yAxis}{tooltip}
-      {data.series.map((_, at) => <R.Line key={at} type="linear" dataKey={`s${at}`} name={names[at]} stroke={color(at)} strokeWidth={2} dot={rows.length <= 40 ? { r: 3.5, fill: color(at), stroke: color(at) } : false} activeDot={{ r: 5, stroke: "#0a0a0a", strokeWidth: 2 }} hide={isHidden(at)} connectNulls isAnimationActive={rows.length <= 120} />)}
+      {data.series.map((_, at) => <R.Line key={at} type="linear" dataKey={`s${at}`} name={names[at]} stroke={color(at)} strokeWidth={2} dot={rows.length <= 40 ? { r: 3.5, fill: color(at), stroke: color(at) } : false} activeDot={{ r: 5, stroke: "#0a0a0a", strokeWidth: 2 }} hide={isHidden(at)} connectNulls={connectGaps} isAnimationActive={rows.length <= 120} />)}
       {brush}</R.LineChart>
   } else if (kind === "area" || kind === "stacked-area") {
     chart = <R.AreaChart data={rows} margin={margin}>
       <defs>{data.series.map((_, at) => <linearGradient key={at} id={`mv-area-${at}`} x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={color(at)} stopOpacity={0.35} /><stop offset="100%" stopColor={color(at)} stopOpacity={0.02} /></linearGradient>)}</defs>
       {grid}{xAxis}{yAxis}{tooltip}
-      {data.series.map((_, at) => <R.Area key={at} type="monotone" dataKey={`s${at}`} name={names[at]} stroke={color(at)} strokeWidth={2} fill={`url(#mv-area-${at})`} stackId={kind === "stacked-area" ? "a" : undefined} hide={isHidden(at)} connectNulls isAnimationActive={rows.length <= 120} />)}
+      {data.series.map((_, at) => <R.Area key={at} type="monotone" dataKey={`s${at}`} name={names[at]} stroke={color(at)} strokeWidth={2} fill={`url(#mv-area-${at})`} stackId={kind === "stacked-area" ? "a" : undefined} hide={isHidden(at)} connectNulls={connectGaps} isAnimationActive={rows.length <= 120} />)}
       {brush}</R.AreaChart>
   } else if (kind === "bar" || kind === "stacked-bar") {
     const stacked = kind === "stacked-bar"

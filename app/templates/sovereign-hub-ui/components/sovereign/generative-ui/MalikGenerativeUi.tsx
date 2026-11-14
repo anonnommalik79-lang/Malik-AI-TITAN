@@ -5,8 +5,8 @@ import { AlertTriangle, ArrowDown, ArrowUp, ArrowUpDown, Check, CheckCircle2, Co
 import { evaluate, type ExprValue } from "@/lib/generative-ui/expr"
 import { rawFallbackText, resolveValue, uiToText } from "@/lib/generative-ui/fallback"
 import { parsePartialUi } from "@/lib/generative-ui/partial"
-import type { Block, ChartBlock, ControlBlock, DataOrigin, Format, ImageRef, TableBlock, UiDocument, Value } from "@/lib/generative-ui/protocol"
-import { validateUi, type UiCheck } from "@/lib/generative-ui/validate"
+import { UI_LIMITS, type Block, type ChartBlock, type ControlBlock, type DataOrigin, type Format, type ImageRef, type TableBlock, type UiDocument, type Value } from "@/lib/generative-ui/protocol"
+import { validateUi, type UiCheck, type UiValidationOptions } from "@/lib/generative-ui/validate"
 import { layoutGraph } from "@/lib/visual/graph-layout"
 import { formatCompact, formatCurrency, type VisualCurrency } from "@/lib/visual/format"
 import { reportReferenceImageFailure, subscribeReferenceImages } from "@/lib/media/client-reference-cache"
@@ -34,6 +34,7 @@ import "./generative-ui.css"
 type Scope = Record<string, ExprValue>
 type Ctx = { scope: Scope; set: (key: string, value: ExprValue) => void; sources: readonly MalikCitation[]; uid: string }
 const UiContext = createContext<Ctx>({ scope: {}, set: () => {}, sources: [], uid: "ui" })
+const NO_SOURCES: readonly MalikCitation[] = []
 
 type Props = {
   raw: string
@@ -42,6 +43,7 @@ type Props = {
   /** The answer is still arriving. */
   streaming?: boolean
   sources?: readonly MalikCitation[]
+  userText?: string
   /** Per-message key: control positions survive a reload. */
   stateKey?: string
   /** How Markdown text is drawn (tables, lists) when a composition falls back to text. */
@@ -50,8 +52,8 @@ type Props = {
 
 type Read = UiCheck & { pendingType?: string; broken: boolean }
 
-function readUi(raw: string, closed: boolean, sources: readonly MalikCitation[]): Read {
-  const options = { sources: sources.map((source) => ({ url: source.url, title: source.title })) }
+function readUi(raw: string, closed: boolean, options: UiValidationOptions): Read {
+  if (raw.length > UI_LIMITS.bytes) return { doc: null, issues: ["Composition size limit exceeded"], fixes: [], broken: true }
   if (!closed) return { ...parsePartialUi(raw, options), broken: false }
   try {
     const check = validateUi(JSON.parse(raw), options)
@@ -63,10 +65,8 @@ function readUi(raw: string, closed: boolean, sources: readonly MalikCitation[])
   }
 }
 
-export function MalikGenerativeUi({ raw, closed, streaming = false, sources = [], stateKey, renderMarkdown }: Props) {
-  const sourceKey = sources.map((source) => source.url).join("\n")
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- the sources are compared by their links
-  const read = useMemo(() => readUi(raw, closed, sources), [raw, closed, sourceKey])
+export function MalikGenerativeUi({ raw, closed, streaming = false, sources = NO_SOURCES, userText, stateKey, renderMarkdown }: Props) {
+  const read = useMemo(() => readUi(raw, closed, { sources, userText }), [raw, closed, sources, userText])
   const text = (markdown: string) => renderMarkdown ? renderMarkdown(markdown) : markdown.split(/\n{2,}/u).map((part, index) => <p key={index}>{part}</p>)
   if (!read.doc) {
     if (!closed) return streaming ? <section className="mgu" data-malik-ui="pending" aria-busy="true"><UiSkeleton type={read.pendingType} /></section> : null
@@ -290,9 +290,8 @@ function UiCitation({ block }: { block: Extract<Block, { type: "citation" }> }) 
     return <a className="mgu-cite" href={href} target="_blank" rel="noopener noreferrer nofollow"><span className="mgu-cite__n">{block.ref}</span>{block.label || source.title || citationName(source)}<ExternalLink aria-hidden="true" /></a>
   }
   if (!block.url) return null
-  return <a className={`mgu-cite${block.unverified ? " is-unverified" : ""}`} href={block.url} target="_blank" rel="noopener noreferrer nofollow" title={block.unverified ? "Ссылки нет среди источников ответа" : undefined}>
-    {block.label || hostOf(block.url)}{block.unverified ? <span className="mgu-cite__flag">не проверено</span> : null}<ExternalLink aria-hidden="true" />
-  </a>
+  if (block.unverified) return <span className="mgu-cite is-unverified" title="Ссылки нет среди источников ответа">{block.label || "Неподтверждённый источник"}</span>
+  return <a className="mgu-cite" href={block.url} target="_blank" rel="noopener noreferrer nofollow">{block.label || hostOf(block.url)}<ExternalLink aria-hidden="true" /></a>
 }
 
 /* ---------------------------------------------------------------- photos */
@@ -444,7 +443,8 @@ function UiChart({ block }: { block: ChartBlock }) {
       {block.title ? <h4 className="mgu-chart__title">{block.title}</h4> : <span />}
       <OriginBadge origin={block.origin} />
     </div>
-    <ChartView kind={block.kind === "scatter" ? "scatter" : block.kind} data={data} unit={unit} height={height} hidden={pie ? [] : hidden} scatter={scatter} xLabel={block.xLabel} yLabel={block.yLabel} />
+    <ChartView kind={block.kind} data={data} unit={unit} height={height} hidden={pie ? [] : hidden} scatter={scatter} xLabel={block.xLabel} yLabel={block.yLabel} connectGaps={false} />
+    {block.sourceRefs?.length ? <div className="mgu-legend" aria-label="Источники значений">{block.sourceRefs.map(ref => <UiCitation key={ref} block={{ type: "citation", ref }} />)}</div> : null}
     {legend.length ? <div className="mgu-legend" role={pie ? "list" : "group"} aria-label="Легенда">
       {legend.map((item) => pie
         ? <span key={item.name} className="mgu-legend__item" role="listitem"><span className="mgu-legend__dot" style={{ background: item.color }} />{item.name}<b>{item.extra}</b></span>

@@ -58,6 +58,8 @@ import {
 import type { GenerationStatusType } from "./generation-status"
 import type { AIPlan } from "@/lib/ai/types"
 import type { MalikMessageResearch, MalikResearchStep, MalikWebSource } from "@/lib/ai/web-research-types"
+import { summarizeSourceAccess } from "@/lib/ai/source-evidence"
+import { SourceEvidenceDetails } from "./SourceEvidenceDetails"
 import { fixWrongKeyboardLayout } from "@/lib/ai/keyboard-layout"
 import type { MalikFactAudit, MalikFactClaim } from "@/lib/ai/fact-audit"
 import { worthFactAuditPanel } from "@/lib/ai/fact-audit"
@@ -1236,7 +1238,7 @@ function SourceDrawer({ research, onClose }: { research: MalikMessageResearch; o
         <header className="malik-sources-drawer__header">
           <div>
             <h2>Источники</h2>
-            <p>{research.sources.length} прочитано{research.tookMs ? ` · ${(research.tookMs / 1000).toFixed(1)}с` : ""}</p>
+            <p>{research.sources.length} найдено · {summarizeSourceAccess(research.sources).read} прочитано{research.tookMs ? ` · ${(research.tookMs / 1000).toFixed(1)}с` : ""}</p>
           </div>
           <button type="button" onClick={onClose} aria-label="Закрыть"><X className="h-5 w-5" /></button>
         </header>
@@ -1259,18 +1261,11 @@ function SourceDrawer({ research, onClose }: { research: MalikMessageResearch; o
             </section>
           ) : null}
 
-          <section className="malik-sources-drawer__section" aria-label="Прочитанные страницы">
-            <h3>Прочитанные страницы</h3>
+          <section className="malik-sources-drawer__section" aria-label="Найденные источники">
+            <h3>Найденные источники</h3>
             <div className="malik-sources-drawer__links">
               {research.sources.map((source, index) => (
-                <a key={source.url} href={source.url} target="_blank" rel="noreferrer">
-                  <SourceIcon source={source} />
-                  <span>
-                    <strong>{source.title || sourceDisplayName(source)}</strong>
-                    <small>{source.domain}</small>
-                  </span>
-                  <em>{index + 1}</em>
-                </a>
+                <SourceEvidenceDetails key={source.url} source={source} index={index} icon={<SourceIcon source={source} />} />
               ))}
             </div>
           </section>
@@ -1801,7 +1796,7 @@ function MessageBubble({
   const displayContent = isUser || olderVersion ? answerText : cleanResearchDisplayText(answerText, message.research)
   const responseModel = !isUser && message.modelId ? getMalikModel(message.modelId) : null
   // The answer actions read the settled text and keep UI notices separate.
-  const actionContent = !isUser && !streaming ? stripAnswerPhotoHints(oilReportBlocksToText(answerQuizzesToText(answerCardsToText(displayContent)))) : ""
+  const actionContent = !isUser && !streaming ? stripAnswerPhotoHints(oilReportBlocksToText(answerQuizzesToText(answerCardsToText(displayContent, olderVersion ? undefined : { sources: message.research?.sources, userText: question || undefined })))) : ""
   const hasActionContent = Boolean(actionContent.trim())
   // A site, game or app being built: its steps instead of code on screen,
   // then the result card and the Live Preview beside the chat.
@@ -3373,7 +3368,7 @@ export function ChatView({ messages, workspaceMode = "chat", onSendMessage, onIm
       {sheet && sheetMessage ? (
         <AnswerSheet
           key={sheet.id}
-          content={stripAnswerPhotoHints(answerCardsToText(cleanResearchDisplayText(sheetMessage.content, sheetMessage.research)))}
+          content={stripAnswerPhotoHints(answerCardsToText(cleanResearchDisplayText(sheetMessage.content, sheetMessage.research), { sources: sheetMessage.research?.sources }))}
           streaming={Boolean(sheetMessage.isStreaming)}
           request={sheetRequest}
           auto={sheet.auto}

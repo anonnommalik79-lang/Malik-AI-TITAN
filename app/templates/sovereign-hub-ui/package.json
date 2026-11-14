@@ -199,7 +199,7 @@
     "test:chat-build": "node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs --test scripts/verify-chat-build.mjs",
     "test:chat-build-browser": "node --experimental-strip-types --no-warnings scripts/verify-chat-build-browser.mjs",
     "test:proof-passport": "node scripts/verify-proof-passport.mjs",
-    "test:generative-ui": "node scripts/verify-generative-ui.mjs"
+    "test:generative-ui": "node --test scripts/verify-generative-ui.mjs scripts/verify-olympus-baseline.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.8.0",

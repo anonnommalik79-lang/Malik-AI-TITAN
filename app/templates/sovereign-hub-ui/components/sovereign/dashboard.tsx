@@ -207,6 +207,7 @@ import {
 import type { AIPlan } from "@/lib/ai/types"
 import { isStoredGeneratedImageUrl, persistGeneratedImageReference, persistGeneratedImageUrl, resolveGeneratedImageUrl } from "@/lib/media/client-generated-image-store"
 import type { MalikMessageResearch, MalikResearchProgress, MalikResearchStep, MalikWebSource } from "@/lib/ai/web-research-types"
+import { normalizeWebSource } from "@/lib/ai/source-evidence"
 import { normalizeFactAudit } from "@/lib/ai/fact-audit"
 import { extractSlideCount, isPresentationCreationRequest, presentationTopic } from "@/lib/presentations/deck"
 import { routeWorkRequest } from "@/lib/work/orchestrator"
@@ -1322,21 +1323,7 @@ function clearLegacyAuthStorage(): void {
 }
 
 function reviveWebSource(value: any): MalikWebSource | null {
-  const url = typeof value?.url === "string" ? value.url.trim() : ""
-  if (!/^https?:\/\//i.test(url)) return null
-  let domain = typeof value?.domain === "string" ? value.domain.trim() : ""
-  if (!domain) {
-    try { domain = new URL(url).hostname.replace(/^www\./, "") } catch { domain = "source" }
-  }
-  return {
-    title: String(value?.title || domain).slice(0, 220),
-    url,
-    domain,
-    snippet: typeof value?.snippet === "string" ? value.snippet.slice(0, 1200) : undefined,
-    provider: typeof value?.provider === "string" ? value.provider.slice(0, 80) : undefined,
-    publishedAt: typeof value?.publishedAt === "string" ? value.publishedAt : undefined,
-    image: typeof value?.image === "string" && /^https:\/\//i.test(value.image) && value.image.length <= 1200 ? value.image : undefined,
-  }
+  return normalizeWebSource(value)
 }
 
 function reviveResearch(value: any): MalikMessageResearch | undefined {
@@ -7163,8 +7150,10 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
         provider: progress.provider,
         at: Date.now(),
       }
-      const sources = source && !previous.sources.some((item) => item.url === source.url)
-        ? [...previous.sources, source].slice(0, 12)
+      const sources = source
+        ? previous.sources.some(item => item.url === source.url)
+          ? previous.sources.map(item => item.url === source.url ? { ...item, ...source } : item)
+          : [...previous.sources, source].slice(0, 12)
         : previous.sources
       const status: MalikMessageResearch["status"] = progress.kind === "error"
         ? "error"

@@ -46,11 +46,11 @@ export type FileBlock = Base & { type: "file"; name: string; note?: string; size
 export type CitationBlock = Base & { type: "citation"; ref?: number; url?: string; label?: string; /** Set by validation, never by the model: the link is not one of the answer's sources. */ unverified?: boolean }
 export type TableColumn = { key: string; label: string; align?: "left" | "right" | "center"; format?: Format; digits?: number; unit?: string }
 export type TableBlock = Base & { type: "table"; columns: TableColumn[]; rows: Array<Record<string, Value | null>>; caption?: string; sortable?: boolean; filterable?: boolean; highlight?: number; origin?: DataOrigin }
-export type ChartSeries = { name: string; values: Value[] }
+export type ChartSeries = { name: string; values: Array<Value | null> }
 export type ChartBlock = Base & {
   type: "chart"; kind: "bar" | "hbar" | "line" | "area" | "pie" | "donut" | "scatter"
   title?: string; labels: string[]; series: ChartSeries[]; unit?: string; format?: Format; digits?: number
-  xLabel?: string; yLabel?: string; origin: DataOrigin; note?: string
+  xLabel?: string; yLabel?: string; origin: DataOrigin; note?: string; sourceRefs?: number[]
 }
 export type TimelineItem = { date: string; title: string; text?: string; status?: "done" | "active" | "next" }
 export type TimelineBlock = Base & { type: "timeline"; items: TimelineItem[] }

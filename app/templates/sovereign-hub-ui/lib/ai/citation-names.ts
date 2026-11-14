@@ -3,7 +3,9 @@
  * the domain label on a card picture, the hosts a card link may point to.
  */
 
-export type MalikCitation = { url: string; title?: string; domain?: string; image?: string }
+import { evidenceUrlMatches } from "./source-evidence"
+
+export type MalikCitation = { url: string; title?: string; domain?: string; image?: string; snippet?: string; publishedAt?: string; checkedAt?: string; readAt?: string }
 
 const KNOWN_SOURCE_NAMES: Record<string, string> = {
   "wikipedia.org": "Wikipedia", "britannica.com": "Britannica", "github.com": "GitHub", "youtube.com": "YouTube",
@@ -39,17 +41,9 @@ export function safeHttps(url: string): string {
   try { const parsed = new URL(url); return (parsed.protocol === "https:" || parsed.protocol === "http:") && !parsed.username && !parsed.password ? parsed.href : "" } catch { return "" }
 }
 
-/** The registrable part of a host, roughly: «events.astanahub.com» → «astanahub.com». */
-function siteOf(host: string): string {
-  const parts = host.split(".").filter(Boolean)
-  if (parts.length <= 2) return host
-  const secondLevel = /^(?:co|com|gov|org|net|edu|ac)$/.test(parts[parts.length - 2])
-  return parts.slice(secondLevel ? -3 : -2).join(".")
-}
-
 /**
  * A link written by the model is kept only when it can be trusted not to be
- * invented: with web sources, it must point to a site one of them is on; with
+ * invented: with web sources, it must match an actual evidence URL; with
  * none, only a site's front page is kept (a made-up deep path is the classic
  * 404). Returns the safe URL or "".
  */
@@ -59,8 +53,7 @@ export function trustedLink(url: unknown, sources: readonly MalikCitation[] | nu
   const host = hostOf(safe)
   if (!host) return ""
   if (sources?.length) {
-    const sites = new Set(sources.map((source) => siteOf(hostOf(source.url))).filter(Boolean))
-    return sites.has(siteOf(host)) ? safe : ""
+    return sources.some(source => evidenceUrlMatches(safe, source.url)) ? safe : ""
   }
   const path = new URL(safe).pathname
   return path === "/" || path === "" ? safe : ""

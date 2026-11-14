@@ -481,6 +481,37 @@
   background: rgba(255, 255, 255, 0.055);
 }
 
+.malik-source-evidence {
+  min-width: 0;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.09);
+}
+
+.malik-source-evidence details {
+  margin: 0 8px 0 46px;
+  color: #a8a8b1;
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.malik-source-evidence summary {
+  cursor: pointer;
+  padding-block: 4px;
+}
+
+.malik-source-evidence details p,
+.malik-source-evidence blockquote {
+  margin: 6px 0 0;
+  overflow-wrap: anywhere;
+}
+
+.malik-source-evidence blockquote {
+  max-height: 10rem;
+  overflow: auto;
+  padding-inline-start: 8px;
+  border-inline-start: 1px solid rgba(255, 255, 255, 0.15);
+}
+
 .malik-sources-drawer__links a > span:not(.malik-source-icon),
 .malik-sources-drawer__links strong,
 .malik-sources-drawer__links small {
