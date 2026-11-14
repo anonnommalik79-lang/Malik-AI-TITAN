@@ -22,6 +22,10 @@ export const NO_WEB = /(?:не\s+(?:ищи|гугли|загугливай)|бе
 const ASK_WEB = /(?:по[ий]щ[иь]|загугл|найди\s+(?:в\s+(?:сети|интернете)|источник)|\b(?:browse|search the web|look up|search online)\b|интернеттен\s+(?:ізде|тап))/iu
 const CREATIVE = /^(?:(?:пожалуйста|please)\s+)?(?:(?:напиши|сочини|придумай)\s+(?:стих|сказк|рассказ|песн)|(?:write|compose)\s+(?:(?:a|an)\s+)?(?:story|poem|fairy\s+tale|song|lyrics)\b|(?:өлең|ертегі|әңгіме)\s+жаз)/iu
 const SELF_CONTAINED = /^(?:(?:пожалуйста|please)\s+)?(?:переведи|перевод|translate\b|аудар|посчитай|вычисли|реши|calculate\b|compute\b|solve\b|есепте|шеш\b|докажи|prove\b)/iu
+// «Сделай сайт новостей», «приложение погоды», «3D сцену»: the changing word
+// names what to build. It is not a question about the present.
+const BUILD = /(?<!\p{L})(?:напиши|создай|сделай|разработай|сверстай|собери|запрограммируй|write|build|create|make|develop|implement|code|жаса|жаз)\p{L}*\s+(?:\S+\s+){0,3}?(?:сайт\p{L}*|лендинг\p{L}*|приложени\p{L}*|игр[уаы]|сцен[уаы]|бот(?:а|ов)?|код|скрипт\p{L}*|компонент\p{L}*|дашборд\p{L}*|калькулятор\p{L}*|страниц[уаы]|интернет[- ]магазин\p{L}*|портфолио|анимаци\p{L}*|web\s?site|web\s?app|site|app|application|game|scene|bot|landing|dashboard|component|page|script|animation|3d|three\.?js|webgl|html|css|react|next\.?js|python|typescript|javascript|node\.?js)(?![\p{L}])/iu
+const BUILD_NEEDS_WEB = /(?:актуальн|свеж|последн|новейш|обзор|сравн|найди|current|latest|newest|review|compare|research|соңғы|қазіргі)/iu
 const WRITING = /(?:напиши|создай|сделай|объясни|рассчитай|write\b|build\b|create\b|explain\b|implement\b|жаз|түсіндір|жаса)/iu
 const LIVE_WORDS = /(?:последние?\s+24\s+час|за\s+24\s+час|сегодня|вчера|прямо\s+сейчас|в\s+реальном\s+времени|\btoday\b|\byesterday\b|last\s+24\s+hours|right\s+now|бүгін|кеше|соңғы\s+24\s+сағат)/iu
 const TIME_WORDS = /(?:последн|новейш|свеж|актуальн|сейчас|на\s+данный\s+момент|на\s+сегодняшний\s+день|на\s+этой\s+неделе|текущ|\blatest\b|\bcurrent\b|\brecent\b|\bnow\b|this\s+(?:week|month|year)|соңғы|қазіргі|қазір|жаңа)/iu
@@ -31,7 +35,7 @@ const MONEY_NOW = /(?:оценива\p{L}*ся|(?<!\p{L})оценк[аиуе]\s+
 export function asksCompanyMoney(prompt: string): boolean {
   return MONEY_NOW.test(normalizeColloquial(String(prompt || "")))
 }
-const VOLATILE = /(?:новост|погод|курс\s+(?:валют|доллар|евро)|цен[ауы]|стоимост|сколько(?:\s+\p{L}+){0,3}\s+стоит|президент|министр|расписани|спикер|релиз|выпуст|выш[её]л|(?<!\p{L})(?:версии?|версия)|доступност|\b(?:news|weather|price|pricing|exchange rate|president|ceo|schedule|release|version|available|availability)\b|жаңалық|бағасы|бағам|нұсқа|шығарыл|президент|министр)/iu
+const VOLATILE = /(?:новост|погод|курс\s+(?:валют|доллар|евро)|(?<!\p{L})цен[ауы]|стоимост|сколько(?:\s+\p{L}+){0,3}\s+стоит|президент|министр|расписани|спикер|релиз|выпуст|выш[её]л|(?<!\p{L})(?:версии?|версия)|доступност|\b(?:news|weather|price|pricing|exchange rate|president|ceo|schedule|release|version|available|availability)\b|жаңалық|бағасы|бағам|нұсқа|шығарыл|президент|министр)/iu
 const AI = /(?:\b(?:AI|LLM|GPT|OpenAI|Anthropic|Claude|Gemini|DeepMind|Meta|Llama|DeepSeek|Alibaba|Qwen|Mistral|xAI|Grok)\b|(?<!\p{L})ИИ[ -]?модел|модел.{0,20}(?<!\p{L})ИИ(?!\p{L})|искусственн.{0,20}интеллект|жасанды\s+интеллект|ЖИ[ -]?модел)/iu
 /** A ranked model list is a changing factual claim, even without words like "today". */
 const LEADERBOARD = /(?:\b(?:top[\s-]?\d+|rankings?|leaderboards?|benchmarks?|best|strongest)\b|(?:^|[^\p{L}])топ(?:[\s-]?\d+|(?=[^\p{L}]|$))|рейтинг\p{L}*|лидерборд\p{L}*|бенчмарк\p{L}*|лучш\p{L}*\s+\d+|үздік\p{L}*)/iu
@@ -104,8 +108,9 @@ export function classifyFreshness(prompt: string, now = new Date(), timeZone = "
   if (CREATIVE.test(text) && !/(?:новост|источник|research|sources|news|жаңалық)/iu.test(text)) return result("STATIC", false, "creative")
   if (SELF_CONTAINED.test(text) && !VOLATILE.test(text) && !/(?:актуальн|current|latest|соңғы|қазіргі)/iu.test(text)) return result("STATIC", false, "self-contained")
   if (historical) return result("STATIC", false, "historical")
+  if (BUILD.test(text) && !BUILD_NEEDS_WEB.test(text)) return result("STATIC", false, "build-task")
   const changing = isNewsRequest(text) || isModelLeaderboardRequest(text) || VOLATILE.test(text) || MONEY_NOW.test(text) || AI.test(text) && (COMPARISON.test(text) || TIME_WORDS.test(text) || /(?:модел|models?|GPT[ -]?\d|Claude[ -]?\d|Gemini[ -]?\d|Grok[ -]?\d)/iu.test(text))
-    || TECH.test(text) && /(?:нов[а-я]*|latest|current|recent|new|жаңа|соңғы)/iu.test(text)
+    || TECH.test(text) && /(?:(?<!\p{L})нов[а-я]*|latest|current|recent|new|жаңа|соңғы)/iu.test(text)
     || EVENT.test(text) && /(?:форум|конференц|мероприяти|выставк|conference|summit|forum|event|expo)/iu.test(text)
   const factualTime = (TIME_WORDS.test(text) || LIVE_WORDS.test(text)) && /(?:кто|како|каки|что.{0,20}(?:произошло|нового)|когда|what|which|who|when|қандай|не\s+болды)/iu.test(text)
   if (changing || factualTime) return result(LIVE_WORDS.test(text) ? "LIVE" : WRITING.test(text) ? "MIXED" : "CURRENT", true, "changing-fact")

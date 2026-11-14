@@ -1258,7 +1258,7 @@ export async function malikGodAnswer(
       systemPrompt: compactSimpleChat
         ? [compactChatInstructions, userContextBlocks(body)].filter(Boolean).join("\n\n")
         : leanEvidenceChat
-        ? [compactChatInstructions, leanEvidenceInstructions, accuracyInstruction(focus.searchText), attributionSystemInstruction(focus.searchText), premiseInstruction(focus.searchText), userContextBlocks(body)].filter(Boolean).join("\n\n")
+        ? [compactChatInstructions, leanEvidenceInstructions, requestFreshness.needsSearch ? freshnessEvidenceInstruction(requestFreshness) : "", accuracyInstruction(focus.searchText), attributionSystemInstruction(focus.searchText), premiseInstruction(focus.searchText), userContextBlocks(body)].filter(Boolean).join("\n\n")
         : [chatWebsiteInstruction(body), body?.metadata?.petroleumDomain ? petroleumKnowledgeInstruction() : "", typeof body?.metadata?.petroleumComputedEvidence === "string" ? [
         "PETROLEUM VERIFIED DATA INPUT (locally calculated; user inputs are not field-verified):",
         body.metadata.petroleumComputedEvidence.slice(0, 16_000),

@@ -48,6 +48,11 @@ for (const value of ["Без интернета последние новост�
 for (const value of ["Топ-20 текстовых языковых моделей (LLM)", "Рейтинг языковых моделей", "Top 20 language models"]) await check("model ranking needs mandatory web evidence: " + value, () => { assert.equal(classifyFreshness(value, NOW).needsSearch, true); assert.equal(shouldUseWeb(value), true) })
 await check("model ranking opt-out remains respected", () => { assert.equal(shouldUseWeb("Без интернета топ-20 языковых моделей LLM"), false) })
 await check("mixed separates current evidence from stable task", () => assert.equal(classifyFreshness("Build with latest Next.js", NOW).category, "MIXED"))
+for (const value of ["Создай 3D сцену с планетами на Three.js", "Сделай сайт для кофейни с меню и ценами", "Создай интернет-магазин телефонов на Next.js", "Сделай приложение погоды на React", "Сделай сайт новостей на Next.js", "Create a weather app in React", "Build a news website"]) await check("a build request is not a question about the present: " + value, () => {
+  assert.equal(classifyFreshness(value, NOW).needsSearch, false)
+  assert.equal(classifyFreshness(value, NOW).reason, "build-task")
+})
+for (const value of ["Какая цена iPhone 17?", "Сделай обзор: цены на конструкторы сайтов", "Напиши код на последней версии Next.js", "Что нового в React?"]) await check("a current fact still needs evidence: " + value, () => assert.equal(classifyFreshness(value, NOW).needsSearch, true))
 await check("unknown intent is explicit", () => assert.equal(classifyFreshness("А он?", NOW).category, "UNCERTAIN"))
 await check("explicit source request is honored", () => assert.equal(shouldUseWeb("Поищи информацию о фотосинтезе"), true))
 for (const [value, label] of [["сегодня", "today"], ["today", "today"], ["бүгін", "today"], ["вчера", "yesterday"], ["yesterday", "yesterday"], ["кеше", "yesterday"], ["за 24 часа", "last-24-hours"], ["last 24 hours", "last-24-hours"], ["последние семь дней", "last-seven-days"], ["this week", "last-seven-days"], ["this month", "this-month"], ["this year", "this-year"]]) await check("time window: " + value, () => {
