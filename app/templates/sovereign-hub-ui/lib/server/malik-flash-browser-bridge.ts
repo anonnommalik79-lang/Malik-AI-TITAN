@@ -79,6 +79,7 @@ export async function runMalikFlashBrowser(input: {
   if (url.protocol !== "https:" && !(process.env.NODE_ENV !== "production" && loopback && url.protocol === "http:"))
     throw new FlashBrowserError("FLASH_WORKER_URL_INVALID", "Для браузерного сервиса требуется защищённое соединение.")
   if (!input.chatId || !input.userId) throw new FlashBrowserError("FLASH_SESSION_MISSING", "Неизвестен пользователь или идентификатор чата.")
+  if (input.userId === "guest" || input.userId.startsWith("guest:")) throw new FlashBrowserError("FLASH_SIGN_IN_REQUIRED", "Для персонального чата необходимо войти в MALIKII.")
 
   const providedImages = input.images || []
   const images = providedImages.filter((item) => item && typeof item.base64 === "string")
