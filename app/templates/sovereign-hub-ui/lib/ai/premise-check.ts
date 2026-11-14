@@ -11,6 +11,7 @@
  */
 
 import { canonicalEvidenceUrl } from "./source-evidence"
+import { chatTimeZone } from "./freshness-intent"
 
 const WHEN_ACTION = /^(?:а\s+)?(?:когда|в\s+каком\s+году|как\s+давно)(?=\s)|^(?:when|what\s+year|in\s+what\s+year)\s+(?:did|was|were|has|have)(?=\s)|(?:қашан|қай\s+жылы)/iu
 const PAST_VERB = /(?<![\p{L}])\p{L}{3,}(?:л|ла|ло|ли|лся|лась|лось|лись)(?![\p{L}])/iu
@@ -57,9 +58,8 @@ export function supportsPremiseSentence(sentence: string, evidence: string): boo
 }
 
 /**
- * Keeps the sentences of a premise-denying answer whose years appear in the
- * evidence (or are the current year). Returns "" when the denial itself did not
- * survive.
+ * Retains the denial and related statements only when the evidence text
+ * matches the subject and numeric details of each statement.
  */
 export function keepEvidencedSentences(answer: string, evidenceText: string): string {
   const known = (year: string) => evidenceText.includes(year)
@@ -96,11 +96,11 @@ const CLOCK_YEAR = /^(?:а\s+)?(?:(?:какой|который)\s+(?:сейча�
 const CLOCK_DATE = /^(?:а\s+)?(?:как(?:ое|ая)\s+(?:сегодня|сейчас)\s+(?:число|дата)|сегодня\s+какое\s+число|какой\s+сегодня\s+день(?:\s+недели)?|какое\s+число\s+сегодня|what(?:'s|\s+is)\s+(?:the\s+date\s+today|today'?s\s+date|the\s+date)|what\s+day\s+is\s+(?:it|today)(?:\s+today)?)[\s?.!]*$/iu
 
 /** The answer to a bare year/date question from the server clock, or "". */
-export function clockReply(prompt: string, now = new Date(), timeZone = "Asia/Almaty"): string {
+export function clockReply(prompt: string, now = new Date(), requestedZone?: unknown): string {
   const text = String(prompt || "").normalize("NFKC").toLowerCase().replace(/ё/g, "е").trim().replace(/\s+/g, " ")
   if (!text || text.length > 60) return ""
   if (!Number.isFinite(now.getTime())) return ""
-  try { new Intl.DateTimeFormat("en", { timeZone }).format(now) } catch { timeZone = "Asia/Almaty" }
+  const timeZone = chatTimeZone(requestedZone)
   const kazakh = /[әіңғүұқөһ]/iu.test(text)
   const english = !kazakh && !/[а-я]/iu.test(text)
   const part = (locale: string, options: Intl.DateTimeFormatOptions) => new Intl.DateTimeFormat(locale, { timeZone, ...options }).format(now)
@@ -114,6 +114,10 @@ export function clockReply(prompt: string, now = new Date(), timeZone = "Asia/Al
     const weekday = part("ru-RU", { weekday: "long" })
     const date = part("ru-RU", { year: "numeric", month: "long", day: "numeric" }).replace(/\s*г\.?$/u, "")
     return `Сегодня ${weekday}, ${date} года.`
+  }
+  if (/^(?:а\s+)?(?:(?:сколько\s+(?:сейчас\s+)?времени|какое\s+сейчас\s+время)|what\s+time\s+is\s+it(?:\s+now)?|қазір\s+сағат\s+неше)[\s?.!]*$/iu.test(text)) {
+    const time = part("en-GB", { hour: "2-digit", minute: "2-digit", hourCycle: "h23" })
+    return kazakh ? `Қазір сағат ${time} (${timeZone}).` : english ? `It is ${time} (${timeZone}).` : `Сейчас ${time} (${timeZone}).`
   }
   return ""
 }

@@ -5,14 +5,14 @@ import { createRequire } from "node:module"
 const require = createRequire(import.meta.url)
 const ts = require("typescript")
 /** Tests execute real TypeScript; only explicitly listed server boundaries are stubbed. */
-export function workTestLoader(stubs = {}) {
+export function workTestLoader(stubs = {}, sources = {}) {
   const cache = new Map()
   const qaRequire = process.env.MALIK_QA_DEPS ? createRequire(path.join(process.env.MALIK_QA_DEPS, "fixture.cjs")) : null
   function load(file) {
     const full = path.resolve(file)
     if (cache.has(full)) return cache.get(full).exports
     const mod = { exports: {} }; cache.set(full, mod)
-    const js = ts.transpileModule(fs.readFileSync(full, "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true } }).outputText
+    const js = ts.transpileModule(sources[full] ?? fs.readFileSync(full, "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true } }).outputText
     const resolve = (name) => {
       if (Object.hasOwn(stubs, name)) return stubs[name]
       if (name === "server-only") return {}

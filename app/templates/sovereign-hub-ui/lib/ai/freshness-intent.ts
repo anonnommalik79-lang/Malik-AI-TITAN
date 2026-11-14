@@ -56,7 +56,16 @@ export function isNewsRequest(prompt: string): boolean {
   return /(?:новост|дайджест|сводк|\bnews\b|жаңалық|что(?:\s+(?:сейчас|сегодня))?\s+(?:нового|новенького)|what(?:['’]s| is)\s+new|latest\s+(?:updates|announcements))/iu.test(prompt)
 }
 
-export function localDateAt(now: Date, timeZone = "Asia/Almaty"): string {
+export const DEFAULT_CHAT_TIME_ZONE = "Asia/Almaty"
+
+/** Validate untrusted client input once before using it for date windows. */
+export function chatTimeZone(value: unknown): string {
+  if (typeof value !== "string" || !/^[a-z0-9_+/-]{1,80}$/i.test(value)) return DEFAULT_CHAT_TIME_ZONE
+  try { return new Intl.DateTimeFormat("en", { timeZone: value }).resolvedOptions().timeZone }
+  catch { return DEFAULT_CHAT_TIME_ZONE }
+}
+
+export function localDateAt(now: Date, timeZone = DEFAULT_CHAT_TIME_ZONE): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(now)
 }
 
@@ -89,7 +98,8 @@ export function temporalWindow(prompt: string, now = new Date(), timeZone = "Asi
   return { from: new Date(from).toISOString(), to: new Date(to).toISOString(), label }
 }
 
-export function classifyFreshness(prompt: string, now = new Date(), timeZone = "Asia/Almaty"): FreshnessIntent {
+export function classifyFreshness(prompt: string, now = new Date(), requestedZone?: unknown): FreshnessIntent {
+  const timeZone = chatTimeZone(requestedZone)
   const text = normalizeColloquial(prompt.normalize("NFKC").replace(/ё/giu, "е").trim())
   const language = /[әіңғүұқөһ]|бүгін|кеше|қандай|соңғы|нұсқа/iu.test(text) ? "kk" : /[а-я]/iu.test(text) ? "ru" : "en"
   const historical = HISTORICAL.test(text) && !TIME_WORDS.test(text) && !LIVE_WORDS.test(text)

@@ -7220,6 +7220,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
         },
         responseDepth,
         workspaceMode: turnWorkspaceMode,
+        metadata: { timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone },
         research: options?.research ?? readWebSearchEnabled(),
         stream: true,
         // Full source bundles and slide decks must not inherit Fast mode's
