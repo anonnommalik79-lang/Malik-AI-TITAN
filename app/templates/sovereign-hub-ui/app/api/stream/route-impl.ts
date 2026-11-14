@@ -7,6 +7,7 @@ import { chatArtDirection } from "@/lib/website/chat-art-direction"
 import { canRetryChat } from "@/lib/ai/chat-stream-recovery"
 import { briefNeedsDeep } from "@/lib/ai/brief-quality"
 import { isCodeRequest } from "@/lib/ai/request-kind"
+import { runMalikFlashBrowser } from "@/lib/server/malik-flash-browser-bridge"
 import type { MalikWebSource } from "@/lib/ai/web-research-types"
 import { upsertWebSource } from "@/lib/ai/source-evidence"
 import { normalizeProviderTokenUsage } from "@/lib/ai/token-telemetry"
@@ -882,6 +883,26 @@ async function runSelectedAnswerUnchecked(
     return { ...result.answer, selectedModelId: selection?.modelId || DEFAULT_MALIK_MODEL_ID }
   }
 
+  // The Flash preview requires a separately authenticated, per-user isolated
+  // browser worker. It must never reuse the founder's Google cookies globally.
+  // Full responses pass through the same streaming/Markdown UI as other models.
+  if (selection?.modelId === "malik-flash" && !isCodeRequest(coderPrompt(body))) {
+    const uploads: any[] = hasMalikAttachments(body?.attachments) ? body.attachments : []
+    if (uploads.some((item) => item?.kind !== "image" && !(typeof item?.mime === "string" && item.mime.startsWith("image/")))) {
+      throw new MalikModelRouteError("FLASH_UNSUPPORTED_ATTACHMENT", "В тестовом режиме Flash поддерживает текст и фотографии PNG/JPEG/WebP.", 422, "malik-flash")
+    }
+    onProgress?.({ phase: "web-search", text: uploads.length ? "Flash передаёт фотографии в персональную сессию Google" : "Flash запрашивает Google AI Mode" })
+    const answer = await runMalikFlashBrowser({
+      question: coderPrompt(body),
+      userId: selection.entitlement.userId,
+      chatId: typeof body?.chatId === "string" ? body.chatId : "",
+      images: uploads.map((item) => ({ mime: item.mime, base64: item.base64, name: item.name })),
+      signal,
+    })
+    onToken?.(answer.content)
+    return answer
+  }
+
   let executionBody = body
   const requestAttachments = hasMalikAttachments(body?.attachments) ? body.attachments : []
   const superpowerPrompt = buildMalikSuperpowerSystemPrompt(
@@ -1000,7 +1021,13 @@ async function runSelectedAnswerUnchecked(
           maxTokensCap: maxOutputTokens,
         }
       : executionBody
-    const selectedModelId = selection?.modelId || DEFAULT_MALIK_MODEL_ID
+    const requestedModelId = selection?.modelId || DEFAULT_MALIK_MODEL_ID
+    // Flash is the free conversational surface. Programming requests explicitly
+    // use the existing MAX coding engine, without bypassing account quotas.
+    const selectedModelId = requestedModelId === "malik-flash" && isCodeRequest(coderPrompt(executionBody))
+      ? "malik-max"
+      : requestedModelId
+    if (selectedModelId !== requestedModelId) onProgress?.({ phase: "model", text: "Задача по программированию — подключаю MalikLLM MAX" })
     const answer = await malikGodAnswer(
       selectedBody,
       {
@@ -1506,7 +1533,19 @@ async function handlePOST(request: Request) {
   }
 
   try {
-    const selection = await resolveStrictMalikSelection(request, body)
+    const requestedSelection = await resolveStrictMalikSelection(request, body)
+    // Flash's product contract: ALL programming/build/game turns use MAX, even
+    // when the free Flash conversation was selected. This is server-side,
+    // verified intent routing; direct PRO selection remains entitlement-gated.
+    const flashPrompt = coderPrompt(body)
+    const flashUsesMax = requestedSelection?.modelId === "malik-flash"
+      && (isCodeRequest(flashPrompt)
+        || isProjectBuildRequest(body)
+        || Boolean(gameStudioTurn(flashPrompt, { messages: body?.messages || body?.history, attachments: body?.attachments }))
+        || Boolean(websiteIntent(flashPrompt)))
+    const selection = flashUsesMax && requestedSelection
+      ? { ...requestedSelection, modelId: "malik-max" }
+      : requestedSelection
     if (routePetroleum(coderPrompt(body), body?.selectedSkillId).engine === "petroleum") { body.isProjectRequest = false; body.forceCanvas = false; body.responseMode = "chat"; body.isCodeRequest = false }
     const entitlement = selection?.entitlement ?? await resolveRequestEntitlement(request)
     // MalikLLM MAX answers owner and PRO accounts with Claude; it reads the plan from here.

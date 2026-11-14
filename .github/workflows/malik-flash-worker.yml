@@ -1,0 +1,35 @@
+name: Malik Flash Browser Bridge safety checks
+on:
+  pull_request:
+    paths:
+      - "tools/malik-flash-worker/**"
+      - "app/templates/sovereign-hub-ui/lib/server/malik-flash-browser-bridge.ts"
+      - "app/templates/sovereign-hub-ui/lib/ai/malik-models.ts"
+      - ".github/workflows/malik-flash-worker.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "tools/malik-flash-worker/**"
+      - "app/templates/sovereign-hub-ui/lib/server/malik-flash-browser-bridge.ts"
+      - ".github/workflows/malik-flash-worker.yml"
+  workflow_dispatch:
+jobs:
+  safety:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Syntax checks
+        run: |
+          node --check tools/malik-flash-worker/photo.mjs
+          node --check tools/malik-flash-worker/browser.mjs
+          node --check tools/malik-flash-worker/server.mjs
+      - name: Photo transfer and isolation unit tests (mocked Google)
+        run: node --test tools/malik-flash-worker/test/*.test.mjs
+      - name: App integration contract
+        working-directory: app/templates/sovereign-hub-ui
+        run: node --test scripts/verify-malik-flash-preview.mjs

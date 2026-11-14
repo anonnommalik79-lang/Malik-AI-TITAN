@@ -1,0 +1,17 @@
+{
+  "name": "malik-flash-chrome-worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Opt-in per-user local or isolated remote Chrome AI Mode worker (experimental; never shared owner cookies)",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node --test test/*.test.mjs"
+  },
+  "dependencies": {
+    "playwright-core": "^1.56.0"
+  }
+}
