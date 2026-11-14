@@ -6,7 +6,7 @@ export type MalikModelTier = "free" | "pro"
 export type MalikModelProvider =
   | "malik-orchestrator" | "modelscope" | "aihubmix" | "groq" | "cloudflare"
   | "cerebras" | "nemotron-openrouter" | "together" | "deepseek"
-  | "xkiro" | "llm7" | "nara" | "google-ai" | "ling-openrouter" | "malik-oil-ensemble"
+  | "xkiro" | "llm7" | "nara" | "google-ai" | "ling-openrouter" | "malik-oil-ensemble" | "malik-browser-bridge"
 
 export type MalikModelBrand = RouterCatalogBrand | "malik" | "baidu" | "ling" | "malik-oil"
 
@@ -98,11 +98,30 @@ const LEGACY_INTERNAL_MODELS: MalikModelDefinition[] = [
   legacy("malik-agent-120b", "NVIDIA Nemotron 3 Super 120B-A12B", "cloudflare", "@cf/nvidia/nemotron-3-120b-a12b", "nvidia", ["text", "tools", "reasoning"]),
 ]
 
+/**
+ * Preview disabled by default: do not expose a "free" cloud model before
+ * a per-user isolated browser worker is provisioned and verified.
+ */
+export const MALIK_FLASH_PREVIEW_ENABLED = process.env.NEXT_PUBLIC_MALIK_FLASH_PREVIEW === "1"
+
+export const MALIK_FLASH_MODEL: MalikModelDefinition = {
+  id: "malik-flash",
+  label: "MalikLLM Flash",
+  description: "Бесплатно · Google AI Mode через персональный браузер",
+  tier: "free",
+  provider: "malik-browser-bridge",
+  providerModel: "google-ai-mode-browser",
+  capabilities: ["text", "vision", "tools", "reasoning"],
+  brand: "malik",
+  access: "free",
+  autoEligible: true,
+}
+
 export const MALIK_MAX_MODEL: MalikModelDefinition = {
   id: "malik-max",
   label: "MalikLLM MAX",
-  description: "Бесплатно · все модели и API в одной",
-  tier: "free",
+  description: MALIK_FLASH_PREVIEW_ENABLED ? "PRO · программирование и сложные проекты" : "Бесплатно · все модели и API в одной",
+  tier: MALIK_FLASH_PREVIEW_ENABLED ? "pro" : "free",
   provider: "malik-orchestrator",
   providerModel: "auto",
   capabilities: ["text", "vision", "code", "tools", "reasoning"],
@@ -220,6 +239,7 @@ export const MALIK_OIL_1TB_MODEL: MalikModelDefinition = {
 }
 
 export const MALIK_MODELS: readonly MalikModelDefinition[] = [
+  ...(MALIK_FLASH_PREVIEW_ENABLED ? [MALIK_FLASH_MODEL] : []),
   MALIK_MAX_MODEL,
   MALIK_OIL_1TB_MODEL,
   ...GOOGLE_AI_POOL_MODELS,
@@ -230,7 +250,7 @@ export const MALIK_MODELS: readonly MalikModelDefinition[] = [
 ]
 
 export const PUBLIC_MALIK_MODELS = MALIK_MODELS.filter((model) => !model.hidden)
-export const DEFAULT_MALIK_MODEL_ID: MalikModelId = "malik-max"
+export const DEFAULT_MALIK_MODEL_ID: MalikModelId = MALIK_FLASH_PREVIEW_ENABLED ? "malik-flash" : "malik-max"
 export const FREE_MALIK_MODELS = PUBLIC_MALIK_MODELS.filter((model) => model.tier === "free")
 export const PRO_MALIK_MODELS = PUBLIC_MALIK_MODELS.filter((model) => model.tier === "pro")
 
