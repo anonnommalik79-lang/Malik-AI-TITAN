@@ -23,6 +23,7 @@ import { enhanceImagePrompt } from "./image-prompt-enhancer"
 import { buildVisualPrompt } from "./visual-prompt"
 import { resolveRequestedQuality } from "./image-resolution-intent"
 import { routeImageGeneration } from "./image-router"
+import { runMalikFlashImage } from "../server/malik-flash-image-worker"
 import {
   checkImageCreditLimit,
   normalizeImageCreditSize,
@@ -145,6 +146,10 @@ export async function handleMalikPhotoGenerationRequest(request: Request) {
   }
 
   const user = await resolveMediaUser(request, body)
+  // Chat-selected Flash uses the isolated browser worker behind the existing
+  // MALIKII media UI. Keep the feature disabled until explicitly activated.
+  const flashRequested = process.env.NEXT_PUBLIC_MALIK_FLASH_PREVIEW === "1"
+    && body?.chatModelId === "malik-flash"
   let editSource
   if (editing) {
     try {
@@ -155,7 +160,7 @@ export async function handleMalikPhotoGenerationRequest(request: Request) {
       { status: error instanceof RequestSafetyError ? error.status : 400 })
     }
   }
-  const requestedModelId = requestedImageModel(request, body)
+  const requestedModelId = flashRequested ? undefined : requestedImageModel(request, body)
   if (requestedModelId && !canUseMalikImageModel(requestedModelId, user.plan)) {
     const lockedModel = getMalikImageModel(requestedModelId)
     return Response.json({
@@ -207,9 +212,43 @@ export async function handleMalikPhotoGenerationRequest(request: Request) {
 
   try {
     let result: ImageGenerateResult | undefined
-    const directDelivery = !editing && ephemeralDirectImageDeliveryEnabled()
+    const directDelivery = !flashRequested && !editing && ephemeralDirectImageDeliveryEnabled()
 
-    if (!editing && agnesImageConfigured()) {
+    if (flashRequested) {
+      try {
+        const image = await runMalikFlashImage({
+          task: editing ? "image_edit" : "image_generate",
+          question: prompt,
+          userId: user.userId,
+          chatId: typeof body?.chatId === "string" ? body.chatId : "",
+          source: editing && editSource
+            ? { mime: "image/png", bytes: editSource.bytes }
+            : undefined,
+        })
+        result = {
+          ok: true,
+          provider: "malik-flash",
+          imageUrl: image.dataUrl,
+          providerModel: "MalikLLM Flash",
+          remainingDailyImages: credit.remaining,
+          quality,
+          enhancedPrompt: prompt,
+          routeReason: "malik-flash-verified-image-result",
+          generationTier: "quality",
+        }
+      } catch (error) {
+        console.warn("[MALIK_FLASH_IMAGE]", error instanceof Error ? error.name : "error")
+        return Response.json({
+          ok: false,
+          status: "failed",
+          error: "FLASH_IMAGE_UNAVAILABLE",
+          publicError: error instanceof Error ? error.message : "Не удалось получить готовое изображение.",
+          retryable: true,
+        }, { status: 503, headers: { "Cache-Control": "no-store" } })
+      }
+    }
+
+    if (!result && !editing && agnesImageConfigured()) {
       try {
         // Agnes used to receive the raw chat sentence (for example
         // "сгенерируй фото ..."). Image models can treat that instruction as
@@ -450,9 +489,9 @@ export async function handleMalikPhotoGenerationRequest(request: Request) {
       kind: "photo",
       operation: editing ? "edit" : "generate",
       provider: result.provider,
-      engine: resolvedImageModel?.label || "MalikImage Auto",
+      engine: resolvedImageModel?.label || (flashRequested ? "MalikLLM Flash" : "MalikImage Auto"),
       modelId: resolvedModelId,
-      modelLabel: resolvedImageModel?.label || "MalikImage Auto",
+      modelLabel: resolvedImageModel?.label || (flashRequested ? "MalikLLM Flash" : "MalikImage Auto"),
       providerModel: result.providerModel || resolvedImageModel?.providerModel,
       imageUrl,
       masterUrl: publicMasterUrl,
