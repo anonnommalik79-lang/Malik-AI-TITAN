@@ -28,7 +28,8 @@ test("Each chat sends a stable chat ID, not a fresh ID per turn", () => {
   assert.match(dashboard, /model: selectedModelId,\s*chatId,/)
 })
 test("Code selected in Flash routes into MAX", () => {
-  assert.match(stream, /requestedModelId === "malik-flash" && isCodeRequest\(coderPrompt\(executionBody\)\)/)
+  assert.match(stream, /const flashUsesMax = requestedSelection\?\.modelId === "malik-flash"/)
+  assert.match(stream, /isCodeRequest\(flashPrompt\)/)
   assert.match(stream, /"malik-max"\s*:\s*requestedModelId/)
 })
 test("Worker requires per-user isolation and HTTPS", () => {
