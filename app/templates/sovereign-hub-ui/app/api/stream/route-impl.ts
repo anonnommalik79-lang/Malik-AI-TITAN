@@ -7,7 +7,7 @@ import { chatArtDirection } from "@/lib/website/chat-art-direction"
 import { canRetryChat } from "@/lib/ai/chat-stream-recovery"
 import { briefNeedsDeep } from "@/lib/ai/brief-quality"
 import { isCodeRequest } from "@/lib/ai/request-kind"
-import { runMalikFlashBrowser } from "@/lib/server/malik-flash-browser-bridge"
+import { isMalikFlashBrowserReady, runMalikFlashBrowser } from "@/lib/server/malik-flash-browser-bridge"
 import type { MalikWebSource } from "@/lib/ai/web-research-types"
 import { upsertWebSource } from "@/lib/ai/source-evidence"
 import { normalizeProviderTokenUsage } from "@/lib/ai/token-telemetry"
@@ -886,7 +886,7 @@ async function runSelectedAnswerUnchecked(
   // The Flash preview requires a separately authenticated, per-user isolated
   // browser worker. It must never reuse the founder's Google cookies globally.
   // Full responses pass through the same streaming/Markdown UI as other models.
-  if (selection?.modelId === "malik-flash" && !isCodeRequest(coderPrompt(body))) {
+  if (selection?.modelId === "malik-flash" && isMalikFlashBrowserReady() && !isCodeRequest(coderPrompt(body))) {
     const uploads: any[] = hasMalikAttachments(body?.attachments) ? body.attachments : []
     if (uploads.some((item) => item?.kind !== "image" && !(typeof item?.mime === "string" && item.mime.startsWith("image/")))) {
       throw new MalikModelRouteError("FLASH_UNSUPPORTED_ATTACHMENT", "В тестовом режиме Flash поддерживает текст и фотографии PNG/JPEG/WebP.", 422, "malik-flash")
@@ -1024,8 +1024,8 @@ async function runSelectedAnswerUnchecked(
     const requestedModelId = selection?.modelId || DEFAULT_MALIK_MODEL_ID
     // Flash is the free conversational surface. Programming requests explicitly
     // use the existing MAX coding engine, without bypassing account quotas.
-    const selectedModelId = requestedModelId === "malik-flash" && isCodeRequest(coderPrompt(executionBody))
-      ? "malik-max"
+    const selectedModelId = requestedModelId === "malik-flash"
+      ? "malik-max" // Native MALIKII beta path until isolated browser service is ready.
       : requestedModelId
     if (selectedModelId !== requestedModelId) onProgress?.({ phase: "model", text: "Задача по программированию — подключаю MalikLLM MAX" })
     const answer = await malikGodAnswer(
@@ -1041,7 +1041,10 @@ async function runSelectedAnswerUnchecked(
       signal,
       preparedEvidence || (requestAttachments.length ? { prompt: coderPrompt(body), sources: [] } : undefined),
     )
-    return agentRuntime ? { ...answer, agentRuntime } : answer
+    const brandedAnswer = requestedModelId === "malik-flash" && !isMalikFlashBrowserReady()
+      ? { ...answer, selectedModelId: "malik-flash" }
+      : answer
+    return agentRuntime ? { ...brandedAnswer, agentRuntime } : brandedAnswer
   }
 
   onProgress?.({ phase: "model", text: agentRuntime ? "Malik Agent Runtime собирает итог" : "Malik Brain выбирает глубину и проверяет задачу" })
@@ -1332,7 +1335,9 @@ function liveSseResponse(
             ? { ...body, maxTokens: Number.isFinite(requested) && requested > 0 ? Math.min(Math.floor(requested), maxOutputTokens) : maxOutputTokens, maxTokensCap: maxOutputTokens }
             : body
           return malikRescueAnswer(rescueBody, {
-            modelId: selection?.modelId || DEFAULT_MALIK_MODEL_ID,
+            modelId: selection?.modelId === "malik-flash" && !isMalikFlashBrowserReady()
+              ? "malik-max"
+              : selection?.modelId || DEFAULT_MALIK_MODEL_ID,
             allowCatalog: Boolean(selection && hasMalikProAccess(selection.entitlement.plan)),
           }, foundSources, {
             wallMs: deadline.rescueMs,
