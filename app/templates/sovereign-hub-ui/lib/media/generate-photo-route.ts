@@ -24,6 +24,7 @@ import { buildVisualPrompt } from "./visual-prompt"
 import { resolveRequestedQuality } from "./image-resolution-intent"
 import { routeImageGeneration } from "./image-router"
 import { runMalikFlashImage } from "../server/malik-flash-image-worker"
+import { isMalikFlashBrowserReady } from "../server/malik-flash-browser-bridge"
 import {
   checkImageCreditLimit,
   normalizeImageCreditSize,
@@ -148,8 +149,11 @@ export async function handleMalikPhotoGenerationRequest(request: Request) {
   const user = await resolveMediaUser(request, body)
   // Chat-selected Flash uses the isolated browser worker behind the existing
   // MALIKII media UI. Keep the feature disabled until explicitly activated.
-  const flashRequested = process.env.NEXT_PUBLIC_MALIK_FLASH_PREVIEW === "1"
+  const flashSelected = process.env.NEXT_PUBLIC_MALIK_FLASH_PREVIEW === "1"
     && body?.chatModelId === "malik-flash"
+  // Flash beta uses existing native photo engines when no isolated worker exists;
+  // never claim an image from this path was created by Google AI Mode.
+  const flashRequested = flashSelected && isMalikFlashBrowserReady()
   let editSource
   if (editing) {
     try {
@@ -489,9 +493,9 @@ export async function handleMalikPhotoGenerationRequest(request: Request) {
       kind: "photo",
       operation: editing ? "edit" : "generate",
       provider: result.provider,
-      engine: resolvedImageModel?.label || (flashRequested ? "MalikLLM Flash" : "MalikImage Auto"),
+      engine: flashSelected ? "MalikLLM Flash" : resolvedImageModel?.label || "MalikImage Auto",
       modelId: resolvedModelId,
-      modelLabel: resolvedImageModel?.label || (flashRequested ? "MalikLLM Flash" : "MalikImage Auto"),
+      modelLabel: flashSelected ? "MalikLLM Flash" : resolvedImageModel?.label || "MalikImage Auto",
       providerModel: result.providerModel || resolvedImageModel?.providerModel,
       imageUrl,
       masterUrl: publicMasterUrl,
