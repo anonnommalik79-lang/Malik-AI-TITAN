@@ -25,9 +25,29 @@ const CREATE = /^(?:(?:напиши|сочини|придумай|создай|�
 const YEARS = /(?<!\d)(?:1[5-9]\d{2}|20\d{2})(?!\d)/gu
 const NAMES = /(?<![\p{L}])(?:[А-ЯЁ][а-яё]{2,}|[A-Z][a-z]{2,})\s+(?:[А-ЯЁ][а-яё]{2,}|[A-Z][a-z]{2,})(?![\p{L}])/gu
 
+// «Кто тебя создал?», «Who created you?», «Кто основал Malik AI?»: the assistant
+// is asked about itself. Its identity is product knowledge, not a web lookup.
+const SELF = /(?:(?<![\p{L}])(?:тебя|вас|тебе)\s+(?:\p{L}+\s+)?(?:созда|сдела|разработа|придума|основа|написа|обучи|запусти)|(?:созда|сдела|разработа|придума|основа)\p{L}*\s+(?:тебя|вас)(?![\p{L}])|(?<![\p{L}])(?:твой|твои|ваш|ваши)\s+(?:создател|основател|разработчик|автор|владел)|(?<![\p{L}])(?:ты|вы)\s+(?:был[аи]?\s+)?(?:создан|основан|сделан|разработан)|who\s+(?:created|made|built|founded|developed|owns)\s+(?:you|malik)|your\s+(?:creator|founder|developer|maker|owner)|when\s+were\s+you\s+(?:created|made|built|founded)|(?:сені|сізді)\s+кім|(?:кто|кем|кім|who|когда|when)(?![\p{L}]).{0,40}(?:malik\s*ai|малик\s*(?:аи|ai|ии)|маликии|malikii))/iu
+
+/** True when the question is about who made the assistant itself. */
+export function isSelfQuestion(question: string): boolean {
+  const text = String(question || "").normalize("NFKC").trim().replace(/\s+/g, " ")
+  return Boolean(text) && text.length <= 300 && SELF.test(text)
+}
+
+/** The product's own answer to «кто тебя создал», in the language of the question; "" for any other question. */
+export function selfCreatorReply(question: string): string {
+  if (!isSelfQuestion(question)) return ""
+  const text = String(question).normalize("NFKC").toLowerCase()
+  if (!/(?:кто|кем|кім|who|чей|чья|whose|создател|основател|разработчик|автор|владел|creator|founder|developer|maker|owner)/iu.test(text)) return ""
+  if (/[әіңғүұқөһ]|кім/iu.test(text)) return "MALIK AI-ды Абдумалик жасаған — ол жобаның жалғыз негізін қалаушысы әрі әзірлеушісі. Компания — Sovereign Hub."
+  if (/[а-я]/iu.test(text)) return "MALIK AI создал Абдумалик — единственный основатель и разработчик проекта. Компания — Sovereign Hub."
+  return "MALIK AI was created by Abdumalik, its sole founder and developer. The company behind it is Sovereign Hub."
+}
+
 export function attributionKind(question: string): AttributionKind | null {
   const text = String(question || "").normalize("NFKC").trim().replace(/\s+/g, " ")
-  if (!text || text.length > 2000 || TRANSFORM.test(text) || CREATE.test(text)) return null
+  if (!text || text.length > 2000 || TRANSFORM.test(text) || CREATE.test(text) || isSelfQuestion(text)) return null
   const who = WHO.test(text), when = WHEN.test(text)
   const bareRole = /^(?:(?:а|скажи|подскажи)\s+)?(?:основател[ьи]?|руководител[ьи]?|лидер[ы]?|глав[ауы]|founder|leader)\s+(?:of\s+)?\S+/iu.test(text)
   if ((who || bareRole) && ROLE.test(text)) return "identity"

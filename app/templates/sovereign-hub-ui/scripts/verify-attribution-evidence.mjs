@@ -1,6 +1,6 @@
 import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
-import { attributionKind, attributionSystemInstruction, gateAttributionAnswer } from "../lib/ai/attribution-evidence.ts"
+import { attributionKind, attributionSystemInstruction, gateAttributionAnswer, isSelfQuestion, selfCreatorReply } from "../lib/ai/attribution-evidence.ts"
 import { shouldUseWeb } from "../lib/ai/web-search-policy.ts"
 
 const factQuestion = "а кто глава тяпляпа"
@@ -95,5 +95,21 @@ assert.match(router, /onToken: \(attribution \|\| needsCurrentEvidence/)
 assert.match(router, /gateAttributionAnswer\(\{ question: focus\.searchText/)
 assert.match(router, /legacyAttribution && !usedWeb/)
 assert.match(policy, /if \(attributionKind\(text\)\) return true/)
+
+// The assistant's own identity is product knowledge, never a web lookup.
+for (const q of ["Кто тебя создал?", "Кто создал Malik AI?", "Кто твой создатель?", "Who created you?", "Сені кім жасады?", "Когда тебя создали?"]) {
+  assert.equal(isSelfQuestion(q), true, q)
+  assert.equal(attributionKind(q), null, q)
+}
+assert.match(selfCreatorReply("Кто тебя создал?"), /Абдумалик.*Sovereign Hub/u)
+assert.match(selfCreatorReply("Who created you?"), /Abdumalik.*Sovereign Hub/u)
+assert.match(selfCreatorReply("Сені кім жасады?"), /Абдумалик жасаған/u)
+assert.equal(selfCreatorReply("Когда тебя создали?"), "", "no founding date is published, so the model answers with the identity instruction")
+for (const q of ["Кто создал Telegram?", "Кто основал Tesla?", "Расскажи, как ты создал этот сайт"]) {
+  assert.equal(isSelfQuestion(q), false, q)
+  assert.equal(selfCreatorReply(q), "", q)
+}
+assert.equal(attributionKind("Кто создал Telegram?"), "identity")
+assert.match(readFileSync(new URL("../lib/malik-god-router.ts", import.meta.url), "utf8"), /\|\| selfCreatorReply\(requestPrompt\)/)
 
 console.log("MALIK historical attribution evidence gate PASS")
