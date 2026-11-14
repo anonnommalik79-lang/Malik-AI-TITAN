@@ -107,7 +107,7 @@ export const MALIK_FLASH_PREVIEW_ENABLED = process.env.NEXT_PUBLIC_MALIK_FLASH_P
 export const MALIK_FLASH_MODEL: MalikModelDefinition = {
   id: "malik-flash",
   label: "MalikLLM Flash",
-  description: "Бесплатно · Google AI Mode через персональный браузер",
+  description: "Бесплатно · быстрые ответы, анализ фото и изображения · БЕТА",
   tier: "free",
   provider: "malik-browser-bridge",
   providerModel: "google-ai-mode-browser",
