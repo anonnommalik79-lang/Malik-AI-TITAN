@@ -2,6 +2,7 @@ import path from "node:path";
 import os from "node:os";
 import fs from "node:fs/promises";
 import { normalizePhotos, uploadPhotosToChrome } from "./photo.mjs";
+import { readVisibleImages, waitForGeneratedImage } from "./image-result.mjs";
 
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 const GOOGLE_HOME = "https://www.google.com/ai";
@@ -170,7 +171,13 @@ export class GoogleBrowserWorker {
     finally { unlock(); if (this.locks.get(userScope) === chained) this.locks.delete(userScope); }
   }
 
-  async ask({ userScope, chatScope, question, images = [] }) {
+  async ask({ userScope, chatScope, question, images = [], task = "chat" }) {
+    if (!["chat", "image_generate", "image_edit"].includes(task))
+      throw new BrowserWorkerError("INVALID_TASK", "Неизвестный тип запроса.", 400);
+    if (task === "image_generate" && images.length)
+      throw new BrowserWorkerError("INVALID_GENERATION_INPUT", "Генерация нового изображения не принимает исходные фотографии.", 400);
+    if (task === "image_edit" && images.length !== 1)
+      throw new BrowserWorkerError("IMAGE_EDIT_SOURCE_REQUIRED", "Для редактирования нужно прикрепить одно исходное фото.", 400);
     if (!/^[a-f0-9]{64}$/.test(userScope) || !/^[a-f0-9]{64}$/.test(chatScope))
       throw new BrowserWorkerError("INVALID_SCOPE", "Некорректный идентификатор сессии.", 400);
     if (typeof question !== "string" || !question.trim() || question.length > 6000)
@@ -185,12 +192,26 @@ export class GoogleBrowserWorker {
       if (/captcha|unusual traffic|подтвердите, что вы не робот/i.test(initial.blockText))
         throw new BrowserWorkerError("GOOGLE_VERIFICATION_REQUIRED", "Google просит пройти проверку вручную.");
       let uploaded = 0;
+      let imagesBefore = [];
       try {
         uploaded = await uploadPhotosToChrome(page, photos);
         if (uploaded !== photos.length) throw new BrowserWorkerError("IMAGE_NOT_ATTACHED", "Не все фотографии были прикреплены.");
-        await submitQuestion(page, question);
+        if (task !== "chat") imagesBefore = await readVisibleImages(page);
+        const imagePrompt = task === "image_generate"
+          ? "Создай новое изображение по запросу пользователя. Покажи готовую картинку: " + question
+          : task === "image_edit"
+            ? "Отредактируй прикреплённое фото согласно запросу пользователя. Покажи готовое изменённое изображение: " + question
+            : question;
+        await submitQuestion(page, imagePrompt);
       } catch (error) {
         throw new BrowserWorkerError(error.code || "GOOGLE_COMPOSER_FAILED", error.message || "Не удалось отправить вопрос в Google.");
+      }
+
+      if (task !== "chat") {
+        const image = await waitForGeneratedImage(page, imagesBefore);
+        await this.persist(user, chatScope, page.url());
+        return { kind: task, complete: true, imagesProcessed: photos.length === uploaded, image,
+          provider: "malik-flash-browser", origin: "browser-image-verified" };
       }
 
       const started = Date.now();
