@@ -163,10 +163,11 @@ export class GoogleBrowserWorker {
     const old = this.locks.get(userScope) || Promise.resolve();
     let unlock;
     const current = new Promise(resolve => { unlock = resolve; });
-    this.locks.set(userScope, old.then(() => current));
+    const chained = old.then(() => current);
+    this.locks.set(userScope, chained);
     await old;
     try { return await callback(); }
-    finally { unlock(); if (this.locks.get(userScope) === current) this.locks.delete(userScope); }
+    finally { unlock(); if (this.locks.get(userScope) === chained) this.locks.delete(userScope); }
   }
 
   async ask({ userScope, chatScope, question, images = [] }) {
