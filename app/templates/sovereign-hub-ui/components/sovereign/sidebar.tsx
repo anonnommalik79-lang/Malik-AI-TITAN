@@ -2,6 +2,8 @@
 
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from "react"
 import {
+  Archive,
+  ArchiveRestore,
   BarChart3,
   Briefcase,
   CircleHelp,
@@ -56,6 +58,7 @@ interface Chat {
   title: string
   timestamp: Date
   isPinned?: boolean
+  archive?: { archived: boolean }
   kind?: "chat" | "project"
   projectId?: string
   messages?: ChatMessagePreview[]
@@ -70,6 +73,7 @@ interface SidebarProps {
   onSelectChat?: (chatId: string) => void
   onDeleteChat?: (chatId: string) => void
   onRenameChat?: (chatId: string, title: string) => void
+  onArchiveChat?: (chatId: string, archived: boolean) => void
   onTogglePinChat?: (chatId: string) => void
   activeChatId?: string | null
   activeView?: string
@@ -214,6 +218,7 @@ function SidebarInner({
   onSelectChat,
   onDeleteChat,
   onRenameChat,
+  onArchiveChat,
   onTogglePinChat,
   activeChatId,
   activeView = "home",
@@ -307,9 +312,12 @@ function SidebarInner({
   const chatGroups = useMemo(() => {
     const todayStart = localDayStart(Date.now())
     const yesterdayStart = todayStart - 24 * 60 * 60 * 1000
-    const pinned = orderedChats.filter((chat) => chat.isPinned)
-    const rest = orderedChats.filter((chat) => !chat.isPinned)
+    const archived = orderedChats.filter(chat => chat.archive?.archived)
+    const open = orderedChats.filter(chat => !chat.archive?.archived)
+    const pinned = open.filter(chat => chat.isPinned)
+    const rest = open.filter(chat => !chat.isPinned)
     return {
+      archived,
       pinned,
       today: rest.filter((chat) => new Date(chat.timestamp).getTime() >= todayStart),
       yesterday: rest.filter((chat) => {
@@ -505,7 +513,11 @@ function SidebarInner({
                 {menuOpen ? (
                   <div role="menu" className="malik-sidebar-chat-menu">
                     <button type="button" onClick={() => { setEditingChatId(chat.id); setEditingTitle(displayTitle); setChatMenuId(null) }}><Pencil className="h-3.5 w-3.5" />Переименовать</button>
-                    <button type="button" onClick={() => { onTogglePinChat?.(chat.id); setChatMenuId(null) }}>{chat.isPinned ? <PinOff className="h-3.5 w-3.5" /> : <Pin className="h-3.5 w-3.5" />}{chat.isPinned ? "Открепить" : "Закрепить"}</button>
+                    {!chat.archive?.archived ? <button type="button" onClick={() => { onTogglePinChat?.(chat.id); setChatMenuId(null) }}>{chat.isPinned ? <PinOff className="h-3.5 w-3.5" /> : <Pin className="h-3.5 w-3.5" />}{chat.isPinned ? "Открепить" : "Закрепить"}</button> : null}
+                    {onArchiveChat ? <button type="button" onClick={() => { onArchiveChat(chat.id, !chat.archive?.archived); setChatMenuId(null) }}>
+                      {chat.archive?.archived ? <ArchiveRestore className="h-3.5 w-3.5" /> : <Archive className="h-3.5 w-3.5" />}
+                      {chat.archive?.archived ? "Вернуть из архива" : "В архив"}
+                    </button> : null}
                     <button type="button" className="is-danger" onClick={() => requestDelete(chat)}><Trash2 className="h-3.5 w-3.5" />Удалить</button>
                   </div>
                 ) : null}
@@ -563,8 +575,12 @@ function SidebarInner({
             {renderChatGroup("Ранее", chatGroups.earlier)}
           </>
         ) : (
-          <div className="malik-sidebar-empty-history"><span>История пуста</span><small>Новые сессии появятся здесь</small></div>
+          chatGroups.archived.length ? null : <div className="malik-sidebar-empty-history"><span>История пуста</span><small>Новые сессии появятся здесь</small></div>
         )}
+        {chatGroups.archived.length ? <details>
+          <summary className="mb-1 cursor-pointer px-2 py-1 text-xs text-zinc-400">Архив · {chatGroups.archived.length}</summary>
+          {renderChatGroup("Архивные чаты", chatGroups.archived)}
+        </details> : null}
       </div>
 
       <div className="malik-sidebar-footer">

@@ -52,6 +52,16 @@ export function summarizeSourceAccess(sources: readonly Pick<MalikWebSource, "re
   return { found: sources.length, read, snippets: sources.length - read }
 }
 
+/** Upgrade an existing search hit in place without changing citation numbers. */
+export function upsertWebSource(sources: MalikWebSource[], source: MalikWebSource, limit: number): MalikWebSource[] {
+  const index = sources.findIndex(item => evidenceUrlMatches(item.url, source.url))
+  if (index < 0) return sources.length >= limit ? sources : [...sources, source]
+  const previous = sources[index]
+  if (sourceWasRead(previous) && !sourceWasRead(source)) return sources
+  const enriched = Object.fromEntries(Object.entries(source).filter(([, value]) => value !== undefined))
+  return sources.map((item, position) => position === index ? { ...item, ...enriched, url: previous.url } : item)
+}
+
 /** Display publication and retrieval dates separately: a fresh fetch is not a fresh article. */
 export function sourceEvidenceLabel(source: MalikWebSource, now = Date.now()): string {
   const parts = [sourceWasRead(source, now) ? "Страница прочитана" : "Результат поиска · страница не прочитана"]

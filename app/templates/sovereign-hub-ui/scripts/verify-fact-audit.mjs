@@ -380,11 +380,11 @@ check("the router audits every answer written from open pages", () => {
   const router = read("lib/malik-god-router.ts")
   assert.match(router, /import \{ auditAnswerFacts, describeUncheckedAnswer, type MalikFactAudit \} from "@\/lib\/ai\/fact-audit"/)
   // Card blocks are audited as their text (lib/ai/answer-cards.ts), like any other sentence.
-  assert.match(router, /factAudit: auditGroundedAnswer\(answerCardsToText\(content\), sources, prompt, verified\.report, freshness\.needsSearch/)
+  assert.match(router, /factAudit: auditGroundedAnswer\(answerCardsToText\(content, \{ sources, userText: \w+ \}\), sources, prompt, verified\.report, freshness\.needsSearch/)
   // Audit the final evidence-gated text on both paths, including an honest
   // replacement when a draft contains an invented source citation, and the
   // direct deadline-rescue path added after this assertion was first written.
-  assert.equal([...router.matchAll(/factAudit: auditGroundedAnswer\(answerCardsToText\(content\), sources, prompt, verified\.report, freshness\.needsSearch/g)].length, 3)
+  assert.equal([...router.matchAll(/factAudit: auditGroundedAnswer\(answerCardsToText\(content, \{ sources, userText: \w+ \}\), sources, prompt, verified\.report, freshness\.needsSearch/g)].length, 3)
   assert.match(router, /factAudit: answer\.factAudit \?\? null/)
 })
 
@@ -410,9 +410,9 @@ check("the dashboard keeps the audit on the message it belongs to", () => {
 check("the chat renders the audit above the source list", () => {
   const view = read("components/sovereign/chat-view.tsx")
   assert.match(view, /function FactAuditPanel\(/)
-  assert.match(view, /message\.research\?\.factAudit && worthFactAuditPanel\(message\.research\.factAudit, displayContent\) \? \(\s*<FactAuditPanel/)
+  assert.match(view, /visibleResearch\?\.factAudit && worthFactAuditPanel\(visibleResearch\.factAudit, displayContent\) \? \(\s*<FactAuditPanel/)
   assert.ok(
-    view.indexOf("<FactAuditPanel") < view.lastIndexOf("<SourceDeck research={message.research} />"),
+    view.indexOf("<FactAuditPanel") < view.lastIndexOf("research={visibleResearch} />"),
     "the verdict must come before the reading list",
   )
 })

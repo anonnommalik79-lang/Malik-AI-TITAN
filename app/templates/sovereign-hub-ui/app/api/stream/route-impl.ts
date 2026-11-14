@@ -8,6 +8,7 @@ import { canRetryChat } from "@/lib/ai/chat-stream-recovery"
 import { briefNeedsDeep } from "@/lib/ai/brief-quality"
 import { isCodeRequest } from "@/lib/ai/request-kind"
 import type { MalikWebSource } from "@/lib/ai/web-research-types"
+import { upsertWebSource } from "@/lib/ai/source-evidence"
 import { normalizeProviderTokenUsage } from "@/lib/ai/token-telemetry"
 import { classifyFreshness, freshnessMode } from "@/lib/ai/freshness-intent"
 import { shouldUseWeb } from "@/lib/ai/web-search-policy"
@@ -1268,7 +1269,7 @@ function liveSseResponse(
         }
       }
       // Sources the full run found, so a rescue answers from them instead of searching again.
-      const foundSources: MalikWebSource[] = []
+      let foundSources: MalikWebSource[] = []
       const mainRun = new AbortController()
       const answerPromise = isProjectBuildRequest(body)
         ? runProjectAnswer(body, selection, entitlement.userId, (text) => { activity.status(text, "code"); send("status", { type: "status", text }) }, { activity, signal: generation.signal })
@@ -1277,7 +1278,7 @@ function liveSseResponse(
             selection,
             (progress) => {
               if (writer !== "main") return
-              if (progress?.kind === "source" && progress.source?.url && foundSources.length < 16 && !foundSources.some((source) => source.url === progress.source.url)) foundSources.push(progress.source)
+              if (progress?.kind === "source" && progress.source?.url) foundSources = upsertWebSource(foundSources, progress.source, 16)
               if (!progress.kind && progress.phase !== "generating") activity.status(progress.text)
               send("progress", { type: "progress", ...progress })
             },

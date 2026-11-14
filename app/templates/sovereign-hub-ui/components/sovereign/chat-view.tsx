@@ -59,6 +59,7 @@ import type { GenerationStatusType } from "./generation-status"
 import type { AIPlan } from "@/lib/ai/types"
 import type { MalikMessageResearch, MalikResearchStep, MalikWebSource } from "@/lib/ai/web-research-types"
 import { summarizeSourceAccess } from "@/lib/ai/source-evidence"
+import type { ChatAnswerVersion } from "@/lib/ai/chat-answer-version"
 import { SourceEvidenceDetails } from "./SourceEvidenceDetails"
 import { fixWrongKeyboardLayout } from "@/lib/ai/keyboard-layout"
 import type { MalikFactAudit, MalikFactClaim } from "@/lib/ai/fact-audit"
@@ -170,7 +171,7 @@ interface Message {
   /** Actual elapsed response time and provider-supplied token usage. */
   responseMetrics?: MalikResponseMetrics
   /** Earlier answers to the same question (regenerated in place). */
-  versions?: Array<{ content: string; at: number }>
+  versions?: ChatAnswerVersion[]
 }
 
 type ImageResolution = "1K" | "2K" | "4K"
@@ -1745,7 +1746,7 @@ function MessageBubble({
   workspaceMode?: WorkspaceMode
   onCopy: (id: string, text: string) => void
   /** Open this answer on its own page (the answer sheet). */
-  onOpenSheet?: (id: string) => void
+  onOpenSheet?: (id: string, version?: ChatAnswerVersion) => void
   copied: boolean
   /** The user turn this answer replies to — what a re-check searches for. */
   question?: string
@@ -1782,21 +1783,24 @@ function MessageBubble({
   const isThinking = Boolean(streaming && !message.content && !message.generatedMedia)
   // Regenerated answers: the newest is shown; earlier ones can be paged back to.
   const versionTotal = !isUser && !streaming && message.versions?.length ? message.versions.length + 1 : 1
-  const [versionIndex, setVersionIndex] = useState(-1)
-  const versionCount = message.versions?.length || 0
-  // A new version arrived: show it, not the one that was being looked at.
-  useEffect(() => { setVersionIndex(-1) }, [versionCount])
-  const shownVersion = versionIndex < 0 || versionIndex >= versionTotal - 1 ? versionTotal - 1 : versionIndex
+  const revision = message.timestamp.getTime()
+  const [cursor, setCursor] = useState<{ index: number; revision: number } | null>(null)
+  const shownVersion = cursor?.revision === revision ? Math.min(cursor.index, versionTotal - 1) : versionTotal - 1
   const olderVersion = versionTotal > 1 && shownVersion < versionTotal - 1 ? message.versions![shownVersion] : null
+  const visibleResearch = olderVersion ? olderVersion.research : message.research
+  const visibleMetrics = olderVersion ? olderVersion.responseMetrics : message.responseMetrics
+  const visibleModelId = olderVersion ? olderVersion.modelId : message.modelId
   const rawAnswer = olderVersion?.content ?? message.content
   const isTextAnswer = !isUser && !message.generatedMedia && !message.imageConfirmation && !message.superflow
   const compactTurn = isTextAnswer && workspaceMode === "chat" && !videoAnalysis
   const notice = !streaming && isTextAnswer ? chatAnswerNotice(rawAnswer) : null
   const answerText = notice ? stripIncompleteNote(rawAnswer) : rawAnswer
-  const displayContent = isUser || olderVersion ? answerText : cleanResearchDisplayText(answerText, message.research)
-  const responseModel = !isUser && message.modelId ? getMalikModel(message.modelId) : null
+  const displayContent = isUser ? answerText : cleanResearchDisplayText(answerText, visibleResearch)
+  const responseModel = !isUser && visibleModelId ? getMalikModel(visibleModelId) : null
   // The answer actions read the settled text and keep UI notices separate.
-  const actionContent = !isUser && !streaming ? stripAnswerPhotoHints(oilReportBlocksToText(answerQuizzesToText(answerCardsToText(displayContent, olderVersion ? undefined : { sources: message.research?.sources, userText: question || undefined })))) : ""
+  const actionContent = useMemo(() => !isUser && !streaming
+    ? stripAnswerPhotoHints(oilReportBlocksToText(answerQuizzesToText(answerCardsToText(displayContent, { sources: visibleResearch?.sources, userText: question || undefined }))))
+    : "", [displayContent, isUser, question, streaming, visibleResearch?.sources])
   const hasActionContent = Boolean(actionContent.trim())
   // A site, game or app being built: its steps instead of code on screen,
   // then the result card and the Live Preview beside the chat.
@@ -1951,7 +1955,7 @@ function MessageBubble({
                     {/* While streaming, `malik-streaming` gives the growing
                         answer its caret and lets only newly added blocks
                         fade in (chat-live.css). It is dropped when done. */}
-                    <MalikMarkdown text={displayContent} allowImages={false} referencePhotos autoPreview={!streaming && !olderVersion && !notice && !buildDone && isChatArtifactCreationRequest(question)} collapseCode={buildDone} className={cn(writingLive && "malik-streaming", freshTurn && isTextAnswer && "malik-answer-enter")} citations={message.research?.sources}
+                    <MalikMarkdown text={displayContent} allowImages={false} referencePhotos autoPreview={!streaming && !olderVersion && !notice && !buildDone && isChatArtifactCreationRequest(question)} collapseCode={buildDone} className={cn(writingLive && "malik-streaming", freshTurn && isTextAnswer && "malik-answer-enter")} citations={visibleResearch?.sources}
                       visualContext={!olderVersion && !message.generatedMedia && !message.imageConfirmation && !message.superflow
                         && !["failed", "interrupted", "cancelled"].includes(message.execution?.state || "")
                         ? { question, messageId: message.id, previousQuestion, previousAnswer, hasAttachment: questionHasAttachment, isLatest, streaming } : undefined} />
@@ -1970,20 +1974,20 @@ function MessageBubble({
           ) : null}
           {/* The verdict on the text above comes before the reading list it was
               written from. */}
-          {!isUser && !streaming && message.research?.factAudit && worthFactAuditPanel(message.research.factAudit, displayContent) ? (
+          {!isUser && !streaming && visibleResearch?.factAudit && worthFactAuditPanel(visibleResearch.factAudit, displayContent) ? (
             <FactAuditPanel
-              audit={message.research.factAudit}
-              sources={message.research.sources}
+              audit={visibleResearch.factAudit}
+              sources={visibleResearch.sources}
               question={question}
               answer={displayContent}
             />
           ) : null}
-          {!isUser && !streaming && message.research?.sources.length ? (
-            <SourceDeck research={message.research} />
+          {!isUser && !streaming && visibleResearch?.sources.length ? (
+            <SourceDeck key={`${revision}:${shownVersion}`} research={visibleResearch} />
           ) : null}
         </div>
         {!isUser && message.content && !streaming && !message.imageConfirmation && (
-          <div role="group" aria-label="Действия с ответом" className={cn("malik-message-actions mt-2 flex min-w-0 flex-wrap items-center gap-2 text-zinc-500", Boolean(message.research?.sources.length) && "is-research", isLatest && "is-latest")}>
+          <div role="group" aria-label="Действия с ответом" className={cn("malik-message-actions mt-2 flex min-w-0 flex-wrap items-center gap-2 text-zinc-500", Boolean(visibleResearch?.sources.length) && "is-research", isLatest && "is-latest")}>
             {hasActionContent ? (
               <button
                 type="button"
@@ -1996,7 +2000,7 @@ function MessageBubble({
                 {copied ? <span className="sr-only" role="status">Скопировано</span> : null}
               </button>
             ) : null}
-            <VersionPager index={shownVersion} total={versionTotal} onChange={setVersionIndex} />
+            <VersionPager index={shownVersion} total={versionTotal} onChange={index => setCursor({ index, revision })} />
             {hasActionContent ? <>
               <ReadAloudButton id={message.id} text={actionContent} />
               {workspaceMode === "work" ? <WorkDownloadMenu markdown={actionContent} /> : <AnswerDownloadButton text={actionContent} />}
@@ -2007,7 +2011,7 @@ function MessageBubble({
               <button type="button" title="Не полезно" aria-label="Неполезный ответ" aria-pressed={feedback === "down"} onClick={() => onFeedback?.(message.id, "down")} className={cn("malik-feedback-action rounded-md p-1 hover:bg-white/10 hover:text-white", feedback === "down" && "is-active")}><ThumbsDown className="h-4 w-4" /></button>
               <button type="button" title="Поделиться" aria-label="Поделиться ответом" onClick={() => onShare?.(actionContent)} className="rounded-md p-1 hover:bg-white/10 hover:text-white"><Share className="h-4 w-4" /></button>
               {onOpenSheet && displayContent.trim() ? (
-                <button type="button" title="Открыть на листе" aria-label="Открыть ответ на листе с экспортом PDF" onClick={() => onOpenSheet(message.id)} className="malik-open-sheet inline-flex items-center gap-1.5 rounded-md px-1.5 py-1 text-[12.5px] font-medium hover:bg-white/10 hover:text-white">
+                <button type="button" title="Открыть на листе" aria-label="Открыть ответ на листе с экспортом PDF" onClick={() => onOpenSheet(message.id, olderVersion ?? undefined)} className="malik-open-sheet inline-flex items-center gap-1.5 rounded-md px-1.5 py-1 text-[12.5px] font-medium hover:bg-white/10 hover:text-white">
                   <FileText className="h-4 w-4" />
                   <span>Лист / PDF</span>
                 </button>
@@ -2017,37 +2021,37 @@ function MessageBubble({
         )}
         {/* Compact, inspectable completion statistics, directly below the answer.
             No token number is shown unless the provider reported it. */}
-        {!isUser && !streaming && !olderVersion && Boolean(displayContent) && !message.imageConfirmation && message.responseMetrics ? (
+        {!isUser && !streaming && Boolean(displayContent) && !message.imageConfirmation && visibleMetrics ? (
           <details className="malik-response-telemetry mt-2 w-fit max-w-full rounded-lg border border-white/[0.09] bg-white/[0.025] px-3 py-1.5 text-xs text-zinc-400 open:bg-white/[0.045]">
             <summary className="flex cursor-pointer list-none items-center gap-1.5 text-[12px] transition hover:text-zinc-200 [&::-webkit-details-marker]:hidden" aria-label="Статистика ответа MALIK AI">
               <Timer size={12} aria-hidden="true" />
-              <span className="tabular-nums">{(message.responseMetrics.tookMs / 1000).toLocaleString("ru-RU", { maximumFractionDigits: 1 })} с</span>
-              {message.responseMetrics.usage ? <>
+              <span className="tabular-nums">{(visibleMetrics.tookMs / 1000).toLocaleString("ru-RU", { maximumFractionDigits: 1 })} с</span>
+              {visibleMetrics.usage ? <>
                 <span aria-hidden="true" className="text-zinc-600">·</span>
-                <span className="tabular-nums">{message.responseMetrics.usage.totalTokens.toLocaleString("ru-RU")} токенов</span>
+                <span className="tabular-nums">{visibleMetrics.usage.totalTokens.toLocaleString("ru-RU")} токенов</span>
               </> : null}
               <ChevronRight size={12} className="ml-0.5 opacity-60" aria-hidden="true" />
             </summary>
             <div className="mt-2 border-t border-white/10 pt-2 text-[11px] leading-5 text-zinc-400">
-              {message.responseMetrics.usage ? (
+              {visibleMetrics.usage ? (
                 <>
                   <div className="flex flex-wrap gap-x-4 gap-y-1 tabular-nums">
-                    {message.responseMetrics.usage.inputTokens !== undefined ? <span>Вход: {message.responseMetrics.usage.inputTokens.toLocaleString("ru-RU")}</span> : null}
-                    {message.responseMetrics.usage.outputTokens !== undefined ? <span>Выход: {message.responseMetrics.usage.outputTokens.toLocaleString("ru-RU")}</span> : null}
-                    {message.responseMetrics.usage.unattributedTokens !== undefined ? <span title="Часть общего расхода провайдером не отнесена к входу или выходу">Не распределено: {message.responseMetrics.usage.unattributedTokens.toLocaleString("ru-RU")}</span> : null}
-                    <span>Всего: {message.responseMetrics.usage.totalTokens.toLocaleString("ru-RU")}</span>
+                    {visibleMetrics.usage.inputTokens !== undefined ? <span>Вход: {visibleMetrics.usage.inputTokens.toLocaleString("ru-RU")}</span> : null}
+                    {visibleMetrics.usage.outputTokens !== undefined ? <span>Выход: {visibleMetrics.usage.outputTokens.toLocaleString("ru-RU")}</span> : null}
+                    {visibleMetrics.usage.unattributedTokens !== undefined ? <span title="Часть общего расхода провайдером не отнесена к входу или выходу">Не распределено: {visibleMetrics.usage.unattributedTokens.toLocaleString("ru-RU")}</span> : null}
+                    <span>Всего: {visibleMetrics.usage.totalTokens.toLocaleString("ru-RU")}</span>
                   </div>
                   <p className="mt-1 text-zinc-500">Данные из ответа провайдера. «Не распределено» — разница между общим расходом и суммой входа/выхода; точная причина не всегда известна. Внутренние вызовы без квитанций могут не учитываться.</p>
                 </>
               ) : (
                 <p>Провайдер не прислал точный расход токенов — MALIK AI не подменяет его приблизительным числом.</p>
               )}
-              {message.responseMetrics.modelFallback ? (
+              {visibleMetrics.modelFallback ? (
                 <p className="mt-1 text-amber-300/90" aria-label="Использована резервная модель">
-                  Выбрана {message.responseMetrics.modelFallback.requestedModelId}; ответила резервная модель {message.responseMetrics.modelFallback.actualModel} ({message.responseMetrics.modelFallback.actualProvider}).
+                  Выбрана {visibleMetrics.modelFallback.requestedModelId}; ответила резервная модель {visibleMetrics.modelFallback.actualModel} ({visibleMetrics.modelFallback.actualProvider}).
                 </p>
               ) : null}
-              <p className="mt-1 text-zinc-500">Время ответа: {message.responseMetrics.tookMs.toLocaleString("ru-RU")} мс.</p>
+              <p className="mt-1 text-zinc-500">Время ответа: {visibleMetrics.tookMs.toLocaleString("ru-RU")} мс.</p>
             </div>
           </details>
         ) : null}
@@ -2093,7 +2097,7 @@ export function ChatView({ messages, workspaceMode = "chat", onSendMessage, onIm
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const [feedbackMap, setFeedbackMap] = useState<Record<string, "up" | "down">>({})
   // The answer sheet: one answer on its own page, opened from «Лист / PDF».
-  const [sheet, setSheet] = useState<{ id: string; auto: boolean } | null>(null)
+  const [sheet, setSheet] = useState<{ id: string; auto: boolean; version?: ChatAnswerVersion } | null>(null)
   const [imageCredits, setImageCredits] = useState<ImageCreditSnapshot | null>(null)
   const [showAttachMenu, setShowAttachMenu] = useState(false)
   const [imageCreatorOpen, setImageCreatorOpen] = useState(false)
@@ -2861,6 +2865,7 @@ export function ChatView({ messages, workspaceMode = "chat", onSendMessage, onIm
 
   const sheetIndex = sheet ? messages.findIndex((item) => item.id === sheet.id) : -1
   const sheetMessage = sheetIndex >= 0 ? messages[sheetIndex] : null
+  const sheetAnswer = sheet?.version || sheetMessage
   const sheetRequest = sheetMessage
     ? messages.slice(0, sheetIndex).reverse().find((item) => item.role === "user")?.content || ""
     : ""
@@ -2906,7 +2911,7 @@ export function ChatView({ messages, workspaceMode = "chat", onSendMessage, onIm
     void saveAnswerFeedback(messageId, next, modelId)
   }, [])
 
-  const openSheetFor = useCallback((id: string) => setSheet({ id, auto: false }), [])
+  const openSheetFor = useCallback((id: string, version?: ChatAnswerVersion) => setSheet({ id, auto: false, version }), [])
 
   const handleQuickAction = (prefix: string) => {
     setPrompt((previous) => previous ? `${prefix}: ${previous}` : prefix)
@@ -3365,10 +3370,10 @@ export function ChatView({ messages, workspaceMode = "chat", onSendMessage, onIm
         </div>
       )}
 
-      {sheet && sheetMessage ? (
+      {sheet && sheetMessage && sheetAnswer ? (
         <AnswerSheet
           key={sheet.id}
-          content={stripAnswerPhotoHints(answerCardsToText(cleanResearchDisplayText(sheetMessage.content, sheetMessage.research), { sources: sheetMessage.research?.sources }))}
+          content={stripAnswerPhotoHints(answerCardsToText(cleanResearchDisplayText(sheetAnswer.content, sheetAnswer.research), { sources: sheetAnswer.research?.sources, userText: sheetRequest || undefined }))}
           streaming={Boolean(sheetMessage.isStreaming)}
           request={sheetRequest}
           auto={sheet.auto}

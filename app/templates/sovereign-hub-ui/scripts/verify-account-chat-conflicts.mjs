@@ -20,11 +20,15 @@ const removed=mergeAccountChatStates({...a,deletedChatIds:["chat-b"]},b)
 assert.deepEqual(removed.chats.map(x=>x.id),["chat-a"],"deletion survives stale desktop")
 assert.deepEqual(removed.deletedChatIds,["chat-b"])
 const alt=mergeAccountChatStates(
-{chats:[{id:"x",messages:[{id:"a",role:"assistant",content:"old answer",isStreaming:false}]}]},
-{chats:[{id:"x",messages:[{id:"a",role:"assistant",content:"new answer",isStreaming:false}]}]},
+{chats:[{id:"x",archive:{archived:true,changedAt:10},messages:[{id:"a",role:"assistant",content:"old answer",isStreaming:false,research:{sources:[{url:"https://example.org/first"}],steps:[{}]}}]}]},
+{chats:[{id:"x",archive:{archived:false,changedAt:11},messages:[{id:"a",role:"assistant",content:"new answer",isStreaming:false,research:{sources:[{url:"https://example.org/second"}]}}]}]},
 )
 assert.equal(alt.chats[0].messages[0].content,"new answer")
 assert.equal(alt.chats[0].messages[0].versions.at(-1).content,"old answer")
+assert.equal(alt.chats[0].messages[0].versions.at(-1).research.sources[0].url,"https://example.org/first")
+assert.deepEqual(alt.chats[0].messages[0].versions.at(-1).research.steps,[])
+assert.deepEqual(alt.chats[0].archive,{archived:false,changedAt:11})
+assert.deepEqual(mergeAccountChatStates({chats:[{id:"x",archive:{archived:true,changedAt:12}}]},alt).chats[0].archive,{archived:true,changedAt:12})
 const repeated=mergeAccountChatStates(
   {chats:[{id:"x",messages:[{id:"a",role:"assistant",content:"old answer",isStreaming:false}]}]},
   alt

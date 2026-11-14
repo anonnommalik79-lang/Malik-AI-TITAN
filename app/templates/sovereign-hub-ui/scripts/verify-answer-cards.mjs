@@ -2,13 +2,14 @@ import assert from "node:assert/strict"
 import fs from "node:fs"
 import { answerCardsToText, parseAnswerCards } from "../lib/ai/answer-cards.ts"
 import { trustedLink } from "../lib/ai/citation-names.ts"
+import { normalizeWebSource, summarizeSourceAccess } from "../lib/ai/source-evidence.ts"
 import { extractPageImage } from "../lib/malik-research/fetch-page.ts"
 import { buildMalikResponseSystemPrompt } from "../lib/ai/response-intelligence.ts"
 
 /**
  * Answer cards as ChatGPT shows them - pictures from the cited pages, names
  * that open official pages, badges, key figures, dates and buttons - and the
- * rules that keep them honest: links only to sites the sources are on,
+ * rules that keep them honest: links to exact evidence pages,
  * pictures only from those pages or the reference catalogue, figures and [n]
  * markers audited like the rest of the answer.
  */
@@ -45,10 +46,12 @@ check("malformed, partial, unknown or oversized blocks render nothing", () => {
   }
 })
 
-check("links are kept only for sites the sources are on; without sources only front pages", () => {
-  assert.equal(trustedLink("https://astanahub.com/ru/apply", sources), "https://astanahub.com/ru/apply")
-  assert.equal(trustedLink("https://events.astanahub.com/battle", sources), "https://events.astanahub.com/battle")
-  assert.equal(trustedLink("https://gitex.com/supernova", sources), "https://gitex.com/supernova")
+check("links require a matching page; without sources only front pages", () => {
+  assert.equal(trustedLink(sources[0].url + "#program", sources), sources[0].url + "#program")
+  assert.equal(trustedLink(sources[1].url + "?utm_source=chat", sources), sources[1].url + "?utm_source=chat")
+  assert.equal(trustedLink("https://astanahub.com/ru/apply", sources), "")
+  assert.equal(trustedLink("https://events.astanahub.com/battle", sources), "")
+  assert.equal(trustedLink("https://gitex.com/supernova", sources), "")
   assert.equal(trustedLink("https://invented.example/apply", sources), "")
   assert.equal(trustedLink("javascript:alert(1)", sources), "")
   assert.equal(trustedLink("https://user:pass@astanahub.com/", sources), "")
@@ -92,11 +95,17 @@ check("wiring: page pictures reach the model, the client and the audit", () => {
   const router = fs.readFileSync("lib/malik-god-router.ts", "utf8")
   assert.match(router, /Page picture: available/)
   assert.match(router, /\.\.\.\(page\.image \? \{ image: page\.image \} : \{\}\)/)
-  assert.match(router, /auditGroundedAnswer\(answerCardsToText\(content\)/)
+  assert.match(router, /auditGroundedAnswer\(answerCardsToText\(content, \{ sources/)
   assert.match(fs.readFileSync("lib/malik-research/fetch-page.ts", "utf8"), /const image = extractPageImage\(html, target\)/)
-  assert.match(fs.readFileSync("components/sovereign/dashboard.tsx", "utf8"), /image: typeof value\?\.image === "string" && \/\^https:/)
+  assert.match(fs.readFileSync("components/sovereign/dashboard.tsx", "utf8"), /return normalizeWebSource\(value\)/)
+  const now = Date.parse("2026-11-12T08:30:00Z")
+  const read = normalizeWebSource({ ...sources[0], image: "https://example.com/photo.jpg", readAt: "2026-11-12T08:25:00Z" })
+  const found = normalizeWebSource({ ...sources[1], checkedAt: "2026-11-12T08:25:00Z", image: "javascript:doNotRender()" })
+  assert.equal(read.image, "https://example.com/photo.jpg")
+  assert.equal(found.image, undefined)
+  assert.deepEqual(summarizeSourceAccess([read, found], now), { found: 2, read: 1, snippets: 1 })
   const view = fs.readFileSync("components/sovereign/chat-view.tsx", "utf8")
-  assert.match(view, /stripAnswerPhotoHints\(oilReportBlocksToText\(answerQuizzesToText\(answerCardsToText\(displayContent\)\)\)\)/)
+  assert.match(view, /answerCardsToText\(displayContent, \{ sources: visibleResearch\?\.sources/)
   assert.match(fs.readFileSync("components/sovereign/MalikMarkdown.tsx", "utf8"), /fence\.language === "malik-cards"/)
 })
 

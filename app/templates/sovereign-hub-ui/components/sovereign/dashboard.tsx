@@ -207,7 +207,9 @@ import {
 import type { AIPlan } from "@/lib/ai/types"
 import { isStoredGeneratedImageUrl, persistGeneratedImageReference, persistGeneratedImageUrl, resolveGeneratedImageUrl } from "@/lib/media/client-generated-image-store"
 import type { MalikMessageResearch, MalikResearchProgress, MalikResearchStep, MalikWebSource } from "@/lib/ai/web-research-types"
-import { normalizeWebSource } from "@/lib/ai/source-evidence"
+import { normalizeWebSource, upsertWebSource } from "@/lib/ai/source-evidence"
+import { snapshotChatAnswer, type ChatAnswerVersion } from "@/lib/ai/chat-answer-version"
+import { readChatArchive, type ChatArchive } from "@/lib/ai/chat-archive"
 import { normalizeFactAudit } from "@/lib/ai/fact-audit"
 import { extractSlideCount, isPresentationCreationRequest, presentationTopic } from "@/lib/presentations/deck"
 import { routeWorkRequest } from "@/lib/work/orchestrator"
@@ -298,11 +300,10 @@ interface Message {
   /** Response time and only upstream-reported token counts. */
   responseMetrics?: MalikResponseMetrics
   /** Earlier answers to the same question, kept when the answer was regenerated. */
-  versions?: MessageVersion[]
+  versions?: ChatAnswerVersion[]
 }
 
 type MessageThought = { ms: number; steps: string[] }
-type MessageVersion = { content: string; at: number }
 
 type ImageResolution = "1K" | "2K" | "4K"
 
@@ -691,6 +692,7 @@ interface Chat {
   title: string
   timestamp: Date
   isPinned?: boolean
+  archive?: ChatArchive
   messages: Message[]
   status?: "deployed" | "draft" | "building"
   techStack?: string[]
@@ -1551,7 +1553,12 @@ function reviveMessage(message: any): Message {
     versions: Array.isArray(message?.versions)
       ? message.versions
           .filter((item: any) => item && typeof item.content === "string" && item.content.trim())
-          .map((item: any) => ({ content: String(item.content).slice(0, 60_000), at: Number(item.at) || Date.now() }))
+          .map((item: any) => snapshotChatAnswer({
+            content: item.content.slice(0, 60_000),
+            research: reviveResearch(item.research),
+            modelId: isMalikModelId(item.modelId) ? item.modelId : undefined,
+            responseMetrics: readResponseMetrics(item.responseMetrics),
+          }, Number(item.at) || 0))
           .slice(-8)
       : undefined,
   }
@@ -1619,6 +1626,7 @@ function reviveChat(chat: StoredChat): Chat {
     title: String(chat?.title || "Новый проект"),
     timestamp: chat?.timestamp ? new Date(chat.timestamp) : new Date(),
     isPinned: Boolean(chat?.isPinned),
+    archive: readChatArchive(chat?.archive),
     messages: Array.isArray(chat?.messages) ? collapseAccidentalDuplicateTurns(chat.messages.map(reviveMessage)) : [],
     status: chat?.status === "deployed" || chat?.status === "building" ? chat.status : "draft",
     techStack: Array.isArray(chat?.techStack) ? chat.techStack : ["React", "Tailwind"],
@@ -1627,6 +1635,7 @@ function reviveChat(chat: StoredChat): Chat {
     projectInstructions: typeof chat?.projectInstructions === "string" ? chat.projectInstructions.slice(0, 3000) : undefined,
     projectColor: ["gold", "blue", "violet", "emerald", "rose"].includes(String(chat?.projectColor)) ? chat.projectColor : undefined,
     kind: chat?.kind === "project" ? "project" : chat?.kind === "chat" ? "chat" : undefined,
+    projectId: typeof chat?.projectId === "string" ? chat.projectId : undefined,
     workspaceMode: resolveWorkspaceMode(chat?.workspaceMode),
   }
 }
@@ -5845,6 +5854,13 @@ export function Dashboard({ guestMode = false, initialView = "home", initialWork
     setChats((previous) => previous.map((chat) => chat.id === chatId ? { ...chat, isPinned: !chat.isPinned } : chat))
   }, [])
 
+  const handleArchiveChat = useCallback((chatId: string, archived: boolean) => {
+    const now = Date.now()
+    setChats(previous => previous.map(chat => chat.id === chatId
+      ? { ...chat, archive: { archived, changedAt: Math.max(now, (chat.archive?.changedAt ?? 0) + 1) } }
+      : chat))
+  }, [])
+
   const handleUpdateProject = useCallback((projectId: string, patch: MalikProjectPatch) => {
     setChats((previous) => previous.map((chat) => chat.id === projectId ? { ...chat, ...patch, timestamp: new Date() } : chat))
     if (activeProjectWorkspaceId === projectId && patch.selectedModelId && canUseMalikModel(patch.selectedModelId, currentPlan)) {
@@ -6505,7 +6521,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
   const assistantMessage: Message = {
     id: regenTarget ? regenTarget.message.id : crypto.randomUUID(),
     versions: regenTarget && regenTarget.message.content.trim() && !options?.forcedMedia
-      ? [...(regenTarget.message.versions || []), { content: regenTarget.message.content, at: Date.now() }].slice(-8)
+      ? [...(regenTarget.message.versions || []), snapshotChatAnswer(regenTarget.message, regenTarget.message.timestamp.getTime())].slice(-8)
       : regenTarget?.message.versions,
     role: "assistant",
     selectedSkillId,
@@ -7150,11 +7166,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
         provider: progress.provider,
         at: Date.now(),
       }
-      const sources = source
-        ? previous.sources.some(item => item.url === source.url)
-          ? previous.sources.map(item => item.url === source.url ? { ...item, ...source } : item)
-          : [...previous.sources, source].slice(0, 12)
-        : previous.sources
+      const sources = source ? upsertWebSource(previous.sources, source, 12) : previous.sources
       const status: MalikMessageResearch["status"] = progress.kind === "error"
         ? "error"
         : progress.kind === "done"
@@ -8483,6 +8495,7 @@ const shouldShowMobilePreviewButton =
           onSelectChat={handleSelectChat}
           onDeleteChat={handleDeleteChat}
           onRenameChat={handleRenameChat}
+          onArchiveChat={handleArchiveChat}
           onTogglePinChat={handleTogglePinChat}
           activeChatId={activeChatId}
           activeView={activeView}
@@ -8505,6 +8518,7 @@ const shouldShowMobilePreviewButton =
           onSelectChat={(id) => { handleSelectChat(id); setMobileMenuOpen(false) }}
           onDeleteChat={handleDeleteChat}
           onRenameChat={handleRenameChat}
+          onArchiveChat={handleArchiveChat}
           onTogglePinChat={handleTogglePinChat}
           activeChatId={activeChatId}
           activeView={activeView}

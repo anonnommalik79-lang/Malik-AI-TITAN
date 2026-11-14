@@ -801,10 +801,11 @@ async function gatherSources(question: string, emit?: ResearchEmitter, activity?
       throw error
     }
     activity?.finish(call, page ? { title: page.title, characters: page.text.length, excerpt: page.text.slice(0, 1200) } : { title: source.title, snippet: source.snippet, limitation: "Полная страница недоступна; доступен только поисковый фрагмент" }, page ? "completed" : "failed", page ? undefined : "Не удалось прочитать полную страницу")
-    if (page) readPages++
-    return page
-      ? { ...source, title: page.title || source.title, snippet: page.text.slice(0, attributionKind(prompt) ? 5200 : 2200), publishedAt: page.publishedAt || source.publishedAt, updatedAt: page.updatedAt, checkedAt: new Date().toISOString(), readAt: page.readAt || new Date().toISOString(), ...(page.image ? { image: page.image } : {}) }
-      : source
+    if (!page) return source
+    readPages++
+    const opened = { ...source, title: page.title || source.title, snippet: page.text.slice(0, attributionKind(prompt) ? 5200 : 2200), publishedAt: page.publishedAt || source.publishedAt, updatedAt: page.updatedAt, checkedAt: new Date().toISOString(), readAt: page.readAt || new Date().toISOString(), ...(page.image ? { image: page.image } : {}) }
+    emit?.({ kind: "source", text: `Получен текст страницы · ${opened.domain}`, source: opened, url: opened.url, domain: opened.domain, title: opened.title, provider: opened.provider })
+    return opened
   })
   signal?.throwIfAborted()
 

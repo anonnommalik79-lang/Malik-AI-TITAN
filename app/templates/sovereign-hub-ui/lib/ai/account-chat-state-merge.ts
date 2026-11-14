@@ -1,3 +1,5 @@
+import { readChatArchive } from "./chat-archive"
+
 /** Shared, deterministic conflict resolution for account chat history.
  * A newer snapshot may add chats/messages, while explicit tombstones keep
  * deleted chats deleted. This never invokes a provider or a network request.
@@ -29,7 +31,12 @@ function uniqueMessages(remote: JsonRecord[], incoming: JsonRecord[]): JsonRecor
     const sourceVariants = [
       ...rows(prior.versions), ...rows(item.versions),
       ...(oldDone && nextDone && oldContent && oldContent !== nextContent
-        ? [{ content: oldContent, at: Number(new Date(String(prior.timestamp || 0))) || 0 }] : []),
+        ? [{
+            content: oldContent, at: Number(new Date(String(prior.timestamp || 0))) || 0,
+            ...(prior.research ? { research: { ...record(prior.research), steps: [] } } : {}),
+            ...(prior.modelId ? { modelId: prior.modelId } : {}),
+            ...(prior.responseMetrics ? { responseMetrics: prior.responseMetrics } : {}),
+          }] : []),
     ]
     const seen = new Set<string>()
     const revisions = sourceVariants.filter(variant => {
@@ -43,7 +50,11 @@ function uniqueMessages(remote: JsonRecord[], incoming: JsonRecord[]): JsonRecor
   return order.map(id => byId.get(id)!).filter(Boolean)
 }
 function mergeChat(remote: JsonRecord, incoming: JsonRecord): JsonRecord {
+  const earlier = readChatArchive(remote.archive)
+  const later = readChatArchive(incoming.archive)
+  const archive = later && (!earlier || later.changedAt >= earlier.changedAt) ? later : earlier
   return { ...remote, ...incoming,
+    ...(archive ? { archive } : {}),
     messages: uniqueMessages(rows(remote.messages), rows(incoming.messages)) }
 }
 export function mergeAccountChatStates(remoteInput: unknown, incomingInput: unknown): JsonRecord {
