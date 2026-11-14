@@ -497,6 +497,10 @@ export async function handleMalikPhotoGenerationRequest(request: Request) {
       modelId: resolvedModelId,
       modelLabel: flashSelected ? "MalikLLM Flash" : resolvedImageModel?.label || "MalikImage Auto",
       providerModel: result.providerModel || resolvedImageModel?.providerModel,
+      // Internal generation provenance. Flash is the selected CHAT surface;
+      // never claim it (or MAX) produced pixels when an image API did.
+      generatorProvider: result.provider,
+      generatorModel: result.providerModel || result.generationSource || resolvedImageModel?.providerModel || undefined,
       imageUrl,
       masterUrl: publicMasterUrl,
       url: displayUrl,
