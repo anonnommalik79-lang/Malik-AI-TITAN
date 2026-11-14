@@ -25,6 +25,8 @@ import { mergeStreamingAssistantCheckpoints, restoreInterruptedAssistant } from 
 import { fixWrongKeyboardLayout } from "@/lib/ai/keyboard-layout"
 import { explicitlyRequestsPackagedProject } from "@/lib/chat-code-routing"
 import { primaryNonMediaArtifact } from "@/lib/ai/artifact-intent"
+import { flashImageOperation, isFlashCodingRequest } from "@/lib/ai/malik-flash-intent"
+import { asksWhichModelGeneratedImage, flashReceiptTarget } from "@/lib/ai/malik-flash-memory"
 import { isChatArtifactCreationRequest } from "@/lib/ai/chat-artifact-skills"
 import { briefNeedsDeep, briefOutputFloor } from "@/lib/ai/brief-quality"
 import { loadResponseDepth } from "@/lib/ai/response-depth"
@@ -380,7 +382,9 @@ type InlineMediaGeneration = {
   /** Verified image engine identity from the server, independent of chat model. */
   generatorProvider?: string
   generatorModel?: string
+  sourceAssetId?: string
   progress?: number
+  indeterminate?: boolean
   url?: string
   /** Provider-direct images exist only for the current browser session. */
   ephemeral?: boolean
@@ -416,29 +420,18 @@ function describeReadyMediaAction(media?: InlineMediaGeneration) {
 
 /** Answer image-model provenance from the actual finished image receipt, not
  * a language model hallucination or an irrelevant web citation. */
-function asksWhichModelGeneratedImage(value: string) {
-  const question = String(value || "").trim()
-  return question.length <= 260 &&
-    /(?:какая|какой|какую|что за|кто|кем|чем|which|what)\b.{0,70}(?:модел|генератор|движок|провайдер|сгенерир|генерирова|создал|создан|нарисовал|generated|model)|(?:эт[оау]|картинк|изображени|фото).{0,40}(?:какая модель|какой моделью|кем создан)/iu.test(question) &&
-    /(?:эт[оау]|последн|фото|картинк|изображени|генерирова|сгенерир|создал|создан|нарисовал|generated|made)/iu.test(question)
-}
-
-function imageGeneratorReceiptAnswer(messages: Message[]) {
-  const media = [...messages].reverse().find(message =>
-    message.generatedMedia?.kind === "image" && message.generatedMedia.status === "ready"
-  )?.generatedMedia
+function imageGeneratorReceiptAnswer(messages: Message[], question: string) {
+  const media = flashReceiptTarget(question, messages.flatMap(({ generatedMedia }) =>
+    generatedMedia?.kind === "image" && generatedMedia.status === "ready" ? [generatedMedia] : []))
   if (!media) return "В этом чате нет готового изображения с подтверждёнными данными генерации."
   const generatorModel = String(media.generatorModel || "").trim().slice(0, 180)
   const generatorProvider = String(media.generatorProvider || "").trim().slice(0, 100)
   if (generatorModel) {
-    return "Последнее изображение создано через медиадвижок MALIKII. Фактическая модель генерации: **" +
-      generatorModel + "**" + (generatorProvider ? " (провайдер: " + generatorProvider + ")." : ".") +
-      "\n\n**MalikLLM Flash** — выбранная модель чата, а не подтверждённый генератор изображения."
+    return "Модель генерации изображения — **" + generatorModel + "**" +
+      (generatorProvider ? " (" + generatorProvider + ")." : ".")
   }
   if (generatorProvider) {
-    return "Последнее изображение создано через медиадвижок MALIKII (провайдер: **" +
-      generatorProvider + "**). Точное название модели не было возвращено сервисом. " +
-      "MalikLLM Flash — выбранная модель чата, а не подтверждённый генератор изображения."
+    return "Сервис изображения — **" + generatorProvider + "**. Точное название модели в квитанции отсутствует."
   }
   return "Изображение создано медиадвижком MALIKII, но в сохранённой истории нет проверенной информации " +
     "о конкретной модели. Нельзя достоверно назвать её MalikLLM MAX или Google AI Mode."
@@ -1541,7 +1534,9 @@ function reviveMessage(message: any): Message {
           provider: typeof message.generatedMedia.provider === "string" ? message.generatedMedia.provider : undefined,
           generatorProvider: typeof message.generatedMedia.generatorProvider === "string" ? message.generatedMedia.generatorProvider.slice(0, 100) : undefined,
           generatorModel: typeof message.generatedMedia.generatorModel === "string" ? message.generatedMedia.generatorModel.slice(0, 180) : undefined,
+          sourceAssetId: typeof message.generatedMedia.sourceAssetId === "string" ? message.generatedMedia.sourceAssetId : undefined,
           progress: typeof message.generatedMedia.progress === "number" ? message.generatedMedia.progress : undefined,
+          indeterminate: message.generatedMedia.indeterminate === true,
           url: typeof message.generatedMedia.url === "string" ? message.generatedMedia.url : undefined,
           ephemeral: message.generatedMedia.ephemeral === true,
           fallbackUrl: typeof message.generatedMedia.fallbackUrl === "string" ? message.generatedMedia.fallbackUrl : undefined,
@@ -6260,6 +6255,8 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
   const turnWorkspaceMode = options?.workspaceMode ?? workspaceMode
   const cleanContent = (content || "").trim()
   if (!cleanContent) return
+  const flashSelected = selectedModelId === "malik-flash"
+  const carryContext = readContextEnabled()
   const petroleumRoute = routePetroleum(cleanContent, options?.selectedSkillId)
   const petroleumAnalytic = petroleumRoute.domain && ["petroleum", "chat"].includes(petroleumRoute.engine)
   const selectedSkillId = petroleumRoute.skillId
@@ -6269,6 +6266,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
   // turns and a stop button that stayed alive beside an already-finished reply.
   // This synchronous gate closes that race at the single dashboard entry point.
   const submissionNow = Date.now()
+  const flashSubmittedAt = flashSelected ? performance.now() : undefined
   const submissionSignature = `${turnWorkspaceMode}:${cleanContent}\u0000${attachments.map((item) => `${item.id}:${item.kind}:${item.size}`).join("|")}`
   const previousSubmission = sendGateRef.current
   const duplicateBurst = previousSubmission.signature === submissionSignature
@@ -6297,7 +6295,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
   // explicit request for a file). Questions, single deliverables, long
   // briefs and numbered task lists are answered by the model in the chat.
   // Signed-in accounts only: projects are stored per account.
-  if (!petroleumAnalytic && !attachments.length && !options?.skipSuperflow && routeWorkRequest(cleanContent, { mode: turnWorkspaceMode, signedIn: !guestMode && Boolean(workOSUser?.email), attachmentKinds: attachments.map((item) => item.kind) }).route === "flow") {
+  if (!flashSelected && !petroleumAnalytic && !attachments.length && !options?.skipSuperflow && routeWorkRequest(cleanContent, { mode: turnWorkspaceMode, signedIn: !guestMode && Boolean(workOSUser?.email), attachmentKinds: attachments.map((item) => item.kind) }).route === "flow") {
     const flowChatId = branchChatId || activeChatId || crypto.randomUUID()
     const reference: SuperflowRef = { clientRequestId: newRequestId("sf"), goal: cleanContent, workspaceMode: turnWorkspaceMode }
     const userTurn: Message = { id: crypto.randomUUID(), role: "user", content: cleanContent, timestamp: new Date() }
@@ -6383,7 +6381,11 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
   // Follow-up questions such as "кто на фото?" automatically receive the last
   // ready generated image from this chat as a hidden multimodal attachment.
   // The user does not need to upload the generated picture again.
-  const implicitGeneratedImage = attachments.some((item) => item.kind === "image")
+  const flashPriorImageId = flashSelected && carryContext ? conversationBase.flatMap(message => [
+    ...(message.attachments || []).map(attachment => attachment.kind === "image" ? attachment.url : undefined),
+    message.generatedMedia?.kind === "image" && message.generatedMedia.status === "ready" ? message.generatedMedia.url : undefined,
+  ]).filter(url => url?.startsWith("/api/chat/flash-image/")).at(-1)?.split("/").at(-1) : undefined
+  const implicitGeneratedImage = flashSelected || attachments.some((item) => item.kind === "image")
     ? null
     : await latestGeneratedImageAttachment(conversationBase, cleanContent)
   const requestAttachments = implicitGeneratedImage
@@ -6443,22 +6445,24 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
   )
   // Routing invariant: when real image bytes/context are present and the user
   // asks to change the picture, text chat is not an eligible destination.
+  const flashSourceId = options?.flashSourceId || flashPriorImageId
+  const flashImage = flashSelected ? options?.flashSourceId ? "edit" : flashImageOperation(cleanContent, hasRequestImageAttachment || Boolean(flashPriorImageId)) : null
   const forcedImageEdit = hasRequestImageAttachment && isExplicitImageEditRequest(cleanContent, true)
   const parsedMediaCommand = parseMediaCommand(cleanContent)
   // What this message asks for, read together with the conversation: «ну
   // сгенерируй как я говорю» points back at the picture already asked for.
   const mediaTurn: Pick<MediaTurn, "kind" | "prompt"> | null = options?.forcedMedia
     || (petroleumRoute.domain || parsedMediaCommand ? null : resolveMediaTurn(cleanContent, conversationBase, requestAttachments.length > 0))
-  const requestedInlineMediaKind = petroleumAnalytic ? null : petroleumRoute.domain && petroleumRoute.engine === "image" ? "image" : petroleumRoute.domain && petroleumRoute.engine === "video" ? "video" : forcedImageEdit
+  const requestedInlineMediaKind = flashImage ? "image" : petroleumAnalytic ? null : petroleumRoute.domain && petroleumRoute.engine === "image" ? "image" : petroleumRoute.domain && petroleumRoute.engine === "video" ? "video" : forcedImageEdit
     ? "image"
     : mediaTurn?.kind || detectInlineMediaGenerationRequest(cleanContent, requestAttachments, activeAiMode)
-  const editingImage = forcedImageEdit || (
+  const editingImage = flashSelected ? flashImage === "edit" : forcedImageEdit || (
     requestedInlineMediaKind === "image"
     && isExplicitImageEditRequest(cleanContent, hasRequestImageAttachment)
   )
   // Asked for is done: the request itself is the consent, and the composer
   // already shows what a picture costs.
-  const inlineMediaKind = requestedInlineMediaKind
+  const inlineMediaKind = flashSelected && asksWhichModelGeneratedImage(cleanContent) ? null : requestedInlineMediaKind
   // Shown in the chat card: without the slash command.
   const inlineMediaPrompt = parsedMediaCommand ? parsedMediaCommand.prompt || cleanContent : mediaTurn?.prompt || cleanContent
   // Sent to the API: the server-side cost guard only accepts prompts that carry
@@ -6541,7 +6545,9 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
       })()
     : null
 
-  const historyAttachments = regenTarget ? [] : await persistChatAttachmentsForHistory(attachments)
+  const historyAttachments = regenTarget ? [] : flashSelected
+    ? attachments.map(lightweightHistoryAttachment)
+    : await persistChatAttachmentsForHistory(attachments)
   const userMessage: Message = regenTarget ? regenTarget.user : {
     id: crypto.randomUUID(),
     role: "user",
@@ -6553,6 +6559,12 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
     selectedSkillId,
   }
 
+  const mediaSeed = inlineMediaKind ? createInlineMediaSeed(inlineMediaKind, inlineMediaPrompt) : undefined
+  if (mediaSeed?.kind === "image" && flashSelected) {
+    mediaSeed.provider = undefined
+    mediaSeed.progress = undefined
+    mediaSeed.indeterminate = true
+  }
   const assistantMessage: Message = {
     id: regenTarget ? regenTarget.message.id : crypto.randomUUID(),
     versions: regenTarget && regenTarget.message.content.trim() && !options?.forcedMedia
@@ -6560,14 +6572,14 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
       : regenTarget?.message.versions,
     role: "assistant",
     selectedSkillId,
-    content: inlineMediaKind ? buildInlineMediaAssistantText(createInlineMediaSeed(inlineMediaKind, inlineMediaPrompt)) : "",
+    content: mediaSeed ? buildInlineMediaAssistantText(mediaSeed) : "",
     timestamp: new Date(),
     isStreaming: true,
     intentType: inlineMediaKind ? "chat" : isProjReq ? "project" : "chat",
     modelId: selectedModelId,
     // Research UI starts only when the server actually emits a search event.
     research: undefined,
-    generatedMedia: inlineMediaKind ? createInlineMediaSeed(inlineMediaKind, inlineMediaPrompt) : undefined,
+    generatedMedia: mediaSeed,
     actionPlan: actionPlan || undefined,
   }
 
@@ -6585,6 +6597,10 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
     return { ...chat, messages: nextMessages }
   }))
   setIsLoading(true)
+  if (flashSubmittedAt !== undefined) window.requestAnimationFrame((frameAt) => {
+    performance.clearMeasures("malik-flash:acknowledgment")
+    performance.measure("malik-flash:acknowledgment", { start: flashSubmittedAt, end: Math.max(flashSubmittedAt, frameAt) })
+  })
   dashboardEventBus.emit({
     type: "chat:send",
     source: "handleSendMessage",
@@ -6598,13 +6614,12 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
     // The finished preview opens inline on mobile, never as a forced full-screen overlay.
   }
 
-  const startTime = Date.now()
+  const startTime = flashSelected ? submissionNow : Date.now()
   const MIN_TERMINAL_TIME = isProjReq ? 6500 : 0
   const normalizedEmail = (!guestMode && workOSUser?.email ? String(workOSUser.email) : username || "").trim().toLowerCase() || "guest@local"
 
   // The "Контекст" switch in the right rail decides whether prior turns travel
   // with the request. Off means the model sees this message and nothing else.
-  const carryContext = readContextEnabled()
   const historyWindow = 32
   // A regenerated answer is asked without the answer it replaces.
   const priorMessages = regenTarget ? conversationBase.filter((item) => item.id !== regenTarget.message.id) : conversationBase
@@ -6672,6 +6687,17 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
   const applyExecution = (trace: ExecutionTrace) => {
     finalExecution = trace
     setMessages((current) => current.map((message) => message.id === assistantMessage.id ? { ...message, execution: trace } : message))
+  }
+
+  const applyFlashAttachments = (value: unknown) => {
+    if (!flashSelected || !Array.isArray(value) || !value.length) return
+    const stored = value.filter((item): item is ChatAttachment =>
+      item?.kind === "image" && typeof item?.id === "string" && typeof item?.url === "string" &&
+      item.url.startsWith("/api/chat/flash-image/"))
+    if (!stored.length) return
+    const patch = (message: Message): Message => message.id === userMessage.id ? { ...message, attachments: stored } : message
+    setMessages(previous => previous.map(patch))
+    setChats(previous => previous.map(chat => chat.id === chatId ? { ...chat, messages: chat.messages.map(patch) } : chat))
   }
 
   const finalizeAssistant = (finalText: string, finalCode?: string, finalResearch?: MalikMessageResearch, failed = false) => {
@@ -6862,8 +6888,8 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
     return
   }
 
-  if (asksWhichModelGeneratedImage(cleanContent)) {
-    finalizeAssistant(imageGeneratorReceiptAnswer(messages))
+  if (!flashSelected && asksWhichModelGeneratedImage(cleanContent)) {
+    finalizeAssistant(imageGeneratorReceiptAnswer(conversationBase, cleanContent))
     setIsGeneratingTerminal(false)
     setIsLoading(false)
     setStreamingText("")
@@ -6882,11 +6908,17 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
   }
 
   if (inlineMediaKind && assistantMessage.generatedMedia) {
+    const flashImageRequest = flashSelected && inlineMediaKind === "image"
+    const mediaController = flashImageRequest ? new AbortController() : undefined
+    if (mediaController) {
+      activeStreamAbortRef.current = mediaController
+      setStreamAbortable(true)
+    }
     const mediaActivity = createExecutionReporter(() => applyExecution(mediaActivity.snapshot()), getMalikModel(selectedModelId).label)
     const mediaCall = mediaActivity.start(inlineMediaKind === "video" ? "Генерация видео" : editingImage ? "Редактирование загруженного изображения" : "Генерация изображения", "media", inlineMediaKind === "video" ? "video.generate" : "image.generate", { prompt: inlineMediaPrompt, editing: Boolean(editingImage) })
     try {
       setIsGeneratingTerminal(false)
-      patchInlineMedia({ status: "thinking", progress: 14 })
+      patchInlineMedia({ status: "thinking", progress: flashImageRequest ? undefined : 14 })
 
       // Step one of the visible flow: say what was understood before spending
       // forty seconds drawing it. A heavy accent or a typo becomes a line the
@@ -6894,8 +6926,8 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
       let understood = ""
       if (inlineMediaKind === "image" && editingImage) {
         understood = `Редактирую загруженное фото: ${inlineMediaPrompt}`
-        patchInlineMedia({ understood, status: "generating", progress: 30 })
-      } else if (inlineMediaKind === "image") {
+        patchInlineMedia({ understood, status: "generating", progress: flashImageRequest ? undefined : 30 })
+      } else if (inlineMediaKind === "image" && !flashImageRequest) {
         try {
           const understandResponse = await clientFetchWithTimeout("/api/ai/image/understand", {
             method: "POST",
@@ -6912,12 +6944,13 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
         }
       }
 
-      patchInlineMedia({ status: "generating", progress: 36 })
+      patchInlineMedia({ status: "generating", progress: flashImageRequest ? undefined : 36 })
 
       const mediaEndpoint = inlineMediaKind === "video" ? "/api/generate/video" : "/api/media/image"
       const response = await clientFetchWithTimeout(mediaEndpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        signal: mediaController?.signal,
         body: JSON.stringify({
           prompt: inlineMediaKind === "image" && options?.imageStyle
             ? `${inlineMediaApiPrompt}\n\nVisual style: ${options.imageStyle}`
@@ -6925,6 +6958,10 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
           operation: editingImage ? "edit" : "generate",
           chatModelId: inlineMediaKind === "image" ? selectedModelId : undefined, // Keep media video unaffected.
           chatId, // Persistent per-chat browser conversation, never client-provided account ownership.
+          userMessageId: flashImageRequest ? userMessage.id : undefined,
+          assistantMessageId: flashImageRequest ? assistantMessage.id : undefined,
+          flashContextEnabled: flashImageRequest ? carryContext : undefined,
+          flashSourceId: flashImageRequest && editingImage && !hasRequestImageAttachment ? flashSourceId : undefined,
           // The picture must match the line the user was just shown.
           understood: understood || undefined,
           stream: false,
@@ -6950,7 +6987,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
         }),
       }, inlineMediaKind === "image" ? 120_000 : 190_000)
 
-      patchInlineMedia({ status: "rendering", progress: 72 })
+      if (!flashImageRequest) patchInlineMedia({ status: "rendering", progress: 72 })
       const payload = await response.json().catch(() => ({}))
 
       const isFallback =
@@ -7095,6 +7132,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
 
       const readyMedia: InlineMediaGeneration = {
         ...assistantMessage.generatedMedia,
+        id: flashImageRequest && typeof finalPayload?.assetId === "string" ? finalPayload.assetId : assistantMessage.generatedMedia.id,
         status: finalStatusIsProcessing ? "rendering" : "ready",
         progress: finalStatusIsProcessing ? 92 : 100,
         url: mediaUrl || undefined,
@@ -7112,6 +7150,8 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
           ? finalPayload.generatorProvider.slice(0, 100) : undefined,
         generatorModel: inlineMediaKind === "image" && typeof finalPayload?.generatorModel === "string"
           ? finalPayload.generatorModel.slice(0, 180) : undefined,
+        sourceAssetId: flashImageRequest && typeof finalPayload?.sourceAssetId === "string" ? finalPayload.sourceAssetId : undefined,
+        createdAt: flashImageRequest && typeof finalPayload?.createdAt === "string" ? finalPayload.createdAt : assistantMessage.generatedMedia.createdAt,
         provider:
           finalPayload?.engine ||
           finalPayload?.providerTitle ||
@@ -7125,18 +7165,24 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
       mediaActivity.finish(mediaCall, { status: readyMedia.status, jobId: readyMedia.jobId, ready: readyMedia.status === "ready" })
       applyExecution(mediaActivity.settle("completed"))
       finalizeInlineMedia(readyMedia)
+      applyFlashAttachments(finalPayload?.flashAttachments)
     } catch (error) {
       const failedMedia: InlineMediaGeneration = {
         ...assistantMessage.generatedMedia,
         status: "failed",
         progress: 100,
-        error: error instanceof Error ? error.message : "Unknown media generation error",
+        error: mediaController?.signal.aborted && mediaController.signal.reason === "user"
+          ? "Остановлено пользователем." : error instanceof Error ? error.message : "Unknown media generation error",
       }
       setErrorNotification(buildInlineMediaAssistantText(failedMedia))
       mediaActivity.finish(mediaCall, undefined, "failed", failedMedia.error)
       applyExecution(mediaActivity.settle("failed"))
       finalizeInlineMedia(failedMedia)
     } finally {
+      if (mediaController && activeStreamAbortRef.current === mediaController) {
+        activeStreamAbortRef.current = null
+        setStreamAbortable(false)
+      }
       setIsLoading(false)
       setStreamingText("")
     }
@@ -7256,21 +7302,24 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
         creatorName: canAccessAdmin ? "Абдумалик" : undefined,
         supportsMediaAction: true,
         attachments: apiRequestAttachments,
-        media_b64: requestAttachments.some((item) => item.kind === "video")
+        media_b64: flashSelected || requestAttachments.some((item) => item.kind === "video")
           ? undefined
           : apiRequestAttachments.find((item) => item.base64)?.base64,
-        media_type: requestAttachments.some((item) => item.kind === "video")
+        media_type: flashSelected || requestAttachments.some((item) => item.kind === "video")
           ? undefined
           : apiRequestAttachments.find((item) => item.base64)?.mime,
         mode: isProjReq ? "pro" : isCodeReq ? "code" : "fast",
         responseMode: mode,
         model: selectedModelId,
         chatId, // Stable across turns; Flash must not mix Google AI Mode sessions.
+        userMessageId: flashSelected ? userMessage.id : undefined,
+        assistantMessageId: flashSelected ? assistantMessage.id : undefined,
+        flashContextEnabled: flashSelected ? carryContext : undefined,
         forceCanvas: isProjReq,
         isProjectRequest: isProjReq,
         isCodeRequest: isCodeReq,
         platform: "malik-ai-sovereign-v7",
-        history,
+        history: flashSelected && !isFlashCodingRequest(cleanContent) ? undefined : history,
         client: {
           surface: "dashboard",
           preview: isProjReq,
@@ -7415,6 +7464,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
           const completionError = chatCompletionError(payload)
           if (completionError) throw new Error(completionError)
           sawDone = true
+          applyFlashAttachments(payload?.flashAttachments)
           turnMetrics = readResponseMetrics(payload)
           // The server's final text wins over what streamed: it may carry a
           // «⚠️» check or the «Ответ не завершён» line the stream never had.

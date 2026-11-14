@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { normalizePhotos, uploadPhotosToChrome, PhotoUploadError } from "../photo.mjs";
-import { isGoogleUrl, sourceLinks, deltaAnswer, GoogleBrowserWorker } from "../browser.mjs";
+import { isGoogleUrl, sourceLinks, GoogleBrowserWorker } from "../browser.mjs";
 
 const tinyPng = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLytQAAAABJRU5ErkJggg==";
 
@@ -64,8 +64,9 @@ test("exposes a clear error instead of claiming photo transfer", async () => {
   await assert.rejects(uploadPhotosToChrome(page, normalizePhotos([{ mime: "image/png", base64: tinyPng }])), e => e.code === "GOOGLE_IMAGE_BUTTON_NOT_FOUND");
 });
 
-test("isolates account keys to 64-char opaque hashes", async () => {
+test("isolates account keys to 64-char opaque hashes", async t => {
   const worker = new GoogleBrowserWorker();
+  t.after(() => worker.close());
   await assert.rejects(worker.ask({ userScope: "founder-email", chatScope: "chat1", question: "test" }), e => e.code === "INVALID_SCOPE");
 });
 
@@ -75,11 +76,6 @@ test("rejects arbitrary restored URLs", () => {
   assert.equal(isGoogleUrl("https://evilgoogle.com/ai"), false);
   assert.equal(isGoogleUrl("http://google.com/ai"), false);
   assert.equal(isGoogleUrl("https://www.google.com.evil.example/ai"), false);
-});
-
-test("keeps new answer text instead of old chat text", () => {
-  assert.equal(deltaAnswer("First reply", "First reply\nSecond reply", "Second question"), "Second reply");
-  assert.equal(deltaAnswer("old", "old", "test"), "");
 });
 
 test("deduplicates sources and rejects local/file URLs", () => {

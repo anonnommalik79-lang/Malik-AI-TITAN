@@ -23,8 +23,9 @@ import { enhanceImagePrompt } from "./image-prompt-enhancer"
 import { buildVisualPrompt } from "./visual-prompt"
 import { resolveRequestedQuality } from "./image-resolution-intent"
 import { routeImageGeneration } from "./image-router"
-import { runMalikFlashImage } from "../server/malik-flash-image-worker"
-import { isMalikFlashBrowserReady } from "../server/malik-flash-browser-bridge"
+import { runFlashMedia } from "../server/malik-flash-media"
+import { FlashBrowserError } from "../server/malik-flash-browser-bridge"
+import { flashImageOperation } from "../ai/malik-flash-intent"
 import {
   checkImageCreditLimit,
   normalizeImageCreditSize,
@@ -147,15 +148,10 @@ export async function handleMalikPhotoGenerationRequest(request: Request) {
   }
 
   const user = await resolveMediaUser(request, body)
-  // Chat-selected Flash uses the isolated browser worker behind the existing
-  // MALIKII media UI. Keep the feature disabled until explicitly activated.
-  const flashSelected = process.env.NEXT_PUBLIC_MALIK_FLASH_PREVIEW === "1"
-    && body?.chatModelId === "malik-flash"
-  // Flash beta uses existing native photo engines when no isolated worker exists;
-  // never claim an image from this path was created by Google AI Mode.
-  const flashRequested = flashSelected && isMalikFlashBrowserReady()
+  const flashRequested = body?.chatModelId === "malik-flash"
+  const flashEditing = flashRequested && (editing || flashImageOperation(rawPrompt, Boolean(body.flashSourceId)) === "edit")
   let editSource
-  if (editing) {
+  if (editing && !flashRequested) {
     try {
       editSource = await withMalikImageProcessingSlot(() => prepareImageEditSource({ ...body, aspectRatio }))
     } catch (error) {
@@ -220,35 +216,24 @@ export async function handleMalikPhotoGenerationRequest(request: Request) {
 
     if (flashRequested) {
       try {
-        const image = await runMalikFlashImage({
-          task: editing ? "image_edit" : "image_generate",
-          question: prompt,
-          userId: user.userId,
-          chatId: typeof body?.chatId === "string" ? body.chatId : "",
-          source: editing && editSource
-            ? { mime: "image/png", bytes: editSource.bytes }
-            : undefined,
-        })
-        result = {
-          ok: true,
-          provider: "malik-flash",
-          imageUrl: image.dataUrl,
-          providerModel: "MalikLLM Flash",
-          remainingDailyImages: credit.remaining,
-          quality,
-          enhancedPrompt: prompt,
-          routeReason: "malik-flash-verified-image-result",
-          generationTier: "quality",
-        }
+        const image = await runFlashMedia({ body, account: user, question: rawPrompt, editing: flashEditing, signal: request.signal })
+        await recordImageCreditUsage(user.userId, imageSize)
+        const remaining = credit.plan === "owner" ? credit.remaining : Math.max(0, credit.remaining - credit.cost)
+        return Response.json({
+          ...image, remainingDailyImages: remaining, remainingImageCredits: remaining, dailyImageCredits: credit.daily, imageCreditCost: credit.cost,
+          remaining4k: credit.plan !== "owner" && imageSize === "4K" ? Math.max(0, credit.remaining4k - 1) : credit.remaining4k,
+          imageSize, resetAt: credit.resetAt, plan: credit.plan,
+        }, { headers: { "Cache-Control": "private, no-store" } })
       } catch (error) {
-        console.warn("[MALIK_FLASH_IMAGE]", error instanceof Error ? error.name : "error")
+        const failure = error instanceof FlashBrowserError ? error :
+          new FlashBrowserError("FLASH_IMAGE_UNAVAILABLE", "Не удалось получить готовое изображение Google AI Mode.")
         return Response.json({
           ok: false,
           status: "failed",
-          error: "FLASH_IMAGE_UNAVAILABLE",
-          publicError: error instanceof Error ? error.message : "Не удалось получить готовое изображение.",
-          retryable: true,
-        }, { status: 503, headers: { "Cache-Control": "no-store" } })
+          error: failure.code,
+          publicError: failure.message,
+          retryable: failure.status >= 500 || failure.status === 429,
+        }, { status: failure.status, headers: { "Cache-Control": "no-store" } })
       }
     }
 
@@ -493,9 +478,9 @@ export async function handleMalikPhotoGenerationRequest(request: Request) {
       kind: "photo",
       operation: editing ? "edit" : "generate",
       provider: result.provider,
-      engine: flashSelected ? "MalikLLM Flash" : resolvedImageModel?.label || "MalikImage Auto",
+      engine: resolvedImageModel?.label || "MalikImage Auto",
       modelId: resolvedModelId,
-      modelLabel: flashSelected ? "MalikLLM Flash" : resolvedImageModel?.label || "MalikImage Auto",
+      modelLabel: resolvedImageModel?.label || "MalikImage Auto",
       providerModel: result.providerModel || resolvedImageModel?.providerModel,
       // Internal generation provenance. Flash is the selected CHAT surface;
       // never claim it (or MAX) produced pixels when an image API did.

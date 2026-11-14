@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react"
 import { cacheGeneratedImageByUrl, readCachedGeneratedImage, resolveGeneratedImageUrl } from "@/lib/media/client-generated-image-store"
+import { isFlashImageUrl } from "@/lib/media/media-url"
 
 type Status = "queued" | "thinking" | "generating" | "rendering" | "ready" | "failed"
 
@@ -17,6 +18,7 @@ type ImageGenerationMotionProps = {
   failed?: boolean
   error?: string
   progress?: number
+  indeterminate?: boolean
 }
 
 const GENERATION_WATCHDOG_MS = 6 * 60 * 1000
@@ -74,6 +76,7 @@ export function ImageGenerationMotion({
   failed,
   error,
   progress,
+  indeterminate = false,
 }: ImageGenerationMotionProps) {
   const phaseStartedAtRef = useRef(Date.now())
   const lastStatusRef = useRef<Status | undefined>(status)
@@ -161,11 +164,11 @@ export function ImageGenerationMotion({
         if (cancelled) return
         setAssetError("")
         setImageLoaded(true)
-        if (!ephemeral) void cacheGeneratedImageByUrl(resolvedResultUrl)
+        if (!ephemeral && !isFlashImageUrl(resolvedResultUrl)) void cacheGeneratedImageByUrl(resolvedResultUrl)
       })
       .catch(async () => {
         if (cancelled) return
-        const cached = await readCachedGeneratedImage(resolvedResultUrl)
+        const cached = isFlashImageUrl(resolvedResultUrl) ? null : await readCachedGeneratedImage(resolvedResultUrl)
         if (cancelled) return
         if (cached) {
           setResolvedResultUrl(cached)
@@ -224,7 +227,7 @@ export function ImageGenerationMotion({
 
         {!imageLoaded && !actuallyFailed ? (
           <div className="malik-photo-final__steps" aria-live="polite">
-            {steps.map((step, index) => (
+            {!indeterminate && steps.map((step, index) => (
               <div
                 key={step}
                 className={`malik-photo-final__step${index === activeStep ? " is-active" : ""}${index < activeStep ? " is-done" : ""}`}
@@ -235,7 +238,7 @@ export function ImageGenerationMotion({
             ))}
             <div className="malik-photo-final__timer">
               <span className="malik-photo-final__pulse" />
-              <span>Генерация {seconds.toFixed(1)}s · {shownProgress}%</span>
+              <span>{indeterminate ? `Ожидание · ${seconds.toFixed(1)} с` : `Генерация ${seconds.toFixed(1)}s · ${shownProgress}%`}</span>
             </div>
           </div>
         ) : null}
@@ -273,7 +276,7 @@ export function ImageGenerationMotion({
         </div>
       )}
 
-      {!actuallyFailed && !imageLoaded ? (
+      {!actuallyFailed && !imageLoaded && !indeterminate ? (
         <div className="malik-photo-final__progress">
           <div className="malik-photo-final__track"><span style={{ width: `${shownProgress}%` }} /></div>
           <div className="malik-photo-final__status">{shownStage}</div>

@@ -3,20 +3,23 @@ on:
   pull_request:
     paths:
       - "tools/malik-flash-worker/**"
-      - "app/templates/sovereign-hub-ui/lib/server/malik-flash-browser-bridge.ts"
+      - "app/templates/sovereign-hub-ui/lib/server/malik-flash-*.ts"
+      - "app/templates/sovereign-hub-ui/lib/ai/malik-flash-*.ts"
       - "app/templates/sovereign-hub-ui/lib/ai/malik-models.ts"
       - "app/templates/sovereign-hub-ui/lib/media/generate-photo-route.ts"
-      - "app/templates/sovereign-hub-ui/lib/server/malik-flash-image-worker.ts"
       - "app/templates/sovereign-hub-ui/components/sovereign/dashboard.tsx"
+      - "app/templates/sovereign-hub-ui/components/sovereign/chat-view.tsx"
       - "app/templates/sovereign-hub-ui/app/api/stream/route-impl.ts"
-      - "app/templates/sovereign-hub-ui/scripts/verify-malik-flash-image.mjs"
+      - "app/templates/sovereign-hub-ui/app/api/chat/**"
+      - "app/templates/sovereign-hub-ui/scripts/verify-malik-flash-*.mjs"
       - ".github/workflows/malik-flash-worker.yml"
   push:
     branches:
       - main
     paths:
       - "tools/malik-flash-worker/**"
-      - "app/templates/sovereign-hub-ui/lib/server/malik-flash-browser-bridge.ts"
+      - "app/templates/sovereign-hub-ui/lib/server/malik-flash-*.ts"
+      - "app/templates/sovereign-hub-ui/lib/ai/malik-flash-*.ts"
       - ".github/workflows/malik-flash-worker.yml"
   workflow_dispatch:
 jobs:
@@ -28,17 +31,24 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
+      - name: Install worker dependencies
+        run: npm ci --prefix tools/malik-flash-worker
+      - name: Install application dependencies
+        working-directory: app/templates/sovereign-hub-ui
+        run: npm ci --legacy-peer-deps
       - name: Syntax checks
         run: |
           node --check tools/malik-flash-worker/photo.mjs
+          node --check tools/malik-flash-worker/google-access.mjs
           node --check tools/malik-flash-worker/image-result.mjs
           node --check tools/malik-flash-worker/browser.mjs
+          node --check tools/malik-flash-worker/telemetry.mjs
           node --check tools/malik-flash-worker/server.mjs
-      - name: Photo transfer and isolation unit tests (mocked Google)
+      - name: Worker tests (no live Google account)
         run: node --test tools/malik-flash-worker/test/*.test.mjs
       - name: App integration contract
         working-directory: app/templates/sovereign-hub-ui
-        run: node --test scripts/verify-malik-flash-preview.mjs scripts/verify-malik-flash-image.mjs
+        run: node --test scripts/verify-malik-flash-preview.mjs scripts/verify-malik-flash-image.mjs scripts/verify-malik-flash-history.mjs
       - name: Preview-on registry and entitlement checks
         working-directory: app/templates/sovereign-hub-ui
         env:

@@ -7,7 +7,9 @@ import { chatArtDirection } from "@/lib/website/chat-art-direction"
 import { canRetryChat } from "@/lib/ai/chat-stream-recovery"
 import { briefNeedsDeep } from "@/lib/ai/brief-quality"
 import { isCodeRequest } from "@/lib/ai/request-kind"
-import { isMalikFlashBrowserReady, runMalikFlashBrowser } from "@/lib/server/malik-flash-browser-bridge"
+import { FlashBrowserError } from "@/lib/server/malik-flash-browser-bridge"
+import { runFlashChat } from "@/lib/server/malik-flash-chat"
+import { flashImageOperation, isFlashCodingRequest } from "@/lib/ai/malik-flash-intent"
 import type { MalikWebSource } from "@/lib/ai/web-research-types"
 import { upsertWebSource } from "@/lib/ai/source-evidence"
 import { normalizeProviderTokenUsage } from "@/lib/ai/token-telemetry"
@@ -27,7 +29,7 @@ import { passportMarkdown } from "@/lib/proof/passport"
 import { projectPassport } from "@/lib/proof/project"
 import { selfBuildIntent } from "@/lib/selfbuild/intent"
 import { buildSelfProject } from "@/lib/selfbuild/studio"
-import { DEFAULT_MALIK_MODEL_ID, hasMalikProAccess } from "@/lib/ai/malik-models"
+import { canUseMalikModel, DEFAULT_MALIK_MODEL_ID, hasMalikProAccess, MALIK_FLASH_PREVIEW_ENABLED, selectsMalikFlash } from "@/lib/ai/malik-models"
 import { checkUsageLimit, recordChatUsage } from "@/lib/limits/rate-limit"
 import {
   MalikModelRouteError,
@@ -92,7 +94,7 @@ import { chatComputeOperation } from "@/lib/malik-compute/policies"
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
-const MAX_CHAT_BODY_BYTES = 16 * 1024 * 1024
+const MAX_CHAT_BODY_BYTES = 30 * 1024 * 1024
 const MAX_TEXT_CONTEXT_CHARS = Math.max(260_000, Math.min(2_000_000, Number(process.env.MALIK_MAX_TEXT_CONTEXT_CHARS || 800_000)))
 const MALIK_CODER_MODEL_ID = "malik-coder-32b" as const
 const MALIK_ADMIN_COMMAND = "/malik"
@@ -883,26 +885,6 @@ async function runSelectedAnswerUnchecked(
     return { ...result.answer, selectedModelId: selection?.modelId || DEFAULT_MALIK_MODEL_ID }
   }
 
-  // The Flash preview requires a separately authenticated, per-user isolated
-  // browser worker. It must never reuse the founder's Google cookies globally.
-  // Full responses pass through the same streaming/Markdown UI as other models.
-  if (selection?.modelId === "malik-flash" && isMalikFlashBrowserReady() && !isCodeRequest(coderPrompt(body))) {
-    const uploads: any[] = hasMalikAttachments(body?.attachments) ? body.attachments : []
-    if (uploads.some((item) => item?.kind !== "image" && !(typeof item?.mime === "string" && item.mime.startsWith("image/")))) {
-      throw new MalikModelRouteError("FLASH_UNSUPPORTED_ATTACHMENT", "В тестовом режиме Flash поддерживает текст и фотографии PNG/JPEG/WebP.", 422, "malik-flash")
-    }
-    onProgress?.({ phase: "web-search", text: uploads.length ? "MalikLLM Flash анализирует фотографии" : "MalikLLM Flash ищет информацию" })
-    const answer = await runMalikFlashBrowser({
-      question: coderPrompt(body),
-      userId: selection.entitlement.userId,
-      chatId: typeof body?.chatId === "string" ? body.chatId : "",
-      images: uploads.map((item) => ({ mime: item.mime, base64: item.base64, name: item.name })),
-      signal,
-    })
-    onToken?.(answer.content)
-    return answer
-  }
-
   let executionBody = body
   const requestAttachments = hasMalikAttachments(body?.attachments) ? body.attachments : []
   const superpowerPrompt = buildMalikSuperpowerSystemPrompt(
@@ -1021,17 +1003,10 @@ async function runSelectedAnswerUnchecked(
           maxTokensCap: maxOutputTokens,
         }
       : executionBody
-    const requestedModelId = selection?.modelId || DEFAULT_MALIK_MODEL_ID
-    // Flash is the free conversational surface. Programming requests explicitly
-    // use the existing MAX coding engine, without bypassing account quotas.
-    const selectedModelId = requestedModelId === "malik-flash"
-      ? "malik-max" // Native MALIKII beta path until isolated browser service is ready.
-      : requestedModelId
-    if (selectedModelId !== requestedModelId && isCodeRequest(coderPrompt(executionBody))) onProgress?.({ phase: "model", text: "Готовлю решение для программирования" })
     const answer = await malikGodAnswer(
       selectedBody,
       {
-        modelId: selectedModelId,
+        modelId: selection?.modelId || DEFAULT_MALIK_MODEL_ID,
         allowCatalog: Boolean(selection && hasMalikProAccess(selection.entitlement.plan)),
       },
       onProgress,
@@ -1041,10 +1016,7 @@ async function runSelectedAnswerUnchecked(
       signal,
       preparedEvidence || (requestAttachments.length ? { prompt: coderPrompt(body), sources: [] } : undefined),
     )
-    const brandedAnswer = requestedModelId === "malik-flash" && !isMalikFlashBrowserReady()
-      ? { ...answer, selectedModelId: "malik-flash" }
-      : answer
-    return agentRuntime ? { ...brandedAnswer, agentRuntime } : brandedAnswer
+    return agentRuntime ? { ...answer, agentRuntime } : answer
   }
 
   onProgress?.({ phase: "model", text: agentRuntime ? "Malik Agent Runtime собирает итог" : "Malik Brain выбирает глубину и проверяет задачу" })
@@ -1222,6 +1194,7 @@ function liveSseResponse(
   entitlement: RequestEntitlement,
   maxOutputTokens?: number,
   workReceipt: WorkQuotaReceipt | null = null,
+  requestSignal?: AbortSignal,
 ) {
   const encoder = new TextEncoder()
   const startedAt = Date.now()
@@ -1232,6 +1205,8 @@ function liveSseResponse(
   const generation = new AbortController()
   let savedTurn: Promise<unknown> | null = null
   let failedWorkRefund: Promise<void> | null = null
+  const flash = selection?.modelId === "malik-flash"
+  const project = !flash && isProjectBuildRequest(body)
   // Work quota refunds must survive stream closure and failed partial output.
   after(async () => {
     if (savedTurn) await savedTurn
@@ -1263,17 +1238,17 @@ function liveSseResponse(
       }
 
       const activity = createExecutionReporter((step) => send("activity", { type: "activity", step, traceId: activity.snapshot().id, startedAt }), selection?.modelId || DEFAULT_MALIK_MODEL_ID)
-      const responseCall = activity.start(isProjectBuildRequest(body) ? "Сборка проекта" : "Обработка запроса", isProjectBuildRequest(body) ? "code" : "status", "malik.chat", { attachments: Array.isArray(body.attachments) ? body.attachments.length : 0 })
+      const responseCall = activity.start(project ? "Сборка проекта" : "Обработка запроса", project ? "code" : "status", "malik.chat", { attachments: Array.isArray(body.attachments) ? body.attachments.length : 0 })
 
-      send("status", { type: "status", text: isProjectBuildRequest(body) ? "Malik AI начинает сборку проекта" : "Malik AI принял запрос" })
-      if (!isProjectBuildRequest(body)) {
+      send("status", { type: "status", text: project ? "Malik AI начинает сборку проекта" : "Malik AI принял запрос" })
+      if (!project) {
         send("progress", { type: "progress", phase: "thinking", text: "Думает…" })
       }
       heartbeat = setInterval(() => {
         send("progress", {
           type: "progress",
           phase: "generating",
-          text: isProjectBuildRequest(body)
+          text: project
             ? "Malik AI продолжает собирать и проверять проект…"
             : streamedAny
               ? "Ответ продолжает поступать…"
@@ -1301,60 +1276,68 @@ function liveSseResponse(
       // Sources the full run found, so a rescue answers from them instead of searching again.
       let foundSources: MalikWebSource[] = []
       const mainRun = new AbortController()
-      const answerPromise = isProjectBuildRequest(body)
-        ? runProjectAnswer(body, selection, entitlement.userId, (text) => { activity.status(text, "code"); send("status", { type: "status", text }) }, { activity, signal: generation.signal })
-        : runSelectedAnswer(
-            body,
-            selection,
-            (progress) => {
-              if (writer !== "main") return
-              if (progress?.kind === "source" && progress.source?.url) foundSources = upsertWebSource(foundSources, progress.source, 16)
-              if (!progress.kind && progress.phase !== "generating") activity.status(progress.text)
-              send("progress", { type: "progress", ...progress })
-            },
-            maxOutputTokens,
-            writeAnswer("main"),
-            activity,
-            AbortSignal.any([generation.signal, mainRun.signal]),
-            undefined,
-            entitlement,
-          )
-      const deadline = chatAnswerDeadline({
-        code: isCodeRequest(coderPrompt(body)), deep: briefNeedsDeep(coderPrompt(body)), site: Boolean(chatArtDirection(coderPrompt(body))),
-        game: Boolean(gameStudioTurn(coderPrompt(body), { messages: body?.messages || body?.history, attachments: body?.attachments })),
-      })
-      const settledAnswer = skillChatRequest(body) || isProjectBuildRequest(body) || !canRetryChat(body) ? answerPromise : withinChatDeadline(answerPromise, deadline, startedAt, {
-        wrote: () => streamedAny,
-        stop: () => { writer = "rescue"; mainRun.abort() },
-        rescue: () => {
-          writer = "rescue"
-          send("progress", { type: "progress", phase: "thinking", text: "Отвечаю напрямую по найденным данным…" })
-          activity.status("Полный разбор не уложился во время — быстрый ответ по найденным данным")
-          const requested = Number(body?.maxTokens)
-          const rescueBody = maxOutputTokens
-            ? { ...body, maxTokens: Number.isFinite(requested) && requested > 0 ? Math.min(Math.floor(requested), maxOutputTokens) : maxOutputTokens, maxTokensCap: maxOutputTokens }
-            : body
-          return malikRescueAnswer(rescueBody, {
-            modelId: selection?.modelId === "malik-flash" && !isMalikFlashBrowserReady()
-              ? "malik-max"
-              : selection?.modelId || DEFAULT_MALIK_MODEL_ID,
-            allowCatalog: Boolean(selection && hasMalikProAccess(selection.entitlement.plan)),
-          }, foundSources, {
-            wallMs: deadline.rescueMs,
-            onToken: writeAnswer("rescue"),
-            activity,
-            signal: AbortSignal.any([generation.signal, AbortSignal.timeout(deadline.rescueMs + 10_000)]),
-          })
-        },
-        partial: (reason) => {
-          const tail = protectStreamChunk("", true)
-          if (tail) {
-            streamedText += tail
-            send("content", { type: "content", content: tail, contentMode: "delta" })
-          }
-          return { content: streamedText, provider: "malik-chat-deadline", model: "partial", selectedModelId: selection?.modelId || DEFAULT_MALIK_MODEL_ID, usedWeb: foundSources.length > 0, sources: foundSources, attempts: [], incomplete: { reason } }
-        },
-      })
+      const signal = AbortSignal.any([generation.signal, mainRun.signal, ...(requestSignal ? [requestSignal] : [])])
+      const settledAnswer = flash
+        ? runFlashChat({ question: coderPrompt(body), body, account: entitlement, maxOutputTokens, signal, onText: writeAnswer("main") })
+        : getNativeChatAnswer()
+      function getNativeChatAnswer() {
+        if (project) {
+          return runProjectAnswer(body, selection, entitlement.userId, (text) => {
+            activity.status(text, "code")
+            send("status", { type: "status", text })
+          }, { activity, signal })
+        }
+        const answerPromise = runSelectedAnswer(
+          body,
+          selection,
+          (progress) => {
+            if (writer !== "main") return
+            if (progress?.kind === "source" && progress.source?.url) foundSources = upsertWebSource(foundSources, progress.source, 16)
+            if (!progress.kind && progress.phase !== "generating") activity.status(progress.text)
+            send("progress", { type: "progress", ...progress })
+          },
+          maxOutputTokens,
+          writeAnswer("main"),
+          activity,
+          signal,
+          undefined,
+          entitlement,
+        )
+        const deadline = chatAnswerDeadline({
+          code: isCodeRequest(coderPrompt(body)), deep: briefNeedsDeep(coderPrompt(body)), site: Boolean(chatArtDirection(coderPrompt(body))),
+          game: Boolean(gameStudioTurn(coderPrompt(body), { messages: body?.messages || body?.history, attachments: body?.attachments })),
+        })
+        return skillChatRequest(body) || !canRetryChat(body) ? answerPromise : withinChatDeadline(answerPromise, deadline, startedAt, {
+          wrote: () => streamedAny,
+          stop: () => { writer = "rescue"; mainRun.abort() },
+          rescue: () => {
+            writer = "rescue"
+            send("progress", { type: "progress", phase: "thinking", text: "Отвечаю напрямую по найденным данным…" })
+            activity.status("Полный разбор не уложился во время — быстрый ответ по найденным данным")
+            const requested = Number(body?.maxTokens)
+            const rescueBody = maxOutputTokens
+              ? { ...body, maxTokens: Number.isFinite(requested) && requested > 0 ? Math.min(Math.floor(requested), maxOutputTokens) : maxOutputTokens, maxTokensCap: maxOutputTokens }
+              : body
+            return malikRescueAnswer(rescueBody, {
+              modelId: selection?.modelId || DEFAULT_MALIK_MODEL_ID,
+              allowCatalog: Boolean(selection && hasMalikProAccess(selection.entitlement.plan)),
+            }, foundSources, {
+              wallMs: deadline.rescueMs,
+              onToken: writeAnswer("rescue"),
+              activity,
+              signal: AbortSignal.any([generation.signal, AbortSignal.timeout(deadline.rescueMs + 10_000)]),
+            })
+          },
+          partial: (reason) => {
+            const tail = protectStreamChunk("", true)
+            if (tail) {
+              streamedText += tail
+              send("content", { type: "content", content: tail, contentMode: "delta" })
+            }
+            return { content: streamedText, provider: "malik-chat-deadline", model: "partial", selectedModelId: selection?.modelId || DEFAULT_MALIK_MODEL_ID, usedWeb: foundSources.length > 0, sources: foundSources, attempts: [], incomplete: { reason } }
+          },
+        })
+      }
 
       void settledAnswer.then(async (answer) => {
         const multimodalCost = estimateMultimodalTokens(hasMalikAttachments(body?.attachments) ? body.attachments : [])
@@ -1368,7 +1351,7 @@ function liveSseResponse(
         observeComputeResult(answer)
         const incomplete = "incomplete" in answer ? answer.incomplete ?? null : null
         // An answer the engine could not finish says so in its last line.
-        const content = withIncompleteNote(asPlainText(answer), incomplete)
+        const content = flash ? answer.content : withIncompleteNote(asPlainText(answer), incomplete)
         // The authoritative final text, sent only when it differs from what
         // streamed: a streamed answer would otherwise keep a server-side
         // rewrite (a «⚠️» warning, the incomplete note) off the screen and
@@ -1406,7 +1389,7 @@ function liveSseResponse(
         const expertDisagreements = reviewSteps.reduce((sum, step) => {
           try { return sum + (Number(JSON.parse(step.output || "{}").numericalDisagreements) || 0) } catch { return sum }
         }, 0)
-        const ledger = "projectArtifact" in answer || skipsClaimAudit(coderPrompt(body),content) ? null : buildClaimLedger({answer:content,prompt:coderPrompt(body),sources:answer.sources,expertDisagreements})
+        const ledger = flash || "projectArtifact" in answer || skipsClaimAudit(coderPrompt(body),content) ? null : buildClaimLedger({answer:content,prompt:coderPrompt(body),sources:answer.sources,expertDisagreements})
         const previousAudit = ("factAudit" in answer ? answer.factAudit : null) as MalikFactAudit | null
         const factAudit = ledger ? { ...(previousAudit || {checked:0,supported:0,missing:0,brokenCitations:0,claims:[],status:"unchecked" as const,summary:"Проверены только распознанные явные утверждения"}),ledger } : previousAudit
         send("done", {
@@ -1432,6 +1415,8 @@ function liveSseResponse(
           incomplete,
           ...(finalContent !== undefined ? { finalContent } : {}),
           tookMs: Date.now() - startedAt,
+          flashTiming: "flashTiming" in answer ? answer.flashTiming : undefined,
+          flashAttachments: "flashAttachments" in answer ? answer.flashAttachments : undefined,
           // Only official provider usage is published; absent metrics remain unknown.
           usage: normalizeProviderTokenUsage("usage" in answer ? answer.usage : undefined) ?? null,
           agentRuntime: "agentRuntime" in answer ? answer.agentRuntime : undefined,
@@ -1443,11 +1428,13 @@ function liveSseResponse(
       }).catch((error) => {
         stopHeartbeat()
         if (workReceipt) failedWorkRefund = refundWorkQuota(entitlement.userId, workReceipt).catch((reason) => console.error("[MALIK_WORK_QUOTA_REFUND]", reason))
-        const payload = error instanceof SkillError ? { error: error.code, message: error.code } : malikModelErrorPayload(error)
+        const payload = error instanceof FlashBrowserError ? { error: error.code, message: error.message }
+          : error instanceof SkillError ? { error: error.code, message: error.code } : malikModelErrorPayload(error)
         activity.finish(responseCall, undefined, "failed", payload.message || payload.error)
         send("error", {
           type: "error",
           ...(error instanceof SkillError ? { code: error.code, retryable: error.retryable } : {}),
+          ...(error instanceof FlashBrowserError ? { code: error.code, retryable: error.status >= 500 || error.status === 429 } : {}),
           message: payload.message || payload.error || "Malik AI temporarily unavailable.",
           execution: activity.settle("failed"),
         })
@@ -1467,14 +1454,18 @@ function liveSseResponse(
       "cache-control": "no-cache, no-transform",
       connection: "keep-alive",
       "x-accel-buffering": "no",
-      "x-malik-router": "malik-coder-1-orchestrator",
+      "x-malik-router": flash ? "malik-flash" : "malik-coder-1-orchestrator",
     },
   })
 }
 
-export const POST = withCompute(handlePOST, chatComputeOperation)
+export const POST = withCompute((request: Request) => handlePOST(request), chatComputeOperation)
 
-async function handlePOST(request: Request) {
+export async function handleFlashJsonChat(request: Request) {
+  return handlePOST(request, true)
+}
+
+async function handlePOST(request: Request, json = false) {
   let workReceipt: WorkQuotaReceipt | null = null
   let workUserId = ""
   if (isFeatureDisabled("chat")) {
@@ -1522,7 +1513,8 @@ async function handlePOST(request: Request) {
   // Fail closed: an image-edit command with an image attachment must never be
   // answered by a text/vision chat model. The dashboard normally routes these
   // straight to /api/ai/image; this guard protects every alternate/stale client.
-  if (requiresImageEditPipeline(body)) {
+  const imageEdit = requiresImageEditPipeline(body)
+  if (imageEdit) {
     return Response.json({
       ok: false,
       error: "IMAGE_EDIT_ROUTE_REQUIRED",
@@ -1538,17 +1530,18 @@ async function handlePOST(request: Request) {
   }
 
   try {
-    const requestedSelection = await resolveStrictMalikSelection(request, body)
-    // Flash's product contract: ALL programming/build/game turns use MAX, even
-    // when the free Flash conversation was selected. This is server-side,
-    // verified intent routing; direct PRO selection remains entitlement-gated.
+    const flashRequested = selectsMalikFlash(body)
+    if (flashRequested && !MALIK_FLASH_PREVIEW_ENABLED) {
+      throw new FlashBrowserError("FLASH_WORKER_NOT_READY", "Google AI Mode в MalikLLM Flash пока недоступен. Попробуйте позже.")
+    }
+    const requestedSelection = await resolveStrictMalikSelection(request, flashRequested ? { ...body, model: "malik-flash" } : body)
     const flashPrompt = coderPrompt(body)
-    const flashUsesMax = requestedSelection?.modelId === "malik-flash"
-      && (isCodeRequest(flashPrompt)
-        || isProjectBuildRequest(body)
-        || Boolean(gameStudioTurn(flashPrompt, { messages: body?.messages || body?.history, attachments: body?.attachments }))
-        || Boolean(websiteIntent(flashPrompt))
-        || (!hasMalikAttachments(body?.attachments) && briefNeedsDeep(flashPrompt)))
+    const flashUsesMax = flashRequested && !flashImageOperation(flashPrompt, imageEdit) &&
+      (isFlashCodingRequest(flashPrompt) || websiteIntent(flashPrompt) === "create" ||
+        gameStudioTurn(flashPrompt, { attachments: body?.attachments })?.kind === "new")
+    if (flashUsesMax && requestedSelection && !canUseMalikModel("malik-max", requestedSelection.entitlement.plan)) {
+      throw new MalikModelRouteError("PRO_MODEL_REQUIRED", "Для этой задачи нужен MalikLLM MAX. Он доступен в MalikAI Plus.", 403, "malik-max")
+    }
     const selection = flashUsesMax && requestedSelection
       ? { ...requestedSelection, modelId: "malik-max" }
       : requestedSelection
@@ -1582,20 +1575,20 @@ async function handlePOST(request: Request) {
 
     const adminCommand = await malikAdminCommandAnswer(request, body, ownerMode)
     if (adminCommand !== null) {
-      if (wantsSse(request, body)) return identitySseResponse(adminCommand, "malik-founder-command")
-      return textResponse(adminCommand)
+      if (!json && wantsSse(request, body)) return identitySseResponse(adminCommand, "malik-founder-command")
+      return json ? Response.json({ ok: true, content: adminCommand }) : textResponse(adminCommand)
     }
 
     const identity = malikIdentityAnswer(body, ownerMode)
-    if (identity) {
-      if (wantsSse(request, body)) return identitySseResponse(identity, selection?.modelId || DEFAULT_MALIK_MODEL_ID)
-      return textResponse(identity)
+    if (identity && selection?.modelId !== "malik-flash") {
+      if (!json && wantsSse(request, body)) return identitySseResponse(identity, selection?.modelId || DEFAULT_MALIK_MODEL_ID)
+      return json ? Response.json({ ok: true, content: identity, provider: "malik-identity-core" }) : textResponse(identity)
     }
 
-    const scheduled = await scheduledCommandAnswer(body, entitlement)
+    const scheduled = selection?.modelId === "malik-flash" ? null : await scheduledCommandAnswer(body, entitlement)
     if (scheduled !== null) {
-      if (wantsSse(request, body)) return identitySseResponse(scheduled, "malik-scheduler", "malik-scheduler")
-      return textResponse(scheduled)
+      if (!json && wantsSse(request, body)) return identitySseResponse(scheduled, "malik-scheduler", "malik-scheduler")
+      return json ? Response.json({ ok: true, content: scheduled, provider: "malik-scheduler" }) : textResponse(scheduled)
     }
 
     const requestAttachments = hasMalikAttachments(body?.attachments) ? body.attachments : []
@@ -1650,8 +1643,10 @@ async function handlePOST(request: Request) {
     // Founder recognition is granted only from the verified WorkOS session.
     // User-controlled email/name fields in the request are intentionally ignored.
     const routedBody = withVerifiedComicChatContext(ownerMode ? withVerifiedOwnerChatContext(body) : body, entitlement)
-    if (wantsSse(request, body)) return liveSseResponse(routedBody, selection, entitlement, maxOutputTokens, workReceipt)
-    const answer = isProjectBuildRequest(routedBody)
+    if (!json && wantsSse(request, body)) return liveSseResponse(routedBody, selection, entitlement, maxOutputTokens, workReceipt, request.signal)
+    const answer = selection?.modelId === "malik-flash"
+      ? await runFlashChat({ question: coderPrompt(routedBody), body: routedBody, account: entitlement, maxOutputTokens, signal: request.signal })
+      : isProjectBuildRequest(routedBody)
       ? await runProjectAnswer(routedBody, selection, entitlement.userId)
       : await runSelectedAnswer(routedBody, selection, undefined, maxOutputTokens,undefined,undefined,undefined,undefined,entitlement)
     const multimodalCost = estimateMultimodalTokens(hasMalikAttachments(routedBody?.attachments) ? routedBody.attachments : [])
@@ -1665,12 +1660,16 @@ async function handlePOST(request: Request) {
     await recordChatUsage(entitlement.userId, entitlement.plan, "chat", 0)
     workReceipt = null
     observeComputeResult(answer)
+    if (selection?.modelId === "malik-flash") {
+      return Response.json({ ok: true, ...answer }, { headers: { "cache-control": "private, no-store", "x-malik-router": "malik-flash" } })
+    }
     const content = withIncompleteNote(asPlainText(answer), "incomplete" in answer ? answer.incomplete ?? null : null)
-    return textResponse(content)
+    return json ? Response.json({ ok: true, ...answer, content }, { headers: { "cache-control": "private, no-store" } }) : textResponse(content)
   } catch (error) {
     if (workReceipt) await refundWorkQuota(workUserId, workReceipt).catch((reason) => console.error("[MALIK_WORK_QUOTA_REFUND]", reason))
     if (error instanceof SkillError) return Response.json({ ok: false, error: error.code, retryable: error.retryable }, { status: error.status, headers: { "cache-control": "private, no-store" } })
     if (error instanceof WorkQuotaError) return Response.json({ ok: false, error: error.code, message: error.message }, { status: error.status, headers: { "cache-control": "private, no-store" } })
+    if (error instanceof FlashBrowserError) return Response.json({ ok: false, error: error.code, message: error.message, retryable: error.status >= 500 || error.status === 429 }, { status: error.status, headers: { "cache-control": "private, no-store" } })
     const payload = malikModelErrorPayload(error)
     const status = error instanceof MalikModelRouteError ? error.status : 503
     return Response.json(payload, {

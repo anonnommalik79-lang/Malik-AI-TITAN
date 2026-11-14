@@ -45,6 +45,13 @@ export async function readAccountChatState(userId: string) {
 }
 
 export async function writeAccountChatState(userId: string, state: Record<string, unknown>) {
+  return updateAccountChatState(userId, current => mergeAccountChatStates(current, state))
+}
+
+export async function updateAccountChatState<T extends Record<string, unknown>>(
+  userId: string,
+  update: (current: Record<string, unknown> | null) => T,
+) {
   const id=normalizedUserId(userId)
   if (!id || id==="guest" || !accountChatStateConfigured()) {
     return {configured:accountChatStateConfigured(),stored:false,savedAt:""}
@@ -58,7 +65,7 @@ export async function writeAccountChatState(userId: string, state: Record<string
       current.value.version!==1 || !current.value.state ||
       typeof current.value.state!=="object" || Array.isArray(current.value.state)
     )) throw new Error("INVALID_REMOTE_CHAT_STATE")
-    const merged=mergeAccountChatStates(current.value?.state ?? null,state)
+    const merged=update(current.value?.state ?? null)
     const savedAt=new Date().toISOString()
     const result=await writePrivateJsonConditional(key,{
       version:1,savedAt,state:merged,
