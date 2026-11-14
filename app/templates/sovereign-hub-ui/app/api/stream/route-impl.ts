@@ -1024,7 +1024,7 @@ async function runSelectedAnswerUnchecked(
     const requestedModelId = selection?.modelId || DEFAULT_MALIK_MODEL_ID
     // Flash is the free conversational surface. Programming requests explicitly
     // use the existing MAX coding engine, without bypassing account quotas.
-    const selectedModelId = requestedModelId === "malik-flash" && isCodeRequest(coderInput)
+    const selectedModelId = requestedModelId === "malik-flash" && isCodeRequest(coderPrompt(executionBody))
       ? "malik-max"
       : requestedModelId
     if (selectedModelId !== requestedModelId) onProgress?.({ phase: "model", text: "Задача по программированию — подключаю MalikLLM MAX" })
