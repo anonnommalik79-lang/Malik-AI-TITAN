@@ -48,3 +48,14 @@ test("Full text and cited sources enter the standard MALIKII chat response pipel
   assert.match(bridge, /return \{\s*content: verified\.answer/)
   assert.match(bridge, /provider: "malik-flash"/)
 })
+
+const imageRoute = read("lib/media/generate-photo-route.ts")
+test("Flash preview can answer without an undeployed Chrome worker", () => {
+  assert.match(stream, /selection\?\.modelId === "malik-flash" && isMalikFlashBrowserReady\(\)/)
+  assert.match(stream, /requestedModelId === "malik-flash"[\s\S]*?\? "malik-max"/)
+  assert.match(stream, /requestedModelId === "malik-flash" && !isMalikFlashBrowserReady\(\)/)
+  assert.match(imageRoute, /flashRequested = flashSelected && isMalikFlashBrowserReady\(\)/)
+  assert.match(imageRoute, /flashSelected \? "MalikLLM Flash"/)
+  assert.match(models, /Бесплатно · быстрые ответы, анализ фото и изображения/)
+  assert.doesNotMatch(models, /Бесплатно · Google AI Mode через персональный браузер/)
+})
