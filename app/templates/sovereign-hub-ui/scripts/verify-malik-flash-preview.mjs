@@ -28,8 +28,9 @@ test("Each chat sends a stable chat ID, not a fresh ID per turn", () => {
   assert.match(dashboard, /model: selectedModelId,\s*chatId,/)
 })
 test("Code selected in Flash routes into MAX", () => {
-  assert.match(stream, /requestedModelId === "malik-flash" && isCodeRequest\(coderPrompt\(executionBody\)\)/)
-  assert.match(stream, /"malik-max"\s*:\s*requestedModelId/)
+  assert.match(stream, /const flashUsesMax = requestedSelection\?\.modelId === "malik-flash"/)
+  assert.match(stream, /isCodeRequest\(flashPrompt\)/)
+  assert.match(stream, /const selectedModelId = requestedModelId === "malik-flash"\s*\? "malik-max"/)
 })
 test("Worker requires per-user isolation and HTTPS", () => {
   assert.match(bridge, /MALIK_FLASH_ISOLATED_WORKER !== "1"/)
@@ -47,4 +48,15 @@ test("Full text and cited sources enter the standard MALIKII chat response pipel
   assert.match(stream, /onToken\?\.\(answer\.content\)/)
   assert.match(bridge, /return \{\s*content: verified\.answer/)
   assert.match(bridge, /provider: "malik-flash"/)
+})
+
+const imageRoute = read("lib/media/generate-photo-route.ts")
+test("Flash preview can answer without an undeployed Chrome worker", () => {
+  assert.match(stream, /selection\?\.modelId === "malik-flash" && isMalikFlashBrowserReady\(\)/)
+  assert.match(stream, /requestedModelId === "malik-flash"[\s\S]*?\? "malik-max"/)
+  assert.match(stream, /requestedModelId === "malik-flash" && !isMalikFlashBrowserReady\(\)/)
+  assert.match(imageRoute, /flashRequested = flashSelected && isMalikFlashBrowserReady\(\)/)
+  assert.match(imageRoute, /flashSelected \? "MalikLLM Flash"/)
+  assert.match(models, /Бесплатно · быстрые ответы, анализ фото и изображения/)
+  assert.doesNotMatch(models, /Бесплатно · Google AI Mode через персональный браузер/)
 })
