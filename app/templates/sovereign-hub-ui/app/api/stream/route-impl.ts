@@ -891,7 +891,7 @@ async function runSelectedAnswerUnchecked(
     if (uploads.some((item) => item?.kind !== "image" && !(typeof item?.mime === "string" && item.mime.startsWith("image/")))) {
       throw new MalikModelRouteError("FLASH_UNSUPPORTED_ATTACHMENT", "В тестовом режиме Flash поддерживает текст и фотографии PNG/JPEG/WebP.", 422, "malik-flash")
     }
-    onProgress?.({ phase: "web-search", text: uploads.length ? "Flash передаёт фотографии в персональную сессию Google" : "Flash запрашивает Google AI Mode" })
+    onProgress?.({ phase: "web-search", text: uploads.length ? "MalikLLM Flash анализирует фотографии" : "MalikLLM Flash ищет информацию" })
     const answer = await runMalikFlashBrowser({
       question: coderPrompt(body),
       userId: selection.entitlement.userId,
@@ -1542,7 +1542,8 @@ async function handlePOST(request: Request) {
       && (isCodeRequest(flashPrompt)
         || isProjectBuildRequest(body)
         || Boolean(gameStudioTurn(flashPrompt, { messages: body?.messages || body?.history, attachments: body?.attachments }))
-        || Boolean(websiteIntent(flashPrompt)))
+        || Boolean(websiteIntent(flashPrompt))
+        || (!hasMalikAttachments(body?.attachments) && briefNeedsDeep(flashPrompt)))
     const selection = flashUsesMax && requestedSelection
       ? { ...requestedSelection, modelId: "malik-max" }
       : requestedSelection
