@@ -1,4 +1,4 @@
-import { routeUiLayout } from "@/lib/generative-ui/router"
+import { wantsVisualAnswer } from "@/lib/generative-ui/router"
 import type { MalikModelId } from "@/lib/ai/malik-models"
 import type { AnswerIncomplete } from "@/lib/ai/answer-completion"
 import { instantReply } from "@/lib/ai/instant-replies"
@@ -1209,6 +1209,8 @@ export async function malikGodAnswer(
     // Any evidence, attachments, special workflows, or complex/deep tasks keep the full prompt.
     const compactSimpleChat = isFastChatRequest(focus.shapeText, attachments)
       && !wantsFullShape(focus.shapeText)
+      // A request to see a diagram, a photo or a comparison needs the visual contracts the compact tier leaves out.
+      && !wantsVisualAnswer(focus.shapeText)
       && !usedEvidence && !requestFreshness.needsSearch
       && !math && !plannedMath && !body?.selectedSkillId
       && !body?.metadata?.conversationRepair
@@ -1231,8 +1233,7 @@ export async function malikGodAnswer(
       && !wantsFullShape(focus.shapeText)
       && !attachments.length && !fusionActive
       // Grids, diagrams, charts, timelines and photo answers keep the full visual contracts.
-      && routeUiLayout(focus.shapeText).layout === "plain"
-      && !/(?:фот|картин|изображен|покажи|нарисуй|схем|диаграм|график|таблиц|сетк|галере|сравни|анализ|photo|image|picture|diagram|chart|table|grid|compare|analy[sz])/iu.test(focus.shapeText)
+      && !wantsVisualAnswer(focus.shapeText)
       && !connected.context && !science.sources.length && !eiaEvidence.context
       && !math && !plannedMath && !body?.selectedSkillId
       && !body?.metadata?.conversationRepair

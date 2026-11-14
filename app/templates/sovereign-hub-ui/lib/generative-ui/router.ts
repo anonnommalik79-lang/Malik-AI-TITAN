@@ -12,7 +12,7 @@ import { UI_FENCE } from "./protocol"
  */
 
 export type UiLayout =
-  | "plain" | "comparison" | "architecture" | "report" | "timeline" | "data" | "calculator" | "overview" | "plan" | "dashboard" | "explainer"
+  | "plain" | "comparison" | "architecture" | "diagram" | "report" | "timeline" | "data" | "calculator" | "overview" | "plan" | "dashboard" | "explainer"
 
 export type UiRoute = { layout: UiLayout; reason: string; recipe: string }
 
@@ -28,19 +28,29 @@ const WRITE = /(?:(?<![\p{L}])(?:напиши|допиши|исправь|поч
 const MATH = /(?:реши\p{L}*\s+(?:уравнени|задач|пример)|вычисли|посчитай\s+\d|\d+\s*[-+*/^×÷]\s*\d+\s*=?\s*\??$|интеграл|производн|\bsolve\b|\bderivative\b)/iu
 const TEXT_TASK = /(?:перевед\p{L}*|переведи|translate|исправь\s+(?:текст|ошибк|опечат)|перефраз\p{L}*|сократи\s+текст|напиши\s+(?:письм|пост|сообщени|стих|рассказ|эссе|сочинени|текст)|аудар)/iu
 
-const COMPARE = /(?:сравн\p{L}*|(?<![\p{L}])vs\.?(?![\p{L}])|versus|compare|comparison|против\s+\p{Lu}|рейтинг\p{L}*|топ[- ]?\d+|лучши[ех]\s+\d+|\d+\s+лучших|leaderboard|benchmark\p{L}*|бенчмарк\p{L}*|какой\s+(?:лучше|выбрать)|что\s+выбрать|разниц\p{L}*\s+между)/iu
-const ARCHITECTURE = /(?:архитектур\p{L}*|как\s+устроен\p{L}*|схем\p{L}*\s+(?:работ|систем|процесс)|диаграмм\p{L}*\s+(?:систем|процесс|архитект)|pipeline|пайплайн\p{L}*|workflow|оркестр\p{L}*|ai[- ]?агент\p{L}*|агентн\p{L}*\s+систем|multi[- ]?agent|мультиагент\p{L}*|микросервис\p{L}*|system\s+design|how\s+.*\s+works\s+internally|data\s+flow|поток\s+данных|структур\p{L}*\s+(?:систем|компани|проект|организац))/iu
+// A diagram asked for by name: flowchart, mind map, decision tree, graph, UML, life cycle.
+const DIAGRAM = /(?:блок[- ]?схем\p{L}*|(?<![\p{L}])схем(?:а|у|ы|ой|е|ою)(?![\p{L}])|flow[- ]?chart\p{L}*|mind[- ]?map\p{L}*|майнд[- ]?(?:мап|мэп|карт)\p{L}*|интеллект[- ]?карт\p{L}*|ментальн\p{L}*\s+карт\p{L}*|карт\p{L}*\s+(?:знаний|понятий|связей)|дерев\p{L}*\s+(?:решений|принятия)|decision\s+tree|(?<![\p{L}])граф(?:а|у|ом|е)?\s+(?:связ|зависим|знани|отношени)\p{L}*|(?:knowledge|node|dependency)\s+graph|(?:uml|er)[- ]?(?:диаграмм\p{L}*|diagram)|диаграмм\p{L}*\s+(?:класс|последовательн|состоян|процесс|связ|поток|архитект|систем|взаимодейств)\p{L}*|(?:sequence|class|state|block|network)\s+diagram|diagram\s+of|(?:draw|make|create|show|build)\s+(?:me\s+)?an?\s+(?:\p{L}+\s+)?diagram|жизненн\p{L}*\s+цикл\p{L}*|life\s?cycle|(?:этапы|стадии|фазы)\s+\p{L}{3,}|stages\s+of|сызба\p{L}*)/iu
+const MIND_MAP = /(?:mind[- ]?map|майнд|интеллект[- ]?карт|ментальн\p{L}*\s+карт|карт\p{L}*\s+(?:знаний|понятий))/iu
+const DECISION = /(?:дерев\p{L}*\s+(?:решений|принятия)|decision\s+tree)/iu
+const CODE_ASK = /(?:```|(?<![\p{L}])(?:код(?:а|у|ом|е)?|скрипт\p{L}*|code|script)(?![\p{L}]))/iu
+// A request to see something: the chat adds real photos, so the full answer contract stays on.
+const VISUAL_ASK = /(?:фот|картин|изображен|покажи|нарисуй|выгляд|схем|диаграм|график|таблиц|сетк|галере|сравни|анализ|сурет|көрсет|салыстыр|photo|image|picture|diagram|chart|table|grid|compare|analy[sz]|show\s+me|looks?\s+like)/iu
+const COMPARE = /(?:сравн\p{L}*|салыстыр\p{L}*|айырмашыл\p{L}*|қайсысы\s+(?:жақсы|артық)|(?<![\p{L}])vs\.?(?![\p{L}])|versus|compare|comparison|против\s+\p{Lu}|рейтинг\p{L}*|топ[- ]?\d+|лучши[ех]\s+\d+|\d+\s+лучших|leaderboard|benchmark\p{L}*|бенчмарк\p{L}*|какой\s+(?:лучше|выбрать)|что\s+выбрать|разниц\p{L}*\s+между)/iu
+const ARCHITECTURE = /(?:архитектур\p{L}*|architecture|қалай\s+құрылған|how\s+(?:is|are)\s+.+\s+(?:built|structured)|как\s+устроен\p{L}*|схем\p{L}*\s+(?:работ|систем|процесс)|диаграмм\p{L}*\s+(?:систем|процесс|архитект)|pipeline|пайплайн\p{L}*|workflow|оркестр\p{L}*|ai[- ]?агент\p{L}*|агентн\p{L}*\s+систем|multi[- ]?agent|мультиагент\p{L}*|микросервис\p{L}*|system\s+design|how\s+.*\s+works\s+internally|data\s+flow|поток\s+данных|структур\p{L}*\s+(?:систем|компани|проект|организац))/iu
 const STRATEGY = /(?:стратег\p{L}*|бизнес[- ]?план\p{L}*|инвест\p{L}*\s+(?:тезис|идея|анализ|меморандум)|investment\s+thesis|pitch|питч\p{L}*|go[- ]to[- ]market|swot|unit[- ]?эконом\p{L}*|финмодел\p{L}*|анализ\s+(?:рынк|компани|конкурент|бизнес)|отч[её]т\p{L}*|report|due\s+diligence|оцен\p{L}*\s+(?:стартап|компани|бизнес))/iu
-const HISTORY = /(?:истори\p{L}*\s+(?:развити|проект|компани|создани|\p{Lu})|хронолог\p{L}*|эволюци\p{L}*|этапы\s+развити|история\s+(?:ии|ai|интернет)|timeline|history\s+of|когда\s+(?:появил|создан|основан)\p{L}*.*\s+и\s+как|летопис\p{L}*|по\s+годам)/iu
+const HISTORY = /(?:истори\p{L}*\s+(?:развити|проект|компани|создани|\p{Lu})|(?<![\p{L}])тарих(?:ы|ын|ына)?(?![\p{L}])|хронолог\p{L}*|эволюци\p{L}*|этапы\s+развити|история\s+(?:ии|ai|интернет)|timeline|history\s+of|когда\s+(?:появил|создан|основан)\p{L}*.*\s+и\s+как|летопис\p{L}*|по\s+годам)/iu
 const DATA = /(?:график\p{L}*|диаграмм\p{L}*|chart|plot|визуализ\p{L}*|построй\s+(?:график|диаграмм)|динамик\p{L}*|по\s+(?:месяц|квартал|годам)\p{L}*|доля\s+рынка|market\s+share|распределени\p{L}*)/iu
 const CALCULATOR = /(?:калькулятор\p{L}*|рассчита\p{L}*|расч[её]т\p{L}*|формул\p{L}*|симуляци\p{L}*|смоделируй|как\s+(?:зависит|изменится)|ипотек\p{L}*|кредит\p{L}*\s+(?:на|под)|сложн\p{L}*\s+процент|roi|npv|irr|break[- ]?even|точк\p{L}*\s+безубыточност|calculator|simulate)/iu
-const PLAN = /(?:(?<![\p{L}])план(?:а|у|ом)?(?![\p{L}])|roadmap|дорожн\p{L}*\s+карт|пошагов\p{L}*\s+план|с\s+чего\s+начать|как\s+(?:начать|запустить|выучить|стать)|чек[- ]?лист\p{L}*|checklist|plan\s+for|step[- ]by[- ]step|программ\p{L}*\s+(?:обучени|тренировок))/iu
+const PLAN = /(?:(?<![\p{L}])план(?:а|у|ом)?(?![\p{L}])|(?<![\p{L}])жоспар\p{L}*|roadmap|дорожн\p{L}*\s+карт|пошагов\p{L}*\s+план|с\s+чего\s+начать|как\s+(?:начать|запустить|выучить|стать)|чек[- ]?лист\p{L}*|checklist|plan\s+for|step[- ]by[- ]step|программ\p{L}*\s+(?:обучени|тренировок))/iu
 const DASHBOARD = /(?:дашборд\p{L}*|dashboard|kpi|метрик\p{L}*|показател\p{L}*\s+(?:бизнес|компани|продаж|эффективност)|сводк\p{L}*\s+по)/iu
 const OVERVIEW = /(?:(?<![\p{L}])(?:кто\s+(?:так(?:ой|ая|ие)|был|была)|что\s+(?:такое|за)|расскажи\s+(?:про|о|об)|обзор\p{L}*|tell\s+me\s+about|who\s+is|what\s+is|overview\s+of))(?![\p{L}])/iu
-const EXPLAIN = /(?:объясн\p{L}*|как\s+работа\p{L}*|почему|принцип\p{L}*\s+работ|explain|how\s+does)/iu
+const EXPLAIN = /(?:объясн\p{L}*|как\s+работа\p{L}*|почему|принцип\p{L}*\s+работ|explain|how\s+(?:do|does|did|can)(?![\p{L}])|why\s+(?:do|does|is|are)(?![\p{L}])|түсіндір\p{L}*|қалай\s+(?:жұмыс|жүреді|істейді|пайда)|неліктен)/iu
+// «Как работает X» names a mechanism even in three words.
+const MECHANISM = /(?:как\s+работа\p{L}*|принцип\p{L}*\s+работ|how\s+(?:do|does)\s+.+\s+work|қалай\s+жұмыс\s+істейді)/iu
 
 const RECIPES: Record<Exclude<UiLayout, "plain">, string> = {
   comparison: "A scoreboard: a short verdict text; a grid of 2–4 cards (one per contender: image query = its canonical name or logo, title, one-line body, badge such as «Лидер в коде»); a sortable table (criterion columns, one row per contender, numeric columns with format and unit, origin «sources» when cited); when one measured metric has real numbers, one hbar chart with origin; a final «кто где выигрывает» table or a callout with the recommendation.",
+  diagram: "A diagram answer: one sentence that says what the diagram shows; ONE flow block that carries the structure — every node has a unique short id, a label of 1–4 words and an optional one-line detail; every edge has from and to set to node ids, plus a short label where the link needs a name; 4–14 nodes; direction «down» for steps and hierarchies, «right» for pipelines and branching maps; then a short text or a list that explains the non-obvious links. No decorative nodes and no node without an edge.",
   architecture: "A diagram answer: a heading and one-line lead; a flow block with 4–10 nodes (id, label, detail) and edges with short labels, direction «down» for layers or «right» for a pipeline; or a tree for a hierarchy; then a grid of cards explaining each layer (numbered variant); a callout that the diagram is conceptual unless sources establish the real implementation.",
   report: "A report: a hero card (eyebrow, title, one-sentence thesis, image query only when a real subject exists); a grid of 3–4 metric blocks with real or clearly labelled figures; numbered sections («01», «02»…) each with heading text and cards; a table of risks (risk, probability, impact, mitigation); a timeline of the next steps; a callout with the decision.",
   timeline: "A timeline answer: a short lead; a timeline block with dated items (status done/active/next where it applies); optionally a grid of cards for the 2–4 turning points with image queries for real events, objects or people; a closing text on what it means now.",
@@ -62,11 +72,16 @@ export function routeUiLayout(prompt: string, signals: readonly string[] = []): 
   if (SMALL_TALK.test(text) || signals.includes("conversation") && words <= 8) return plain("small talk")
   if (PLAIN_ONLY.test(text)) return plain("user asked for plain text")
   const compares = has(text, COMPARE) || signals.includes("headtohead")
+  const route = (layout: Exclude<UiLayout, "plain">, reason: string, extra = ""): UiRoute => ({ layout, reason, recipe: RECIPES[layout] + extra })
+  if (has(text, DIAGRAM) && !has(text, CODE_ASK)) {
+    if (has(text, MIND_MAP)) return route("diagram", "a mind map", " Mind map: the first node is the central topic; 3–6 branch nodes link from it; each branch has 1–3 leaf nodes; direction «right»; edges need no labels.")
+    if (has(text, DECISION)) return route("diagram", "a decision tree", " Decision tree: each decision node is a question; every edge leaving it is labelled with the answer («да», «нет», a condition); leaf nodes are outcomes; direction «down»; finish with a callout that names which path fits which case.")
+    return route("diagram", "a diagram was asked for")
+  }
   if ((has(text, CODE) || signals.includes("code")) && (!compares || has(text, WRITE))) return plain("code is answered in code blocks")
   if (has(text, TEXT_TASK) || signals.includes("translate")) return plain("text task")
   if (has(text, MATH) && !has(text, CALCULATOR)) return plain("maths is typeset, not composed")
 
-  const route = (layout: Exclude<UiLayout, "plain">, reason: string): UiRoute => ({ layout, reason, recipe: RECIPES[layout] })
   if (has(text, CALCULATOR)) return route("calculator", "a quantity depends on inputs")
   if (compares) return route("comparison", "named options are compared")
   if (has(text, ARCHITECTURE)) return route("architecture", "a system or process structure")
@@ -76,9 +91,15 @@ export function routeUiLayout(prompt: string, signals: readonly string[] = []): 
   if (has(text, DATA)) return route("data", "numbers to visualise")
   if (has(text, PLAN) || signals.includes("planning")) return route("plan", "steps toward a goal")
   if (has(text, OVERVIEW) || signals.includes("overview")) return words <= 3 && !signals.includes("overview") ? plain("short lookup") : route("overview", "a subject overview")
-  if (has(text, EXPLAIN) && words >= 4) return route("explainer", "a mechanism to explain")
+  if (has(text, EXPLAIN) && words >= 4 || has(text, MECHANISM) && words >= 3) return route("explainer", "a mechanism to explain")
   if (signals.includes("complex") && words >= 12) return route("explainer", "a complex request")
   return plain(words <= 10 ? "short question" : "prose answers it best")
+}
+
+/** True when the answer should keep the visual and photo contracts: a composed layout, or a request to see something. */
+export function wantsVisualAnswer(prompt: string, signals: readonly string[] = []): boolean {
+  const text = String(prompt || "")
+  return routeUiLayout(text, signals).layout !== "plain" || VISUAL_ASK.test(text)
 }
 
 /** The protocol in a compact form the model can follow. Added to the system prompt only when the router chose a visual layout. */

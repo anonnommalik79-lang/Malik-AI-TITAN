@@ -222,7 +222,10 @@ function block(raw: unknown, ctx: Ctx, depth: number, where: string): Block | nu
       const ids = new Set<string>()
       const nodes = arr(data.nodes).slice(0, UI_LIMITS.flowNodes).map(obj).map((node, index) => ({ id: str(node.id, 40) || `n${index + 1}`, label: str(node.label ?? node.title, 60), ...(str(node.detail ?? node.text, 160) ? { detail: str(node.detail ?? node.text, 160) } : {}) })).filter((node) => node.label && !ids.has(node.id) && ids.add(node.id))
       if (nodes.length < 2) { ctx.issues.push(`${at("nodes")}: a diagram needs at least two nodes`); return null }
-      const edges = arr(data.edges).slice(0, 60).map(obj).map((edge) => ({ from: str(edge.from, 40), to: str(edge.to, 40), ...(str(edge.label, 40) ? { label: str(edge.label, 40) } : {}) }))
+      // Models often name an edge's ends by the node's label instead of its id.
+      const byLabel = new Map(nodes.map((node) => [node.label.toLowerCase(), node.id]))
+      const end = (value: unknown) => { const id = str(value, 60); return ids.has(id) ? id : byLabel.get(id.toLowerCase()) || id }
+      const edges = arr(data.edges ?? data.links).slice(0, 60).map(obj).map((edge) => ({ from: end(edge.from ?? edge.source), to: end(edge.to ?? edge.target), ...(str(edge.label, 40) ? { label: str(edge.label, 40) } : {}) }))
       const valid = edges.filter((edge) => ids.has(edge.from) && ids.has(edge.to) && edge.from !== edge.to)
       if (valid.length < edges.length) ctx.fixes.push(`${at("edges")}: ${edges.length - valid.length} links to unknown nodes removed`)
       return { ...base, type, nodes, edges: valid, direction: oneOf(data.direction, ["down", "right"] as const, "down") }

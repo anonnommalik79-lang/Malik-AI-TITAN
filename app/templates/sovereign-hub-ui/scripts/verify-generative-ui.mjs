@@ -7,7 +7,7 @@ import assert from "node:assert/strict"
 import { workTestLoader } from "./work-test-loader.mjs"
 
 const load = workTestLoader({})
-const { routeUiLayout, buildGenerativeUiContract } = load("lib/generative-ui/router.ts")
+const { routeUiLayout, buildGenerativeUiContract, wantsVisualAnswer } = load("lib/generative-ui/router.ts")
 const { validateUi } = load("lib/generative-ui/validate.ts")
 const { parsePartialUi } = load("lib/generative-ui/partial.ts")
 const { uiToText, uiFencesToText, rawFallbackText } = load("lib/generative-ui/fallback.ts")
@@ -33,6 +33,19 @@ test("the router picks a form for each kind of task", () => {
     ["План изучения машинного обучения за 3 месяца", "plan"],
     ["Дашборд KPI интернет-магазина", "dashboard"],
     ["Объясни, как работает трансформер в нейросетях", "explainer"],
+    ["Как работает нейросеть?", "explainer"],
+    ["How do neural networks work?", "explainer"],
+    ["Нейрондық желі қалай жұмыс істейді?", "explainer"],
+    ["Үш ЖИ моделін салыстыр", "comparison"],
+    ["Draw the architecture of a web app", "architecture"],
+    ["Нарисуй блок-схему алгоритма сортировки", "diagram"],
+    ["Нарисуй схему фотосинтеза", "diagram"],
+    ["Сделай mind map по теме маркетинг", "diagram"],
+    ["Дерево решений: стоит ли брать ипотеку", "diagram"],
+    ["Decision tree for choosing a database", "diagram"],
+    ["Покажи граф связей между отделами компании", "diagram"],
+    ["Make a flowchart of user login", "diagram"],
+    ["Этапы жизненного цикла звезды", "diagram"],
   ]
   for (const [prompt, layout] of cases) {
     const route = routeUiLayout(prompt)
@@ -133,4 +146,17 @@ test("broken JSON falls back to its text; copies and exports read the fence as t
   const { doc } = validateUi({ state: { k: 3 }, blocks: [{ type: "metric", label: "k", value: { expr: "k * 2" } }, { type: "chart", kind: "line", labels: ["a", "b"], series: [{ name: "s", values: [1, 2] }] }] })
   assert.match(uiToText(doc), /\*\*k:\*\* 6/u)
   assert.match(uiToText(doc), /иллюстрация/u)
+})
+
+test("a diagram keeps its arrows when edges name nodes by label", () => {
+  const { doc } = validateUi({ blocks: [{ type: "flow", nodes: [{ id: "a", label: "Вход" }, { id: "b", label: "Проверка" }, { id: "c", label: "Результат" }], links: [{ source: "Вход", target: "проверка", label: "да" }, { from: "b", to: "c" }, { from: "b", to: "нет такого" }] }] })
+  const flow = doc.blocks[0]
+  assert.deepEqual(flow.edges, [{ from: "a", to: "b", label: "да" }, { from: "b", to: "c" }])
+})
+
+test("a request to see something keeps the visual contracts", () => {
+  for (const prompt of ["Покажи орла", "Show me an eagle", "Как выглядит Эйфелева башня?", "Сделай mind map по теме маркетинг", "Как работает нейросеть?"]) assert.equal(wantsVisualAnswer(prompt), true, prompt)
+  for (const prompt of ["Привет", "Hello.", "Какая столица Франции?", "спасибо"]) assert.equal(wantsVisualAnswer(prompt), false, prompt)
+  assert.match(buildGenerativeUiContract("Сделай mind map по теме маркетинг"), /Mind map: the first node/u)
+  assert.match(buildGenerativeUiContract("Decision tree for choosing a database"), /Decision tree: each decision node/u)
 })
