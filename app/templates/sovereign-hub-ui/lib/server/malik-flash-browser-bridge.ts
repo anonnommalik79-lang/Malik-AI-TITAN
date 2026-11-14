@@ -9,10 +9,10 @@
 import { createHmac } from "node:crypto"
 
 export type FlashBrowserImage = { mime?: string; base64?: string; name?: string }
-export type FlashBrowserSource = { url: string; title: string; domain: string; provider: "google-ai-mode-browser" }
+export type FlashBrowserSource = { url: string; title: string; domain: string; provider: "malik-flash" }
 export type FlashBrowserAnswer = {
   content: string
-  provider: "malik-flash-browser"
+  provider: "malik-flash"
   model: "MalikLLM Flash"
   selectedModelId: "malik-flash"
   usedWeb: true
@@ -46,7 +46,7 @@ export function flashSources(input: unknown): FlashBrowserSource[] {
       url.hash = ""
       if (seen.has(url.href)) continue
       seen.add(url.href)
-      result.push({ url: url.href, title: typeof entry.title === "string" ? entry.title.slice(0, 160) : url.hostname, domain: url.hostname, provider: "google-ai-mode-browser" })
+      result.push({ url: url.href, title: typeof entry.title === "string" ? entry.title.slice(0, 160) : url.hostname, domain: url.hostname, provider: "malik-flash" })
       if (result.length >= 16) break
     } catch { /* malformed source */ }
   }
@@ -56,10 +56,10 @@ export function flashSources(input: unknown): FlashBrowserSource[] {
 export function readFlashWorkerAnswer(payload: unknown, hasImages = false): { answer: string; sources: FlashBrowserSource[] } {
   if (!payload || typeof payload !== "object") throw new FlashBrowserError("FLASH_INVALID_RESPONSE", "Сервис поиска вернул неверный ответ.")
   const body = payload as { answer?: unknown; complete?: unknown; sources?: unknown; imagesProcessed?: unknown }
-  if (body.complete !== true) throw new FlashBrowserError("FLASH_INCOMPLETE", "Google AI Mode ещё не закончил ответ. Незавершённый результат не показывается как полный.")
-  if (hasImages && body.imagesProcessed !== true) throw new FlashBrowserError("FLASH_IMAGE_UNVERIFIED", "Не удалось подтвердить, что Google обработал прикреплённую фотографию.")
+  if (body.complete !== true) throw new FlashBrowserError("FLASH_INCOMPLETE", "MalikLLM Flash ещё формирует ответ.")
+  if (hasImages && body.imagesProcessed !== true) throw new FlashBrowserError("FLASH_IMAGE_UNVERIFIED", "Не удалось подтвердить обработку фотографии.")
   if (typeof body.answer !== "string" || !body.answer.trim() || body.answer.length > 200_000)
-    throw new FlashBrowserError("FLASH_EMPTY_OR_TOO_LARGE", "Нет полного текстового ответа Google AI Mode.")
+    throw new FlashBrowserError("FLASH_EMPTY_OR_TOO_LARGE", "Не удалось получить полный ответ.")
   return { answer: body.answer, sources: flashSources(body.sources) }
 }
 
@@ -73,17 +73,17 @@ export async function runMalikFlashBrowser(input: {
   const endpoint = process.env.MALIK_FLASH_WORKER_URL
   const secret = process.env.MALIK_FLASH_WORKER_SECRET
   if (process.env.MALIK_FLASH_ISOLATED_WORKER !== "1" || !endpoint || !secret || secret.length < 24)
-    throw new FlashBrowserError("FLASH_WORKER_NOT_READY", "MalikLLM Flash пока не подключён к изолированному браузерному сервису.")
+    throw new FlashBrowserError("FLASH_WORKER_NOT_READY", "MalikLLM Flash сейчас недоступен.")
   const url = new URL(endpoint)
   const loopback = ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname)
   if (url.protocol !== "https:" && !(process.env.NODE_ENV !== "production" && loopback && url.protocol === "http:"))
-    throw new FlashBrowserError("FLASH_WORKER_URL_INVALID", "Для браузерного сервиса требуется защищённое соединение.")
+    throw new FlashBrowserError("FLASH_WORKER_URL_INVALID", "Сервис MalikLLM Flash сейчас недоступен.")
   if (!input.chatId || !input.userId) throw new FlashBrowserError("FLASH_SESSION_MISSING", "Неизвестен пользователь или идентификатор чата.")
   if (input.userId === "guest" || input.userId.startsWith("guest:")) throw new FlashBrowserError("FLASH_SIGN_IN_REQUIRED", "Для персонального чата необходимо войти в MALIKII.")
 
   const providedImages = input.images || []
   const images = providedImages.filter((item) => item && typeof item.base64 === "string")
-  if (providedImages.length !== images.length) throw new FlashBrowserError("FLASH_IMAGE_MISSING", "Одна или несколько фотографий не были переданы в браузерный сервис.")
+  if (providedImages.length !== images.length) throw new FlashBrowserError("FLASH_IMAGE_MISSING", "Не удалось отправить прикреплённые фотографии.")
   if (images.length > 4 || images.some((image) =>
     !/^image\/(?:png|jpeg|webp)$/i.test(image.mime || "") ||
     !/^[a-zA-Z0-9+/]+={0,2}$/.test(image.base64 || "") ||
@@ -112,9 +112,9 @@ export async function runMalikFlashBrowser(input: {
       signal,
     })
   } catch {
-    throw new FlashBrowserError("FLASH_WORKER_UNREACHABLE", "Браузерный сервис сейчас недоступен. Попробуйте позже.")
+    throw new FlashBrowserError("FLASH_WORKER_UNREACHABLE", "MalikLLM Flash временно недоступен. Попробуйте позже.")
   }
-  if (!response.ok) throw new FlashBrowserError("FLASH_WORKER_FAILED", "Google AI Mode не завершил обработку запроса.")
+  if (!response.ok) throw new FlashBrowserError("FLASH_WORKER_FAILED", "Не удалось завершить запрос. Попробуйте позже.")
   const raw = await response.text()
   if (raw.length > 1_000_000) throw new FlashBrowserError("FLASH_RESPONSE_TOO_LARGE", "Сервис вернул слишком большой ответ.")
   let json: unknown
@@ -122,7 +122,7 @@ export async function runMalikFlashBrowser(input: {
   const verified = readFlashWorkerAnswer(json, images.length > 0)
   return {
     content: verified.answer,
-    provider: "malik-flash-browser",
+    provider: "malik-flash",
     model: "MalikLLM Flash",
     selectedModelId: "malik-flash",
     usedWeb: true,
