@@ -103,6 +103,10 @@ test("Gemini that cannot answer before any text hands the turn back to MALIKII",
   t.after(() => engine.resetGeminiEngineState())
   const { fetchImpl } = google(() => new Response(JSON.stringify({ error: { code: 403, status: "PERMISSION_DENIED", message: "API key not valid." } }), { status: 403, headers: { "content-type": "application/json" } }))
   await assert.rejects(search.runFlashGoogleSearch({ question: "Hello", body: {}, env, fetchImpl }), error => error instanceof search.FlashSearchUnavailable && error.code === "KEY_REJECTED")
+  const status = search.flashGoogleSearchStatus(env)
+  assert.equal(status.lastFailure.code, "KEY_REJECTED")
+  assert.deepEqual(status.lastFailure.statuses, [403])
+  assert.equal(JSON.stringify(status).includes(KEY) || JSON.stringify(status).includes("GEMINI_API_KEY"), false, "no key and no key name in health")
 })
 
 test("a stop from the user is a stop, not a fallback", async t => {

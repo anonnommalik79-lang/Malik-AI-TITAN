@@ -1311,7 +1311,7 @@ function liveSseResponse(
                 // Gemini did not answer before any text: Flash stays available on the native engine.
                 if (!(error instanceof FlashSearchUnavailable)) throw error
                 console.warn("[MALIK_FLASH_GOOGLE_SEARCH]", error.code)
-                activity.status("Поиск Google недоступен — отвечает MALIKII")
+                activity.status("Поиск Google недоступен (" + error.code + ") — отвечает MALIKII")
                 return await getNativeChatAnswer()
               }
             })()

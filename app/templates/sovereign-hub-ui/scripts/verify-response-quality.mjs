@@ -323,6 +323,14 @@ check("the chat request carries the Russian reading in every field the model rea
   assert.equal(layoutFixedChatBody({ originalQuestion: "what is the best model" }, "what is the best model"), null)
 })
 
+check("site names in a Russian sentence stay as typed", () => {
+  for (const text of ["Расскажи коротко про компанию Kaspi.kz", "Что продаёт halyk.bank.kz?", "Открой google.com и найди отзывы", "Как обновить Next.js до новой версии?", "Сравни kolesa.kz и krisha.kz"]) {
+    assert.equal(fixWrongKeyboardLayout(text), null, text)
+  }
+  // A dot inside wrong-layout typing is still the «ю» key.
+  assert.equal(fixWrongKeyboardLayout("ghbdtn rfr ltkf")?.text, "привет как дела")
+})
+
 check("real English, code and links are never converted", () => {
   for (const text of ["what is the best model", "kubernetes deployment rollback", "iphone 17 pro max", "fix the bug in my react component", "hello", "https://ghbdtn.com", "```ghbdtn```", "привет как дела", "ok"]) {
     assert.equal(fixWrongKeyboardLayout(text), null, text)

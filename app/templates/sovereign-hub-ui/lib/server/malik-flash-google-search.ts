@@ -49,9 +49,18 @@ export function flashGoogleSearchEnabled(env: Env = process.env): boolean {
   return flashGoogleSearchSwitch(env) && geminiKeys(env).length > 0
 }
 
-/** For the public health check: whether the switch and a key are seen. Never the keys. */
+type FlashSearchHealth = { lastFailure?: { code: string; statuses: number[]; at: string }; lastSuccessAt?: string }
+const health = globalThis as typeof globalThis & { __malikFlashSearchHealth?: FlashSearchHealth }
+function searchHealth(): FlashSearchHealth {
+  return health.__malikFlashSearchHealth ||= {}
+}
+
+/**
+ * For the public health check: whether the switch and a key are seen, and how
+ * the last call ended. Codes and HTTP statuses only; never a key or its name.
+ */
 export function flashGoogleSearchStatus(env: Env = process.env) {
-  return { switch: flashGoogleSearchSwitch(env), geminiKey: geminiKeys(env).length > 0, enabled: flashGoogleSearchEnabled(env) }
+  return { switch: flashGoogleSearchSwitch(env), geminiKey: geminiKeys(env).length > 0, enabled: flashGoogleSearchEnabled(env), ...searchHealth() }
 }
 
 /**
@@ -164,6 +173,7 @@ export async function runFlashGoogleSearch(input: {
       },
     })
     const sources = flashSearchSources(result.sources)
+    searchHealth().lastSuccessAt = new Date().toISOString()
     return {
       content: result.content,
       provider: FLASH_GOOGLE_SEARCH_PROVIDER,
@@ -177,6 +187,8 @@ export async function runFlashGoogleSearch(input: {
   } catch (error) {
     const code = error instanceof GeminiEngineError ? error.code : "FAILED"
     if (code === "ABORTED" || input.signal?.aborted) throw error
+    const statuses = error instanceof GeminiEngineError ? [...new Set(error.trail.flatMap(step => typeof step.status === "number" ? [step.status] : []))].slice(0, 6) : []
+    searchHealth().lastFailure = { code, statuses, at: new Date().toISOString() }
     if (!forwarded) throw new FlashSearchUnavailable(code)
     throw new FlashBrowserError("FLASH_GOOGLE_SEARCH_INTERRUPTED", "Ответ с поиском Google прервался. Нажмите «Перегенерировать», чтобы повторить.", 503)
   }

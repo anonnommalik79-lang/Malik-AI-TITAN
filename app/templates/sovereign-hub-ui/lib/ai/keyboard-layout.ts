@@ -54,6 +54,18 @@ const EN_VOWELS = /[aeiouy]/i
 /** A short list of Latin-letter words people write in a Russian sentence. */
 const KEEP_LATIN = /^(?:ai|api|ui|ux|ok|id|ios|android|iphone|ipad|mac|macbook|python|java|javascript|typescript|js|ts|css|html|react|next|node|sql|github|git|google|gemini|gpt|chatgpt|claude|openai|anthropic|telegram|whatsapp|instagram|tiktok|youtube|kaspi|pro|max|plus|mini|ultra|wifi|usb|pdf|seo|crm|vs|it|ok|www|com|kz|ru|en)$/iu
 
+/**
+ * A site name such as «Kaspi.kz» or «halyk.bank.kz»: its dots are dots, not the
+ * «ю» key. So is a dotted name made of words that stay Latin («Next.js»).
+ */
+const DOMAIN = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)*\.(?:kz|ru|com|org|net|io|ai|app|dev|uz|kg|by|ua|tj|am|az|ge|me|co|info|biz|edu|gov|tv|pro|site|online|store|shop|tech|xyz|bank|cloud|world|us|uk|de|fr|cn|jp|tr|in|eu)$/iu
+
+function keepsLatin(core: string) {
+  if (KEEP_LATIN.test(core) || DOMAIN.test(core)) return true
+  const parts = core.split(".")
+  return parts.length > 1 && parts.every((part) => KEEP_LATIN.test(part) || /^js$/iu.test(part))
+}
+
 function convertWord(word: string) {
   let out = ""
   for (const char of word) out += TO_RU.get(char) ?? char
@@ -120,7 +132,7 @@ export function fixWrongKeyboardLayout(input: string): LayoutFix | null {
     // Trailing sentence punctuation stays punctuation.
     const core = raw.replace(/[.,]+$/u, "")
     if (core.length < 2) continue
-    if (KEEP_LATIN.test(core)) { english += 1; decisions.set(token, false); continue }
+    if (keepsLatin(core)) { english += 1; decisions.set(token, false); continue }
     const cyr = convertWord(core)
     const layoutKeys = /[;'\[\]{}:"<>`~]|[A-Za-z][,.][A-Za-z]/.test(core)
     const common = RU_COMMON.has(cyr.toLowerCase()) ? 0.6 : 0
