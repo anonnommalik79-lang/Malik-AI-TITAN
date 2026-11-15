@@ -454,6 +454,11 @@ export type GeminiRunInput = {
   search?: boolean
   /** Put this model first; the rest of the chain still backs it up. */
   preferredModel?: string
+  /**
+   * Use only these models, never anything newer the key can see. For a
+   * feature whose price differs by model (Google Search grounding).
+   */
+  onlyModels?: string[]
   signal?: AbortSignal
   onEvent?: (event: GeminiEvent) => void
   env?: Env
@@ -513,9 +518,15 @@ export async function runGemini(input: GeminiRunInput): Promise<GeminiResult> {
   // Model-major: the best model on every key before a weaker model on any.
   const chains = await Promise.all(keys.map(async (key) => ({
     key,
-    chain: chainForKey(configured, await listModels(base, key, fetchImpl, input.signal), input.preferredModel),
+    chain: chainForKey(configured, await listModels(base, key, fetchImpl, input.signal), input.preferredModel)
+      .filter((id) => !input.onlyModels || input.onlyModels.includes(id)),
   })))
   const models = [...new Set(chains.flatMap((item) => item.chain))]
+  if (input.onlyModels && !models.length) {
+    throw new GeminiEngineError("MODEL_MISSING", "Ни одна из разрешённых моделей Gemini не доступна этим ключам.", {
+      trail: input.onlyModels.map((model) => ({ model, key: "*", code: "MODEL_MISSING" as const })),
+    })
+  }
   const discoveryMs = Date.now() - started
   const wantedLevel = input.thinkingLevel === "default" ? undefined : resolveThinkingLevel(input.thinkingLevel, env)
   let firstThoughtAt = 0

@@ -20,6 +20,15 @@ import { FlashBrowserError } from "./malik-flash-browser-bridge"
  */
 
 export const FLASH_GOOGLE_SEARCH_PROVIDER = "google-gemini-search"
+/**
+ * Models with a free daily Google Search allowance. Gemini 3 grounding is billed
+ * from the first request on a project without a free search tier (production
+ * answered 402 and 429), so it is never called from here unless the owner
+ * names it in MALIK_FLASH_GEMINI_MODEL.
+ */
+export const FLASH_FREE_SEARCH_MODELS = ["gemini-2.5-flash", "gemini-2.5-flash-lite"] as const
+/** Stays under Google's free 1 500 grounded requests a day for Gemini 2.5. */
+const DEFAULT_DAILY_LIMIT = 1000
 const MAX_QUESTION_CHARS = 6000
 const HISTORY_TURNS = 6
 const HISTORY_CHARS = 1500
@@ -49,7 +58,12 @@ export function flashGoogleSearchEnabled(env: Env = process.env): boolean {
   return flashGoogleSearchSwitch(env) && geminiKeys(env).length > 0
 }
 
-type FlashSearchHealth = { lastFailure?: { code: string; statuses: number[]; at: string }; lastSuccessAt?: string }
+type FlashSearchHealth = {
+  lastFailure?: { code: string; statuses: number[]; models: Array<{ model: string; code: string; status?: number }>; at: string }
+  lastSuccessAt?: string
+  day?: string
+  used?: number
+}
 const health = globalThis as typeof globalThis & { __malikFlashSearchHealth?: FlashSearchHealth }
 function searchHealth(): FlashSearchHealth {
   return health.__malikFlashSearchHealth ||= {}
@@ -60,7 +74,40 @@ function searchHealth(): FlashSearchHealth {
  * the last call ended. Codes and HTTP statuses only; never a key or its name.
  */
 export function flashGoogleSearchStatus(env: Env = process.env) {
-  return { switch: flashGoogleSearchSwitch(env), geminiKey: geminiKeys(env).length > 0, enabled: flashGoogleSearchEnabled(env), ...searchHealth() }
+  const { day: _day, used: _used, ...last } = searchHealth()
+  return { switch: flashGoogleSearchSwitch(env), geminiKey: geminiKeys(env).length > 0, enabled: flashGoogleSearchEnabled(env),
+    models: flashSearchModels(env), dailyUsed: usedToday(), dailyLimit: flashSearchDailyLimit(env), ...last }
+}
+
+/** The models Flash may search with: the owner's list, or the free-allowance ones. */
+export function flashSearchModels(env: Env = process.env): string[] {
+  const named = String(env.MALIK_FLASH_GEMINI_MODEL || "").split(",").map(value => value.trim().replace(/^models\//, "")).filter(value => /^gemini-[a-z0-9.-]{2,60}$/iu.test(value))
+  return named.length ? [...new Set(named)] : [...FLASH_FREE_SEARCH_MODELS]
+}
+
+export function flashSearchDailyLimit(env: Env = process.env): number {
+  const raw = String(env.MALIK_FLASH_GOOGLE_SEARCH_DAILY_LIMIT ?? "").trim()
+  const value = Number(raw)
+  // Unset or malformed means the default; an explicit 0 turns searching off.
+  return raw && Number.isInteger(value) && value >= 0 && value <= 100_000 ? value : DEFAULT_DAILY_LIMIT
+}
+
+function today() {
+  return new Date().toISOString().slice(0, 10)
+}
+
+function usedToday() {
+  const state = searchHealth()
+  return state.day === today() ? state.used || 0 : 0
+}
+
+/** Counts one search for today, or false when today's allowance is spent. Per server process. */
+function takeDailySearch(env: Env): boolean {
+  const state = searchHealth()
+  if (state.day !== today()) { state.day = today(); state.used = 0 }
+  if ((state.used || 0) >= flashSearchDailyLimit(env)) return false
+  state.used = (state.used || 0) + 1
+  return true
 }
 
 /**
@@ -152,6 +199,13 @@ export async function runFlashGoogleSearch(input: {
   fetchImpl?: typeof fetch
 }): Promise<FlashSearchAnswer> {
   let forwarded = "", restarted = false
+  const env = input.env || process.env
+  // Over today's free allowance MALIKII answers instead: nothing is billed.
+  if (!takeDailySearch(env)) {
+    searchHealth().lastFailure = { code: "DAILY_LIMIT", statuses: [], models: [], at: new Date().toISOString() }
+    throw new FlashSearchUnavailable("DAILY_LIMIT")
+  }
+  const models = flashSearchModels(env)
   try {
     const result = await runGemini({
       system: SYSTEM,
@@ -159,11 +213,12 @@ export async function runFlashGoogleSearch(input: {
       maxOutputTokens: Math.max(256, Math.min(input.maxOutputTokens ?? 4096, 8192)),
       search: true,
       thinkingLevel: "low",
-      // An owner can pin a faster Gemini (for example a Flash-Lite) without a code change.
-      preferredModel: (input.env || process.env).MALIK_FLASH_GEMINI_MODEL?.trim() || undefined,
+      preferredModel: models[0],
+      onlyModels: models,
       deadlineMs: 100_000,
       signal: input.signal,
-      env: input.env,
+      // The engine walks its configured list; Flash's list is the free-allowance models.
+      env: { ...env, BUSINESS_GEMINI_MODELS: models.join(",") },
       fetchImpl: input.fetchImpl,
       onEvent: event => {
         if (event.type === "reset") { if (forwarded) restarted = true; return }
@@ -187,8 +242,16 @@ export async function runFlashGoogleSearch(input: {
   } catch (error) {
     const code = error instanceof GeminiEngineError ? error.code : "FAILED"
     if (code === "ABORTED" || input.signal?.aborted) throw error
-    const statuses = error instanceof GeminiEngineError ? [...new Set(error.trail.flatMap(step => typeof step.status === "number" ? [step.status] : []))].slice(0, 6) : []
-    searchHealth().lastFailure = { code, statuses, at: new Date().toISOString() }
+    const trail = error instanceof GeminiEngineError ? error.trail : []
+    const statuses = [...new Set(trail.flatMap(step => typeof step.status === "number" ? [step.status] : []))].slice(0, 6)
+    const seen = new Set<string>()
+    const perModel = trail.flatMap(step => {
+      const id = step.model + ":" + step.code + ":" + (step.status ?? "")
+      if (seen.has(id)) return []
+      seen.add(id)
+      return [{ model: step.model, code: step.code, ...(typeof step.status === "number" ? { status: step.status } : {}) }]
+    }).slice(0, 8)
+    searchHealth().lastFailure = { code, statuses, models: perModel, at: new Date().toISOString() }
     if (!forwarded) throw new FlashSearchUnavailable(code)
     throw new FlashBrowserError("FLASH_GOOGLE_SEARCH_INTERRUPTED", "Ответ с поиском Google прервался. Нажмите «Перегенерировать», чтобы повторить.", 503)
   }
