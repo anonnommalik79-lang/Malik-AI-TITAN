@@ -141,10 +141,13 @@ try {
     args[4]("Confirmed answer.")
     return { content: "Confirmed answer.", sources: [], usedWeb: true, provider: "test", model: "test", selectedModelId: "malik-max" }
   }
-  const { liveSseResponse } = functionsFrom("app/api/stream/route-impl.ts", ["coderPrompt", "protectChatCodeFences", "createStreamingFenceProtector", "liveSseResponse"], {
+  const { liveSseResponse } = functionsFrom("app/api/stream/route-impl.ts", ["coderPrompt", "protectChatCodeFences", "createStreamingFenceProtector", "flashNativeTurn", "liveSseResponse"], {
+    selectsMalikFlash: load("lib/ai/malik-models.ts").selectsMalikFlash, MALIK_FLASH_BROWSER_ENABLED: false,
+    flashSearchTurn: () => false, FLASH_GOOGLE_SEARCH_PROVIDER: "google-gemini-search", FlashSearchUnavailable: class extends Error {},
     after: (callback) => callbacks.push(callback), createExecutionReporter, DEFAULT_MALIK_MODEL_ID: "malik-max",
     isProjectBuildRequest: () => false, runSelectedAnswer: (...args) => modelRun(...args),
     skillChatRequest: load("lib/skills/chat-intent.ts").skillChatRequest, SkillError: load("lib/skills/types.ts").SkillError,
+    FlashBrowserError: load("lib/server/malik-flash-browser-bridge.ts").FlashBrowserError,
     estimateMultimodalTokens: () => 0, hasMalikAttachments: () => false,
     recordDailyMultimodalTokens: () => {}, observeComputeResult: () => {}, asPlainText: (answer) => answer.content,
     recordChatUsage: () => usage, persistFounderChatTurn: () => history,

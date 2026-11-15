@@ -12,6 +12,7 @@
     "test": "node --test test/*.test.mjs"
   },
   "dependencies": {
-    "playwright-core": "^1.56.0"
+    "playwright-core": "^1.56.0",
+    "robots-parser": "3.0.1"
   }
 }

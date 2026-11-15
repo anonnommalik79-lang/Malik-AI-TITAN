@@ -114,7 +114,7 @@ export const MALIK_FLASH_MODEL: MalikModelDefinition = {
   capabilities: ["text", "vision", "tools", "reasoning"],
   brand: "malik",
   access: "free",
-  autoEligible: true,
+  autoEligible: false,
 }
 
 export const MALIK_MAX_MODEL: MalikModelDefinition = {
@@ -251,6 +251,35 @@ export const MALIK_MODELS: readonly MalikModelDefinition[] = [
 
 export const PUBLIC_MALIK_MODELS = MALIK_MODELS.filter((model) => !model.hidden)
 export const DEFAULT_MALIK_MODEL_ID: MalikModelId = MALIK_FLASH_PREVIEW_ENABLED ? "malik-flash" : "malik-max"
+
+export function selectsMalikFlash(body: { model?: unknown; modelId?: unknown } | null | undefined) {
+  return (body?.model || body?.modelId) === "malik-flash"
+}
+
+/**
+ * The Google AI Mode browser integration behind Flash. It is a second switch on
+ * top of the preview: while it is off, Flash is answered by the native MALIKII
+ * engines, exactly as before the worker existed, so the model stays usable.
+ * The browser and the server read the same flag, so they never disagree about
+ * which kind of request a Flash turn is.
+ */
+export const MALIK_FLASH_BROWSER_ENABLED = MALIK_FLASH_PREVIEW_ENABLED && process.env.NEXT_PUBLIC_MALIK_FLASH_BROWSER === "1"
+
+/**
+ * The model the native engines run for a selection. Flash has no engine of its
+ * own: whatever reaches a native engine under its name is answered by the MAX
+ * orchestrator. That is every Flash turn while the Google integration is off,
+ * and a request that names no model while Flash is the default. A turn for the
+ * Google integration is taken by the chat route before any native engine runs.
+ */
+export function nativeMalikEngineId(modelId: MalikModelId): MalikModelId {
+  return modelId === "malik-flash" ? "malik-max" : modelId
+}
+
+/** True when a turn with this model goes through the Google browser integration. */
+export function usesMalikFlashBrowser(modelId: unknown): boolean {
+  return modelId === "malik-flash" && MALIK_FLASH_BROWSER_ENABLED
+}
 export const FREE_MALIK_MODELS = PUBLIC_MALIK_MODELS.filter((model) => model.tier === "free")
 export const PRO_MALIK_MODELS = PUBLIC_MALIK_MODELS.filter((model) => model.tier === "pro")
 

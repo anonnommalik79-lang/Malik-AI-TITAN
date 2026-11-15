@@ -30,6 +30,9 @@ function uniqueMessages(remote: JsonRecord[], incoming: JsonRecord[]): JsonRecor
     if (oldDone && !nextDone) continue
     if (!oldDone && nextDone && oldContent.length > nextContent.length) continue
     if (!oldDone && !nextDone && oldContent.length > nextContent.length && oldContent.startsWith(nextContent)) continue
+    // Keep the server's complete Flash result when an older browser snapshot
+    // arrives during reload, stop/retry, or a cross-device merge.
+    if (prior.flashServerSaved === true && item.flashServerSaved !== true) continue
     // A simultaneously regenerated final answer retains its prior completed
     // variant in versions, rather than silently discarding one device's text.
     // Stable, unique historical variants: repeated sync must not append the
@@ -61,6 +64,8 @@ function mergeChat(remote: JsonRecord, incoming: JsonRecord): JsonRecord {
   const archive = later && (!earlier || later.changedAt >= earlier.changedAt) ? later : earlier
   return { ...remote, ...incoming,
     ...(archive ? { archive } : {}),
+    ...((remote.flashConversationStarted === true || incoming.flashConversationStarted === true) ? { flashConversationStarted: true } : {}),
+    ...((remote.flashMediaIds || incoming.flashMediaIds) ? { flashMediaIds: [...new Set([...rowsDeleted(remote.flashMediaIds), ...rowsDeleted(incoming.flashMediaIds)])] } : {}),
     messages: uniqueMessages(rows(remote.messages), rows(incoming.messages)) }
 }
 export function mergeAccountChatStates(remoteInput: unknown, incomingInput: unknown): JsonRecord {

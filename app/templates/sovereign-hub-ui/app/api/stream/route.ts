@@ -218,6 +218,7 @@ function withLayoutFixed(request: Request, body: any): { request: Request; body:
 async function addressedChatPOST(request: Request) {
   const requestBody = await request.clone().json().catch(() => ({}))
   const response = await originalPOST(request)
+  if (response.headers.get("x-malik-router") === "malik-flash") return response
   return addressChatResponse(response, await resolveRequestEntitlement(request), requestBody)
 }
 

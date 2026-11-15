@@ -1,5 +1,5 @@
 import { wantsVisualAnswer } from "@/lib/generative-ui/router"
-import type { MalikModelId } from "@/lib/ai/malik-models"
+import { nativeMalikEngineId, type MalikModelId } from "@/lib/ai/malik-models"
 import type { AnswerIncomplete } from "@/lib/ai/answer-completion"
 import { instantReply } from "@/lib/ai/instant-replies"
 import { clockReply, isPremiseQuestion, premiseInstruction } from "@/lib/ai/premise-check"
@@ -1059,6 +1059,9 @@ export async function malikGodAnswer(
   signal?: AbortSignal,
   preparedEvidence?: PreparedLiveEvidence,
 ): Promise<GodAnswer> {
+  // Browser-backed Flash is taken by the chat route before this point. Flash
+  // that reaches the native engine is answered by it under its real provider.
+  if (selection) selection = { ...selection, modelId: nativeMalikEngineId(selection.modelId) }
   const prompt = extractPrompt(body)
   const requestPrompt = preparedEvidence?.prompt || prompt
   // Attachment extraction may augment `prompt` with untrusted document text.
@@ -1400,6 +1403,7 @@ export async function malikRescueAnswer(
   found: SourceItem[],
   options: { wallMs: number; onToken?: (chunk: string) => void; activity?: ExecutionReporter; signal?: AbortSignal },
 ): Promise<GodAnswer> {
+  selection = { ...selection, modelId: nativeMalikEngineId(selection.modelId) }
   const prompt = extractPrompt(body)
   const history = conversationHistory(body)
   const intent = resolveConversationIntent({ prompt, messages: history, attachments: body?.attachments })

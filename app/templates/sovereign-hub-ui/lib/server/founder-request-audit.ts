@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto"
 import { resolveRequestEntitlement } from "@/lib/server/request-entitlement"
 import { appendFounderMessage, MAX_FOUNDER_TEXT_CHARS, type FounderMessageSource, type FounderMessageStatus } from "@/lib/server/founder-message-log"
 import { chatCompletionError, MAX_CHAT_SSE_FRAME_CHARS, mergeChatStreamText, parseChatSseFrame } from "@/lib/ai/chat-stream-contract"
+import { selectsMalikFlash } from "@/lib/ai/malik-models"
 
 type Endpoint = (request: Request) => Promise<Response>
 const MAX_TEXT = MAX_FOUNDER_TEXT_CHARS
@@ -55,6 +56,8 @@ export function withFounderRequestAudit(handler: Endpoint, source: FounderMessag
       request.clone().json().catch(() => null),
       resolveRequestEntitlement(request).catch(() => null),
     ])
+    // Flash persists to the requesting account's private transcript.
+    if (source === "chat" && selectsMalikFlash(body)) return handler(request)
     const prompt = promptFrom(body, source)
     const userText = redact(prompt)
     if (!entitlement?.authenticated || !entitlement.userId || entitlement.userId === "guest" ||

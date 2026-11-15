@@ -34,7 +34,7 @@ function realPng() {
 }
 
 const old={index:0,src:"https://example.com/old.png",alt:"original",width:500,height:300,naturalWidth:900,naturalHeight:600};
-const fresh={index:1,src:"blob:https://www.google.com/new-art",alt:"Generated image",width:620,height:380,naturalWidth:1600,naturalHeight:900};
+const fresh={generated:true, index:1,src:"blob:https://www.google.com/new-art",alt:"Generated image",width:620,height:380,naturalWidth:1600,naturalHeight:900};
 
 test("the output is new, never the uploaded original or historical result",()=>{
   const selected=newImageCandidates([old],[old,fresh]);
@@ -43,8 +43,8 @@ test("the output is new, never the uploaded original or historical result",()=>{
   assert.deepEqual(newImageCandidates([old],[old]),[]);
 });
 
-test("small thumbnails are ignored as generation results",()=>{
-  const mini={...fresh,width:100,height:120};
+test("search thumbnails without a generated marker are ignored",()=>{
+  const mini={...fresh,generated:false,width:100,height:120};
   assert.deepEqual(newImageCandidates([old],[old,mini]),[]);
 });
 
@@ -57,32 +57,30 @@ test("real PNG is verified and converted to bytes, not a text-only success",()=>
   assert.throws(()=>verifyImageDataUrl("https://untrusted.example/photo.png"),BrowserImageError);
 });
 
-test("capture screens only the selected image element, not whole page",async()=>{
-  const png=realPng();const called=[];
-  const page={
-    evaluate:async()=>null,
-    locator:(selector)=>({nth:(index)=>({
-      isVisible:async()=>true,
-      screenshot:async()=>{called.push({selector,index});return png},
-    })}),
-  };
-  const output=await captureBrowserImage(page,fresh);
-  assert.equal(output.mime,"image/png");
-  assert.deepEqual(Buffer.from(output.base64,"base64"),png);
-  assert.deepEqual(called,[{selector:"img",index:1}]);
+test("requires original bytes and never falls back to a screenshot", async () => {
+  const png = realPng();
+  const page = { evaluate: async (_fn, args) => {
+    assert.equal(args.candidate.src, fresh.src);
+    return "data:image/png;base64," + png.toString("base64");
+  } };
+  const output = await captureBrowserImage(page, fresh);
+  assert.equal(output.mime, "image/png");
+  assert.deepEqual(Buffer.from(output.base64, "base64"), png);
+  await assert.rejects(captureBrowserImage({ evaluate: async () => null }, fresh), BrowserImageError);
 });
 
-test("waits for a stable new image before returning a result",async()=>{
-  const png=realPng();let frames=0;const snapshots=[[old],[old,fresh],[old,fresh],[old,fresh]];
-  const page={
-    evaluate:async(fn)=>{
-      if(fn.toString().includes('const result = []')) return snapshots[Math.min(frames++,snapshots.length-1)];
-      return false;
-    },
-    locator:()=>({nth:()=>({isVisible:async()=>true,screenshot:async()=>png})}),
-  };
-  const img=await waitForGeneratedImage(page,[old],{poll:async()=>{},timeoutMs:1500});
-  assert.equal(img.mime,"image/png");
-  assert.equal(img.width,fresh.naturalWidth);
-  assert.ok(frames>=4);
+test("requires completion and a stable, uniquely marked new image before capture", async () => {
+  const png = realPng();
+  let checks = 0, scans = 0;
+  const page = { evaluate: async (fn) => {
+    if (fn.toString().includes("const result = []")) {
+      scans++;
+      return scans === 1 ? [old, { ...fresh, generated: false }] : [old, fresh];
+    }
+    return "data:image/png;base64," + png.toString("base64");
+  } };
+  const img = await waitForGeneratedImage(page, [old], { completed: async () => ++checks > 1, poll: async () => {}, timeoutMs: 1000 });
+  assert.equal(img.mime, "image/png");
+  assert.equal(checks, 4);
+  assert.equal(scans, 3);
 });

@@ -4,6 +4,7 @@ import type { WorkspaceMode } from "./work-mode"
 export type ResponseDepth = "fast" | "deep" | "ultra"
 
 export type ChatSendOptions = {
+  flashSourceId?: string
   selectedSkillId?: "petroleum.analyze"
   workspaceMode?: WorkspaceMode
   responseDepth?: ResponseDepth
