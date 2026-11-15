@@ -43,6 +43,12 @@ test("Google Search runs only when the owner turned it on and a Gemini key exist
   assert.equal(search.flashGoogleSearchEnabled({ GEMINI_API_KEY: KEY }), false, "off by default: grounding is billed")
   assert.equal(search.flashGoogleSearchEnabled({ MALIK_FLASH_GOOGLE_SEARCH: "1" }), false, "no key, no lane")
   assert.equal(search.flashGoogleSearchEnabled(env), true)
+  for (const value of ["true", " 1 ", "ON", "yes"]) assert.equal(search.flashGoogleSearchEnabled({ GEMINI_API_KEY: KEY, MALIK_FLASH_GOOGLE_SEARCH: value }), true, JSON.stringify(value))
+  for (const value of ["0", "false", "", "2"]) assert.equal(search.flashGoogleSearchEnabled({ GEMINI_API_KEY: KEY, MALIK_FLASH_GOOGLE_SEARCH: value }), false, JSON.stringify(value))
+  const status = search.flashGoogleSearchStatus({ MALIK_FLASH_GOOGLE_SEARCH: "true" })
+  assert.deepEqual(status, { switch: true, geminiKey: false, enabled: false })
+  assert.equal(JSON.stringify(search.flashGoogleSearchStatus(env)).includes(KEY), false, "the health check never shows a key")
+  assert.match(readFileSync("app/api/health/route.ts", "utf8"), /flashGoogleSearch: flashGoogleSearchStatus\(\)/u)
 })
 
 test("text questions use Google Search; code, images, video and attachments keep their MALIKII paths", () => {

@@ -39,9 +39,19 @@ export type FlashSearchAnswer = {
 
 type Env = Record<string, string | undefined>
 
+/** The owner's switch, read the way people type it in a dashboard: 1, true, on or yes. */
+export function flashGoogleSearchSwitch(env: Env = process.env): boolean {
+  return /^(?:1|true|on|yes)$/iu.test(String(env.MALIK_FLASH_GOOGLE_SEARCH ?? "").trim())
+}
+
 /** Search grounding is on only when the owner turned it on and a Gemini key exists. */
 export function flashGoogleSearchEnabled(env: Env = process.env): boolean {
-  return env.MALIK_FLASH_GOOGLE_SEARCH === "1" && geminiKeys(env).length > 0
+  return flashGoogleSearchSwitch(env) && geminiKeys(env).length > 0
+}
+
+/** For the public health check: whether the switch and a key are seen. Never the keys. */
+export function flashGoogleSearchStatus(env: Env = process.env) {
+  return { switch: flashGoogleSearchSwitch(env), geminiKey: geminiKeys(env).length > 0, enabled: flashGoogleSearchEnabled(env) }
 }
 
 /**
