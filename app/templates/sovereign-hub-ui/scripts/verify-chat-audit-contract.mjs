@@ -4,7 +4,6 @@ import assert from "node:assert/strict"
 import fs from "node:fs"
 import { randomUUID } from "node:crypto"
 import ts from "typescript"
-import { workTestLoader } from "./work-test-loader.mjs"
 
 const transpile = path => ts.transpileModule(fs.readFileSync(path, "utf8"), {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
@@ -13,7 +12,6 @@ const contractModule = { exports: {} }
 new Function("module", "exports", transpile("lib/ai/chat-stream-contract.ts"))(contractModule, contractModule.exports)
 const writes = []
 let authenticated = true
-const modelSelection = workTestLoader()("lib/ai/malik-models.ts")
 const auditModule = { exports: {} }
 new Function("require", "module", "exports", transpile("lib/server/founder-request-audit.ts"))(name => {
   if (name === "server-only") return {}
@@ -21,7 +19,6 @@ new Function("require", "module", "exports", transpile("lib/server/founder-reque
   if (name.endsWith("request-entitlement")) return { resolveRequestEntitlement: async () => ({ authenticated, userId: authenticated ? "account-a" : "guest" }) }
   if (name.endsWith("founder-message-log")) return { MAX_FOUNDER_TEXT_CHARS: 256_000, appendFounderMessage: async value => { writes.push(value); return true } }
   if (name.endsWith("chat-stream-contract")) return contractModule.exports
-  if (name.endsWith("malik-models")) return modelSelection
   throw new Error(`Unexpected dependency ${name}`)
 }, auditModule, auditModule.exports)
 const { withFounderRequestAudit } = auditModule.exports
@@ -86,9 +83,21 @@ await run("authoritative finalContent replaces an earlier draft", event("content
   assert.equal(result.assistantText, "Verified answer")
   assert.equal(result.model, "selected-model")
 })
-await run("private Flash turns are excluded from founder audit", event("done", { content: "Private Flash answer" }), () => {
-  assert.equal(writes.length, 0)
-}, { requestBody: { model: "malik-flash" } })
+await run("Flash updates the same founder entry after streaming its answer", event("done", {
+  content: "Flash answer", provider: "local-smart", model: "local-quick-reply", selectedModelId: "malik-flash",
+}), result => {
+  assert.equal(writes.length, 2)
+  assert.equal(writes[0].status, "pending")
+  assert.equal(writes[0].id, result.id)
+  assert.equal(result.userId, "account-a")
+  assert.equal(result.userText, "Flash question")
+  assert.equal(result.assistantText, "Flash answer")
+  assert.equal(result.provider, "local-smart")
+  assert.equal(result.model, "local-quick-reply")
+  assert.equal(result.status, "success")
+}, { requestBody: { originalQuestion: "Flash question", model: "malik-flash" } })
 authenticated = false
-await run("unauthenticated traffic is never logged against an account", event("done", { content: "Guest answer" }), () => assert.equal(writes.length, 0))
+await run("unauthenticated Flash traffic is never logged against an account", event("done", { content: "Guest answer" }), () => assert.equal(writes.length, 0), {
+  requestBody: { model: "malik-flash" },
+})
 console.log(`${checks}/${checks} audit-contract checks passed; auth/storage fixtures only`)

@@ -99,9 +99,11 @@ test("simultaneous requests do not overwrite one another", async () => {
   for (let i = 0; i < 20; i++) assert.equal(history.find(e => e.id === `parallel-${i}`).assistantText, `Answer ${i}`)
 })
 
-test("real audit stream to disk to owner API, final content and redaction preserved", async () => {
-  const wire = frame("content", { content: "Draft", contentMode: "delta" }) + frame("done", { ok: true, finalContent: "Final answer password=hidden123", model: "fixture-model" })
-  const response = await audit.withFounderRequestAudit(async () => new Response(wire, { headers: { "content-type": "text/event-stream" } }))(request({ prompt: "User question", userId: "forged@example.test" }))
+test("Flash audit stream to disk to owner API, final content and redaction preserved", async () => {
+  const wire = frame("content", { content: "Draft", contentMode: "delta" }) + frame("done", { ok: true, finalContent: "Final answer password=hidden123", model: "fixture-model", selectedModelId: "malik-flash" })
+  const response = await audit.withFounderRequestAudit(async () => new Response(wire, { headers: { "content-type": "text/event-stream" } }))(request({
+    originalQuestion: "User question", question: "Rewritten question", model: "malik-flash", userId: "forged@example.test",
+  }))
   assert.equal(await response.text(), wire)
   viewer = { id: "owner-id", email: "owner@example.test", emailVerified: true }
   const result = await messages.GET(new Request("http://localhost/api/founder/messages?email=customer@example.test&id=customer-id"))
@@ -115,9 +117,12 @@ test("real audit stream to disk to owner API, final content and redaction preser
   assert.equal((await store.readFounderMessageLog("forged@example.test")).length, 0)
 })
 
-test("UIMessage parts and standard voice JSON replies are logged", async () => {
+test("Flash JSON text parts and standard voice replies are logged", async () => {
   const wrapped = audit.withFounderRequestAudit(async () => Response.json({ content: "Parts reply" }))
-  await (await wrapped(request({ messages: [{ role: "user", parts: [{ type: "text", text: "Parts question" }, { type: "file", url: "private-file" }] }] }))).text()
+  await (await wrapped(request({
+    modelId: "malik-flash",
+    messages: [{ role: "user", parts: [{ type: "text", text: "Parts question" }, { type: "file", url: "private-file" }] }],
+  }))).text()
   const voice = audit.withFounderRequestAudit(async () => Response.json({ content: "Voice reply" }), "voice")
   await (await voice(request({ transcript: "Voice question" }))).text()
   const history = await store.readFounderMessageLog(entry.userId)
