@@ -13,10 +13,12 @@ test("worker HTTP admission authenticates health and work, correlates failures, 
   await new Promise(resolve => reservation.close(resolve));
 
   const secret = "test-only-secret-".repeat(3);
+  // Windows ends a process on SIGTERM without running its handlers, so the drain is requested over IPC there.
+  const windows = process.platform === "win32";
   const child = spawn(process.execPath, ["server.mjs"], {
     cwd: new URL("..", import.meta.url),
     env: { ...process.env, MALIK_FLASH_WORKER_SECRET: secret, MALIK_FLASH_WORKER_BIND: "127.0.0.1", MALIK_FLASH_WORKER_PORT: String(port) },
-    stdio: ["ignore", "pipe", "pipe"],
+    stdio: ["ignore", "pipe", "pipe", ...(windows ? ["ipc"] : [])],
   });
   const ended = once(child, "exit");
   t.after(() => { if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL"); });
@@ -54,6 +56,6 @@ test("worker HTTP admission authenticates health and work, correlates failures, 
   assert.deepEqual(await submit({ userScope: "different-identity" }), [400, "INVALID_SCOPE"]);
   for (let n = 0; n < 30; n++) assert.deepEqual(await submit({}), [400, "INVALID_QUESTION"]);
   assert.deepEqual(await submit({}), [429, "HOURLY_LIMIT"]);
-  child.kill("SIGTERM");
+  if (windows) child.send("shutdown"); else child.kill("SIGTERM");
   assert.deepEqual(await ended, [0, null]);
 });

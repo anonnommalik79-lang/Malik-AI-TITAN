@@ -26,6 +26,7 @@ import { routeImageGeneration } from "./image-router"
 import { runFlashMedia } from "../server/malik-flash-media"
 import { FlashBrowserError } from "../server/malik-flash-browser-bridge"
 import { flashImageOperation } from "../ai/malik-flash-intent"
+import { usesMalikFlashBrowser } from "../ai/malik-models"
 import {
   checkImageCreditLimit,
   normalizeImageCreditSize,
@@ -148,7 +149,9 @@ export async function handleMalikPhotoGenerationRequest(request: Request) {
   }
 
   const user = await resolveMediaUser(request, body)
-  const flashRequested = body?.chatModelId === "malik-flash"
+  // Without the Google integration a Flash chat draws with the native MALIKII
+  // photo engines and reports the engine that actually made the picture.
+  const flashRequested = usesMalikFlashBrowser(body?.chatModelId)
   const flashEditing = flashRequested && (editing || flashImageOperation(rawPrompt, Boolean(body.flashSourceId)) === "edit")
   let editSource
   if (editing && !flashRequested) {

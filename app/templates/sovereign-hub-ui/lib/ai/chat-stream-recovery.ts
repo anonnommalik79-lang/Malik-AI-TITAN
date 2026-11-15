@@ -3,6 +3,7 @@ import { chatAnswerDeadline } from "./chat-deadline"
 import { answerRevises } from "./answer-completion"
 import { chatCompletionError, isChatStoppedByUser, MAX_CHAT_SSE_FRAME_CHARS, mergeChatStreamText, parseChatSseFrame } from "./chat-stream-contract"
 import { resolveConversationIntent } from "./conversation-intent"
+import { usesMalikFlashBrowser } from "./malik-models"
 
 /** Recover a saved turn before repeating a read-only question. Never replay actions. */
 type RecoveryOptions = {
@@ -36,7 +37,7 @@ export type ChatStreamTimings = { firstTextMs: number; idleMs: number; recoveryM
  * so the server always finishes first and reports its real result.
  */
 export function chatStreamTimings(body: Record<string, unknown>): ChatStreamTimings {
-  if (body.model === "malik-flash" && !body.isProjectRequest && !body.isCodeRequest) {
+  if (usesMalikFlashBrowser(body.model) && !body.isProjectRequest && !body.isCodeRequest) {
     return { firstTextMs: 125_000, idleMs: 60_000, recoveryMs: 125_000, headersMs: 115_000 }
   }
   const retryable = canRetryChat(body)
@@ -127,7 +128,7 @@ export async function fetchRecoverableChat(input: RequestInfo | URL, init: Reque
   const signal = init.signal
   let body: Record<string, unknown> = {}
   try { body = JSON.parse(String(init.body || "{}")) } catch {}
-  const flash = body.model === "malik-flash"
+  const flash = usesMalikFlashBrowser(body.model)
   const retryable = !flash && canRetryChat(body)
   const defaults = chatStreamTimings(body)
   const firstTextMs = options.firstTextMs ?? defaults.firstTextMs

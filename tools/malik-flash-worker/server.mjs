@@ -147,6 +147,10 @@ async function shutdown() {
   server.close();
   for (const connection of active) connection.abort();
   await worker.close();
+  // An open IPC channel would keep the drained process alive.
+  if (process.connected) process.disconnect();
 }
 process.on("SIGINT", shutdown);
 process.on("SIGTERM", shutdown);
+// Windows has no SIGTERM handler: a supervisor asks for the same drain over IPC.
+process.on("message", message => { if (message === "shutdown") void shutdown(); });

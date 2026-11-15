@@ -6,6 +6,7 @@ import {
   getMalikModel,
   isMalikModelId,
   MAX_ROUTER_MODEL_IDS,
+  nativeMalikEngineId,
   type MalikModelDefinition,
   type MalikModelId,
 } from "@/lib/ai/malik-models"
@@ -880,6 +881,8 @@ export async function runStrictMalikModel(input: {
   /** Honoured by the streaming engine (MAX and models picked by name). */
   signal?: AbortSignal
 }, options: { allowFallback?: boolean; continuationDepth?: number } = {}): Promise<StrictMalikResult> {
+  // Flash has no engine of its own: here it is the native orchestrator.
+  input = { ...input, modelId: nativeMalikEngineId(input.modelId) }
   if (hasHiddenGeminiMedia(input.attachments)) {
     try {
       const started = Date.now()

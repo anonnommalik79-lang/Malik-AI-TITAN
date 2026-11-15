@@ -10,6 +10,7 @@ import { resolveRequestEntitlement } from "@/lib/server/request-entitlement"
 import { withCompute } from "@/lib/malik-compute/runtime"
 import { generationComputeOperation } from "@/lib/malik-compute/policies"
 import { handleMalikPhotoGenerationRequest } from "@/lib/media/generate-photo-route"
+import { usesMalikFlashBrowser } from "@/lib/ai/malik-models"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -42,7 +43,7 @@ async function handlePOST(request: Request) {
   if (kind === "photo" && isPhotoGenerationPaused()) {
     return photoMaintenanceResponse("/api/generate")
   }
-  if (kind === "photo" && body.chatModelId === "malik-flash") {
+  if (kind === "photo" && usesMalikFlashBrowser(body.chatModelId)) {
     return handleMalikPhotoGenerationRequest(request)
   }
 

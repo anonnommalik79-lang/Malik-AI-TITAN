@@ -31,7 +31,7 @@ import { isChatArtifactCreationRequest } from "@/lib/ai/chat-artifact-skills"
 import { briefNeedsDeep, briefOutputFloor } from "@/lib/ai/brief-quality"
 import { loadResponseDepth } from "@/lib/ai/response-depth"
 import { resolveWorkspaceMode, WORKSPACE_MODE_KEY, type WorkspaceMode } from "@/lib/ai/work-mode"
-import { hasMalikProAccess } from "@/lib/ai/malik-models"
+import { hasMalikProAccess, usesMalikFlashBrowser } from "@/lib/ai/malik-models"
 import { FeatureCenter } from "./features/FeatureCenter"
 import { CapabilitiesPanel } from "./capabilities"
 import { MalikCodexModal } from "./codex/malik-codex-modal"
@@ -6255,7 +6255,8 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
   const turnWorkspaceMode = options?.workspaceMode ?? workspaceMode
   const cleanContent = (content || "").trim()
   if (!cleanContent) return
-  const flashSelected = selectedModelId === "malik-flash"
+  // Flash follows the browser-worker flow only while the Google integration is on.
+  const flashSelected = usesMalikFlashBrowser(selectedModelId)
   const carryContext = readContextEnabled()
   const petroleumRoute = routePetroleum(cleanContent, options?.selectedSkillId)
   const petroleumAnalytic = petroleumRoute.domain && ["petroleum", "chat"].includes(petroleumRoute.engine)

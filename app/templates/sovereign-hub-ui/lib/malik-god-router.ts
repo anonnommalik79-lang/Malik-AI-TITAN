@@ -1,5 +1,5 @@
 import { wantsVisualAnswer } from "@/lib/generative-ui/router"
-import type { MalikModelId } from "@/lib/ai/malik-models"
+import { nativeMalikEngineId, type MalikModelId } from "@/lib/ai/malik-models"
 import type { AnswerIncomplete } from "@/lib/ai/answer-completion"
 import { instantReply } from "@/lib/ai/instant-replies"
 import { clockReply, isPremiseQuestion, premiseInstruction } from "@/lib/ai/premise-check"
@@ -24,7 +24,6 @@ import { accuracyInstruction, finalizeAccuracy, type AccuracyReport } from "@/li
 import { accuracyTokenGate } from "@/lib/ai/accuracy/stream"
 import { fetchPageText } from "@/lib/malik-research/fetch-page"
 import { runStrictMalikModel } from "@/lib/server/malik-model-router"
-import { FlashBrowserError } from "@/lib/server/malik-flash-browser-bridge"
 import { chatWebsiteInstruction } from "@/lib/server/chat-website-design"
 import { fetchEiaSpotEvidence } from "@/lib/server/petroleum-eia"
 import { asksCompanyMoney, classifyFreshness, freshnessMode, isModelLeaderboardRequest, NO_WEB, publicSearchText, type FreshnessMode, type FreshnessIntent } from "@/lib/ai/freshness-intent"
@@ -1060,10 +1059,9 @@ export async function malikGodAnswer(
   signal?: AbortSignal,
   preparedEvidence?: PreparedLiveEvidence,
 ): Promise<GodAnswer> {
-  // Browser-backed Flash is handled before model routing or local replies.
-  if (selection?.modelId === "malik-flash") {
-    throw new FlashBrowserError("FLASH_WORKER_NOT_READY", "Для Flash требуется персональная сессия Google AI Mode.")
-  }
+  // Browser-backed Flash is taken by the chat route before this point. Flash
+  // that reaches the native engine is answered by it under its real provider.
+  if (selection) selection = { ...selection, modelId: nativeMalikEngineId(selection.modelId) }
   const prompt = extractPrompt(body)
   const requestPrompt = preparedEvidence?.prompt || prompt
   // Attachment extraction may augment `prompt` with untrusted document text.
@@ -1405,6 +1403,7 @@ export async function malikRescueAnswer(
   found: SourceItem[],
   options: { wallMs: number; onToken?: (chunk: string) => void; activity?: ExecutionReporter; signal?: AbortSignal },
 ): Promise<GodAnswer> {
+  selection = { ...selection, modelId: nativeMalikEngineId(selection.modelId) }
   const prompt = extractPrompt(body)
   const history = conversationHistory(body)
   const intent = resolveConversationIntent({ prompt, messages: history, attachments: body?.attachments })

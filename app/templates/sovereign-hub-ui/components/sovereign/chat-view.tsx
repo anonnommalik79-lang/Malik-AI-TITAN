@@ -65,7 +65,7 @@ import { fixWrongKeyboardLayout } from "@/lib/ai/keyboard-layout"
 import type { MalikFactAudit, MalikFactClaim } from "@/lib/ai/fact-audit"
 import { worthFactAuditPanel } from "@/lib/ai/fact-audit"
 import { ClaimLedgerPanel } from "./ClaimLedgerPanel"
-import { DEFAULT_MALIK_MODEL_ID, getMalikModel, type MalikModelId } from "@/lib/ai/malik-models"
+import { DEFAULT_MALIK_MODEL_ID, getMalikModel, usesMalikFlashBrowser, type MalikModelId } from "@/lib/ai/malik-models"
 import { clientFetchWithTimeout } from "@/lib/api-client"
 import { MalikModelSelector } from "./MalikModelSelector"
 import { PetroleumMentionMenu, usePetroleumMention } from "@/components/sovereign/composer-tools/PetroleumMention"
@@ -2270,7 +2270,7 @@ export function ChatView({ messages, workspaceMode = "chat", onSendMessage, onIm
 
     const extension = blob.type.includes("png") ? "png" : blob.type.includes("webp") ? "webp" : "jpg"
     const file = new File([blob], `malik-editor-source-${Date.now()}.${extension}`, { type: blob.type })
-    return fileToAttachment(file, selectedModelId === "malik-flash")
+    return fileToAttachment(file, usesMalikFlashBrowser(selectedModelId))
   }
 
   useEffect(() => {
@@ -2285,7 +2285,7 @@ export function ChatView({ messages, workspaceMode = "chat", onSendMessage, onIm
       void (async () => {
         try {
           setLocalError(null)
-          const sourceId = selectedModelId === "malik-flash"
+          const sourceId = usesMalikFlashBrowser(selectedModelId)
             ? /^\/api\/chat\/flash-image\/[^/]+\/([0-9a-f]{32})$/u.exec(detail.sourceSrc)?.[1]
             : undefined
           const sourceAttachment = sourceId ? undefined : await attachmentFromEditorSource(detail.sourceSrc)
@@ -2581,7 +2581,7 @@ export function ChatView({ messages, workspaceMode = "chat", onSendMessage, onIm
     let firstError = ""
     for (const file of Array.from(files).slice(0, room)) {
       try {
-        parsed.push(await fileToAttachment(file, selectedModelId === "malik-flash"))
+        parsed.push(await fileToAttachment(file, usesMalikFlashBrowser(selectedModelId)))
       } catch (error) {
         if (!firstError) firstError = error instanceof Error ? error.message : "Ошибка файла"
       }
@@ -3033,7 +3033,7 @@ export function ChatView({ messages, workspaceMode = "chat", onSendMessage, onIm
     }
     let failed = 0
     for (const file of prepared.media) {
-      try { added.push(await fileToAttachment(file, selectedModelId === "malik-flash")) } catch { failed += 1 }
+      try { added.push(await fileToAttachment(file, usesMalikFlashBrowser(selectedModelId))) } catch { failed += 1 }
     }
     setAttachments((previous) => [...previous, ...added].slice(0, MAX_CHAT_ATTACHMENTS))
     setComposerNotice(prepared.notice + (failed ? ` Не прочитались: ${failed}.` : ""))

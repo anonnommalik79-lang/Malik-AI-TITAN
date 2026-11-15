@@ -64,8 +64,8 @@ test("completed transcripts survive reload, preserve chronological order and rem
 
 test("image receipts survive refresh, retain source lineage and honor authenticated deletion", async t => {
   globalThis.__malikStoreConfigured = true
-  const restore = new Map(["NEXT_PUBLIC_MALIK_FLASH_PREVIEW", "MALIK_FLASH_ISOLATED_WORKER", "MALIK_FLASH_WORKER_URL", "MALIK_FLASH_WORKER_SECRET"].map(key => [key, process.env[key]]))
-  Object.assign(process.env, { NEXT_PUBLIC_MALIK_FLASH_PREVIEW: "1", MALIK_FLASH_ISOLATED_WORKER: "1",
+  const restore = new Map(["NEXT_PUBLIC_MALIK_FLASH_PREVIEW", "NEXT_PUBLIC_MALIK_FLASH_BROWSER", "MALIK_FLASH_ISOLATED_WORKER", "MALIK_FLASH_WORKER_URL", "MALIK_FLASH_WORKER_SECRET"].map(key => [key, process.env[key]]))
+  Object.assign(process.env, { NEXT_PUBLIC_MALIK_FLASH_PREVIEW: "1", NEXT_PUBLIC_MALIK_FLASH_BROWSER: "1", MALIK_FLASH_ISOLATED_WORKER: "1",
     MALIK_FLASH_WORKER_URL: "https://flash.test/v1/ask", MALIK_FLASH_WORKER_SECRET: "f".repeat(40) })
   const oldFetch = globalThis.fetch
   t.after(() => {

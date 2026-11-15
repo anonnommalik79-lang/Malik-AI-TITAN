@@ -31,11 +31,12 @@ test("a successful edit needs a completed real image receipt and accepted source
   await assert.rejects(verifyMalikFlashImagePayload({ ...success, kind: "image_generate" }, "image_edit"), { code: "FLASH_IMAGE_INCOMPLETE" })
 })
 
-test("Flash image uses the native card without preflight providers or native fallback", () => {
+test("Flash image uses the worker only while the Google integration is on, and the native card either way", () => {
   const route = readFileSync("lib/media/generate-photo-route.ts", "utf8")
   const dashboard = readFileSync("components/sovereign/dashboard.tsx", "utf8")
   const implementation = readFileSync("lib/server/malik-flash-media.ts", "utf8")
-  assert.match(route, /flashRequested = body\?\.chatModelId === "malik-flash"/u)
+  assert.match(route, /flashRequested = usesMalikFlashBrowser\(body\?\.chatModelId\)/u)
+  assert.match(readFileSync("app/api/generate/route.ts", "utf8"), /kind === "photo" && usesMalikFlashBrowser\(body\.chatModelId\)/u)
   assert.match(route, /if \(flashRequested\) \{[\s\S]*?return Response.json\([\s\S]*?catch \(error\) \{[\s\S]*?return Response.json\(/u)
   assert.match(route, /await recordImageCreditUsage\(user.userId, imageSize\)/)
   assert.match(dashboard, /else if \(inlineMediaKind === "image" && !flashImageRequest\)/)

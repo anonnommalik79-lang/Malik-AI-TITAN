@@ -48,7 +48,7 @@ jobs:
         run: node --test tools/malik-flash-worker/test/*.test.mjs
       - name: App integration contract
         working-directory: app/templates/sovereign-hub-ui
-        run: node --test scripts/verify-malik-flash-preview.mjs scripts/verify-malik-flash-image.mjs scripts/verify-malik-flash-history.mjs
+        run: node --test scripts/verify-malik-flash-preview.mjs scripts/verify-malik-flash-image.mjs scripts/verify-malik-flash-history.mjs scripts/verify-malik-flash-google-search.mjs
       - name: Preview-on registry and entitlement checks
         working-directory: app/templates/sovereign-hub-ui
         env:

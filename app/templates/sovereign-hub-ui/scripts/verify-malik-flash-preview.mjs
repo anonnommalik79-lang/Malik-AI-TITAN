@@ -23,6 +23,7 @@ const representative = [
 ]
 const config = {
   NEXT_PUBLIC_MALIK_FLASH_PREVIEW: "1",
+  NEXT_PUBLIC_MALIK_FLASH_BROWSER: "1",
   MALIK_FLASH_ISOLATED_WORKER: "1",
   MALIK_FLASH_WORKER_URL: "https://worker.example.test/v1/ask",
   MALIK_FLASH_WORKER_SECRET: "fixture-worker-secret".repeat(3),
@@ -79,6 +80,53 @@ test("disabled or malformed worker setup makes no external or local fallback cal
   process.env.MALIK_FLASH_WORKER_URL = config.MALIK_FLASH_WORKER_URL
   process.env.MALIK_FLASH_ISOLATED_WORKER = "0"
   await assert.rejects(flash.runMalikFlashBrowser(body), { code: "FLASH_WORKER_NOT_READY" })
+  process.env.MALIK_FLASH_ISOLATED_WORKER = "1"
+  process.env.NEXT_PUBLIC_MALIK_FLASH_BROWSER = "0"
+  await assert.rejects(flash.runMalikFlashBrowser(body), { code: "FLASH_WORKER_NOT_READY" })
+})
+
+test("Flash stays usable on the native MALIKII engine while the Google integration is off", t => {
+  const keys = ["NEXT_PUBLIC_MALIK_FLASH_PREVIEW", "NEXT_PUBLIC_MALIK_FLASH_BROWSER"]
+  const original = Object.fromEntries(keys.map(key => [key, process.env[key]]))
+  t.after(() => { for (const key of keys) if (original[key] === undefined) delete process.env[key]; else process.env[key] = original[key] })
+  // The flags are read when the module loads, as in a production build.
+  const models = (preview, browser) => {
+    Object.assign(process.env, { NEXT_PUBLIC_MALIK_FLASH_PREVIEW: preview, NEXT_PUBLIC_MALIK_FLASH_BROWSER: browser })
+    return workTestLoader()("lib/ai/malik-models.ts")
+  }
+  const listed = models("1", "0")
+  assert.equal(listed.MALIK_FLASH_BROWSER_ENABLED, false)
+  assert.equal(listed.DEFAULT_MALIK_MODEL_ID, "malik-flash")
+  assert.ok(listed.PUBLIC_MALIK_MODELS.some(model => model.id === "malik-flash"))
+  assert.equal(listed.usesMalikFlashBrowser("malik-flash"), false)
+  assert.equal(listed.nativeMalikEngineId("malik-flash"), "malik-max")
+  assert.equal(listed.nativeMalikEngineId("malik-max"), "malik-max")
+  const google = models("1", "1")
+  assert.equal(google.usesMalikFlashBrowser("malik-flash"), true)
+  assert.equal(google.usesMalikFlashBrowser("malik-max"), false)
+  assert.equal(google.nativeMalikEngineId("malik-flash"), "malik-max", "a request that names no model is still answered natively")
+  const hidden = models("0", "1")
+  assert.equal(hidden.MALIK_FLASH_BROWSER_ENABLED, false, "the integration never runs behind a hidden model")
+  assert.equal(hidden.DEFAULT_MALIK_MODEL_ID, "malik-max")
+  assert.equal(hidden.PUBLIC_MALIK_MODELS.some(model => model.id === "malik-flash"), false)
+
+  const stream = readFileSync("app/api/stream/route-impl.ts", "utf8")
+  assert.match(stream, /const flashBrowser = flashRequested && MALIK_FLASH_BROWSER_ENABLED\s+const flashNative = flashRequested && !flashBrowser/u)
+  assert.match(stream, /const flashUsesMax = flashBrowser && /u)
+  assert.match(stream, /const selection = \(flashUsesMax \|\| flashNative\) && requestedSelection\s+\? \{ \.\.\.requestedSelection, modelId: "malik-max" \}/u)
+  assert.match(stream, /selectedModelId: flashNativeTurn\(body\) \? "malik-flash" : answer\.selectedModelId/u)
+  // Every native engine entry maps Flash, so a request that names no model works while Flash is the default.
+  assert.match(readFileSync("lib/malik-god-router.ts", "utf8"), /if \(selection\) selection = \{ \.\.\.selection, modelId: nativeMalikEngineId\(selection\.modelId\) \}/u)
+  assert.equal(readFileSync("lib/malik-god-router.ts", "utf8").includes("FLASH_WORKER_NOT_READY"), false)
+  assert.match(readFileSync("lib/malik-god-router.ts", "utf8"), /\): Promise<GodAnswer> \{\s+selection = \{ \.\.\.selection, modelId: nativeMalikEngineId\(selection\.modelId\) \}\s+const prompt = extractPrompt\(body\)\s+const history/u)
+  assert.match(readFileSync("lib/server/malik-model-router.ts", "utf8"), /input = \{ \.\.\.input, modelId: nativeMalikEngineId\(input\.modelId\) \}/u)
+  // The browser follows the worker flow only under the same flag as the server.
+  assert.match(readFileSync("components/sovereign/dashboard.tsx", "utf8"), /const flashSelected = usesMalikFlashBrowser\(selectedModelId\)/u)
+  const view = readFileSync("components/sovereign/chat-view.tsx", "utf8")
+  assert.equal(view.includes('selectedModelId === "malik-flash"'), false)
+  assert.equal([...view.matchAll(/usesMalikFlashBrowser\(selectedModelId\)/gu)].length, 4)
+  assert.match(readFileSync("lib/ai/chat-stream-recovery.ts", "utf8"), /const flash = usesMalikFlashBrowser\(body\.model\)/u)
+  assert.match(readFileSync("lib/server/malik-flash-browser-bridge.ts", "utf8"), /process\.env\.NEXT_PUBLIC_MALIK_FLASH_BROWSER !== "1"/u)
 })
 
 test("text, sources, scope and timing are returned from the correlated worker receipt", async t => {
@@ -142,6 +190,7 @@ test("normal chat endpoints share the Flash handler and preserve existing MAX en
   const json = readFileSync("app/api/ai/chat/route.ts", "utf8")
   assert.match(stream, /flashUsesMax && requestedSelection && !canUseMalikModel\("malik-max"/)
   assert.match(stream, /\? \{ \.\.\.requestedSelection, modelId: "malik-max" \}/)
+  assert.match(stream, /flashUsesMax = flashBrowser && !flashImageOperation/)
   assert.match(stream, /const settledAnswer = flash\s*\? runFlashChat\([\s\S]*?: getNativeChatAnswer\(\)/u)
-  assert.match(json, /if \(selectsMalikFlash\(requestBody\)\) \{[\s\S]*?return handleFlashJsonChat\(request\)/)
+  assert.match(json, /if \(selectsMalikFlash\(requestBody\) && MALIK_FLASH_BROWSER_ENABLED\) \{[\s\S]*?return handleFlashJsonChat\(request\)/)
 })

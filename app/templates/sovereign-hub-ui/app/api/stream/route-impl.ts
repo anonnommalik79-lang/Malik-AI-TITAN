@@ -9,6 +9,7 @@ import { briefNeedsDeep } from "@/lib/ai/brief-quality"
 import { isCodeRequest } from "@/lib/ai/request-kind"
 import { FlashBrowserError } from "@/lib/server/malik-flash-browser-bridge"
 import { runFlashChat } from "@/lib/server/malik-flash-chat"
+import { FLASH_GOOGLE_SEARCH_PROVIDER, FlashSearchUnavailable, flashGoogleSearchEligible, flashGoogleSearchEnabled, runFlashGoogleSearch } from "@/lib/server/malik-flash-google-search"
 import { flashImageOperation, isFlashCodingRequest } from "@/lib/ai/malik-flash-intent"
 import type { MalikWebSource } from "@/lib/ai/web-research-types"
 import { upsertWebSource } from "@/lib/ai/source-evidence"
@@ -29,7 +30,7 @@ import { passportMarkdown } from "@/lib/proof/passport"
 import { projectPassport } from "@/lib/proof/project"
 import { selfBuildIntent } from "@/lib/selfbuild/intent"
 import { buildSelfProject } from "@/lib/selfbuild/studio"
-import { canUseMalikModel, DEFAULT_MALIK_MODEL_ID, hasMalikProAccess, MALIK_FLASH_PREVIEW_ENABLED, selectsMalikFlash } from "@/lib/ai/malik-models"
+import { canUseMalikModel, DEFAULT_MALIK_MODEL_ID, hasMalikProAccess, MALIK_FLASH_BROWSER_ENABLED, MALIK_FLASH_PREVIEW_ENABLED, selectsMalikFlash } from "@/lib/ai/malik-models"
 import { checkUsageLimit, recordChatUsage } from "@/lib/limits/rate-limit"
 import {
   MalikModelRouteError,
@@ -1188,6 +1189,29 @@ async function runProjectAnswer(
   }
 }
 
+/**
+ * A Flash turn answered by the native MALIKII engine because the Google
+ * integration is off. The answer keeps its real provider and model; only the
+ * chat's own selection is reported back as Flash.
+ */
+function flashNativeTurn(body: unknown): boolean {
+  return selectsMalikFlash(body as { model?: unknown; modelId?: unknown } | null) && !MALIK_FLASH_BROWSER_ENABLED
+}
+
+/**
+ * A native Flash turn answered by Gemini with Google Search: the owner turned
+ * MALIK_FLASH_GOOGLE_SEARCH on, and the turn is a text question. Code, sites,
+ * games, petroleum, skills, images and attachments keep their MALIKII paths.
+ */
+function flashSearchTurn(body: any): boolean {
+  if (!flashNativeTurn(body) || !flashGoogleSearchEnabled() || skillChatRequest(body)) return false
+  const prompt = coderPrompt(body)
+  const codeOrBuild = Boolean(body?.isProjectRequest || body?.isCodeRequest || body?.forceCanvas || body?.selectedSkillId) ||
+    websiteIntent(prompt) === "create" || Boolean(gameStudioTurn(prompt, { messages: body?.messages || body?.history, attachments: body?.attachments })) ||
+    Boolean(routePetroleum(prompt, body?.selectedSkillId).domain)
+  return flashGoogleSearchEligible(prompt, { attachments: body?.attachments, codeOrBuild })
+}
+
 function liveSseResponse(
   body: any,
   selection: Awaited<ReturnType<typeof resolveStrictMalikSelection>>,
@@ -1279,7 +1303,19 @@ function liveSseResponse(
       const signal = AbortSignal.any([generation.signal, mainRun.signal, ...(requestSignal ? [requestSignal] : [])])
       const settledAnswer = flash
         ? runFlashChat({ question: coderPrompt(body), body, account: entitlement, maxOutputTokens, signal, onText: writeAnswer("main") })
-        : getNativeChatAnswer()
+        : !project && flashSearchTurn(body)
+          ? (async () => {
+              try {
+                return await runFlashGoogleSearch({ question: coderPrompt(body), body, maxOutputTokens, signal, onText: writeAnswer("main") })
+              } catch (error) {
+                // Gemini did not answer before any text: Flash stays available on the native engine.
+                if (!(error instanceof FlashSearchUnavailable)) throw error
+                console.warn("[MALIK_FLASH_GOOGLE_SEARCH]", error.code)
+                activity.status("Поиск Google недоступен — отвечает MALIKII")
+                return await getNativeChatAnswer()
+              }
+            })()
+          : getNativeChatAnswer()
       function getNativeChatAnswer() {
         if (project) {
           return runProjectAnswer(body, selection, entitlement.userId, (text) => {
@@ -1389,14 +1425,14 @@ function liveSseResponse(
         const expertDisagreements = reviewSteps.reduce((sum, step) => {
           try { return sum + (Number(JSON.parse(step.output || "{}").numericalDisagreements) || 0) } catch { return sum }
         }, 0)
-        const ledger = flash || "projectArtifact" in answer || skipsClaimAudit(coderPrompt(body),content) ? null : buildClaimLedger({answer:content,prompt:coderPrompt(body),sources:answer.sources,expertDisagreements})
+        const ledger = flash || answer.provider === FLASH_GOOGLE_SEARCH_PROVIDER || "projectArtifact" in answer || skipsClaimAudit(coderPrompt(body),content) ? null : buildClaimLedger({answer:content,prompt:coderPrompt(body),sources:answer.sources,expertDisagreements})
         const previousAudit = ("factAudit" in answer ? answer.factAudit : null) as MalikFactAudit | null
         const factAudit = ledger ? { ...(previousAudit || {checked:0,supported:0,missing:0,brokenCitations:0,claims:[],status:"unchecked" as const,summary:"Проверены только распознанные явные утверждения"}),ledger } : previousAudit
         send("done", {
           type: "done",
           provider: answer.provider,
           model: answer.model,
-          selectedModelId: answer.selectedModelId,
+          selectedModelId: flashNativeTurn(body) ? "malik-flash" : answer.selectedModelId,
           modelFallback: "modelFallback" in answer ? answer.modelFallback : undefined,
           usedWeb: answer.usedWeb,
           sources: answer.sources,
@@ -1536,13 +1572,17 @@ async function handlePOST(request: Request, json = false) {
     }
     const requestedSelection = await resolveStrictMalikSelection(request, flashRequested ? { ...body, model: "malik-flash" } : body)
     const flashPrompt = coderPrompt(body)
-    const flashUsesMax = flashRequested && !flashImageOperation(flashPrompt, imageEdit) &&
+    // The Google integration is a separate switch. While it is off, Flash is
+    // answered by the native MALIKII engine, as it was before the worker existed.
+    const flashBrowser = flashRequested && MALIK_FLASH_BROWSER_ENABLED
+    const flashNative = flashRequested && !flashBrowser
+    const flashUsesMax = flashBrowser && !flashImageOperation(flashPrompt, imageEdit) &&
       (isFlashCodingRequest(flashPrompt) || websiteIntent(flashPrompt) === "create" ||
         gameStudioTurn(flashPrompt, { attachments: body?.attachments })?.kind === "new")
     if (flashUsesMax && requestedSelection && !canUseMalikModel("malik-max", requestedSelection.entitlement.plan)) {
       throw new MalikModelRouteError("PRO_MODEL_REQUIRED", "Для этой задачи нужен MalikLLM MAX. Он доступен в MalikAI Plus.", 403, "malik-max")
     }
-    const selection = flashUsesMax && requestedSelection
+    const selection = (flashUsesMax || flashNative) && requestedSelection
       ? { ...requestedSelection, modelId: "malik-max" }
       : requestedSelection
     if (routePetroleum(coderPrompt(body), body?.selectedSkillId).engine === "petroleum") { body.isProjectRequest = false; body.forceCanvas = false; body.responseMode = "chat"; body.isCodeRequest = false }
@@ -1648,6 +1688,16 @@ async function handlePOST(request: Request, json = false) {
       ? await runFlashChat({ question: coderPrompt(routedBody), body: routedBody, account: entitlement, maxOutputTokens, signal: request.signal })
       : isProjectBuildRequest(routedBody)
       ? await runProjectAnswer(routedBody, selection, entitlement.userId)
+      : flashSearchTurn(routedBody)
+      ? await (async () => {
+          try {
+            return await runFlashGoogleSearch({ question: coderPrompt(routedBody), body: routedBody, maxOutputTokens, signal: request.signal })
+          } catch (error) {
+            if (!(error instanceof FlashSearchUnavailable)) throw error
+            console.warn("[MALIK_FLASH_GOOGLE_SEARCH]", error.code)
+            return await runSelectedAnswer(routedBody, selection, undefined, maxOutputTokens,undefined,undefined,undefined,undefined,entitlement)
+          }
+        })()
       : await runSelectedAnswer(routedBody, selection, undefined, maxOutputTokens,undefined,undefined,undefined,undefined,entitlement)
     const multimodalCost = estimateMultimodalTokens(hasMalikAttachments(routedBody?.attachments) ? routedBody.attachments : [])
     if (multimodalCost > 0) {
@@ -1664,7 +1714,7 @@ async function handlePOST(request: Request, json = false) {
       return Response.json({ ok: true, ...answer }, { headers: { "cache-control": "private, no-store", "x-malik-router": "malik-flash" } })
     }
     const content = withIncompleteNote(asPlainText(answer), "incomplete" in answer ? answer.incomplete ?? null : null)
-    return json ? Response.json({ ok: true, ...answer, content }, { headers: { "cache-control": "private, no-store" } }) : textResponse(content)
+    return json ? Response.json({ ok: true, ...answer, ...(flashNativeTurn(routedBody) ? { selectedModelId: "malik-flash" } : {}), content }, { headers: { "cache-control": "private, no-store" } }) : textResponse(content)
   } catch (error) {
     if (workReceipt) await refundWorkQuota(workUserId, workReceipt).catch((reason) => console.error("[MALIK_WORK_QUOTA_REFUND]", reason))
     if (error instanceof SkillError) return Response.json({ ok: false, error: error.code, retryable: error.retryable }, { status: error.status, headers: { "cache-control": "private, no-store" } })

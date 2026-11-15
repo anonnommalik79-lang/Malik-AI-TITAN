@@ -2,16 +2,41 @@
 
 ## Release status
 
-The application and worker changes can be reviewed and run locally. The Google AI Mode integration is **blocked for production**.
+MalikLLM Flash stays available to users on the native MALIKII engines. The Google AI Mode integration is **blocked for production** and stays switched off.
 
-- On 14 November 2026, the worker's Google address redirected from `/ai` through `/aimode` to `/search?udm=50&aep=11`. The general group in Google's [robots.txt](https://www.google.com/robots.txt) disallows `/search`, and Google [terms](https://policies.google.com/terms?hl=en-US) prohibit automated access that violates those instructions. The worker checks the policy before opening Chrome and fails closed. A signed-in Google profile alone does not establish permission to automate the endpoint.
-- The Render workspace contains `MalikAI-V6.5-TITAN` and currently has no separate worker. The verified live deployment before these changes was `dep-dbs9knd6e07s73981tmg` at `aadbaca767c270729ea9b5f1c932c6095d7772f5`. The public health route responded `online`.
-- Google's [image help](https://support.google.com/websearch/answer/16649374) lists a signed-in eligible account, feature availability for people 18 and older, and account-level usage limits.
-- Supported alternative, subject to product approval, is a separately labeled Google integration using [Gemini with Search grounding](https://ai.google.dev/gemini-api/docs/google-search) and [Gemini image generation and editing](https://ai.google.dev/gemini-api/docs/image-generation). The official API has its own limits, identity and costs. There is no automatic switch to it.
+### Blocker: no permitted automated access to Google AI Mode
+
+Rechecked on 15 November 2026:
+
+- The worker's entry `https://www.google.com/ai` redirects to `/search?udm=50&aep=11`. The general group (`User-agent: *`) of Google's [robots.txt](https://www.google.com/robots.txt) disallows `/search`. `Allow: /search` is granted only to the `facebookexternalhit` and `Twitterbot` crawlers for shared image links. No rule allows `/search?udm=50`, `/ai` or `/aimode` for other agents.
+- Google [terms](https://policies.google.com/terms?hl=en-US) prohibit automated access that violates those machine-readable instructions. A signed-in Google profile does not establish permission to automate the endpoint.
+- No official Google AI Mode API was found. Google's Connected Apps preview places third-party apps inside AI Mode; it does not let an app query AI Mode. Third-party "AI Mode API" services scrape the same endpoint and do not remove the restriction.
+- The worker checks robots.txt before opening Chrome and fails closed with `GOOGLE_AUTOMATION_RESTRICTED`. This check was kept unchanged.
+
+### Supported alternative: Gemini with Google Search (built, off until approved)
+
+Flash text questions can be answered by [Gemini with Grounding with Google Search](https://ai.google.dev/gemini-api/docs/google-search) through the official Gemini API. It reuses the Gemini keys and engine the server already has (`lib/business/gemini-engine.ts`), so no new connection is needed. Google bills grounded requests, so it runs only when `MALIK_FLASH_GOOGLE_SEARCH=1` is set on Render. It is off.
+
+- `lib/server/malik-flash-google-search.ts` streams the answer and turns Google's grounding links into the chat's source cards. The answer is labeled with its real provider `google-gemini-search` and the real Gemini model. The system prompt forbids presenting the answer as Google, Gemini or Google AI Mode.
+- It takes only text questions. Code, sites, games, petroleum, skills, images, video and attachments keep their MALIKII paths, and coding still goes to MAX under the existing quotas.
+- A bounded excerpt of the same chat (six recent messages, 1 500 characters each) goes with the question, so a follow-up keeps its subject.
+- If Gemini cannot answer before any text reaches the chat (no key, quota, outage), the turn is answered by the native MALIKII engine. A failure after text is a retryable error with «Перегенерировать». A stop from the user stays a stop.
+- Covered by `scripts/verify-malik-flash-google-search.mjs` with a scripted Gemini API. It has not answered a live question yet: that needs the switch on Render.
+
+[Gemini image generation and editing](https://ai.google.dev/gemini-api/docs/image-generation) is the matching option for pictures. It is not connected.
+
+### Two switches
+
+- `NEXT_PUBLIC_MALIK_FLASH_PREVIEW=1` lists MalikLLM Flash. Production has it on: the live `/api/ai/chat` reports `defaultModel: "malik-flash"`.
+- `NEXT_PUBLIC_MALIK_FLASH_BROWSER=1` (new) turns on the Google browser integration. The worker path also needs `MALIK_FLASH_ISOLATED_WORKER=1`, `MALIK_FLASH_WORKER_URL` and `MALIK_FLASH_WORKER_SECRET`. All four are off or empty.
+- While the integration is off, a Flash turn is answered by the native MAX orchestrator on the stream route, the JSON route, the photo routes and the rescue path. Every native engine entry maps `malik-flash` to `malik-max`, so requests that name no model also work while Flash is the default. The chat keeps `selectedModelId: "malik-flash"`. Each answer keeps its real provider and model. Images report the engine that made them.
+- Without this switch, the earlier head of this branch would have answered every production Flash turn with `FLASH_WORKER_NOT_READY` once merged, because production has the preview on and no worker. The browser and the server read the same flag, so the client never sends a worker-shaped request to the native engine.
+- The Render workspace contains `MalikAI-V6.5-TITAN` and no separate worker. Live deployment before this work: `dep-dbs9knd6e07s73981tmg` at `aadbaca767c270729ea9b5f1c932c6095d7772f5`. The public health route responded `online`.
+- Google's [image help](https://support.google.com/websearch/answer/16649374) lists a signed-in eligible account, availability for people 18 and older, and account-level usage limits. These apply only if access becomes permitted.
 
 ## Application and worker contract
 
-- `NEXT_PUBLIC_MALIK_FLASH_PREVIEW=0` and `MALIK_FLASH_ISOLATED_WORKER=0` are the safe defaults. The server uses `MALIK_FLASH_WORKER_URL` with the `/v1/ask` path and a backend-only `MALIK_FLASH_WORKER_SECRET` of at least 24 characters. Production requests require HTTPS and reject redirects. No Google credentials or browser URLs are returned to the app or UI.
+- `NEXT_PUBLIC_MALIK_FLASH_BROWSER=0` and `MALIK_FLASH_ISOLATED_WORKER=0` are the safe defaults. `NEXT_PUBLIC_MALIK_FLASH_PREVIEW` only lists the model. The server uses `MALIK_FLASH_WORKER_URL` with the `/v1/ask` path and a backend-only `MALIK_FLASH_WORKER_SECRET` of at least 24 characters. Production requests require HTTPS and reject redirects. No Google credentials or browser URLs are returned to the app or UI.
 - Explicit Flash selections enter the same routing policy on stream and JSON endpoints. Browser text and image failures produce retryable errors where appropriate. Software requests go through existing MAX access controls and quota admission. The image route preserves the existing image-credit checks.
 - The worker accepts authenticated `GET /health` and `POST /v1/ask`. Requests carry protocol `malik-flash-worker-v1`, a correlation ID, opaque user and chat scopes, task, question and bounded attachments. The worker returns JSON or NDJSON with genuine extracted deltas and a separate terminal event. Chrome completion and generated-image markers must be confirmed against the permitted live interface before rollout.
 - A single worker exposes at most four active requests, one active request per account and 30 admissions per account per hour. Idle persistent Chrome contexts close automatically. Fast shutdown and Stop close the active page; the app honors its existing durable background turn policy on ordinary network disconnect. Browser restrictions remain active.
@@ -28,35 +53,49 @@ npm test --prefix tools/malik-flash-worker
 
 cd app/templates/sovereign-hub-ui
 npm ci --legacy-peer-deps
-node --test scripts/verify-malik-flash-preview.mjs scripts/verify-malik-flash-image.mjs scripts/verify-malik-flash-history.mjs
+node --experimental-strip-types --no-warnings --import ./scripts/ts-resolve.mjs --test scripts/verify-malik-flash-preview.mjs scripts/verify-malik-flash-image.mjs scripts/verify-malik-flash-history.mjs scripts/verify-malik-flash-google-search.mjs
 npm run test:release-core
 npm run typecheck
 npm run build
 ```
 
-The completed worker exchanges record queue, browser preparation, submit, first-content and completion times where available. Authenticated `GET /metrics` reports P50/P95 for up to 200 recent samples per task from the current process. The UI records submission-to-first-frame acknowledgment in browser Performance entries. Google P50/P95 remain unmeasured until live samples exist for each task. Local fixture durations are not Google latency.
+Worker exchanges record queue, browser preparation, submit, first-content and completion times. Authenticated `GET /metrics` reports P50/P95 for up to 200 recent samples per task from the current process. The UI records submission-to-first-frame acknowledgment as the `malik-flash:acknowledgment` Performance entry. Google P50/P95 remain unmeasured: no permitted worker exists. Local fixture durations are not Google latency.
+
+### Production latency of Flash on the native engine
+
+Measured 15 November 2026 against `https://malikaiworld.world/api/stream` as a guest, Flash selected, a new chat per turn, eight short prompts. Times are client-side from send. Response headers stand in for queue admission; the server does not report its queue separately on this path.
+
+| Stage | Samples | P50 | P95 |
+|---|---|---|---|
+| Response headers (admission) | 8 | 516 ms | 1 307 ms |
+| First answer text | 8 | 679 ms | 11 497 ms |
+| Text complete | 8 | 707 ms | 11 498 ms |
+
+All eight turns answered with `selectedModelId: "malik-flash"`. Providers: `local-smart` (2), `groq` `openai/gpt-oss-120b` (4), `google-direct` `gemini-3.5-flash` (2). The two slow turns were the Gemini ones (7.3 s and 11.5 s to first text). Image completion was not measured.
+
+### Acceptance
 
 | # | Acceptance | Status | Evidence |
 |---|---|---|---|
-| 1 | Hello through Google AI Mode | BLOCKED | Google automated access unavailable, no live worker. |
-| 2 | Follow-up in the same Google chat | BLOCKED | Scope reuse is covered by fixtures. Live Google conversation not exercised. |
-| 3 | Analyze uploaded photo | BLOCKED | Original bytes and acceptance validation covered in fixtures. |
-| 4 | Generate a sports-car image | BLOCKED | No live image generated. |
-| 5 | Edit an uploaded photo | BLOCKED | Source validation covered in fixtures. |
-| 6 | Edit a generated image | BLOCKED | Original-byte and parent-record fixture passes. |
-| 7 | History after refresh | NOT TESTED | Server-state reads were tested with a fresh module instance, full browser flow pending. |
+| 1 | Hello through Google AI Mode | BLOCKED | No permitted automated access (see Blocker); no worker. «Hello» with Flash on production answers natively in 0.66 s. The Gemini with Google Search lane is built and off. |
+| 2 | Follow-up in the same Google chat | BLOCKED | Same blocker. Per-chat scope reuse is covered by fixtures. |
+| 3 | Analyze uploaded photo | BLOCKED | Same blocker. Byte validation and the image receipt are covered by fixtures. |
+| 4 | Generate a sports-car image | BLOCKED | Same blocker for Google. Native Flash image generation was not run live in this pass. |
+| 5 | Edit an uploaded photo | BLOCKED | Same blocker. Source validation is covered by fixtures. |
+| 6 | Edit a generated image | BLOCKED | Same blocker. Original bytes and the parent link are covered by fixtures (`verify-malik-flash-history`). |
+| 7 | History after refresh | NOT TESTED | Server-state reads pass with a fresh module instance. No signed-in browser session for the full flow. |
 | 8 | History after app reopening | NOT TESTED | Same limitation as #7. |
-| 9 | Retrieve an older message | PASS | Local account-state and transcript retrieval fixtures. |
+| 9 | Retrieve an older message | PASS | Bounded retrieval fixtures: an older matching turn is returned, context stays within 3 600 characters. |
 | 10 | Separate two chats | PASS | Account-state and worker scope fixtures. |
-| 11 | Separate two users | PASS | Owner-scoped history and private media route fixtures. Google account separation still needs live verification. |
-| 12 | Delegate substantial coding to MAX | NOT TESTED | Local intent and entitlement contract passed. Live MAX coding from Flash needs a paid or owner test account. |
-| 13 | Fail closed when unavailable | PASS | App bridge, worker access and HTTP admission checks. |
-| 14 | Report the actual image generator | PASS | Receipt and first-image lookup fixtures. Google production provenance unverified. |
-| 15 | Preserve Markdown and real citations | BLOCKED | Markdown and sources round-trip in fixtures. Live DOM capture pending. |
-| 16 | iPhone and desktop | NOT TESTED | Real device and responsive Flash tests pending. |
-| 17 | Restart browser worker | BLOCKED | Authorized Google session restoration requires permitted access and a known conversation URL. |
-| 18 | Cancel and retry | BLOCKED | Local streaming and AbortSignal checks passed. Live Google cancellation and retry remain unverified. |
-| 19 | Honor usage and subscriptions | PASS | Existing quota regression and Flash MAX entitlement contract. Live plan/account limits unverified. |
-| 20 | Collect real latency metrics | BLOCKED | Timing instrumentation and validation tested locally. Google P50/P95 unavailable. |
+| 11 | Separate two users | PASS | Owner-scoped history and private media route fixtures. Google account separation is BLOCKED with the integration. |
+| 12 | Delegate substantial coding to MAX | NOT TESTED | Intent and entitlement contract pass. A live Flash coding turn needs a paid or owner account. With the integration off, every Flash turn runs on MAX under the existing quotas. |
+| 13 | Fail closed when unavailable | PASS | With the integration off no worker request is made (fixture asserts no network call). With it on and no worker, the route returns `FLASH_WORKER_NOT_READY`, retryable. |
+| 14 | Report the actual image generator | PASS | Receipt fixtures. Native Flash images report their real engine. Google provenance is unverified. |
+| 15 | Preserve Markdown and real citations | BLOCKED | Markdown and sources round-trip in fixtures. Live Google DOM capture is blocked. |
+| 16 | iPhone and desktop | NOT TESTED | No real device run in this pass. |
+| 17 | Restart browser worker | BLOCKED | Needs a permitted Google session. The worker's drain on shutdown passes on Linux (SIGTERM) and Windows (IPC). |
+| 18 | Cancel and retry | BLOCKED | Local streaming and AbortSignal checks pass. Live Google cancellation is blocked. The chat keeps «Перегенерировать» on failed turns. |
+| 19 | Honor usage and subscriptions | PASS | Existing quota regressions and the Flash MAX entitlement contract. Live plan limits unverified. |
+| 20 | Collect real latency metrics | BLOCKED | Google P50/P95 unavailable. Production native Flash: 8 samples, first text P50 679 ms, P95 11 497 ms (table above). |
 
-Recheck the production head, feature configuration and authorized worker readiness before any deploy. A production release is complete only after live text, image understanding, generation, editing, isolation, restoration and the post-deploy smoke tests succeed.
+`MALIK_FLASH_ISOLATED_WORKER=1` and `NEXT_PUBLIC_MALIK_FLASH_BROWSER=1` must stay off until a permitted access path exists and items 1-8, 15-18 and 20 pass live. A release of the integration is complete only after live text, image understanding, generation, editing, isolation, restoration and the post-deploy smoke tests succeed.

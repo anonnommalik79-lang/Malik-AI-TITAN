@@ -94,7 +94,8 @@ export function readFlashWorkerAnswer(payload: Record<string, unknown>, hasImage
 function workerSettings() {
   const endpoint = process.env.MALIK_FLASH_WORKER_URL
   const secret = process.env.MALIK_FLASH_WORKER_SECRET
-  if (process.env.NEXT_PUBLIC_MALIK_FLASH_PREVIEW !== "1" || process.env.MALIK_FLASH_ISOLATED_WORKER !== "1" ||
+  if (process.env.NEXT_PUBLIC_MALIK_FLASH_PREVIEW !== "1" || process.env.NEXT_PUBLIC_MALIK_FLASH_BROWSER !== "1" ||
+      process.env.MALIK_FLASH_ISOLATED_WORKER !== "1" ||
       !endpoint || !secret || secret.length < 24) return null
   try {
     const url = new URL(endpoint)
