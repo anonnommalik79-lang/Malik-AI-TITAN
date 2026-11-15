@@ -4,6 +4,7 @@ import assert from "node:assert/strict"
 import fs from "node:fs"
 import { randomUUID } from "node:crypto"
 import ts from "typescript"
+import { workTestLoader } from "./work-test-loader.mjs"
 
 const transpile = path => ts.transpileModule(fs.readFileSync(path, "utf8"), {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
@@ -12,6 +13,7 @@ const contractModule = { exports: {} }
 new Function("module", "exports", transpile("lib/ai/chat-stream-contract.ts"))(contractModule, contractModule.exports)
 const writes = []
 let authenticated = true
+const modelSelection = workTestLoader()("lib/ai/malik-models.ts")
 const auditModule = { exports: {} }
 new Function("require", "module", "exports", transpile("lib/server/founder-request-audit.ts"))(name => {
   if (name === "server-only") return {}
@@ -19,6 +21,7 @@ new Function("require", "module", "exports", transpile("lib/server/founder-reque
   if (name.endsWith("request-entitlement")) return { resolveRequestEntitlement: async () => ({ authenticated, userId: authenticated ? "account-a" : "guest" }) }
   if (name.endsWith("founder-message-log")) return { MAX_FOUNDER_TEXT_CHARS: 256_000, appendFounderMessage: async value => { writes.push(value); return true } }
   if (name.endsWith("chat-stream-contract")) return contractModule.exports
+  if (name.endsWith("malik-models")) return modelSelection
   throw new Error(`Unexpected dependency ${name}`)
 }, auditModule, auditModule.exports)
 const { withFounderRequestAudit } = auditModule.exports
@@ -28,7 +31,10 @@ async function run(label, wire, verify, options = {}) {
   writes.length = 0
   const response = await withFounderRequestAudit(async () => new Response(options.body || wire, {
     headers: { "content-type": "text/event-stream" },
-  }))(new Request("http://localhost/api/stream", { method: "POST", body: JSON.stringify({ prompt: "Explain a test", userId: "forged-other-account" }) }))
+  }))(new Request("http://localhost/api/stream", {
+    method: "POST",
+    body: JSON.stringify({ prompt: "Explain a test", userId: "forged-other-account", ...options.requestBody }),
+  }))
   const received = await response.text()
   if (!options.body) assert.equal(received, wire, "telemetry must preserve the original response byte-for-byte")
   await verify(writes.at(-1), received)
@@ -80,6 +86,9 @@ await run("authoritative finalContent replaces an earlier draft", event("content
   assert.equal(result.assistantText, "Verified answer")
   assert.equal(result.model, "selected-model")
 })
+await run("private Flash turns are excluded from founder audit", event("done", { content: "Private Flash answer" }), () => {
+  assert.equal(writes.length, 0)
+}, { requestBody: { model: "malik-flash" } })
 authenticated = false
 await run("unauthenticated traffic is never logged against an account", event("done", { content: "Guest answer" }), () => assert.equal(writes.length, 0))
 console.log(`${checks}/${checks} audit-contract checks passed; auth/storage fixtures only`)
