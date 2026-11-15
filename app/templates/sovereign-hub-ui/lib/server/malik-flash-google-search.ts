@@ -3,6 +3,9 @@ import "server-only"
 import { geminiKeys, GeminiEngineError, runGemini, type GeminiSource } from "@/lib/business/gemini-engine"
 import { flashImageOperation, isFlashCodingRequest } from "@/lib/ai/malik-flash-intent"
 import { isExplicitVideoGenerationRequest } from "@/lib/ai/image-intent"
+import { instantReply } from "@/lib/ai/instant-replies"
+import { clockReply } from "@/lib/ai/premise-check"
+import { selfCreatorReply } from "@/lib/ai/attribution-evidence"
 import { FlashBrowserError } from "./malik-flash-browser-bridge"
 
 /**
@@ -45,11 +48,23 @@ export function flashGoogleSearchEnabled(env: Env = process.env): boolean {
  * The turns Gemini with Google Search answers: a text question. Code, sites,
  * games, images, video, attachments and skills keep their own MALIKII paths.
  */
-export function flashGoogleSearchEligible(prompt: string, input: { attachments?: unknown; codeOrBuild?: boolean } = {}): boolean {
+export function flashGoogleSearchEligible(prompt: string, input: { attachments?: unknown; codeOrBuild?: boolean; history?: unknown } = {}): boolean {
   const text = String(prompt || "").trim()
   if (!text || text.length > MAX_QUESTION_CHARS || input.codeOrBuild) return false
   if (Array.isArray(input.attachments) && input.attachments.length) return false
+  // A greeting, «который час», «кто тебя создал» are answered locally in well
+  // under a second. A Google search would only make them slower.
+  if (flashLocalReply(text, input.history)) return false
   return !isFlashCodingRequest(text) && !flashImageOperation(text, false) && !isExplicitVideoGenerationRequest(text)
+}
+
+/** The instant MALIKII reply for this turn, or "" when it needs a model. Same rules as the native router. */
+export function flashLocalReply(prompt: string, history?: unknown): string {
+  const earlier = Array.isArray(history) ? history.filter((item: unknown) => {
+    const message = item as { role?: unknown; content?: unknown }
+    return (message?.role === "user" || message?.role === "assistant") && typeof message.content === "string" && message.content.trim() && message.content.trim() !== prompt.trim()
+  }) : []
+  return clockReply(prompt) || selfCreatorReply(prompt) || (earlier.length ? "" : instantReply(prompt))
 }
 
 const SYSTEM = [
@@ -125,6 +140,8 @@ export async function runFlashGoogleSearch(input: {
       maxOutputTokens: Math.max(256, Math.min(input.maxOutputTokens ?? 4096, 8192)),
       search: true,
       thinkingLevel: "low",
+      // An owner can pin a faster Gemini (for example a Flash-Lite) without a code change.
+      preferredModel: (input.env || process.env).MALIK_FLASH_GEMINI_MODEL?.trim() || undefined,
       deadlineMs: 100_000,
       signal: input.signal,
       env: input.env,

@@ -1209,7 +1209,7 @@ function flashSearchTurn(body: any): boolean {
   const codeOrBuild = Boolean(body?.isProjectRequest || body?.isCodeRequest || body?.forceCanvas || body?.selectedSkillId) ||
     websiteIntent(prompt) === "create" || Boolean(gameStudioTurn(prompt, { messages: body?.messages || body?.history, attachments: body?.attachments })) ||
     Boolean(routePetroleum(prompt, body?.selectedSkillId).domain)
-  return flashGoogleSearchEligible(prompt, { attachments: body?.attachments, codeOrBuild })
+  return flashGoogleSearchEligible(prompt, { attachments: body?.attachments, codeOrBuild, history: body?.history || body?.messages })
 }
 
 function liveSseResponse(

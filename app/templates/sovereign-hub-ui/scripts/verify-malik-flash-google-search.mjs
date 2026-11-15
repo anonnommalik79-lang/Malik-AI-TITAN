@@ -46,13 +46,20 @@ test("Google Search runs only when the owner turned it on and a Gemini key exist
 })
 
 test("text questions use Google Search; code, images, video and attachments keep their MALIKII paths", () => {
-  for (const prompt of ["Какой сейчас курс доллара?", "Hello", "Кто президент Казахстана?", "Объясни, как работает REST API"])
+  for (const prompt of ["Какой сейчас курс доллара?", "Кто президент Казахстана?", "Объясни, как работает REST API", "Hello, what happened in tech today?"])
     assert.equal(search.flashGoogleSearchEligible(prompt), true, prompt)
   for (const prompt of ["Build a production-ready web application with a PostgreSQL backend", "Debug this repository", "Сгенерируй изображение спорткара", "Сгенерируй видео заката"])
     assert.equal(search.flashGoogleSearchEligible(prompt), false, prompt)
   assert.equal(search.flashGoogleSearchEligible("Что на фото?", { attachments: [{ kind: "image" }] }), false)
   assert.equal(search.flashGoogleSearchEligible("Сделай сайт кофейни", { codeOrBuild: true }), false)
   assert.equal(search.flashGoogleSearchEligible("x".repeat(6001)), false)
+  // Instant local replies stay local: a Google search would only make them slower.
+  for (const prompt of ["Hello", "Привет", "Как дела?", "Кто тебя создал?", "Какой сегодня день?"]) {
+    assert.equal(search.flashGoogleSearchEligible(prompt), false, prompt)
+    assert.ok(search.flashLocalReply(prompt), prompt)
+  }
+  assert.equal(search.flashGoogleSearchEligible("Привет", { history: [{ role: "user", content: "Найди отель в Алматы" }, { role: "assistant", content: "Вот варианты." }, { role: "user", content: "Привет" }] }), true,
+    "inside a conversation a short message is a reply, not a greeting")
 })
 
 test("the answer streams with Google's own links, under its real provider and model", async t => {
