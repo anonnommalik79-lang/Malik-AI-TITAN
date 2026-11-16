@@ -204,7 +204,8 @@ export function resetGeminiEngineState() {
 
 async function listModels(base: string, key: GeminiKey, fetchImpl: typeof fetch, signal?: AbortSignal): Promise<Set<string> | null> {
   if (signal?.aborted) return null
-  const cached = discovery.get(key.source)
+  const cacheKey = `${base}::${key.source}`
+  const cached = discovery.get(cacheKey)
   if (cached && Date.now() - cached.at < DISCOVERY_TTL_MS) return cached.models
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), 5_000)
@@ -217,6 +218,7 @@ async function listModels(base: string, key: GeminiKey, fetchImpl: typeof fetch,
       fetchImpl(`${base}/v1beta/models?pageSize=1000`, {
         headers: { "x-goog-api-key": key.key },
         signal: controller.signal,
+        redirect: "error",
       }),
       new Promise<never>((_, reject) => {
         if (controller.signal.aborted) reject(new Error("list timeout"))
@@ -226,7 +228,7 @@ async function listModels(base: string, key: GeminiKey, fetchImpl: typeof fetch,
     if (!response.ok) {
       // A key that cannot even list models will not generate either; the
       // generate call reports why. Remember "unknown", not "empty".
-      discovery.set(key.source, { at: Date.now(), models: null })
+      discovery.set(cacheKey, { at: Date.now(), models: null })
       return null
     }
     const payload = await response.json().catch(() => ({})) as { models?: Array<{ name?: string; supportedGenerationMethods?: string[] }> }
@@ -237,12 +239,12 @@ async function listModels(base: string, key: GeminiKey, fetchImpl: typeof fetch,
         .filter(Boolean),
     )
     const entry = { at: Date.now(), models: models.size ? models : null }
-    discovery.set(key.source, entry)
+    discovery.set(cacheKey, entry)
     return entry.models
   } catch {
     // A key whose list hangs would otherwise make every agent wait for the
     // timeout again. Remember "unknown" for five minutes.
-    if (!signal?.aborted) discovery.set(key.source, { at: Date.now() - DISCOVERY_TTL_MS + 5 * 60_000, models: null })
+    if (!signal?.aborted) discovery.set(cacheKey, { at: Date.now() - DISCOVERY_TTL_MS + 5 * 60_000, models: null })
     return null
   } finally {
     clearTimeout(timer)
@@ -303,6 +305,9 @@ export function classifyGeminiFailure(status: number, payload: any, header: stri
   const detail = safeDetail(message || `HTTP ${status}`)
   const text = `${reason} ${message}`.toLowerCase()
 
+  if (status === 402 || status === 429 || reason === "RESOURCE_EXHAUSTED") {
+    return { code: "QUOTA", status, detail, retryAfterMs: retryDelayFrom(payload, header) }
+  }
   if (sent.search && /google_search|googlesearch|grounding|search tool|tool.*not (?:supported|enabled|allowed)/.test(text)) {
     return { code: "BAD_REQUEST", status, detail, feature: "search" }
   }
@@ -311,9 +316,6 @@ export function classifyGeminiFailure(status: number, payload: any, header: stri
   // thinking config. Each is retried at once on the same model.
   if (sent.thinking && status === 400 && /thinking|thought/.test(text)) {
     return { code: "BAD_REQUEST", status, detail, feature: sent.level ? "level" : "thinking" }
-  }
-  if (status === 429 || reason === "RESOURCE_EXHAUSTED") {
-    return { code: "QUOTA", status, detail, retryAfterMs: retryDelayFrom(payload, header) }
   }
   if (/api key not valid|api_key_invalid|api key expired|invalid api key/.test(text) || status === 401) {
     return { code: "KEY_REJECTED", status, detail }
@@ -330,13 +332,13 @@ export function classifyGeminiFailure(status: number, payload: any, header: stri
   return { code: "BAD_REQUEST", status, detail }
 }
 
-function cooldownKey(key: GeminiKey, model: string) {
-  return `${key.source}::${model}`
+function cooldownKey(scope: string, key: GeminiKey, model: string) {
+  return `${scope}::${key.source}::${model}`
 }
 
-function coolingFor(key: GeminiKey, model: string) {
+function coolingFor(scope: string, key: GeminiKey, model: string) {
   const now = Date.now()
-  for (const name of [cooldownKey(key, model), `${key.source}::*`]) {
+  for (const name of [cooldownKey(scope, key, model), cooldownKey(scope, key, "*")]) {
     const entry = cooldowns.get(name)
     if (entry && entry.until > now) return entry
     if (entry) cooldowns.delete(name)
@@ -452,6 +454,8 @@ export type GeminiRunInput = {
   maxOutputTokens: number
   /** Ground the answer in Google Search. Falls back to no search when refused. */
   search?: boolean
+  /** Keep Google Search in every attempt and stop on the first quota refusal. */
+  strictSearch?: boolean
   /** Put this model first; the rest of the chain still backs it up. */
   preferredModel?: string
   /**
@@ -508,8 +512,10 @@ export async function runGemini(input: GeminiRunInput): Promise<GeminiResult> {
     throw new GeminiEngineError("NO_KEY", "На сервере нет ключа Gemini.")
   }
   const base = geminiBaseUrl(env)
+  const scope = input.strictSearch ? `${base}::grounded` : base
   const configured = configuredGeminiModels(env)
   const stall = input.stallMs || { firstMs: 90_000, nextMs: 45_000 }
+  const attemptLimit = input.strictSearch ? 3 : 14
   const trail: GeminiEngineError["trail"] = []
   let attempts = 0
   let emitted = false
@@ -542,8 +548,8 @@ export async function runGemini(input: GeminiRunInput): Promise<GeminiResult> {
       for (const { key, chain } of chains) {
         if (!chain.includes(model)) continue
         if (input.signal?.aborted) throw new GeminiEngineError("ABORTED", "Остановлено.")
-        if (Date.now() > deadline || attempts >= 14) break
-        const cooling = coolingFor(key, model)
+        if (Date.now() >= deadline || attempts >= attemptLimit) break
+        const cooling = coolingFor(scope, key, model)
         if (cooling && !(pass === 1 && SOFT_COOLDOWN.has(cooling.code))) {
           trail.push({ model, key: key.source, code: cooling.code })
           if (cooling.code === "QUOTA") {
@@ -554,23 +560,25 @@ export async function runGemini(input: GeminiRunInput): Promise<GeminiResult> {
           continue
         }
 
-        const featureKey = cooldownKey(key, model)
+        const featureKey = cooldownKey(scope, key, model)
+        const searchKey = cooldownKey(scope, key, "search")
         const known = features.get(featureKey) || {}
         let thinking = known.thinking !== false
         let level = wantedLevel && known.level !== false ? wantedLevel : undefined
-        let search = Boolean(input.search) && known.search !== false && features.get(`${key.source}::search`)?.search !== false
-        let budget = Math.max(512, Math.min(65_536, Math.round(input.maxOutputTokens)))
+        let search = Boolean(input.strictSearch || (input.search && known.search !== false && features.get(searchKey)?.search !== false))
+        let budget = Math.max(input.strictSearch ? 1 : 512, Math.min(65_536, Math.round(input.maxOutputTokens)))
         let grownOnce = false
 
         // A few tries on one key+model: each refused setting peeled off, and
         // once more with room when thinking ate the whole budget.
-        for (let local = 0; local < 5; local += 1) {
+        for (let local = 0; local < 5 && attempts < attemptLimit && Date.now() < deadline; local += 1) {
+          if (input.signal?.aborted) throw new GeminiEngineError("ABORTED", "Остановлено.")
           attempts += 1
           input.onEvent?.({ type: "attempt", model, attempt: attempts })
           const controller = new AbortController()
           const onAbort = () => controller.abort()
           input.signal?.addEventListener("abort", onAbort, { once: true })
-          const remaining = Math.max(5_000, deadline - Date.now())
+          const remaining = Math.max(1, deadline - Date.now())
           const hardTimer = setTimeout(() => controller.abort(), remaining)
           const outcome: AttemptOutcome = { text: "", thoughts: 0, sources: [] }
           let classified: Classified | null = null
@@ -585,6 +593,7 @@ export async function runGemini(input: GeminiRunInput): Promise<GeminiResult> {
               },
               body: JSON.stringify(requestBody(input, budget, thinking, search, level)),
               signal: controller.signal,
+              ...(input.strictSearch ? { redirect: "error" } : {}),
             })
 
             if (!response.ok) {
@@ -632,7 +641,7 @@ export async function runGemini(input: GeminiRunInput): Promise<GeminiResult> {
             const content = outcome.text.trim()
             if (outcome.blockReason || outcome.finishReason === "SAFETY" || outcome.finishReason === "PROHIBITED_CONTENT" || outcome.finishReason === "BLOCKLIST") {
               classified = { code: "SAFETY", detail: outcome.blockReason || outcome.finishReason || "SAFETY" }
-            } else if (!content && outcome.finishReason === "MAX_TOKENS" && !grownOnce) {
+            } else if (!content && outcome.finishReason === "MAX_TOKENS" && !grownOnce && !input.strictSearch) {
               // Thinking spent the budget before a word was written.
               grownOnce = true
               budget = Math.min(65_536, budget * 2)
@@ -668,7 +677,10 @@ export async function runGemini(input: GeminiRunInput): Promise<GeminiResult> {
           }
 
           trail.push({ model, key: key.source, code: classified.code, status: classified.status })
-          console.warn("[BUSINESS_GEMINI]", JSON.stringify({ model, key: key.source, code: classified.code, status: classified.status, detail: classified.detail }))
+          console.warn("[BUSINESS_GEMINI]", JSON.stringify({ model, key: key.source, code: classified.code, status: classified.status,
+            ...(!input.strictSearch ? { detail: classified.detail } : {}) }))
+
+          if (input.strictSearch && classified.code === "QUOTA") throw summarizeFailure(trail, classified.retryAfterMs)
 
           if (classified.feature === "level") {
             level = undefined
@@ -681,8 +693,9 @@ export async function runGemini(input: GeminiRunInput): Promise<GeminiResult> {
             continue
           }
           if (classified.feature === "search") {
+            if (input.strictSearch) break
             search = false
-            features.set(`${key.source}::search`, { search: false })
+            features.set(searchKey, { search: false })
             continue
           }
 
@@ -697,7 +710,7 @@ export async function runGemini(input: GeminiRunInput): Promise<GeminiResult> {
             quotaWait = quotaWait === undefined ? wait : Math.min(quotaWait, wait)
             cool(featureKey, wait, "QUOTA")
           } else if (classified.code === "KEY_REJECTED") {
-            cool(`${key.source}::*`, 10 * 60_000, "KEY_REJECTED")
+            cool(cooldownKey(scope, key, "*"), 10 * 60_000, "KEY_REJECTED")
           } else if (classified.code === "MODEL_MISSING") {
             cool(featureKey, 30 * 60_000, "MODEL_MISSING")
           } else if (classified.code === "UNAVAILABLE" || classified.code === "TIMEOUT") {

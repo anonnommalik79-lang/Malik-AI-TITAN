@@ -192,5 +192,5 @@ test("normal chat endpoints share the Flash handler and preserve existing MAX en
   assert.match(stream, /\? \{ \.\.\.requestedSelection, modelId: "malik-max" \}/)
   assert.match(stream, /flashUsesMax = flashBrowser && !flashImageOperation/)
   assert.match(stream, /const settledAnswer = flash\s*\? runFlashChat\([\s\S]*?: getNativeChatAnswer\(\)/u)
-  assert.match(json, /if \(selectsMalikFlash\(requestBody\) && MALIK_FLASH_BROWSER_ENABLED\) \{[\s\S]*?return handleFlashJsonChat\(request\)/)
+  assert.match(json, /if \(selectsMalikFlash\(requestBody\)\) \{[\s\S]*?if \(MALIK_FLASH_BROWSER_ENABLED[\s\S]*?return handleFlashJsonChat\(request\)/)
 })

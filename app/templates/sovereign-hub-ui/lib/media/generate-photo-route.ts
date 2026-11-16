@@ -25,7 +25,7 @@ import { resolveRequestedQuality } from "./image-resolution-intent"
 import { routeImageGeneration } from "./image-router"
 import { runFlashMedia } from "../server/malik-flash-media"
 import { FlashBrowserError } from "../server/malik-flash-browser-bridge"
-import { flashImageOperation } from "../ai/malik-flash-intent"
+import { flashGoogleIntent, flashImageOperation } from "../ai/malik-flash-intent"
 import { usesMalikFlashBrowser } from "../ai/malik-models"
 import {
   checkImageCreditLimit,
@@ -152,6 +152,10 @@ export async function handleMalikPhotoGenerationRequest(request: Request) {
   // Without the Google integration a Flash chat draws with the native MALIKII
   // photo engines and reports the engine that actually made the picture.
   const flashRequested = usesMalikFlashBrowser(body?.chatModelId)
+  if (body.chatModelId === "malik-flash" && !flashRequested && flashGoogleIntent(rawPrompt) === "ai-mode") {
+    return Response.json({ ok: false, status: "failed", error: "FLASH_GOOGLE_AI_MODE_UNAVAILABLE",
+      publicError: "Google AI Mode через браузер сейчас недоступен в MalikLLM Flash." }, { status: 503 })
+  }
   const flashEditing = flashRequested && (editing || flashImageOperation(rawPrompt, Boolean(body.flashSourceId)) === "edit")
   let editSource
   if (editing && !flashRequested) {

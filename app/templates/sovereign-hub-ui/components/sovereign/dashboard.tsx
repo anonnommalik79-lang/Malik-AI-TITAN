@@ -25,7 +25,7 @@ import { mergeStreamingAssistantCheckpoints, restoreInterruptedAssistant } from 
 import { fixWrongKeyboardLayout } from "@/lib/ai/keyboard-layout"
 import { explicitlyRequestsPackagedProject } from "@/lib/chat-code-routing"
 import { primaryNonMediaArtifact } from "@/lib/ai/artifact-intent"
-import { flashImageOperation, isFlashCodingRequest } from "@/lib/ai/malik-flash-intent"
+import { flashGoogleIntent, flashImageOperation, isFlashCodingRequest } from "@/lib/ai/malik-flash-intent"
 import { asksWhichModelGeneratedImage, flashReceiptTarget } from "@/lib/ai/malik-flash-memory"
 import { isChatArtifactCreationRequest } from "@/lib/ai/chat-artifact-skills"
 import { briefNeedsDeep, briefOutputFloor } from "@/lib/ai/brief-quality"
@@ -6257,6 +6257,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
   if (!cleanContent) return
   // Flash follows the browser-worker flow only while the Google integration is on.
   const flashSelected = usesMalikFlashBrowser(selectedModelId)
+  const directedGoogleMode = selectedModelId === "malik-flash" && flashGoogleIntent(cleanContent) === "ai-mode"
   const carryContext = readContextEnabled()
   const petroleumRoute = routePetroleum(cleanContent, options?.selectedSkillId)
   const petroleumAnalytic = petroleumRoute.domain && ["petroleum", "chat"].includes(petroleumRoute.engine)
@@ -6928,7 +6929,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
       if (inlineMediaKind === "image" && editingImage) {
         understood = `Редактирую загруженное фото: ${inlineMediaPrompt}`
         patchInlineMedia({ understood, status: "generating", progress: flashImageRequest ? undefined : 30 })
-      } else if (inlineMediaKind === "image" && !flashImageRequest) {
+      } else if (inlineMediaKind === "image" && !flashImageRequest && !directedGoogleMode) {
         try {
           const understandResponse = await clientFetchWithTimeout("/api/ai/image/understand", {
             method: "POST",
@@ -7315,7 +7316,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
         chatId, // Stable across turns; Flash must not mix Google AI Mode sessions.
         userMessageId: flashSelected ? userMessage.id : undefined,
         assistantMessageId: flashSelected ? assistantMessage.id : undefined,
-        flashContextEnabled: flashSelected ? carryContext : undefined,
+        flashContextEnabled: selectedModelId === "malik-flash" ? carryContext : undefined,
         forceCanvas: isProjReq,
         isProjectRequest: isProjReq,
         isCodeRequest: isCodeReq,
