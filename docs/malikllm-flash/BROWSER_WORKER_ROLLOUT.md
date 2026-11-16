@@ -73,29 +73,39 @@ Measured 15 November 2026 against `https://malikaiworld.world/api/stream` as a g
 
 All eight turns answered with `selectedModelId: "malik-flash"`. Providers: `local-smart` (2), `groq` `openai/gpt-oss-120b` (4), `google-direct` `gemini-3.5-flash` (2). The two slow turns were the Gemini ones (7.3 s and 11.5 s to first text). Image completion was not measured.
 
+## 16 November production follow-up
+
+Render service `MalikAI-V6.5-TITAN` made `dep-dbt93j67bikc73ddvhr0` live at 10:20 Almaty time (05:20 UTC) with commit `1b9f2361db2f394b277f82a6253f2a3d563ea930`. [PR #173](https://github.com/anonnommalik79-lang/Malik-AI-TITAN/pull/173) contains the routing and request limit changes. The follow-up commit fixes the chat client reading HTTP error bodies twice.
+
+- Guest Flash returned `Hello! How can I help you today?` in the desktop chat. The response stayed in the same chat after refresh. The UI reported 1.8 seconds for that turn.
+- Three live requests explicitly naming Google AI Mode returned `FLASH_GOOGLE_AI_MODE_UNAVAILABLE` on the text stream, JSON chat and native image entry points. Desktop «Перегенерировать» displayed the service message in the chat after the client fix.
+- The separate Gemini with Google Search request returned `FLASH_GOOGLE_SEARCH_BILLING_REQUIRED`. `/api/health` recorded `unavailable`, with upstream HTTP statuses 404 and 402. This is evidence of correct failure handling. The browser path and its image operations are blocked.
+- The application and worker Flash fixtures passed 28/28 and 18/18. The Gemini engine regression passed 29/29. The full release regression and production build passed on the PR's Node 22 workflow. TypeScript, the production build, and the 11 chat stream and 15 Flash Search checks passed locally for the client fix. The [main production check](https://github.com/anonnommalik79-lang/Malik-AI-TITAN/actions/runs/43809196463) passed on attempt 2 after an intermittent 429 polling assertion on attempt 1. Local restricted-network tests passed 12/12.
+- A direct HTTP smoke test on the final deployment completed an ordinary native Flash explanation in 15.1 seconds. Five simple prompts on the preceding deployment, which used the same backend, had first-text P50 of 4.396 seconds and P95 of 5.070 seconds. These are client-side samples from the test environment.
+
 ### Acceptance
 
 | # | Acceptance | Status | Evidence |
 |---|---|---|---|
-| 1 | Hello through Google AI Mode | BLOCKED | No permitted automated access (see Blocker); no worker. «Hello» with Flash on production answers natively in 0.66 s. The Gemini with Google Search lane is built and off. |
+| 1 | Hello through Google AI Mode | BLOCKED | No permitted automated access (see Blocker); no worker. «Hello» with Flash on production answers natively in 0.66 s. The separate Gemini Search route returned a billing error on 16 November. |
 | 2 | Follow-up in the same Google chat | BLOCKED | Same blocker. Per-chat scope reuse is covered by fixtures. |
 | 3 | Analyze uploaded photo | BLOCKED | Same blocker. Byte validation and the image receipt are covered by fixtures. |
 | 4 | Generate a sports-car image | BLOCKED | Same blocker for Google. Native Flash image generation was not run live in this pass. |
 | 5 | Edit an uploaded photo | BLOCKED | Same blocker. Source validation is covered by fixtures. |
 | 6 | Edit a generated image | BLOCKED | Same blocker. Original bytes and the parent link are covered by fixtures (`verify-malik-flash-history`). |
-| 7 | History after refresh | NOT TESTED | Server-state reads pass with a fresh module instance. No signed-in browser session for the full flow. |
+| 7 | History after refresh | NOT TESTED | Guest history and the visible Flash answer survived refresh on the live desktop site. Signed-in durable restoration remains unverified. |
 | 8 | History after app reopening | NOT TESTED | Same limitation as #7. |
 | 9 | Retrieve an older message | PASS | Bounded retrieval fixtures: an older matching turn is returned, context stays within 3 600 characters. |
 | 10 | Separate two chats | PASS | Account-state and worker scope fixtures. |
 | 11 | Separate two users | PASS | Owner-scoped history and private media route fixtures. Google account separation is BLOCKED with the integration. |
 | 12 | Delegate substantial coding to MAX | NOT TESTED | Intent and entitlement contract pass. A live Flash coding turn needs a paid or owner account. With the integration off, every Flash turn runs on MAX under the existing quotas. |
-| 13 | Fail closed when unavailable | PASS | With the integration off no worker request is made (fixture asserts no network call). With it on and no worker, the route returns `FLASH_WORKER_NOT_READY`, retryable. |
+| 13 | Fail closed when unavailable | PASS | Live text, JSON and photo requests naming Google AI Mode returned `FLASH_GOOGLE_AI_MODE_UNAVAILABLE`. The desktop chat displayed the service error after retry. |
 | 14 | Report the actual image generator | PASS | Receipt fixtures. Native Flash images report their real engine. Google provenance is unverified. |
 | 15 | Preserve Markdown and real citations | BLOCKED | Markdown and sources round-trip in fixtures. Live Google DOM capture is blocked. |
-| 16 | iPhone and desktop | NOT TESTED | No real device run in this pass. |
+| 16 | iPhone and desktop | NOT TESTED | Native Flash passed the desktop Chrome smoke test. iPhone remains unverified. |
 | 17 | Restart browser worker | BLOCKED | Needs a permitted Google session. The worker's drain on shutdown passes on Linux (SIGTERM) and Windows (IPC). |
-| 18 | Cancel and retry | BLOCKED | Local streaming and AbortSignal checks pass. Live Google cancellation is blocked. The chat keeps «Перегенерировать» on failed turns. |
+| 18 | Cancel and retry | BLOCKED | Local streaming and AbortSignal checks pass. Desktop retry worked for the blocked Google request. Live cancellation against a running Google session remains blocked. |
 | 19 | Honor usage and subscriptions | PASS | Existing quota regressions and the Flash MAX entitlement contract. Live plan limits unverified. |
-| 20 | Collect real latency metrics | BLOCKED | Google P50/P95 unavailable. Production native Flash: 8 samples, first text P50 679 ms, P95 11 497 ms (table above). |
+| 20 | Collect real latency metrics | BLOCKED | Google latency measurement needs a permitted working integration. Five native simple-prompt samples on 16 November had first-text P50 4 396 ms and P95 5 070 ms. |
 
 `MALIK_FLASH_ISOLATED_WORKER=1` and `NEXT_PUBLIC_MALIK_FLASH_BROWSER=1` must stay off until a permitted access path exists and items 1-8, 15-18 and 20 pass live. A release of the integration is complete only after live text, image understanding, generation, editing, isolation, restoration and the post-deploy smoke tests succeed.
