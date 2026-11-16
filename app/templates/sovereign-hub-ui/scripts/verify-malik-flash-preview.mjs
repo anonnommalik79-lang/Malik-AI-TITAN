@@ -111,7 +111,11 @@ test("Flash stays usable on the native MALIKII engine while the Google integrati
   }
   const listed = models("1", "0")
   assert.equal(listed.MALIK_FLASH_BROWSER_ENABLED, false)
-  assert.equal(listed.DEFAULT_MALIK_MODEL_ID, "malik-flash")
+  assert.equal(listed.DEFAULT_MALIK_MODEL_ID, "malik-max", "MAX is the free default")
+  assert.equal(listed.MALIK_FLASH_MODEL.tier, "pro")
+  assert.equal(listed.MALIK_MAX_MODEL.tier, "free")
+  assert.equal(listed.canUseMalikModel("malik-flash", "free"), false)
+  assert.equal(listed.canUseMalikModel("malik-max", "free"), true)
   assert.ok(listed.PUBLIC_MALIK_MODELS.some(model => model.id === "malik-flash"))
   assert.equal(listed.usesMalikFlashBrowser("malik-flash"), false)
   assert.equal(listed.nativeMalikEngineId("malik-flash"), "malik-max")

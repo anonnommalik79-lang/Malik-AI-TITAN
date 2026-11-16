@@ -23,15 +23,17 @@ import {
 
 assert.deepEqual(ROUTER_CATALOG_COUNTS, { total: 138, text: 123, image: 9, video: 6 }, "Three-router catalogue must stay 138 = 123 text + 9 image + 6 video")
 assert.equal(ROUTER_CATALOG.length, 138)
-assert.equal(DEFAULT_MALIK_MODEL_ID, MALIK_FLASH_PREVIEW_ENABLED ? "malik-flash" : "malik-max")
+assert.equal(DEFAULT_MALIK_MODEL_ID, "malik-max", "MAX is the free default; Flash is PRO")
+assert.equal(getMalikModel("malik-max").tier, "free")
+assert.equal(canUseMalikModel("malik-max", "free"), true)
 assert.equal(PUBLIC_MALIK_MODELS[0]?.id, DEFAULT_MALIK_MODEL_ID)
 if (MALIK_FLASH_PREVIEW_ENABLED) {
   assert.equal(getMalikModel("malik-flash").provider, "malik-browser-bridge")
   assert.equal(getMalikModel("malik-flash").brand, "malik")
   assert.deepEqual(getMalikModel("malik-flash"), MALIK_FLASH_MODEL)
-  assert.equal(canUseMalikModel("malik-flash", "free"), true)
-  assert.equal(canUseMalikModel("malik-max", "free"), false)
-  assert.equal(canUseMalikModel("malik-max", "pro"), true)
+  assert.equal(PUBLIC_MALIK_MODELS[1]?.id, "malik-flash", "Flash follows MAX")
+  assert.equal(canUseMalikModel("malik-flash", "free"), false)
+  assert.equal(canUseMalikModel("malik-flash", "pro"), true)
 }
 assert.equal(getMalikModel("malik-max").label, "MalikLLM MAX")
 assert.equal(getMalikModel("malik-max").provider, "malik-orchestrator")
@@ -50,7 +52,7 @@ assert.ok(GOOGLE_AI_POOL_MODELS.every((model) => model.provider === "google-ai" 
 assert.equal(PUBLIC_MALIK_MODELS.length, MALIK_FLASH_PREVIEW_ENABLED ? 134 : 133)
 // Oil BETA is publicly selectable second, while remaining special provider
 // availability is reported by the real runtime rather than promising 3/3.
-assert.deepEqual(FREE_MALIK_MODELS.map((model) => model.id), MALIK_FLASH_PREVIEW_ENABLED ? ["malik-flash", "malik-oil-1tb"] : ["malik-max", "malik-oil-1tb"])
+assert.deepEqual(FREE_MALIK_MODELS.map((model) => model.id), ["malik-max", "malik-oil-1tb"], "MAX is free; Flash is PRO")
 assert.equal(PRO_MALIK_MODELS.length, MALIK_FLASH_PREVIEW_ENABLED ? 132 : 131, "Paid choices must remain gated")
 assert.equal(new Set(MALIK_MODELS.map((model) => model.id)).size, MALIK_MODELS.length, "Model IDs must be unique")
 
@@ -140,6 +142,6 @@ const naraNemotron = getMalikModel("router:nara:nemotron-3-ultra-free")
 assert.equal(naraNemotron.label, "Nemotron 3 Ultra Free")
 assert.equal(naraNemotron.access, "free")
 assert.equal(naraNemotron.tier, "pro", "Free provider routes are still MalikAI Plus picks; free users get them through MAX")
-assert.equal(canUseMalikModel("malik-max", "free"), !MALIK_FLASH_PREVIEW_ENABLED)
+assert.equal(canUseMalikModel("malik-max", "free"), true, "free users always have MAX")
 
 console.log(`Verified ${PUBLIC_MALIK_MODELS.length} public text choices, ${MAX_ROUTER_MODEL_IDS.length} MAX failover lanes and 138 router catalogue entries.`)

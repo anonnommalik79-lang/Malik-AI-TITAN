@@ -107,8 +107,8 @@ export const MALIK_FLASH_PREVIEW_ENABLED = process.env.NEXT_PUBLIC_MALIK_FLASH_P
 export const MALIK_FLASH_MODEL: MalikModelDefinition = {
   id: "malik-flash",
   label: "MalikLLM Flash",
-  description: "Бесплатно · быстрые ответы, анализ фото и изображения · БЕТА",
-  tier: "free",
+  description: "PRO · быстрые ответы с поиском Google, анализ фото и изображения",
+  tier: "pro",
   provider: "malik-browser-bridge",
   providerModel: "google-ai-mode-browser",
   capabilities: ["text", "vision", "tools", "reasoning"],
@@ -120,8 +120,8 @@ export const MALIK_FLASH_MODEL: MalikModelDefinition = {
 export const MALIK_MAX_MODEL: MalikModelDefinition = {
   id: "malik-max",
   label: "MalikLLM MAX",
-  description: MALIK_FLASH_PREVIEW_ENABLED ? "PRO · программирование и сложные проекты" : "Бесплатно · все модели и API в одной",
-  tier: MALIK_FLASH_PREVIEW_ENABLED ? "pro" : "free",
+  description: "Бесплатно · все модели и API в одной",
+  tier: "free",
   provider: "malik-orchestrator",
   providerModel: "auto",
   capabilities: ["text", "vision", "code", "tools", "reasoning"],
@@ -239,8 +239,8 @@ export const MALIK_OIL_1TB_MODEL: MalikModelDefinition = {
 }
 
 export const MALIK_MODELS: readonly MalikModelDefinition[] = [
-  ...(MALIK_FLASH_PREVIEW_ENABLED ? [MALIK_FLASH_MODEL] : []),
   MALIK_MAX_MODEL,
+  ...(MALIK_FLASH_PREVIEW_ENABLED ? [MALIK_FLASH_MODEL] : []),
   MALIK_OIL_1TB_MODEL,
   ...GOOGLE_AI_POOL_MODELS,
   LING_3_1_FLASH_MODEL,
@@ -250,7 +250,8 @@ export const MALIK_MODELS: readonly MalikModelDefinition[] = [
 ]
 
 export const PUBLIC_MALIK_MODELS = MALIK_MODELS.filter((model) => !model.hidden)
-export const DEFAULT_MALIK_MODEL_ID: MalikModelId = MALIK_FLASH_PREVIEW_ENABLED ? "malik-flash" : "malik-max"
+// MAX is the free model everyone starts on; Flash is a PRO choice.
+export const DEFAULT_MALIK_MODEL_ID: MalikModelId = "malik-max"
 
 export function selectsMalikFlash(body: { model?: unknown; modelId?: unknown } | null | undefined) {
   return (body?.model || body?.modelId) === "malik-flash"
