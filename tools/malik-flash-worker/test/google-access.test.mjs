@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { googleAccess } from "../google-access.mjs";
-import { GoogleBrowserWorker, isGoogleUrl } from "../browser.mjs";
+import { GoogleBrowserWorker, isGoogleUrl, sourceLinks } from "../browser.mjs";
 
 const scope = "1".repeat(64);
 const request = { userScope: scope, chatScope: "2".repeat(64), question: "Hello" };
@@ -55,4 +55,27 @@ test("disallowed Google AI Mode blocks all four multimodal tasks before Chrome",
     await assert.rejects(worker.ask(body), { code: "GOOGLE_AUTOMATION_RESTRICTED" });
   }
   assert.equal(launches, 0);
+});
+
+test("Google source receipts discard unsafe schemes, credentials, duplicates and oversized URLs", () => {
+  const sources = sourceLinks([
+    { url: "javascript:alert(1)", title: "unsafe" },
+    { url: "https://user:password@example.com/private", title: "credentials" },
+    { url: "https://example.com/article#section", title: "Article" },
+    { url: "https://example.com/article#other", title: "Duplicate" },
+    { url: "https://example.org/" + "a".repeat(2200), title: "oversized" },
+  ]);
+  assert.deepEqual(sources, [{ url: "https://example.com/article", title: "Article" }]);
+});
+
+test("Google navigation allowlist rejects lookalike hosts, insecure URLs and unapproved paths", () => {
+  for (const url of [
+    "http://www.google.com/ai",
+    "https://www.google.com.evil.test/ai",
+    "https://evil.test/search?udm=50",
+    "https://www.google.com/search?udm=0",
+    "https://www.google.com:444/ai",
+    "https://user@www.google.com/ai",
+  ]) assert.equal(isGoogleUrl(url), false, url);
+  assert.equal(isGoogleUrl("https://www.google.com/search?udm=50"), true);
 });
