@@ -38,7 +38,7 @@ test("an allowed test policy still requires a separately authorized account prof
   assert.equal(isGoogleUrl("https://www.google.com:9443/ai"), false);
 });
 
-test("disallowed Google AI Mode blocks chat and image generation before Chrome", async t => {
+test("disallowed Google AI Mode blocks all four multimodal tasks before Chrome", async t => {
   let launches = 0;
   const worker = new GoogleBrowserWorker({
     policy: googleAccess(async () => new Response("User-agent: *\nDisallow: /search")),
@@ -48,12 +48,11 @@ test("disallowed Google AI Mode blocks chat and image generation before Chrome",
   const tinyPng = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=";
   for (const body of [
     { ...request, task: "chat" },
-    { ...request, task: "chat", images: [{ mimeType: "image/png", data: tinyPng }] },
+    { ...request, task: "chat", images: [{ mime: "image/png", base64: tinyPng }] },
     { ...request, task: "image_generate" },
     { ...request, task: "image_edit", images: [{ mimeType: "image/png", data: tinyPng }] },
   ]) {
-    await assert.rejects(worker.ask(body), error =>
-      ["GOOGLE_AUTOMATION_RESTRICTED", "INVALID_IMAGE_INPUT"].includes(error.code));
+    await assert.rejects(worker.ask(body), { code: "GOOGLE_AUTOMATION_RESTRICTED" });
   }
   assert.equal(launches, 0);
 });
