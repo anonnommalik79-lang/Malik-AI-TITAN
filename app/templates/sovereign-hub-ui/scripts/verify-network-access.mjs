@@ -123,15 +123,15 @@ await check("polling performs GET only and delivers one complete UTF-8 answer wi
   assert.equal(result.find(e => e.type === "done").payload.sources.length, 1)
   assert.equal(result.find(e => e.type === "done").payload.usedWeb, true)
 })
-await check("polling stops immediately on account, missing-job and quota failures", async () => {
+await check("polling stops on account and missing-job errors, and when quota backoff exceeds the deadline", async () => {
   for (const status of [401, 403, 404, 429]) {
     let calls = 0
-    // A 429 waits and reads again until the deadline, so it gets a short one.
-    const response = pollingChatResponse(admission(), { signal: new AbortController().signal, ...(status === 429 ? { timeoutMs: 50 } : {}),
+    const response = pollingChatResponse(admission(), { signal: new AbortController().signal, ...(status === 429 ? { timeoutMs: 30_000 } : {}),
       fetcher: async () => { calls++; return new Response("denied", { status }) },
     })
     const result = events(await response.text())
     assert.equal(calls, 1); assert.equal(result.filter(e => e.type === "error").length, 1)
+    if (status === 429) assert.match(result.at(-1).payload.message, /Лимит проверки ответа исчерпан/u)
     assert.equal(result.filter(e => e.type === "done").length, 0)
   }
 })

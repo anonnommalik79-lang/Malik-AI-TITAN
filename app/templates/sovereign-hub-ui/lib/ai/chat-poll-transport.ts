@@ -58,7 +58,16 @@ export function pollingChatResponse(admission: Response, options: PollOptions): 
               send("error", { message: saved.status === 404 ? "Сохранённый запрос не найден или недоступен этому аккаунту. Новый запрос автоматически не запускался." : "Сессия истекла или доступ запрещён. Войдите снова, чтобы открыть сохранённый ответ." })
               break
             }
-            if (saved.status === 429) { await pause(Math.min(60_000, Math.max(0, deadline - Date.now()))); continue }
+            if (saved.status === 429) {
+              const retryDelayMs = 60_000
+              if (deadline - Date.now() <= retryDelayMs) {
+                send("error", { message: "Лимит проверки ответа исчерпан. Откройте сохранённый чат немного позже." })
+                controller.close()
+                return
+              }
+              await pause(retryDelayMs)
+              continue
+            }
             if (!saved.ok) throw new Error(`HTTP ${saved.status}`)
             const payload = await saved.json() as { turn?: Record<string, unknown> }
             if (cancelled) break
