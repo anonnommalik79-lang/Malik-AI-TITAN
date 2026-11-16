@@ -6,6 +6,7 @@ import { flashImageOperation } from "@/lib/ai/malik-flash-intent"
 import { estimateGeneratedTokens } from "./daily-text-token-quota"
 import type { RequestEntitlement } from "./request-entitlement"
 import { FlashBrowserError, requireMalikFlashBrowser, runMalikFlashBrowser } from "./malik-flash-browser-bridge"
+import { flashOmniEnabled, runFlashOmniRoute } from "./malik-flash-omniroute"
 import { validateFlashImage } from "./malik-flash-image-worker"
 import { enforceFlashMediaLimit, flashAttachmentReference, flashTurnInput, loadFlashHistory, newFlashImageAssetId, saveFlashTurn } from "./malik-flash-history"
 import { deleteFlashAssets, isFlashAssetId, readFlashAsset, requireFlashAssetStorage, writeFlashAsset } from "./malik-flash-assets"
@@ -36,7 +37,8 @@ export async function runFlashChat(input: {
     if (isExplicitVideoGenerationRequest(question)) {
       throw new FlashBrowserError("FLASH_VIDEO_ROUTE_REQUIRED", "Для генерации видео откройте видеостудию MALIKII.", 409)
     }
-    requireMalikFlashBrowser()
+    // The gateway handles text only. Keep the existing image/browser route intact.
+    if (!flashOmniEnabled() || uploads.length > 0) requireMalikFlashBrowser()
   }
   const startedAt = new Date().toISOString()
   const history = await loadFlashHistory(account.userId, turn, question)
@@ -81,15 +83,20 @@ export async function runFlashChat(input: {
   enforceFlashMediaLimit(history.mediaCount, uploads.length)
   const images = await Promise.all(uploads.map(validateFlashImage))
   let streamed = ""
-  const answer = await runMalikFlashBrowser({
-    question, userId: account.userId, chatId: turn.chatId, images: uploads,
-    context: history.context, requireExisting: history.requireExisting, isolatedTurn: turn.isolatedTurn,
-    onText: input.onText ? chunk => {
-      streamed += chunk
-      checkBudget(streamed)
-      input.onText?.(chunk)
-    } : undefined, signal,
-  })
+  const forwardText = input.onText ? (chunk: string) => {
+    streamed += chunk
+    checkBudget(streamed)
+    input.onText?.(chunk)
+  } : undefined
+  // OmniRoute is opt-in and text-only; image uploads continue through the
+  // existing secured Flash browser bridge.
+  const answer = flashOmniEnabled() && uploads.length === 0
+    ? await runFlashOmniRoute({ question, context: history.context, onText: forwardText, signal })
+    : await runMalikFlashBrowser({
+        question, userId: account.userId, chatId: turn.chatId, images: uploads,
+        context: history.context, requireExisting: history.requireExisting, isolatedTurn: turn.isolatedTurn,
+        onText: forwardText, signal,
+      })
   checkBudget(answer.content)
   signal?.throwIfAborted()
 
@@ -105,7 +112,7 @@ export async function runFlashChat(input: {
     signal?.throwIfAborted()
     await saveFlashTurn(account.userId, turn, {
       question, answer: answer.content, provider: answer.provider, model: answer.model, sources: answer.sources,
-      browserConversation: true, startedAt, completedAt: new Date().toISOString(),
+      browserConversation: answer.provider === "google-ai-mode-browser", startedAt, completedAt: new Date().toISOString(),
       attachments, mediaIds: attachments.map(attachment => attachment.assetId),
     })
   } catch (error) {
