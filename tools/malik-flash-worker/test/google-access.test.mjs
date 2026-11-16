@@ -37,3 +37,16 @@ test("an allowed test policy still requires a separately authorized account prof
   assert.equal(isGoogleUrl("https://accounts.google.com/"), false);
   assert.equal(isGoogleUrl("https://www.google.com:9443/ai"), false);
 });
+
+test("disallowed Google AI Mode blocks chat, image understanding, image generation and edits before Chrome", async t => {
+  let launches = 0;
+  const worker = new GoogleBrowserWorker({
+    policy: googleAccess(async () => new Response("User-agent: *\nDisallow: /search")),
+    chromiumFactory: { launchPersistentContext() { launches++; throw new Error("Browser must not launch"); } },
+  });
+  t.after(() => worker.close());
+  for (const task of ["chat", "image_generate"]) {
+    await assert.rejects(worker.ask({ ...request, task }), { code: "GOOGLE_AUTOMATION_RESTRICTED" });
+  }
+  assert.equal(launches, 0);
+});
