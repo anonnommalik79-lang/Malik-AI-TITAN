@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { normalizePhotos, uploadPhotosToChrome, PhotoUploadError } from "../photo.mjs";
-import { isGoogleUrl, sourceLinks, GoogleBrowserWorker } from "../browser.mjs";
+import { assertGooglePage, GOOGLE_COMPOSER_SELECTOR, GoogleBrowserWorker, isGoogleUrl, sourceLinks } from "../browser.mjs";
 
 const tinyPng = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLytQAAAABJRU5ErkJggg==";
 
@@ -76,6 +76,27 @@ test("rejects arbitrary restored URLs", () => {
   assert.equal(isGoogleUrl("https://evilgoogle.com/ai"), false);
   assert.equal(isGoogleUrl("http://google.com/ai"), false);
   assert.equal(isGoogleUrl("https://www.google.com.evil.example/ai"), false);
+});
+
+test("recognizes the Russian AI Mode composer by its label or placeholder", () => {
+  assert.ok(GOOGLE_COMPOSER_SELECTOR.includes('[aria-label="Задайте вопрос"]'));
+  assert.ok(GOOGLE_COMPOSER_SELECTOR.includes('[placeholder="Задайте вопрос"]'));
+  assert.ok(GOOGLE_COMPOSER_SELECTOR.includes('[aria-label="Ask anything"]'));
+});
+
+test("Google consent stops submission and other pages still require the access check", async () => {
+  for (const [url, code] of [
+    ["https://consent.google.com/m", "GOOGLE_CONSENT_REQUIRED"],
+    ["https://accounts.google.com/signin", "GOOGLE_LOGIN_REQUIRED"],
+    ["https://consent.google.com.example.org/m", "GOOGLE_CONVERSATION_UNAVAILABLE"],
+  ]) {
+    await assert.rejects(assertGooglePage({ url: () => url }, () => assert.fail("unexpected policy call")), { code, status: 409 });
+  }
+  const url = "https://www.google.com/ai";
+  await assert.rejects(assertGooglePage({ url: () => url }, async target => {
+    assert.equal(target, url);
+    throw new Error("automatic access unavailable");
+  }), /automatic access unavailable/u);
 });
 
 test("deduplicates sources and rejects local/file URLs", () => {

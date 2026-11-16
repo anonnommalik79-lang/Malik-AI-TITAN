@@ -121,6 +121,7 @@ export function requireMalikFlashBrowser() {
 const publicWorkerErrors: Record<string, [string, number]> = {
   GOOGLE_AUTOMATION_RESTRICTED: ["Google AI Mode в MalikLLM Flash пока недоступен.", 503],
   GOOGLE_LOGIN_REQUIRED: ["Для Flash нужна подтверждённая сессия Google этого аккаунта.", 409],
+  GOOGLE_CONSENT_REQUIRED: ["Google открыл экран согласия. Завершите настройку в своей сессии Google и повторите запрос.", 409],
   GOOGLE_VERIFICATION_REQUIRED: ["Google требует подтвердить доступ в браузере.", 409],
   GOOGLE_CONVERSATION_UNAVAILABLE: ["Сессия Google для этого чата недоступна. История MALIKII сохранена.", 409],
   GOOGLE_ANSWER_INCOMPLETE: ["Google AI Mode не подтвердил завершение ответа. Попробуйте ещё раз.", 503],

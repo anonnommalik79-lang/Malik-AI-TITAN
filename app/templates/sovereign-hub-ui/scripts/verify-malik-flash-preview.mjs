@@ -85,6 +85,21 @@ test("disabled or malformed worker setup makes no external or local fallback cal
   await assert.rejects(flash.runMalikFlashBrowser(body), { code: "FLASH_WORKER_NOT_READY" })
 })
 
+test("the consent page is shown as an account action, never as an answer", async t => {
+  configure(t)
+  const original = globalThis.fetch
+  t.after(() => { globalThis.fetch = original })
+  globalThis.fetch = async (_url, init) => {
+    const requestId = new Headers(init.headers).get("x-request-id")
+    return Response.json({ requestId, error: "GOOGLE_CONSENT_REQUIRED" }, {
+      status: 409, headers: { "x-request-id": requestId },
+    })
+  }
+  await assert.rejects(flash.runMalikFlashBrowser(body), {
+    code: "GOOGLE_CONSENT_REQUIRED", status: 409, message: /Google открыл экран согласия/u,
+  })
+})
+
 test("Flash stays usable on the native MALIKII engine while the Google integration is off", t => {
   const keys = ["NEXT_PUBLIC_MALIK_FLASH_PREVIEW", "NEXT_PUBLIC_MALIK_FLASH_BROWSER"]
   const original = Object.fromEntries(keys.map(key => [key, process.env[key]]))

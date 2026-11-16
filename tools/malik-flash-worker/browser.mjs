@@ -12,7 +12,10 @@ const MAX_SAVED_CHATS = 256;
 const GOOGLE_HOST = "www.google.com";
 const SCOPE_ID = /^[a-f0-9]{64}$/u;
 const ANSWERS = '[data-message-author-role="assistant"], [data-author="assistant"], [data-ai-mode-response]';
-const COMPOSER = 'textarea[aria-label="Ask anything"], [role="textbox"][aria-label="Ask anything"], textarea[aria-label="Спросите что угодно"]';
+export const GOOGLE_COMPOSER_SELECTOR = ["Ask anything", "Спросите что угодно", "Задайте вопрос"]
+  .map(label => ':is(textarea, input[type="search"], input[type="text"], [role="textbox"])'
+    + ':is([aria-label="' + label + '"], [placeholder="' + label + '"], [data-placeholder="' + label + '"])')
+  .join(", ");
 const COMPLETE = '[data-response-state="complete"], [data-complete="true"], button[aria-label^="Good response"], button[aria-label^="Bad response"], button[aria-label="Copy response"]';
 const IDLE_MS = 10 * 60_000;
 
@@ -114,9 +117,10 @@ async function capture(page) {
   }, { answers: ANSWERS, complete: COMPLETE });
 }
 
-async function assertGooglePage(page, policy) {
+export async function assertGooglePage(page, policy) {
   const url = page.url();
   if (/^https:\/\/accounts\.google\.com(?:\/|$)/u.test(url)) throw new BrowserWorkerError("GOOGLE_LOGIN_REQUIRED", 409);
+  if (/^https:\/\/consent\.google\.com(?:\/|$)/u.test(url)) throw new BrowserWorkerError("GOOGLE_CONSENT_REQUIRED", 409);
   if (/^https:\/\/www\.google\.com\/sorry/u.test(url)) throw new BrowserWorkerError("GOOGLE_VERIFICATION_REQUIRED", 409);
   if (!isGoogleUrl(url)) throw new BrowserWorkerError("GOOGLE_CONVERSATION_UNAVAILABLE", 409);
   await policy(url);
@@ -277,7 +281,7 @@ export class GoogleBrowserWorker {
       signal.addEventListener("abort", cancel, { once: true });
       signal.throwIfAborted();
       await assertGooglePage(page, this.policy);
-      const input = page.locator(COMPOSER).last();
+      const input = page.locator(GOOGLE_COMPOSER_SELECTOR).filter({ visible: true }).last();
       await input.waitFor({ state: "visible", timeout: 6000 });
       const signedIn = page.locator('a[aria-label^="Google Account:"], button[aria-label^="Google Account:"], a[aria-label^="Аккаунт Google:"]');
       if (!await signedIn.first().isVisible())
