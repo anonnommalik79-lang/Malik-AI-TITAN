@@ -45,8 +45,15 @@ test("disallowed Google AI Mode blocks chat and image generation before Chrome",
     chromiumFactory: { launchPersistentContext() { launches++; throw new Error("Browser must not launch"); } },
   });
   t.after(() => worker.close());
-  for (const task of ["chat", "image_generate"]) {
-    await assert.rejects(worker.ask({ ...request, task }), { code: "GOOGLE_AUTOMATION_RESTRICTED" });
+  const tinyPng = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=";
+  for (const body of [
+    { ...request, task: "chat" },
+    { ...request, task: "chat", images: [{ mimeType: "image/png", data: tinyPng }] },
+    { ...request, task: "image_generate" },
+    { ...request, task: "image_edit", images: [{ mimeType: "image/png", data: tinyPng }] },
+  ]) {
+    await assert.rejects(worker.ask(body), error =>
+      ["GOOGLE_AUTOMATION_RESTRICTED", "INVALID_IMAGE_INPUT"].includes(error.code));
   }
   assert.equal(launches, 0);
 });
