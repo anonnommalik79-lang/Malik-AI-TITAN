@@ -38,7 +38,7 @@ test("an allowed test policy still requires a separately authorized account prof
   assert.equal(isGoogleUrl("https://www.google.com:9443/ai"), false);
 });
 
-test("disallowed Google AI Mode blocks chat, image understanding, image generation and edits before Chrome", async t => {
+test("disallowed Google AI Mode blocks chat and image generation before Chrome", async t => {
   let launches = 0;
   const worker = new GoogleBrowserWorker({
     policy: googleAccess(async () => new Response("User-agent: *\nDisallow: /search")),
