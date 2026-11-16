@@ -88,6 +88,7 @@ const server = http.createServer(async (request, response) => {
   const signal = AbortSignal.any([connection.signal, AbortSignal.timeout(110_000)]);
   active.add(connection);
   let userScope;
+  let acquiredUserLock = false;
   let streamed = false;
   const onClose = () => { if (!response.writableEnded) connection.abort(); };
   response.once("close", onClose);
@@ -100,6 +101,7 @@ const server = http.createServer(async (request, response) => {
     if (running.has(body.userScope)) return json(response, 409, { error: "USER_BUSY", requestId });
     userScope = body.userScope;
     running.add(userScope);
+    acquiredUserLock = true;
     if (!rateLimit(userScope)) return json(response, 429, { error: "HOURLY_LIMIT", requestId });
     signal.throwIfAborted();
     const task = body.task === undefined ? "chat" : body.task;
@@ -131,7 +133,8 @@ const server = http.createServer(async (request, response) => {
       json(response, status, { error: code, requestId });
     }
   } finally {
-    if (userScope) running.delete(userScope);
+    // A rejected concurrent request must never release another request's lock.
+    if (acquiredUserLock) running.delete(userScope);
     active.delete(connection);
     response.off("close", onClose);
   }
