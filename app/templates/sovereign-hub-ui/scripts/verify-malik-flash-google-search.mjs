@@ -13,6 +13,7 @@ const search = load("lib/server/malik-flash-google-search.ts")
 const engine = load("lib/business/gemini-engine.ts")
 const { flashGoogleIntent } = load("lib/ai/malik-flash-intent.ts")
 const { fetchRecoverableChat } = load("lib/ai/chat-stream-recovery.ts")
+const { chatHttpErrorMessage } = load("lib/ai/errors.ts")
 
 const KEY = "AIzaTESTKEYFLASHAAAAAAAAAAAAAAAAAAAAAA"
 const env = { GEMINI_API_KEY: KEY, MALIK_FLASH_GOOGLE_SEARCH: "1", MALIK_FLASH_GEMINI_MODEL: "gemini-2.5-flash,gemini-2.5-flash-lite" }
@@ -235,7 +236,11 @@ test("directed Google requests keep their error on both chat transports without 
     },
   })
   assert.equal(response.status, 503)
-  assert.equal((await response.json()).error, "FLASH_GOOGLE_AI_MODE_UNAVAILABLE")
+  const raw = await response.text()
+  assert.equal(JSON.parse(raw).error, "FLASH_GOOGLE_AI_MODE_UNAVAILABLE")
+  assert.equal(chatHttpErrorMessage(response.status, raw, response.headers.get("content-type")), "Google AI Mode недоступен.")
+  const dashboard = readFileSync("components/sovereign/dashboard.tsx", "utf8")
+  assert.match(dashboard, /if \(!response\.ok\) \{\s*throw new Error\(chatHttpErrorMessage\(response\.status, await response\.text\(\), responseType\)\)\s*\}/u)
   assert.equal(posts, 1)
 })
 

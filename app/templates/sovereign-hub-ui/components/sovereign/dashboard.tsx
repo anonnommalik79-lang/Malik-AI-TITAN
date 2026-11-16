@@ -7356,16 +7356,15 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
 
     if (stoppedByPerson) void response.body?.cancel().catch(() => {})
     throwIfStopped()
+    const responseType = response.headers.get("content-type") || ""
     if (!response.ok) {
-      const rawError = await response.text()
+      throw new Error(chatHttpErrorMessage(response.status, await response.text(), responseType))
     }
 
     fullText = ""
     // True once the server said the answer is complete (`done`). A stream that
     // simply stops without it was cut on the way (proxy timeout, network).
     let sawDone = false
-    const responseType = response.headers.get("content-type") || ""
-
     // Live rendering: the answer is written into the message as the chunks
     // arrive — at most one React update per animation frame, and no more
     // often than every ~48ms, because every update re-renders the dashboard.
