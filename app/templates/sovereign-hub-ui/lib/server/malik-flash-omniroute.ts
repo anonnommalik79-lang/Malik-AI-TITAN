@@ -19,6 +19,7 @@ function config() {
   const key = (process.env.MALIK_FLASH_OMNIROUTE_API_KEY || "").trim()
   const model = (process.env.MALIK_FLASH_OMNIROUTE_MODEL || "flash-zero").trim()
   if (!raw || !key || !model) throw new Error("Flash OmniRoute: missing server-only URL, API key or combo model")
+  if (!/^flash-zero(?:-(?:code|smart|vision))?$/.test(model)) throw new Error("Flash OmniRoute only accepts explicitly configured free-only flash-zero combos")
   const parsed = new URL(raw)
   const loopback = parsed.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(parsed.hostname)
   if (parsed.protocol !== "https:" && !loopback) throw new Error("Flash OmniRoute requires HTTPS outside localhost")
@@ -31,7 +32,7 @@ type OmniEvent = { choices?: Array<{ delta?: { content?: unknown }; message?: { 
 
 export async function runFlashOmniRoute(input: {
   question: string
-  context: string
+  context?: string
   signal?: AbortSignal
   onText?: (chunk: string) => void
 }) {
