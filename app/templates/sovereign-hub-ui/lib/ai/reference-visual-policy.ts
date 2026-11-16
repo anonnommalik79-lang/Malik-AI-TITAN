@@ -207,6 +207,25 @@ function contextualVisualSubject(input: string): { topic: string; person: boolea
   return null
 }
 
+/**
+ * A photo nobody asked for is shown only for a concrete subject: a person, a
+ * place, a dish, a product, a landmark. Questions that ask why or how, advice,
+ * sums, weather, jokes and greetings name nothing to photograph; searching
+ * their words («будет 15% от 2400», «помоги с домашкой», «погода завтра»)
+ * returned unrelated pictures.
+ */
+const IMPLICIT_NOT_PHOTO = /\d|%|^[^\p{L}]|[,:;]|(?<!\p{L})(?:почему|зачем|why|анекдот\p{L}*|шутк\p{L}*|юмор|совет\p{L}*|помо[гщ]\p{L}*|домашк\p{L}*|погод\p{L}*|курс\p{L}*|новост\p{L}*|болит|бол[ьи]\p{L}*|деньг\p{L}*|заработ\p{L}*|лучше|хуже|разниц\p{L}*|отличи\p{L}*|vs|или|простыми\s+словами|подробно|кратко|работает|работают|устроен\p{L}*|значит|смысл|правильно|нужно|можно|сделать|делать|идеи|идей|план\p{L}*|список|способ\p{L}*|причин\p{L}*|пример\p{L}*)(?!\p{L})/iu
+
+export function concreteImplicitPhotoTopic(topic: string): boolean {
+  const text = topic.trim()
+  return /\p{L}{3,}/u.test(text) && text.split(/\s+/u).length <= 4 && !IMPLICIT_NOT_PHOTO.test(text) && !isAbstractPhotoSubject(text)
+    // «похудеть», «выспаться»: an action, not a thing.
+    && !/^\p{L}+(?:ть|ться|чь|тись)$/iu.test(text)
+}
+
+/** Lists of things one can see: places, dishes, models, breeds. Their items get their own photos. */
+const LISTS_PHOTOGRAPHABLE = /(?<!\p{L})(?:посмотреть|сходить|посетить|достопримечательност\p{L}*|мест[аоу]?|landmarks?|places|sights|блюд\p{L}*|кухн\p{L}*|пород\p{L}*|модел\p{L}*|марк[иа]|машин\p{L}*|автомобил\p{L}*|ноутбук\p{L}*|смартфон\p{L}*|телефон\p{L}*|город\p{L}*|стран\p{L}*|оз[её]р\p{L}*|гор[аыуе]?|горах|горн\p{L}*|тау\p{L}*|пляж\p{L}*|отел\p{L}*|музе\p{L}*|архитектур\p{L}*|животн\p{L}*|птиц\p{L}*|цвет[ыо]в|dishes|cars?|laptops?|phones?|models|cities|countries|lakes|mountains|beaches|hotels|museums|animals|birds)(?!\p{L})/iu
+
 /** Evaluate every explanatory answer; never require the user to ask for photos. */
 export function planReferenceVisuals(question: string, previousQuestion = "", hasAttachment = false, previousAnswer = ""): ReferenceVisualPlan | null {
   // «а щя скоко оценивается хиггсфиелд» names its subject like any other question.
@@ -222,8 +241,10 @@ export function planReferenceVisuals(question: string, previousQuestion = "", ha
   const context = resolveVisualContext(domain.context.subject)
   // Long briefs often include reference data after the actual question.
   // Never feed thousands of pasted characters into a photo lookup query.
+  // Colloquial normalization can join lines, so the first line is taken from the original.
+  const firstLine = original.split(/\r?\n/u, 1)[0]
   const text = raw.length > 2500
-    ? raw.split(/\r?\n/u, 1)[0].slice(0, 220).split(/(?<=[.!?])\s+/u, 1)[0].trim()
+    ? (normalizeColloquial(firstLine) || firstLine).slice(0, 220).split(/(?<=[.!?])\s+/u, 1)[0].trim()
     : raw
   if (!text) return null
   if (/^\//u.test(text) || isExplicitImageGenerationRequest(text) || NON_VISUAL.test(text) || TEXT_TASK.test(text) || FORMAT_ONLY_ANSWER.test(text) || ORDER_NOT_LOOKUP.test(text)) return null
@@ -252,7 +273,8 @@ export function planReferenceVisuals(question: string, previousQuestion = "", ha
     subject = places ? places[1] : (conversationalPerson || contextualSubject?.topic || text)
     if (/^(?:объясни\s+как|почему\s+не\s+работает)/iu.test(text)) return null
   }
-  const topic = referenceTopic(subject)
+  // «сварить борщ» → «борщ»: the dish is the subject, the verb is the question.
+  const topic = !explicit && !followUp ? referenceTopic(subject).replace(/^(?:\p{L}+(?:ть|ться|чь|тись)\s+)+/iu, "") : referenceTopic(subject)
   // «а третий?», «почему?», «2+2?», «а ты?» name no subject to photograph; the
   // answer's own photo hints show the subject it resolves them to.
   if (!followUp && isContextDependent(text)) return null
@@ -267,6 +289,9 @@ export function planReferenceVisuals(question: string, previousQuestion = "", ha
   const subjects = listed.length ? listed : allIPhones ? Object.keys(APPLE_IPHONE_PHOTOS).reverse() : undefined
   const person = Boolean(conversationalPerson || contextualSubject?.person) || /^(?:кто(?:\s+(?:такой|такая|такое|это))?|who(?:\s+is)?|кім)(?:\s|$)/iu.test(subject)
     || /(?:назарбаев|портрет|portrait|биографи)/iu.test(subject)
+  // «Покажи сильные ноутбуки» asks to see things even without the word «фото».
+  const asksToSee = /^(?:покажи(?:те)?|найди(?:те)?|подбери(?:те)?|show|find)(?![\p{L}\p{N}_])/iu.test(text)
+  if (!explicit && !followUp && !person && !subjects && !allIPhones && !asksToSee && !concreteImplicitPhotoTopic(topic)) return null
   return { topic, queries, explicit, subjects, person, context, entity: person || /(?:iphone|айфон)/iu.test(subject), layout: person || /референс|вдохнов|бренд|постер|reference|inspiration|poster|brand/iu.test(text) ? "portrait" : "landscape" }
 }
 
@@ -337,7 +362,12 @@ export function planAnswerVisualSlots(question: string, segments: AnswerVisualSe
     const anchor = candidates.find((segment) => base.visualTerms?.some((term) => segment.text.toLowerCase().includes(term))) || segments.find((segment) => segment.kind === "paragraph") || candidates[0]
     return anchor ? [{ key: anchor.key, plan: base, row: true }] : []
   }
-  const useful = candidates.filter((segment) => {
+  // Section photos only where the items are things to look at; «Ингредиенты»
+  // or «Определи цель» found unrelated pictures.
+  const photographableList = base.explicit || LISTS_PHOTOGRAPHABLE.test(question)
+    // A guide to getting into a venue shows the app, the ticket and the building.
+    || /(?<!\p{L})(?:зайти|войти|попасть|добраться|вход\p{L}*|выставк\p{L}*|мероприяти\p{L}*|venue|event|enter|get\s+to)(?!\p{L})/iu.test(question)
+  const useful = !photographableList ? [] : candidates.filter((segment) => {
     const label = visualSegmentLabel(segment.text)
     return label.length > 3 && label.split(/\s+/u).length <= 10 && !isAbstractPhotoSubject(label) && !/^\d{4}$/u.test(label)
       && !/^(?:истори[яи]|биографи[яи]|особенности|классическ|эпоха|открой|нажми|выбери|перейди|введи|вернись|как\s|how\s|экосистемы\s+и\s+инструменты|сравнение\s+результатов|большое\s+изображение|условия\s+и\s+цены|логистика|маршрут|click|tap|open|select|enter)/iu.test(label)
