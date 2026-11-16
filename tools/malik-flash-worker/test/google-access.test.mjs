@@ -50,7 +50,7 @@ test("disallowed Google AI Mode blocks all four multimodal tasks before Chrome",
     { ...request, task: "chat" },
     { ...request, task: "chat", images: [{ mime: "image/png", base64: tinyPng }] },
     { ...request, task: "image_generate" },
-    { ...request, task: "image_edit", images: [{ mimeType: "image/png", data: tinyPng }] },
+    { ...request, task: "image_edit", images: [{ mime: "image/png", base64: tinyPng }] },
   ]) {
     await assert.rejects(worker.ask(body), { code: "GOOGLE_AUTOMATION_RESTRICTED" });
   }
