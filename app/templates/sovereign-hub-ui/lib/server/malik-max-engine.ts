@@ -1622,7 +1622,10 @@ export async function runMalikMax(input: MaxInput, deps: { fetcher?: typeof fetc
   // Leaderboard answers must fit a bounded model call instead of spending the
   // entire HTTP deadline on an uncontrolled essay. Other tasks are unaffected.
   const rankingRequest = !codeMode && isModelLeaderboardRequest(taskPrompt)
-  const perCall = (spent: number) => Math.max(1, Math.min(microCode ? 1_400 : fastMode ? 1_500 : !codeMode && rankingRequest ? 2_800 : 16_000, budget - spent))
+  // A short overview («Расскажи про Эйфелеву башню») is a fast request with a
+  // full answer: at 1 500 tokens a call it was finished in slow continuation
+  // rounds (110 s on production). Only one-line replies keep the small cap.
+  const perCall = (spent: number) => Math.max(1, Math.min(microCode ? 1_400 : quickPath ? 1_500 : fastMode ? 4_000 : !codeMode && rankingRequest ? 2_800 : 16_000, budget - spent))
   const timing = () => quickPath
     ? { hedgeMs: 900, firstTokenMs: 8_000, firstDeadlineMs: 20_000, idleMs: 15_000 }
     : fastMode
