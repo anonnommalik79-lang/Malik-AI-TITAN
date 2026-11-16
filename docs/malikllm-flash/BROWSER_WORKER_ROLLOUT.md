@@ -6,22 +6,22 @@ MalikLLM Flash stays available to users on the native MALIKII engines. The Googl
 
 ### Blocker: no permitted automated access to Google AI Mode
 
-Rechecked on 15 November 2026:
+Rechecked on 16 November 2026:
 
 - The worker's entry `https://www.google.com/ai` redirects to `/search?udm=50&aep=11`. The general group (`User-agent: *`) of Google's [robots.txt](https://www.google.com/robots.txt) disallows `/search`. `Allow: /search` is granted only to the `facebookexternalhit` and `Twitterbot` crawlers for shared image links. No rule allows `/search?udm=50`, `/ai` or `/aimode` for other agents.
 - Google [terms](https://policies.google.com/terms?hl=en-US) prohibit automated access that violates those machine-readable instructions. A signed-in Google profile does not establish permission to automate the endpoint.
 - No official Google AI Mode API was found. Google's Connected Apps preview places third-party apps inside AI Mode; it does not let an app query AI Mode. Third-party "AI Mode API" services scrape the same endpoint and do not remove the restriction.
 - The worker checks robots.txt before opening Chrome and fails closed with `GOOGLE_AUTOMATION_RESTRICTED`. This check was kept unchanged.
 
-### Supported alternative: Gemini with Google Search (built, off until approved)
+### Gemini with Google Search
 
-Flash text questions can be answered by [Gemini with Grounding with Google Search](https://ai.google.dev/gemini-api/docs/google-search) through the official Gemini API. It reuses the Gemini keys and engine the server already has (`lib/business/gemini-engine.ts`), so no new connection is needed. Google bills grounded requests, so it runs only when `MALIK_FLASH_GOOGLE_SEARCH=1` is set on Render. It is off.
+The official [Gemini with Grounding with Google Search](https://ai.google.dev/gemini-api/docs/google-search) text path uses the server's existing Gemini keys when `MALIK_FLASH_GOOGLE_SEARCH=1`. On 16 November, production reported the switch enabled. Render logs showed HTTP 404 for inaccessible Gemini 2.5 model IDs and HTTP 402 billing refusals from the configured connections. A grounded production answer has yet to be verified. The browser flags stay off.
 
-- `lib/server/malik-flash-google-search.ts` streams the answer and turns Google's grounding links into the chat's source cards. The answer is labeled with its real provider `google-gemini-search` and the real Gemini model. The system prompt forbids presenting the answer as Google, Gemini or Google AI Mode.
-- It takes only text questions. Code, sites, games, petroleum, skills, images, video and attachments keep their MALIKII paths, and coding still goes to MAX under the existing quotas.
-- A bounded excerpt of the same chat (six recent messages, 1 500 characters each) goes with the question, so a follow-up keeps its subject.
-- If Gemini cannot answer before any text reaches the chat (no key, quota, outage), the turn is answered by the native MALIKII engine. A failure after text is a retryable error with «Перегенерировать». A stop from the user stays a stop.
-- Covered by `scripts/verify-malik-flash-google-search.mjs` with a scripted Gemini API. It has not answered a live question yet: that needs the switch on Render.
+- The chat publishes a Google Search reply only after receiving a completion receipt and valid grounding links. It labels successful text `google-gemini-search` and uses the reported Gemini model version.
+- The path handles search and text questions that need the web. Code, sites, games, petroleum, skills, images, video and attachments use their existing routes. A bounded excerpt of the active chat accompanies the question. With context disabled, the request contains only the current question.
+- The Gemini path allows three concurrent calls per app process. Each outbound generation request counts against the local daily limit, which defaults to 500 and resets on Google's Pacific day. Google can enforce a lower quota. A quota or billing refusal pauses fresh attempts. The caller stops the Google attempt at 15 seconds.
+- Ordinary Flash requests can use native answers during a Google outage. Explicit requests to use Google Search or Google AI Mode receive the corresponding service error. The app displays the error once and allows the user to retry.
+- `scripts/verify-malik-flash-google-search.mjs` exercises successful grounding, missing sources, incomplete responses, consent, quota, and parallel traffic with a scripted Gemini API. Before expanding the official API route, verify eligible users, the project quota, and the required display of Google Search Suggestions and restrictions on storage under the [Gemini terms](https://ai.google.dev/gemini-api/terms#grounding-with-google-search).
 
 [Gemini image generation and editing](https://ai.google.dev/gemini-api/docs/image-generation) is the matching option for pictures. It is not connected.
 

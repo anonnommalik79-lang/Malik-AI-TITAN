@@ -11,6 +11,7 @@ import { withCompute } from "@/lib/malik-compute/runtime"
 import { generationComputeOperation } from "@/lib/malik-compute/policies"
 import { handleMalikPhotoGenerationRequest } from "@/lib/media/generate-photo-route"
 import { usesMalikFlashBrowser } from "@/lib/ai/malik-models"
+import { flashGoogleIntent } from "@/lib/ai/malik-flash-intent"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -44,6 +45,9 @@ async function handlePOST(request: Request) {
     return photoMaintenanceResponse("/api/generate")
   }
   if (kind === "photo" && usesMalikFlashBrowser(body.chatModelId)) {
+    return handleMalikPhotoGenerationRequest(request)
+  }
+  if (kind === "photo" && body.chatModelId === "malik-flash" && flashGoogleIntent(prompt) === "ai-mode") {
     return handleMalikPhotoGenerationRequest(request)
   }
 

@@ -4,6 +4,7 @@ import { answerRevises } from "./answer-completion"
 import { chatCompletionError, isChatStoppedByUser, MAX_CHAT_SSE_FRAME_CHARS, mergeChatStreamText, parseChatSseFrame } from "./chat-stream-contract"
 import { resolveConversationIntent } from "./conversation-intent"
 import { usesMalikFlashBrowser } from "./malik-models"
+import { flashGoogleIntent } from "./malik-flash-intent"
 
 /** Recover a saved turn before repeating a read-only question. Never replay actions. */
 type RecoveryOptions = {
@@ -129,7 +130,9 @@ export async function fetchRecoverableChat(input: RequestInfo | URL, init: Reque
   let body: Record<string, unknown> = {}
   try { body = JSON.parse(String(init.body || "{}")) } catch {}
   const flash = usesMalikFlashBrowser(body.model)
-  const retryable = !flash && canRetryChat(body)
+  const directedGoogle = (body.model || body.modelId) === "malik-flash" &&
+    Boolean(flashGoogleIntent(String(body.originalQuestion || body.question || body.prompt || body.message || "")))
+  const retryable = !flash && !directedGoogle && canRetryChat(body)
   const defaults = chatStreamTimings(body)
   const firstTextMs = options.firstTextMs ?? defaults.firstTextMs
   const idleMs = options.idleMs ?? defaults.idleMs
@@ -159,7 +162,7 @@ export async function fetchRecoverableChat(input: RequestInfo | URL, init: Reque
     }
   }
   // Permission and quota failures are terminal; never retry or disguise them.
-  if (flash && !response.ok) return response
+  if ((flash || directedGoogle) && !response.ok) return response
   if (!response.ok && ![502, 503, 504].includes(response.status)) return response
   if (!response.headers.get("content-type")?.includes("text/event-stream") && response.ok) return response
   const encoder = new TextEncoder()

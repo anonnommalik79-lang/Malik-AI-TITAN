@@ -1,5 +1,6 @@
 import { asJson, extractPrompt, malikGodAnswer } from "@/lib/malik-god-router"
 import { DEFAULT_MALIK_MODEL_ID, hasMalikProAccess, MALIK_FLASH_BROWSER_ENABLED, selectsMalikFlash } from "@/lib/ai/malik-models"
+import { flashGoogleIntent, isFlashCodingRequest } from "@/lib/ai/malik-flash-intent"
 import { withFounderRequestAudit } from "@/lib/server/founder-request-audit"
 import { parsePluginCommandFromBody } from "@/lib/server/plugin-runtime"
 import { runPluginModelAnswer } from "@/lib/server/plugin-model-answer"
@@ -25,10 +26,14 @@ export const POST = withFounderRequestAudit(withCompute(addressedHandlePOST, asy
 
 async function addressedHandlePOST(request: Request) {
   const requestBody = await request.clone().json().catch(() => ({}))
-  // Only a turn for the Google integration leaves this route; native Flash stays here.
-  if (selectsMalikFlash(requestBody) && MALIK_FLASH_BROWSER_ENABLED) {
-    const { handleFlashJsonChat } = await import("../../stream/route-impl")
-    return handleFlashJsonChat(request)
+  // Directed Google requests go to the same handler as streaming Flash turns.
+  if (selectsMalikFlash(requestBody)) {
+    const prompt = extractPrompt(requestBody)
+    if (MALIK_FLASH_BROWSER_ENABLED || (flashGoogleIntent(prompt) && !isFlashCodingRequest(prompt) &&
+      !skillChatRequest(requestBody) && !parsePluginCommandFromBody(requestBody))) {
+      const { handleFlashJsonChat } = await import("../../stream/route-impl")
+      return handleFlashJsonChat(request)
+    }
   }
   const response = await handlePOST(request)
   return addressChatResponse(response, await resolveRequestEntitlement(request), requestBody)

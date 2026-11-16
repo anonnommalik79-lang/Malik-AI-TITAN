@@ -9,12 +9,12 @@ import { briefNeedsDeep } from "@/lib/ai/brief-quality"
 import { isCodeRequest } from "@/lib/ai/request-kind"
 import { FlashBrowserError } from "@/lib/server/malik-flash-browser-bridge"
 import { runFlashChat } from "@/lib/server/malik-flash-chat"
-import { FLASH_GOOGLE_SEARCH_PROVIDER, FlashSearchUnavailable, flashGoogleSearchEligible, flashGoogleSearchEnabled, runFlashGoogleSearch } from "@/lib/server/malik-flash-google-search"
-import { flashImageOperation, isFlashCodingRequest } from "@/lib/ai/malik-flash-intent"
+import { FLASH_GOOGLE_SEARCH_PROVIDER, FlashSearchUnavailable, flashGoogleModeUnavailable, flashGoogleSearchEligible, flashGoogleSearchEnabled, flashGoogleSearchError, runFlashGoogleSearch } from "@/lib/server/malik-flash-google-search"
+import { flashGoogleIntent, flashImageOperation, isFlashCodingRequest } from "@/lib/ai/malik-flash-intent"
 import type { MalikWebSource } from "@/lib/ai/web-research-types"
 import { upsertWebSource } from "@/lib/ai/source-evidence"
 import { normalizeProviderTokenUsage } from "@/lib/ai/token-telemetry"
-import { classifyFreshness, freshnessMode } from "@/lib/ai/freshness-intent"
+import { classifyFreshness, freshnessMode, NO_WEB } from "@/lib/ai/freshness-intent"
 import { shouldUseWeb } from "@/lib/ai/web-search-policy"
 import { currentEvidenceAvailable, finalizeFreshAnswer, freshnessEvidenceInstruction, unavailableFreshAnswer } from "@/lib/live-intelligence/evidence"
 import { isContinueRequest, resumableAnswer, resumeText, sameAnswerText, withIncompleteNote, type AnswerIncomplete } from "@/lib/ai/answer-completion"
@@ -1204,12 +1204,27 @@ function flashNativeTurn(body: unknown): boolean {
  * games, petroleum, skills, images and attachments keep their MALIKII paths.
  */
 function flashSearchTurn(body: any): boolean {
-  if (!flashNativeTurn(body) || !flashGoogleSearchEnabled() || skillChatRequest(body)) return false
+  if (!flashNativeTurn(body) || skillChatRequest(body)) return false
   const prompt = coderPrompt(body)
+  const explicitGoogle = flashGoogleIntent(prompt) === "search"
+  if (!explicitGoogle && (!flashGoogleSearchEnabled() || body?.disableResearch || body?.research === false || NO_WEB.test(prompt))) return false
   const codeOrBuild = Boolean(body?.isProjectRequest || body?.isCodeRequest || body?.forceCanvas || body?.selectedSkillId) ||
     websiteIntent(prompt) === "create" || Boolean(gameStudioTurn(prompt, { messages: body?.messages || body?.history, attachments: body?.attachments })) ||
     Boolean(routePetroleum(prompt, body?.selectedSkillId).domain)
-  return flashGoogleSearchEligible(prompt, { attachments: body?.attachments, codeOrBuild, history: body?.history || body?.messages })
+  return flashGoogleSearchEligible(prompt, { attachments: body?.attachments, codeOrBuild, history: body?.history || body?.messages }) &&
+    (explicitGoogle || shouldUseWeb(prompt, { research: body?.research, history: body?.history || body?.messages }))
+}
+
+async function flashSearchAnswer<T>(input: Parameters<typeof runFlashGoogleSearch>[0], fallback: (reason: string) => Promise<T>) {
+  const requested = Number(input.body.maxTokens)
+  const requestedLimit = Number.isFinite(requested) && requested >= 1 ? Math.floor(requested) : undefined
+  try {
+    return await runFlashGoogleSearch({ ...input, maxOutputTokens: requestedLimit === undefined ? input.maxOutputTokens : Math.min(requestedLimit, input.maxOutputTokens ?? requestedLimit) })
+  } catch (error) {
+    if (!(error instanceof FlashSearchUnavailable)) throw error
+    if (flashGoogleIntent(input.question) === "search") throw flashGoogleSearchError(error)
+    return fallback(error.code)
+  }
 }
 
 function liveSseResponse(
@@ -1304,17 +1319,11 @@ function liveSseResponse(
       const settledAnswer = flash
         ? runFlashChat({ question: coderPrompt(body), body, account: entitlement, maxOutputTokens, signal, onText: writeAnswer("main") })
         : !project && flashSearchTurn(body)
-          ? (async () => {
-              try {
-                return await runFlashGoogleSearch({ question: coderPrompt(body), body, maxOutputTokens, signal, onText: writeAnswer("main") })
-              } catch (error) {
-                // Gemini did not answer before any text: Flash stays available on the native engine.
-                if (!(error instanceof FlashSearchUnavailable)) throw error
-                console.warn("[MALIK_FLASH_GOOGLE_SEARCH]", error.code)
-                activity.status("Поиск Google недоступен (" + error.code + ") — отвечает MALIKII")
-                return await getNativeChatAnswer()
-              }
-            })()
+          ? flashSearchAnswer({ question: coderPrompt(body), body, maxOutputTokens, signal, onText: writeAnswer("main") }, async reason => {
+              console.warn("[MALIK_FLASH_GOOGLE_SEARCH]", reason)
+              activity.status("Поиск Google недоступен. Отвечает Malik AI.")
+              return getNativeChatAnswer()
+            })
           : getNativeChatAnswer()
       function getNativeChatAnswer() {
         if (project) {
@@ -1452,6 +1461,7 @@ function liveSseResponse(
           ...(finalContent !== undefined ? { finalContent } : {}),
           tookMs: Date.now() - startedAt,
           flashTiming: "flashTiming" in answer ? answer.flashTiming : undefined,
+          flashSearch: "flashSearch" in answer ? answer.flashSearch : undefined,
           flashAttachments: "flashAttachments" in answer ? answer.flashAttachments : undefined,
           // Only official provider usage is published; absent metrics remain unknown.
           usage: normalizeProviderTokenUsage("usage" in answer ? answer.usage : undefined) ?? null,
@@ -1576,6 +1586,11 @@ async function handlePOST(request: Request, json = false) {
     // answered by the native MALIKII engine, as it was before the worker existed.
     const flashBrowser = flashRequested && MALIK_FLASH_BROWSER_ENABLED
     const flashNative = flashRequested && !flashBrowser
+    if (flashNative && !isFlashCodingRequest(flashPrompt) && !skillChatRequest(body)) {
+      const google = flashGoogleIntent(flashPrompt)
+      if (google === "ai-mode") throw flashGoogleModeUnavailable()
+      if (google === "search" && !flashSearchTurn(body)) throw flashGoogleSearchError(new FlashSearchUnavailable("UNSUPPORTED_TURN"))
+    }
     const flashUsesMax = flashBrowser && !flashImageOperation(flashPrompt, imageEdit) &&
       (isFlashCodingRequest(flashPrompt) || websiteIntent(flashPrompt) === "create" ||
         gameStudioTurn(flashPrompt, { attachments: body?.attachments })?.kind === "new")
@@ -1689,15 +1704,10 @@ async function handlePOST(request: Request, json = false) {
       : isProjectBuildRequest(routedBody)
       ? await runProjectAnswer(routedBody, selection, entitlement.userId)
       : flashSearchTurn(routedBody)
-      ? await (async () => {
-          try {
-            return await runFlashGoogleSearch({ question: coderPrompt(routedBody), body: routedBody, maxOutputTokens, signal: request.signal })
-          } catch (error) {
-            if (!(error instanceof FlashSearchUnavailable)) throw error
-            console.warn("[MALIK_FLASH_GOOGLE_SEARCH]", error.code)
-            return await runSelectedAnswer(routedBody, selection, undefined, maxOutputTokens,undefined,undefined,undefined,undefined,entitlement)
-          }
-        })()
+      ? await flashSearchAnswer({ question: coderPrompt(routedBody), body: routedBody, maxOutputTokens, signal: request.signal }, reason => {
+          console.warn("[MALIK_FLASH_GOOGLE_SEARCH]", reason)
+          return runSelectedAnswer(routedBody, selection, undefined, maxOutputTokens,undefined,undefined,undefined,undefined,entitlement)
+        })
       : await runSelectedAnswer(routedBody, selection, undefined, maxOutputTokens,undefined,undefined,undefined,undefined,entitlement)
     const multimodalCost = estimateMultimodalTokens(hasMalikAttachments(routedBody?.attachments) ? routedBody.attachments : [])
     if (multimodalCost > 0) {

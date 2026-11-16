@@ -6,6 +6,7 @@ import { isExplicitVideoGenerationRequest } from "@/lib/ai/image-intent"
 import { instantReply } from "@/lib/ai/instant-replies"
 import { clockReply } from "@/lib/ai/premise-check"
 import { selfCreatorReply } from "@/lib/ai/attribution-evidence"
+import { normalizeProviderTokenUsage, type MalikTokenUsage } from "@/lib/ai/token-telemetry"
 import { FlashBrowserError } from "./malik-flash-browser-bridge"
 
 /**
@@ -15,8 +16,9 @@ import { FlashBrowserError } from "./malik-flash-browser-bridge"
  * This is not Google AI Mode and is never shown as AI Mode: automated access
  * to AI Mode is not permitted (see docs/malikllm-flash/BROWSER_WORKER_ROLLOUT.md).
  * Search grounding is billed by Google, so it runs only when the owner sets
- * MALIK_FLASH_GOOGLE_SEARCH=1. Without it, or when Gemini cannot answer before
- * any text reached the chat, Flash is answered by the native MALIKII engine.
+ * MALIK_FLASH_GOOGLE_SEARCH=1. The chat route handles ordinary turns with its
+ * native engine when this service is unavailable and reports explicit Google
+ * requests as unavailable.
  */
 
 export const FLASH_GOOGLE_SEARCH_PROVIDER = "google-gemini-search"
@@ -27,8 +29,10 @@ export const FLASH_GOOGLE_SEARCH_PROVIDER = "google-gemini-search"
  * names it in MALIK_FLASH_GEMINI_MODEL.
  */
 export const FLASH_FREE_SEARCH_MODELS = ["gemini-2.5-flash", "gemini-2.5-flash-lite"] as const
-/** Stays under Google's free 1 500 grounded requests a day for Gemini 2.5. */
-const DEFAULT_DAILY_LIMIT = 1000
+const DEFAULT_DAILY_LIMIT = 500
+const MAX_IN_FLIGHT = 3
+const GOOGLE_DEADLINE_MS = 15_000
+const PACIFIC_DAY = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Los_Angeles", dateStyle: "short" })
 const MAX_QUESTION_CHARS = 6000
 const HISTORY_TURNS = 6
 const HISTORY_CHARS = 1500
@@ -43,7 +47,8 @@ export type FlashSearchAnswer = {
   usedWeb: boolean
   sources: FlashSearchSource[]
   attempts: []
-  flashSearch: { searched: boolean; keySource: string; firstTextMs?: number; totalMs: number }
+  usage?: MalikTokenUsage
+  flashSearch: { searched: true; firstTextMs?: number; totalMs: number }
 }
 
 type Env = Record<string, string | undefined>
@@ -61,6 +66,8 @@ export function flashGoogleSearchEnabled(env: Env = process.env): boolean {
 type FlashSearchHealth = {
   lastFailure?: { code: string; statuses: number[]; models: Array<{ model: string; code: string; status?: number }>; at: string }
   lastSuccessAt?: string
+  cooldown?: { until: number; code: string }
+  active?: number
   day?: string
   used?: number
 }
@@ -74,15 +81,23 @@ function searchHealth(): FlashSearchHealth {
  * the last call ended. Codes and HTTP statuses only; never a key or its name.
  */
 export function flashGoogleSearchStatus(env: Env = process.env) {
-  const { day: _day, used: _used, ...last } = searchHealth()
-  return { switch: flashGoogleSearchSwitch(env), geminiKey: geminiKeys(env).length > 0, enabled: flashGoogleSearchEnabled(env),
-    models: flashSearchModels(env), dailyUsed: usedToday(), dailyLimit: flashSearchDailyLimit(env), ...last }
+  const { lastFailure, lastSuccessAt } = searchHealth()
+  const enabled = flashGoogleSearchEnabled(env)
+  const dailyLimit = flashSearchDailyLimit(env)
+  const status = !enabled || dailyLimit === 0 ? "disabled"
+    : lastSuccessAt && (!lastFailure || lastSuccessAt >= lastFailure.at) ? "ready"
+    : lastFailure ? "unavailable" : "unverified"
+  return { switch: flashGoogleSearchSwitch(env), geminiKey: geminiKeys(env).length > 0, enabled, status,
+    models: flashSearchModels(env), dailyUsed: usedToday(), dailyLimit,
+    lastFailure, lastSuccessAt }
 }
 
 /** The models Flash may search with: the owner's list, or the free-allowance ones. */
-export function flashSearchModels(env: Env = process.env): string[] {
+export function flashSearchModels(env: Env = process.env, now = Date.now()): string[] {
   const named = String(env.MALIK_FLASH_GEMINI_MODEL || "").split(",").map(value => value.trim().replace(/^models\//, "")).filter(value => /^gemini-[a-z0-9.-]{2,60}$/iu.test(value))
-  return named.length ? [...new Set(named)] : [...FLASH_FREE_SEARCH_MODELS]
+  if (named.length) return [...new Set(named)]
+  // Google will reroute this ID to a differently billed model at shutdown.
+  return now < Date.UTC(2026, 11, 1) ? [...FLASH_FREE_SEARCH_MODELS] : ["gemini-2.5-flash-lite"]
 }
 
 export function flashSearchDailyLimit(env: Env = process.env): number {
@@ -93,7 +108,7 @@ export function flashSearchDailyLimit(env: Env = process.env): number {
 }
 
 function today() {
-  return new Date().toISOString().slice(0, 10)
+  return PACIFIC_DAY.format(new Date())
 }
 
 function usedToday() {
@@ -101,7 +116,7 @@ function usedToday() {
   return state.day === today() ? state.used || 0 : 0
 }
 
-/** Counts one search for today, or false when today's allowance is spent. Per server process. */
+/** Counts one generation request, including a retry, against this process's daily budget. */
 function takeDailySearch(env: Env): boolean {
   const state = searchHealth()
   if (state.day !== today()) { state.day = today(); state.used = 0 }
@@ -151,6 +166,7 @@ function historyMessages(body: Record<string, unknown>): Array<{ role: string; c
 
 /** The question with a bounded excerpt of the same chat, so a follow-up keeps its subject. */
 export function flashSearchPrompt(question: string, body: Record<string, unknown>): string {
+  if (body.flashContextEnabled === false) return question.trim()
   const history = historyMessages(body)
   if (history.length && history.at(-1)?.role === "user" && history.at(-1)?.content === question.trim()) history.pop()
   if (!history.length) return question.trim()
@@ -175,18 +191,25 @@ export function flashSearchSources(items: GeminiSource[]): FlashSearchSource[] {
   return [...sources.values()]
 }
 
-/**
- * Streams one Flash answer from Gemini with Google Search. Text reaches the
- * chat as it arrives. If Gemini restarts the answer on another key after text
- * was shown, the stream stops there and the final text replaces it on `done`.
- * A failure before any text is a FlashSearchUnavailable the caller answers
- * natively; a failure after text is a retryable chat error.
- */
 export class FlashSearchUnavailable extends Error {
   constructor(public readonly code: string) {
     super("Gemini with Google Search did not answer: " + code)
     this.name = "FlashSearchUnavailable"
   }
+}
+
+export function flashGoogleModeUnavailable(): FlashBrowserError {
+  return new FlashBrowserError("FLASH_GOOGLE_AI_MODE_UNAVAILABLE", "Google AI Mode через браузер сейчас недоступен в MalikLLM Flash.")
+}
+
+export function flashGoogleSearchError(error: FlashSearchUnavailable): FlashBrowserError {
+  if (error.code === "BILLING_REQUIRED") {
+    return new FlashBrowserError("FLASH_GOOGLE_SEARCH_BILLING_REQUIRED", "Для поиска Google текущему подключению нужен доступ к платному тарифу. Запрос остановлен.")
+  }
+  if (["QUOTA", "DAILY_LIMIT", "BUSY"].includes(error.code)) {
+    return new FlashBrowserError("FLASH_GOOGLE_SEARCH_LIMIT", "Поиск Google сейчас ограничен. Попробуйте повторить запрос позже.", 429)
+  }
+  return new FlashBrowserError("FLASH_GOOGLE_SEARCH_UNAVAILABLE", "Не удалось получить подтверждённый ответ от поиска Google. Попробуйте повторить запрос позже.")
 }
 
 export async function runFlashGoogleSearch(input: {
@@ -198,52 +221,62 @@ export async function runFlashGoogleSearch(input: {
   env?: Env
   fetchImpl?: typeof fetch
 }): Promise<FlashSearchAnswer> {
-  let forwarded = "", restarted = false
   const env = input.env || process.env
-  // Over today's free allowance MALIKII answers instead: nothing is billed.
-  if (!takeDailySearch(env)) {
-    searchHealth().lastFailure = { code: "DAILY_LIMIT", statuses: [], models: [], at: new Date().toISOString() }
-    throw new FlashSearchUnavailable("DAILY_LIMIT")
-  }
+  input.signal?.throwIfAborted()
+  if (!flashGoogleSearchEnabled(env)) throw new FlashSearchUnavailable("DISABLED")
+  if (usedToday() >= flashSearchDailyLimit(env)) throw new FlashSearchUnavailable("DAILY_LIMIT")
+  const state = searchHealth()
+  if (state.cooldown && Date.now() < state.cooldown.until) throw new FlashSearchUnavailable(state.cooldown.code)
+  if ((state.active ?? 0) >= MAX_IN_FLIGHT) throw new FlashSearchUnavailable("BUSY")
   const models = flashSearchModels(env)
+  const deadline = AbortSignal.timeout(GOOGLE_DEADLINE_MS)
+  const signal = input.signal ? AbortSignal.any([deadline, input.signal]) : deadline
+  state.active = (state.active ?? 0) + 1
   try {
     const result = await runGemini({
       system: SYSTEM,
       prompt: flashSearchPrompt(input.question, input.body),
-      maxOutputTokens: Math.max(256, Math.min(input.maxOutputTokens ?? 4096, 8192)),
+      maxOutputTokens: Math.min(input.maxOutputTokens ?? 4096, 8192),
       search: true,
-      thinkingLevel: "low",
+      strictSearch: true,
+      thinkingLevel: models.every(model => model.startsWith("gemini-2.5-")) ? "default" : "low",
       preferredModel: models[0],
       onlyModels: models,
-      deadlineMs: 100_000,
-      signal: input.signal,
-      // The engine walks its configured list; Flash's list is the free-allowance models.
-      env: { ...env, BUSINESS_GEMINI_MODELS: models.join(",") },
+      deadlineMs: GOOGLE_DEADLINE_MS,
+      stallMs: { firstMs: 8_000, nextMs: 5_000 },
+      signal,
+      // The Flash lane talks to the official endpoint using the approved models.
+      env: { ...env, GEMINI_API_BASE_URL: undefined, BUSINESS_GEMINI_MODELS: models.join(",") },
       fetchImpl: input.fetchImpl,
       onEvent: event => {
-        if (event.type === "reset") { if (forwarded) restarted = true; return }
-        if (event.type !== "delta" || restarted || !event.text) return
-        forwarded += event.text
-        input.onText?.(event.text)
+        if (event.type === "attempt" && !takeDailySearch(env)) throw new FlashSearchUnavailable("DAILY_LIMIT")
       },
     })
+    signal.throwIfAborted()
     const sources = flashSearchSources(result.sources)
-    searchHealth().lastSuccessAt = new Date().toISOString()
+    if (result.finishReason !== "STOP") throw new FlashSearchUnavailable("INCOMPLETE")
+    if (!result.searched || !sources.length) throw new FlashSearchUnavailable("NO_SOURCES")
+    // Citations can arrive in the last SSE frame. Release the real answer only
+    // after Google confirms both completion and grounding for this response.
+    input.onText?.(result.content)
+    state.lastSuccessAt = new Date().toISOString()
     return {
       content: result.content,
       provider: FLASH_GOOGLE_SEARCH_PROVIDER,
-      model: result.model,
+      model: result.modelVersion || result.model,
       selectedModelId: "malik-flash",
-      usedWeb: result.searched && sources.length > 0,
+      usedWeb: true,
       sources,
       attempts: [],
-      flashSearch: { searched: result.searched, keySource: result.keySource, firstTextMs: result.timing.firstTextMs, totalMs: result.timing.totalMs },
+      usage: normalizeProviderTokenUsage({ ...result.usage, inputTokens: result.usage?.promptTokens }),
+      flashSearch: { searched: true, firstTextMs: result.timing.firstTextMs, totalMs: result.timing.totalMs },
     }
   } catch (error) {
-    const code = error instanceof GeminiEngineError ? error.code : "FAILED"
-    if (code === "ABORTED" || input.signal?.aborted) throw error
+    if (input.signal?.aborted) throw error
     const trail = error instanceof GeminiEngineError ? error.trail : []
     const statuses = [...new Set(trail.flatMap(step => typeof step.status === "number" ? [step.status] : []))].slice(0, 6)
+    const code = deadline.aborted ? "TIMEOUT" : statuses.includes(402) ? "BILLING_REQUIRED"
+      : error instanceof GeminiEngineError || error instanceof FlashSearchUnavailable ? error.code : "FAILED"
     const seen = new Set<string>()
     const perModel = trail.flatMap(step => {
       const id = step.model + ":" + step.code + ":" + (step.status ?? "")
@@ -251,8 +284,13 @@ export async function runFlashGoogleSearch(input: {
       seen.add(id)
       return [{ model: step.model, code: step.code, ...(typeof step.status === "number" ? { status: step.status } : {}) }]
     }).slice(0, 8)
-    searchHealth().lastFailure = { code, statuses, models: perModel, at: new Date().toISOString() }
-    if (!forwarded) throw new FlashSearchUnavailable(code)
-    throw new FlashBrowserError("FLASH_GOOGLE_SEARCH_INTERRUPTED", "Ответ с поиском Google прервался. Нажмите «Перегенерировать», чтобы повторить.", 503)
+    state.lastFailure = { code, statuses, models: perModel, at: new Date().toISOString() }
+    const backoff = code === "QUOTA" ? (error instanceof GeminiEngineError ? error.retryAfterMs : undefined) ?? 30_000
+      : ["BILLING_REQUIRED", "MODEL_MISSING", "KEY_REJECTED"].includes(code) ? 5 * 60_000
+      : code === "TIMEOUT" || code === "UNAVAILABLE" ? 15_000 : 0
+    if (backoff) state.cooldown = { until: Date.now() + backoff, code }
+    throw new FlashSearchUnavailable(code)
+  } finally {
+    state.active -= 1
   }
 }

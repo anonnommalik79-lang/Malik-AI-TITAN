@@ -11,9 +11,11 @@ import { workTestLoader } from "./work-test-loader.mjs"
 const load = workTestLoader()
 const search = load("lib/server/malik-flash-google-search.ts")
 const engine = load("lib/business/gemini-engine.ts")
+const { flashGoogleIntent } = load("lib/ai/malik-flash-intent.ts")
+const { fetchRecoverableChat } = load("lib/ai/chat-stream-recovery.ts")
 
 const KEY = "AIzaTESTKEYFLASHAAAAAAAAAAAAAAAAAAAAAA"
-const env = { GEMINI_API_KEY: KEY, MALIK_FLASH_GOOGLE_SEARCH: "1" }
+const env = { GEMINI_API_KEY: KEY, MALIK_FLASH_GOOGLE_SEARCH: "1", MALIK_FLASH_GEMINI_MODEL: "gemini-2.5-flash,gemini-2.5-flash-lite" }
 const sse = frames => new Response(new ReadableStream({
   start(controller) {
     const encoder = new TextEncoder()
@@ -33,6 +35,7 @@ function google(answer) {
   const fetchImpl = async (url, init = {}) => {
     const href = String(url)
     assert.ok(!href.includes("key="), "the key never goes in the URL")
+    assert.equal(new URL(href).origin, "https://generativelanguage.googleapis.com")
     if (href.includes("/v1beta/models?")) return models()
     const body = JSON.parse(init.body)
     body.model = decodeURIComponent(href.match(/models\/([^:]+):streamGenerateContent/)?.[1] || "")
@@ -57,11 +60,12 @@ test("Google Search runs only when the owner turned it on and a Gemini key exist
   assert.equal(status.switch, true)
   assert.equal(status.geminiKey, false)
   assert.equal(status.enabled, false)
-  assert.deepEqual(status.models, ["gemini-2.5-flash", "gemini-2.5-flash-lite"])
-  assert.equal(status.dailyLimit, 1000)
+  assert.deepEqual(search.flashSearchModels({}, Date.UTC(2026, 10, 16)), ["gemini-2.5-flash", "gemini-2.5-flash-lite"])
+  assert.deepEqual(search.flashSearchModels({}, Date.UTC(2026, 11, 1)), ["gemini-2.5-flash-lite"])
+  assert.equal(status.dailyLimit, 500)
   assert.deepEqual(search.flashSearchModels({ MALIK_FLASH_GEMINI_MODEL: "gemini-3.6-flash, models/gemini-2.5-flash, ../x" }), ["gemini-3.6-flash", "gemini-2.5-flash"])
   assert.equal(search.flashSearchDailyLimit({ MALIK_FLASH_GOOGLE_SEARCH_DAILY_LIMIT: "200" }), 200)
-  assert.equal(search.flashSearchDailyLimit({ MALIK_FLASH_GOOGLE_SEARCH_DAILY_LIMIT: "-5" }), 1000)
+  assert.equal(search.flashSearchDailyLimit({ MALIK_FLASH_GOOGLE_SEARCH_DAILY_LIMIT: "-5" }), 500)
   assert.equal(JSON.stringify(search.flashGoogleSearchStatus(env)).includes(KEY), false, "the health check never shows a key")
   assert.match(readFileSync("app/api/health/route.ts", "utf8"), /flashGoogleSearch: flashGoogleSearchStatus\(\)/u)
 })
@@ -83,7 +87,7 @@ test("text questions use Google Search; code, images, video and attachments keep
     "inside a conversation a short message is a reply, not a greeting")
 })
 
-test("the answer streams with Google's own links, under its real provider and model", async t => {
+test("the completed answer reaches the chat with Google's own links and model version", async t => {
   fresh(t)
   const { fetchImpl, calls } = google(() => sse([text("Курс доллара сегодня — "), text("**470 ₸** [1]."), finish({
     webSearchQueries: ["курс доллара тенге сегодня"],
@@ -98,9 +102,10 @@ test("the answer streams with Google's own links, under its real provider and mo
   assert.equal(chunks.join(""), "Курс доллара сегодня — **470 ₸** [1].")
   assert.equal(answer.content, chunks.join(""))
   assert.equal(answer.provider, "google-gemini-search")
-  assert.equal(answer.model, "gemini-2.5-flash", "the free-allowance model, not the newest the key can see")
+  assert.equal(answer.model, "gemini-2.5-flash-001")
   assert.equal(answer.selectedModelId, "malik-flash")
   assert.equal(answer.usedWeb, true)
+  assert.deepEqual(answer.usage, { inputTokens: 40, outputTokens: 12, totalTokens: 52 })
   assert.deepEqual(answer.sources, [{ url: "https://nationalbank.kz/ru/exchangerates", title: "nationalbank.kz", domain: "nationalbank.kz", provider: "google-gemini-search" }])
   const request = calls[0]
   assert.deepEqual(calls.map(call => call.model), ["gemini-2.5-flash"])
@@ -114,15 +119,47 @@ test("the answer streams with Google's own links, under its real provider and mo
   assert.equal(prompt.match(/А какой курс сегодня\?/gu).length, 1, "the current question is not repeated from history")
 })
 
-test("billed Gemini 3 is never called: when 2.5 is out of quota, MALIKII answers", async t => {
+test("quota stops the attempt without trying other models or keys until the retry window", async t => {
   fresh(t)
   const { fetchImpl, calls } = google(body => body.model.startsWith("gemini-2.5")
     ? new Response(JSON.stringify({ error: { code: 429, status: "RESOURCE_EXHAUSTED", message: "Quota exceeded." } }), { status: 429, headers: { "content-type": "application/json" } })
     : assert.fail("called " + body.model))
   await assert.rejects(search.runFlashGoogleSearch({ question: "Курс доллара?", body: {}, env, fetchImpl }), error => error instanceof search.FlashSearchUnavailable && error.code === "QUOTA")
-  assert.deepEqual([...new Set(calls.map(call => call.model))].sort(), ["gemini-2.5-flash", "gemini-2.5-flash-lite"])
+  await assert.rejects(search.runFlashGoogleSearch({ question: "А курс евро?", body: {}, env, fetchImpl }), error => error.code === "QUOTA")
+  assert.deepEqual(calls.map(call => call.model), ["gemini-2.5-flash"])
   const failure = search.flashGoogleSearchStatus(env).lastFailure
-  assert.deepEqual(failure.models.map(item => item.model + " " + item.code + " " + item.status).sort(), ["gemini-2.5-flash QUOTA 429", "gemini-2.5-flash-lite QUOTA 429"])
+  assert.deepEqual(failure.models, [{ model: "gemini-2.5-flash", code: "QUOTA", status: 429 }])
+})
+
+test("a billing refusal is reported without attempting ungrounded generation", async t => {
+  fresh(t)
+  const { fetchImpl, calls } = google(() => Response.json({ error: { message: "Google Search grounding requires billing." } }, { status: 402 }))
+  await assert.rejects(search.runFlashGoogleSearch({ question: "Курс доллара?", body: {}, env, fetchImpl }), error => {
+    assert.equal(error.code, "BILLING_REQUIRED")
+    assert.equal(search.flashGoogleSearchError(error).code, "FLASH_GOOGLE_SEARCH_BILLING_REQUIRED")
+    return true
+  })
+  assert.equal(calls.length, 1)
+  assert.deepEqual(search.flashGoogleSearchStatus(env).lastFailure.statuses, [402])
+})
+
+test("turns without real sources or a completion receipt never yield partial Google text", async t => {
+  fresh(t)
+  const grounding = { groundingChunks: [{ web: { uri: "https://example.com/source" } }] }
+  for (const [frames, code] of [[[text("Без источника"), finish()], "NO_SOURCES"], [[text("Оборванный ответ"), { candidates: [{ groundingMetadata: grounding }] }], "INCOMPLETE"]]) {
+    const { fetchImpl } = google(() => sse(frames))
+    await assert.rejects(search.runFlashGoogleSearch({ question: "Курс доллара?", body: {}, env, fetchImpl,
+      onText: () => assert.fail("unverified text reached the chat") }), error => error.code === code)
+  }
+})
+
+test("unsupported grounding is not retried without the Google Search tool", async t => {
+  fresh(t)
+  const { fetchImpl, calls } = google(() => Response.json({ error: { message: "google_search is not supported" } }, { status: 400 }))
+  await assert.rejects(search.runFlashGoogleSearch({ question: "Последние новости?", body: {}, env, fetchImpl }), search.FlashSearchUnavailable)
+  assert.ok(calls.length > 0)
+  assert.ok(calls.every(call => call.tools?.some(tool => tool.google_search)))
+  assert.equal(search.flashGoogleSearchStatus(env).dailyUsed, calls.length)
 })
 
 test("a key without the free-allowance models answers natively, without trying Gemini 3", async t => {
@@ -137,11 +174,32 @@ test("a key without the free-allowance models answers natively, without trying G
 test("over the daily allowance nothing is sent to Google", async t => {
   fresh(t)
   const limited = { ...env, MALIK_FLASH_GOOGLE_SEARCH_DAILY_LIMIT: "1" }
-  const { fetchImpl, calls } = google(() => sse([text("Ответ."), finish()]))
+  const { fetchImpl, calls } = google(() => sse([text("Ответ."), finish({ groundingChunks: [{ web: { uri: "https://example.com/source" } }] })]))
   await search.runFlashGoogleSearch({ question: "Первый вопрос", body: {}, env: limited, fetchImpl })
   await assert.rejects(search.runFlashGoogleSearch({ question: "Второй вопрос", body: {}, env: limited, fetchImpl }), error => error instanceof search.FlashSearchUnavailable && error.code === "DAILY_LIMIT")
   assert.equal(calls.length, 1)
   assert.equal(search.flashGoogleSearchStatus(limited).dailyUsed, 1)
+})
+
+test("Flash Search handles simultaneous users with a bounded number of Google requests", async t => {
+  fresh(t)
+  const gate = Promise.withResolvers()
+  const { fetchImpl, calls } = google(async () => {
+    await gate.promise
+    return sse([text("Ответ."), finish({ groundingChunks: [{ web: { uri: "https://example.com/source" } }] })])
+  })
+  const submit = question => search.runFlashGoogleSearch({ question, body: {}, env, fetchImpl })
+  const active = [submit("Первый"), submit("Второй"), submit("Третий")]
+  try { await assert.rejects(submit("Четвёртый"), error => error.code === "BUSY") }
+  finally { gate.resolve(); await Promise.all(active) }
+  await submit("Следующий")
+  assert.equal(calls.length, 4)
+})
+
+test("memory opt-out sends only the current question, even when the client offers earlier turns", () => {
+  assert.equal(search.flashSearchPrompt("Что нового?", {
+    flashContextEnabled: false, history: [{ role: "user", content: "Earlier private context" }],
+  }), "Что нового?")
 })
 
 test("Gemini that cannot answer before any text hands the turn back to MALIKII", async t => {
@@ -163,11 +221,30 @@ test("a stop from the user is a stop, not a fallback", async t => {
     error => !(error instanceof search.FlashSearchUnavailable))
 })
 
-test("the chat routes answer Flash with Google Search and fall back to the native engine", () => {
+test("directed Google requests keep their error on both chat transports without an automatic replay", async () => {
+  assert.equal(flashGoogleIntent("Найди в Google официальный сайт"), "search")
+  assert.equal(flashGoogleIntent("Ответь через ИИ-режим Google"), "ai-mode")
+  assert.equal(flashGoogleIntent("Сгенерируй изображение через Google AI Mode"), "ai-mode")
+  assert.equal(flashGoogleIntent("Как работает поиск в Google AI Mode?"), null)
+  assert.equal(flashGoogleIntent("Без поиска объясни, как работает Google"), null)
+  let posts = 0
+  const response = await fetchRecoverableChat("/api/stream", { method: "POST", body: JSON.stringify({ model: "malik-flash", question: "Ответь через Google AI Mode" }) }, {
+    fetcher: async () => {
+      posts++
+      return Response.json({ error: "FLASH_GOOGLE_AI_MODE_UNAVAILABLE", message: "Google AI Mode недоступен." }, { status: 503 })
+    },
+  })
+  assert.equal(response.status, 503)
+  assert.equal((await response.json()).error, "FLASH_GOOGLE_AI_MODE_UNAVAILABLE")
+  assert.equal(posts, 1)
+})
+
+test("streaming and JSON share the same Google-only policy", () => {
   const stream = readFileSync("app/api/stream/route-impl.ts", "utf8")
-  assert.match(stream, /function flashSearchTurn\(body: any\): boolean \{\s+if \(!flashNativeTurn\(body\) \|\| !flashGoogleSearchEnabled\(\) \|\| skillChatRequest\(body\)\) return false/u)
-  assert.match(stream, /: !project && flashSearchTurn\(body\)\s+\? \(async \(\) => \{[\s\S]*?runFlashGoogleSearch\(\{[\s\S]*?if \(!\(error instanceof FlashSearchUnavailable\)\) throw error[\s\S]*?return await getNativeChatAnswer\(\)/u)
-  assert.match(stream, /: flashSearchTurn\(routedBody\)\s+\? await \(async \(\) => \{[\s\S]*?return await runSelectedAnswer\(routedBody/u)
+  assert.match(stream, /if \(flashGoogleIntent\(input\.question\) === "search"\) throw flashGoogleSearchError\(error\)/u)
+  assert.match(stream, /!project && flashSearchTurn\(body\)\s*\? flashSearchAnswer\(/u)
+  assert.match(stream, /flashSearchTurn\(routedBody\)\s*\? await flashSearchAnswer\(/u)
+  assert.match(readFileSync("app/api/ai/chat/route.ts", "utf8"), /flashGoogleIntent\(prompt\)[\s\S]*?return handleFlashJsonChat\(request\)/u)
   assert.match(stream, /const ledger = flash \|\| answer\.provider === FLASH_GOOGLE_SEARCH_PROVIDER/u)
   assert.match(readFileSync("../../../.env.example", "utf8"), /^MALIK_FLASH_GOOGLE_SEARCH=0$/mu)
 })
