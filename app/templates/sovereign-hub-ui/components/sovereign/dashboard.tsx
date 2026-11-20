@@ -1276,6 +1276,7 @@ type StoredChat = Omit<Chat, "timestamp" | "messages"> & {
 
 const DASHBOARD_STORAGE_KEY = "malik_dashboard_state_v3"
 const ACCOUNT_CHAT_STATE_EVENT = "malik-dashboard-full-state-v1"
+const TAB_CHAT_KEY = "malik-dashboard-open-chat"
 const AUTH_ADMINS = [MALIK_OWNER_EMAIL]
 
 const isBrowser = () => typeof window !== "undefined"
@@ -5331,32 +5332,55 @@ export function Dashboard({ guestMode = false, initialView = "home", initialWork
         const restoredChats = Array.isArray(parsed?.chats) ? parsed.chats.map(reviveChat) : []
         if (Array.isArray(parsed?.deletedChatIds)) setDeletedChatIds(parsed.deletedChatIds.filter((id: unknown) => typeof id === "string").slice(-1000))
         if (restoredChats.length) setChats(restoredChats)
-        // Reopening Malik starts on the welcome artwork, not inside the last
-        // conversation. Restore the full history above without selecting it.
-        // Explicit deep links (for example Compute) retain their own entry view.
+        // Restore this tab's conversation on reload. A fresh visit still opens
+        // the welcome screen and a deep link keeps its own entry view.
+        const navigation = performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming | undefined
+        let tabChatId: string | null = null
+        if (navigation?.type === "reload") {
+          try { tabChatId = window.sessionStorage.getItem(TAB_CHAT_KEY) } catch { /* Local history can still be restored. */ }
+        }
+        const tabChat = tabChatId ? restoredChats.find((chat: Chat) => chat.id === tabChatId
+          && !chat.archive?.archived && chat.kind !== "project" && !chat.projectId
+          && (!initialWorkspaceMode || resolveWorkspaceMode(chat.workspaceMode) === initialWorkspaceMode)) : undefined
+        let restoredModel: MalikModelId = DEFAULT_MALIK_MODEL_ID
         if (initialView === "home") {
-          setActiveChatId(null)
-          setMessages([])
-          setGeneratedCode("")
+          if (tabChat) {
+            const mode = resolveWorkspaceMode(tabChat.workspaceMode)
+            workspaceModeRef.current = mode
+            modeActiveChatIdsRef.current[mode] = tabChat.id
+            setWorkspaceMode(mode)
+            setActiveChatId(tabChat.id)
+            setMessages(tabChat.messages)
+            setGeneratedCode(tabChat.messages.findLast((message: Message) => message.role === "assistant" && message.generatedCode)?.generatedCode || "")
+            restoredModel = tabChat.selectedModelId || restoredModel
+          } else {
+            setActiveChatId(null)
+            setMessages([])
+            setGeneratedCode("")
+          }
           setActiveView("home")
         } else {
           if (parsed?.activeChatId) setActiveChatId(String(parsed.activeChatId))
           if (Array.isArray(parsed?.messages)) setMessages(collapseAccidentalDuplicateTurns(parsed.messages.map(reviveMessage)))
           if (typeof parsed?.generatedCode === "string") setGeneratedCode(parsed.generatedCode)
         }
-        // MalikLLM MAX is the global entry model for every session. Do not
-        // revive an old last-used model from a previous dashboard snapshot.
-        // Historical chats/projects still restore their own selected model when
-        // the user explicitly opens them.
-        setSelectedModelId(DEFAULT_MALIK_MODEL_ID)
-        saveMalikModelSelection(DEFAULT_MALIK_MODEL_ID)
+        setSelectedModelId(restoredModel)
+        saveMalikModelSelection(restoredModel)
       }
     } catch (err) {
       console.warn("[DASHBOARD RESTORE ERROR]", err)
     } finally {
       setStorageRestored(true)
     }
-  }, [initialView])
+  }, [initialView, initialWorkspaceMode])
+
+  useEffect(() => {
+    if (!storageRestored) return
+    try {
+      if (activeView === "home" && activeChatId && !activeProjectWorkspaceId) window.sessionStorage.setItem(TAB_CHAT_KEY, activeChatId)
+      else window.sessionStorage.removeItem(TAB_CHAT_KEY)
+    } catch { /* History still opens from the sidebar when tab storage is unavailable. */ }
+  }, [activeChatId, activeProjectWorkspaceId, activeView, storageRestored])
 
   const lastDashboardPersistRef = useRef(0)
   useEffect(() => {

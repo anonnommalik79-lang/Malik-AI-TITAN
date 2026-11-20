@@ -498,7 +498,12 @@ for (const width of WIDTHS) {
     assert.match(await row.locator(".mgu-chart").getAttribute("aria-label"), /Feb — —/u)
     assert.equal(await row.locator('a[href="https://example.org/invented"]').count(), 0)
     assert.equal(await row.locator(".mgu-flow svg path.mgu-flow__edge").count(), 1)
-    await row.getByRole("button", { name: "Сортировать по «Продажи»" }).click()
+    const sort = row.getByRole("button", { name: "Сортировать по «Продажи»" })
+    await sort.click()
+    await row.locator('th[aria-sort="descending"]').waitFor()
+    assert.match(await row.locator(".mgu-table tbody tr").first().innerText(), /Mar/u)
+    await sort.click()
+    await row.locator('th[aria-sort="ascending"]').waitFor()
     assert.match(await row.locator(".mgu-table tbody tr").first().innerText(), /Jan/u)
     await row.getByRole("button", { name: "Открыть 2 источников" }).click()
     const drawer = page.getByRole("dialog", { name: "Источники" })
@@ -507,6 +512,16 @@ for (const width of WIDTHS) {
     assert.match(await drawer.locator('details[open] blockquote').innerText(), /Mar: 30/u)
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true)
     await shot(page, `olympus-evidence-${width}`)
+  })
+
+  await check("Olympus: verified image loads even if its external thumbnail fails", width, async (page) => {
+    await page.route("https://thumb.wikimedia.org/**", (route) => route.abort())
+    const doc = { v: 1, blocks: [{ type: "image", aspect: "portrait", image: { query: "Elon Musk", alt: "Портрет Илона Маска" } }] }
+    await send(page, "Добавь портрет к справке", { chunks: [`Портрет из открытого источника.\n\n\`\`\`malik-ui\n${JSON.stringify(doc)}\n\`\`\``] })
+    const photo = assistant(page).locator('.mgu-photo img[src="/reference-photos/elon-musk.jpg"]')
+    await photo.scrollIntoViewIfNeeded({ timeout: 25_000 })
+    await page.waitForFunction(() => document.querySelector('.mgu-photo img[src="/reference-photos/elon-musk.jpg"]')?.naturalWidth > 0)
+    assert.match(await assistant(page).locator(".mgu-photo__credit").getAttribute("href"), /^https:\/\/commons\.wikimedia\.org\/wiki\/File:/u)
   })
 
   await check("Olympus: regenerated answer evidence survives reload", width, async (page) => {
@@ -520,6 +535,7 @@ for (const width of WIDTHS) {
     assert.equal(await assistant(page).locator('.malik-md a[href="https://first.example/report"]').count(), 1)
     assert.equal(await assistant(page).locator('.malik-md a[href="https://second.example/report"]').count(), 0)
     await page.waitForFunction(() => Object.keys(localStorage).some(key => localStorage.getItem(key)?.includes("Второй ответ")))
+    await page.waitForFunction(() => sessionStorage.getItem("malik-dashboard-open-chat"))
     await page.reload({ waitUntil: "domcontentloaded" })
     await assistant(page).getByText(/Второй ответ/u).waitFor()
     await assistant(page).getByRole("button", { name: "Предыдущая версия" }).click()
