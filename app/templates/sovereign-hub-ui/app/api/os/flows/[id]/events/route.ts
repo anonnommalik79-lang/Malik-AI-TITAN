@@ -1,7 +1,7 @@
 import { subscribe } from "@/lib/os/events"
 import { z } from "zod"
 import { takeRequestFrequency } from "@/lib/server/request-frequency"
-import { isFlowRunning, recoverInterrupted } from "@/lib/os/executor"
+import { recoverInterrupted } from "@/lib/os/executor"
 import { flowView, osError, osOwner } from "@/lib/os/http"
 import { getArtifacts, getFlow, toSummary } from "@/lib/os/store"
 import { OsToolError } from "@/lib/os/failures"
@@ -31,13 +31,14 @@ export async function GET(request: Request, context: RouteContext) {
     const found = await getFlow(owner.userId, id)
     if (!found) throw new OsToolError("NOT_FOUND", "Задача не найдена.", { retryable: false })
     const flow = await recoverInterrupted(owner.userId, found)
-    const artifacts = await getArtifacts(owner.userId, flow.tasks.flatMap((task) => task.artifactIds))
     const encoder = new TextEncoder()
     let close = () => {}
 
     const stream = new ReadableStream<Uint8Array>({
       start(controller) {
         let closed = false
+        let snapshotSent = false
+        const buffered: OsEvent[] = []
         const send = (event: string, data: unknown) => {
           if (closed) return
           try {
@@ -46,14 +47,7 @@ export async function GET(request: Request, context: RouteContext) {
             close()
           }
         }
-        send("snapshot", { flow: flowView(flow), artifacts: artifacts.map(toSummary) })
-        if (!isFlowRunning(flow.id)) {
-          send("done", { flowId: flow.id, status: flow.status })
-          closed = true
-          controller.close()
-          return
-        }
-        const unsubscribe = subscribe(flow.id, (event: OsEvent) => {
+        const dispatch = (event: OsEvent) => {
           if (event.type === "task") send("task", { flowId: event.flowId, task: flowView({ ...flow, tasks: [event.task] }).tasks[0], status: flow.status })
           else if (event.type === "artifact") send("artifact", event)
           else if (event.type === "work") send("work", event.event)
@@ -62,22 +56,45 @@ export async function GET(request: Request, context: RouteContext) {
             send("done", event)
             close()
           }
+        }
+        const unsubscribe = subscribe(flow.id, event => {
+          if (snapshotSent) dispatch(event)
+          else buffered.push(event)
         })
         const heartbeat = setInterval(() => send("ping", { at: Date.now() }), 15_000)
         const limit = setTimeout(() => close(), MAX_STREAM_MS)
+        const onAbort = () => close()
         close = () => {
           if (closed) return
           closed = true
           clearInterval(heartbeat)
           clearTimeout(limit)
           unsubscribe()
+          request.signal.removeEventListener("abort", onAbort)
           try {
             controller.close()
           } catch {
             /* already closed by the client */
           }
         }
-        request.signal.addEventListener("abort", () => close(), { once: true })
+        request.signal.addEventListener("abort", onAbort, { once: true })
+        if (request.signal.aborted) return close()
+        // Subscribe before loading summaries. The operation may finish while
+        // storage is responding; replay those events after the initial snapshot.
+        void (async () => {
+          const current = await getFlow(owner.userId, flow.id) || flow
+          const snapshot = flowView(current)
+          const artifacts = await getArtifacts(owner.userId, snapshot.tasks.flatMap(task => task.artifactIds))
+          if (closed) return
+          send("snapshot", { flow: snapshot, artifacts: artifacts.map(toSummary) })
+          snapshotSent = true
+          for (const event of buffered) dispatch(event)
+          buffered.length = 0
+          if (!closed && snapshot.finishedAt && current.finishedAt) {
+            send("done", { flowId: flow.id, status: current.status })
+            close()
+          }
+        })().catch(() => close())
       },
       cancel() {
         close()

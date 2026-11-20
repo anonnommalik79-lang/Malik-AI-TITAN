@@ -26,6 +26,8 @@ import type { DependencyOutput, OwnerContext, ToolContext, ToolDeps } from "./to
 import { toolFor } from "./tools/registry"
 import type { Artifact, Capability, OsError, OsFlow, OsTask, ValidationReport, WorkEvent } from "./types"
 import { validateArtifact } from "./validate"
+import type { DocumentFormat } from "@/lib/work/documents/formats"
+import type { WorkFileFormats } from "@/lib/work/orchestrator"
 
 /**
  * The executor: runs a flow's task graph.
@@ -95,6 +97,7 @@ export type StartFlowInput = {
   chatId?: string
   projectId?: string
   capabilities?: Capability[]
+  workFiles?: WorkFileFormats
   /** A custom task graph (continuation, editing, data analysis). */
   tasks?: (flowId: string) => OsTask[]
   /** Work repository briefs only; ordinary flow goals retain their legacy limit. */
@@ -107,7 +110,7 @@ export type StartFlowInput = {
 export function startFlow(input: StartFlowInput): Promise<{ flow: OsFlow; created: boolean }> {
   const lock = `${ownerKey(input.owner.userId)}:${input.clientRequestId}`
   const pending = creating().get(lock)
-  if (pending) return pending
+  if (pending) return pending.then(({ flow }) => ({ flow, created: false }))
   const promise = createFlow(input).finally(() => creating().delete(lock))
   creating().set(lock, promise)
   return promise
@@ -131,7 +134,7 @@ async function createFlow(input: StartFlowInput): Promise<{ flow: OsFlow; create
     || await createProject(ownerId, { title: titleFrom(goal), goal, chatId: input.chatId }, now)
 
   const id = newId("flow")
-  const tasks = input.tasks ? input.tasks(id) : planFlow({ flowId: id, goal, capabilities, quality })
+  const tasks = input.tasks ? input.tasks(id) : planFlow({ flowId: id, goal, capabilities, quality, workFiles: input.workFiles })
   const flow: OsFlow = {
     id,
     projectId: project.id,
@@ -172,7 +175,14 @@ function titleFrom(goal: string) {
  */
 export async function recoverInterrupted(ownerId: string, flow: OsFlow): Promise<OsFlow> {
   if (isFlowRunning(flow.id)) return flow
-  if (flow.tasks.every((task) => isTerminal(task.status))) return flow
+  if (flow.tasks.every((task) => isTerminal(task.status))) {
+    if (!flow.finishedAt && flow.tasks.length) {
+      flow.status = flowStatusOf(flow.tasks)
+      flow.finishedAt = Math.max(flow.updatedAt, ...flow.tasks.map(task => task.finishedAt || 0))
+      await saveFlow(ownerId, flow)
+    }
+    return flow
+  }
   const now = Date.now()
   flow.tasks = flow.tasks.map((task) => {
     if (isTerminal(task.status)) return task
@@ -214,6 +224,7 @@ export async function cancelFlow(ownerId: string, flowId: string) {
     flow.updatedAt = now
     flow.finishedAt = now
     await saveFlow(ownerId, flow)
+    publish(flow.id, { type: "flow", flow })
     publish(flow.id, { type: "done", flowId: flow.id, status: flow.status })
   }
   return true
@@ -370,6 +381,7 @@ export async function runFlow(ownerId: string, flowId: string, owner: OwnerConte
     flow.finishedAt = deps.now()
     await save()
     recordPerf("flow.total", flow.finishedAt - started, flow.status === "completed" || flow.status === "partial")
+    publish(flow.id, { type: "flow", flow })
     publish(flow.id, { type: "done", flowId: flow.id, status: flow.status })
     if (flow.status === "completed" || flow.status === "partial") await rememberForDemo(ownerId, flow).catch(() => undefined)
   } finally {
@@ -406,6 +418,7 @@ async function runTask(
   const controller = new AbortController()
   const onFlowAbort = () => controller.abort()
   flowSignal.addEventListener("abort", onFlowAbort, { once: true })
+  if (flowSignal.aborted) controller.abort()
   let timedOut = false
   const timer = setTimeout(() => {
     timedOut = true
@@ -414,6 +427,7 @@ async function runTask(
   const started = deps.now()
 
   try {
+    controller.signal.throwIfAborted()
     const project = await getProject(ownerId, flow.projectId)
     if (!project) throw new OsToolError("PROJECT_MISSING", "Проект не найден.", { retryable: false })
 
@@ -431,7 +445,7 @@ async function runTask(
     const context: ToolContext = {
       owner,
       flow,
-      task,
+      task: { ...task, error: initial.error },
       project,
       deps,
       signal: controller.signal,
@@ -470,22 +484,57 @@ async function runTask(
       sourceCount: Array.isArray(draft.metadata?.sources) ? (draft.metadata!.sources as unknown[]).length : undefined,
       language,
     }, deps.now()))
+    const formats = Array.isArray(task.input.workExportFormats) ? task.input.workExportFormats as DocumentFormat[] : []
+    const strictDelivery = formats.length > 0 || task.input.workResearch === true
     const failedReport = reports.find((report) => !report.ok)
-    if (failedReport && attempt < task.retry.maxAttempts) {
+    if (failedReport && (strictDelivery || attempt < task.retry.maxAttempts)) {
       feedback().set(task.id, failedReport)
-      throw new OsToolError("SELF_CHECK_FAILED", `Результат не прошёл проверку: ${failedReport.checks.filter((check) => !check.ok).map((check) => check.note).slice(0, 2).join("; ")}. Исправляю.`, { retryable: true })
+      throw new OsToolError("SELF_CHECK_FAILED", `Результат не прошёл проверку: ${failedReport.checks.filter((check) => !check.ok).map((check) => check.note).slice(0, 2).join("; ")}.`, { retryable: true })
+    }
+    if (strictDelivery && !result.artifacts.length) throw new OsToolError("EMPTY_DELIVERABLE", "Шаг не вернул результат.", { retryable: true })
+    if (formats.length) {
+      await setTask({ ...current(), activity: "Проверяю скачиваемый файл", progress: 0.94 })
+      const [{ renderArtifactExport, ArtifactExportError }, { verifyNativeArtifact }] = await Promise.all([
+        import("./artifact-export"), import("@/lib/work/documents/verify-native"),
+      ])
+      for (const draft of result.artifacts) {
+        const verified = []
+        for (const format of formats) {
+          try {
+            controller.signal.throwIfAborted()
+            const file = await renderArtifactExport(draft, format)
+            const verification = verifyNativeArtifact(file.bytes, format, { constraints: {
+              formulas: format === "xlsx" && draft.metadata?.safeFormulas === true,
+              charts: format === "xlsx" && draft.metadata?.charts === true,
+              slideCount: typeof draft.metadata?.requestedSlides === "number" ? draft.metadata.requestedSlides : undefined,
+            } })
+            verified.push({ format, ...verification })
+          } catch (error) {
+            controller.signal.throwIfAborted()
+            const hint = error instanceof ArtifactExportError ? error.message : format === "xlsx"
+              ? "Проверь структуру таблиц и наличие запрошенных формул и диаграмм."
+              : "Проверь полноту исходного содержимого."
+            const note = `${format.toUpperCase()} не прошёл проверку экспорта. ${hint}`
+            feedback().set(task.id, { ok: false, score: 0, checkedAt: deps.now(), checks: [{ id: "native-export", ok: false, note }] })
+            throw new OsToolError("EXPORT_CHECK_FAILED", note, { retryable: true })
+          }
+        }
+        draft.metadata = { ...draft.metadata, verifiedExports: verified }
+      }
     }
     feedback().delete(task.id)
-
-    const completion = appendWork(flow, "tool.completed", deps.now(), { ...taskEvent(current(), deps.now()), durationMs: Math.max(0, deps.now() - started) })
-    await saveFlow(ownerId, flow)
-    publishWork(flow, completion)
+    controller.signal.throwIfAborted()
 
     const stored: Artifact[] = []
     for (let index = 0; index < result.artifacts.length; index += 1) {
       const draft = result.artifacts[index]
-      const artifact = await putArtifact(ownerId, { ...draft, validation: reports[index], version: draft.version || 1 }, deps.now())
+      const artifact = await putArtifact(ownerId, { ...draft, validation: reports[index], version: draft.version || 1 }, deps.now(), { requireWrite: strictDelivery })
       stored.push(artifact)
+    }
+    const completion = appendWork(flow, "tool.completed", deps.now(), { ...taskEvent(current(), deps.now()), durationMs: Math.max(0, deps.now() - started) })
+    await saveFlow(ownerId, flow)
+    publishWork(flow, completion)
+    for (const artifact of stored) {
       const ready = appendWork(flow, "artifact.ready", deps.now(), { taskId: task.id, tool: task.type, label: artifact.title, artifactId: artifact.id })
       await saveFlow(ownerId, flow)
       publishWork(flow, ready)
@@ -511,17 +560,21 @@ async function runTask(
       return
     }
     const classified = classifyFailure(error)
+    const failure = error instanceof Error && error.message === "ARTIFACT_WRITE_FAILED"
+      ? { code: "ARTIFACT_WRITE_FAILED", message: "Хранилище не подтвердило запись файла. Можно повторить шаг.", retryable: true, action: "retry" as const }
+      : classified
     const latest = current()
-    if (shouldRetry(classified, attempt, latest.retry.maxAttempts)) {
-      const delay = retryDelayMs(attempt, classified, (error as { retryAfterMs?: number })?.retryAfterMs, deps.random)
+    if (shouldRetry(failure, attempt, latest.retry.maxAttempts)) {
+      const delay = retryDelayMs(attempt, failure, (error as { retryAfterMs?: number })?.retryAfterMs, deps.random)
       await setTask(transition(latest, "retrying", {
-        error: classified,
+        error: failure,
         activity: undefined,
-        retry: { ...latest.retry, attempts: attempt, nextRetryAt: deps.now() + delay, lastErrorCode: classified.code },
+        retry: { ...latest.retry, attempts: attempt, nextRetryAt: deps.now() + delay, lastErrorCode: failure.code },
       }, deps.now()))
       return
     }
-    if (flow.demo) {
+    feedback().delete(task.id)
+    if (flow.demo && !Array.isArray(task.input.workExportFormats) && task.input.workResearch !== true) {
       const rescued = await demoFallback(ownerId, flow, latest, deps)
       if (rescued) {
         const ready = appendWork(flow, "artifact.ready", deps.now(), { taskId: latest.id, tool: latest.type, artifactId: rescued.id, label: `${rescued.title} · сохранённая копия` })
@@ -532,7 +585,7 @@ async function runTask(
         return
       }
     }
-    await setTask(transition(latest, "failed", { error: classified, retry: { ...latest.retry, attempts: attempt, lastErrorCode: classified.code, nextRetryAt: undefined } }, deps.now()))
+    await setTask(transition(latest, "failed", { error: failure, retry: { ...latest.retry, attempts: attempt, lastErrorCode: failure.code, nextRetryAt: undefined } }, deps.now()))
   } finally {
     clearTimeout(timer)
     flowSignal.removeEventListener("abort", onFlowAbort)

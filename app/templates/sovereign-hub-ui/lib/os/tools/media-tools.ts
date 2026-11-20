@@ -2,6 +2,7 @@ import { OsToolError } from "../failures"
 import type { DeckOutlineResult, DeckSlide, ToolDefinition } from "./contract"
 import { brandOf, briefOf, clip, languageOf, logoOf, planOf, projectContext, researchOf } from "./shared"
 import { pickTheme } from "@/lib/presentations/themes"
+import { MAX_SLIDES, normalizeSlide, requestedDeckLanguage, requestedSlideCount } from "@/lib/presentations/deck"
 
 /* --------------------------------------------------------- image.generate */
 
@@ -66,7 +67,7 @@ function escapeHtml(value: string) {
 }
 
 /** Puts the generated logo next to the brand name in the site's header. */
-export function withLogo(html: string, logoUrl: string, name: string) {
+export function withLogo(html: string, logoUrl: string, _name: string) {
   if (!/^https:\/\//i.test(logoUrl)) return html
   const mark = `<img src="${escapeHtml(logoUrl)}" alt="" width="28" height="28" style="width:28px;height:28px;border-radius:7px;object-fit:cover;vertical-align:-7px;margin-right:9px" loading="lazy" referrerpolicy="no-referrer">`
   let replaced = false
@@ -86,10 +87,11 @@ export const siteTool: ToolDefinition = {
     const brand = brandOf(context)
     const brief = briefOf(context)
     const research = researchOf(context)
-    const language = brief?.language || languageOf(context.flow.goal)
+    const workFile = Array.isArray(context.task.input.workExportFormats)
+    const language = (workFile && requestedDeckLanguage(context.flow.goal)) || brief?.language || languageOf(context.flow.goal)
     const request = [
       `Создай лендинг для компании ${brand?.name || brief?.title || ""}.`,
-      brief ? `Продукт: ${brief.idea}. Аудитория: ${brief.audience || "—"}. Проблема: ${brief.problem || "—"}. Решение: ${brief.solution || "—"}.` : `Задача: ${clip(context.flow.goal, 1_200)}`,
+      brief ? `Продукт: ${brief.idea}. Аудитория: ${brief.audience || "—"}. Проблема: ${brief.problem || "—"}. Решение: ${brief.solution || "—"}.` : `Задача: ${workFile ? context.flow.goal : clip(context.flow.goal, 1_200)}`,
       brand ? `Название бренда строго «${brand.name}». Слоган: «${brand.tagline}». Позиционирование: ${brand.positioning}. Тон: ${brand.voice}. Акцентный цвет ${brand.colors.accent}.` : "",
       research ? `Факты о рынке для блока статистики (только из исследования, с источником): ${clip(research.text.replace(/\n+/g, " "), 900)}` : "",
       `Язык сайта: ${language}. Не выдумывай отзывы клиентов, логотипы партнёров и цифры без источника — используй разделы «как это работает», «для кого», «преимущества», «тарифы (ориентировочно)», «FAQ», «контакты».`,
@@ -147,11 +149,18 @@ export const presentationTool: ToolDefinition = {
     const plan = planOf(context)
     const research = researchOf(context)
     const investors = context.task.input.audience === "investors"
-    const language = brief?.language || languageOf(context.flow.goal)
+    const workFile = Array.isArray(context.task.input.workExportFormats)
+    const goal = context.flow.goal
+    const language = (workFile && requestedDeckLanguage(goal)) || brief?.language || languageOf(goal)
     const maxSlides = await context.deps.presentation.maxSlides(context.owner)
-    const count = Math.max(6, Math.min(investors ? 11 : 10, maxSlides))
+    const requestedCount = workFile ? requestedSlideCount(goal) : null
+    if (requestedCount && requestedCount > Math.min(maxSlides, MAX_SLIDES)) {
+      throw new OsToolError("SLIDE_LIMIT", `Для одного файла доступно до ${Math.min(maxSlides, MAX_SLIDES)} слайдов. Укажите меньшее число.`)
+    }
+    const count = requestedCount ?? Math.max(workFile ? 1 : 6, Math.min(investors ? 11 : 10, maxSlides))
     const topic = [
       investors ? `Инвестиционная презентация (pitch deck) компании ${brand?.name || brief?.title || ""}.` : `Презентация: ${brief?.title || clip(context.flow.goal, 200)}.`,
+      workFile ? `Полный запрос пользователя: ${goal}` : "",
       investors ? "Порядок: титул, проблема, решение, продукт, рынок, бизнес-модель, go-to-market, конкуренты, финансовый план, команда (роли), инвестиции и следующий шаг." : "",
       brief ? `Идея: ${brief.idea}. Аудитория: ${brief.audience}.` : "",
       brand ? `Бренд: ${brand.name} — ${brand.tagline}.` : "",
@@ -171,7 +180,8 @@ export const presentationTool: ToolDefinition = {
     try {
       context.activity("Составляю план слайдов", 0.1)
       const outline: DeckOutlineResult = await context.deps.presentation.outline({ topic, count, language, signal: context.signal })
-      if (!prepaid) refund -= 1
+      if (workFile && outline.items.length !== count) throw new OsToolError("INCOMPLETE_OUTLINE", `План должен содержать ровно ${count} слайдов.`, { retryable: true })
+      if (!prepaid && !workFile) refund -= 1
       const written = new Map<number, DeckSlide>()
       const starts: number[] = []
       for (let index = 0; index < outline.items.length; index += BATCH) starts.push(index)
@@ -189,18 +199,22 @@ export const presentationTool: ToolDefinition = {
         })))
         for (const result of results) {
           if (result.status !== "fulfilled") continue
-          for (const item of result.value.slides) written.set(item.index, item.slide)
+          for (const item of result.value.slides) {
+            if (workFile && (!Number.isInteger(item.index) || item.index < 0 || item.index >= count || !normalizeSlide(item.slide))) continue
+            written.set(item.index, item.slide)
+          }
         }
         done = written.size
         context.activity(`Пишу слайды: ${done} из ${outline.items.length}`, 0.15 + 0.75 * (done / outline.items.length))
       }
       const slides = [...written.entries()].sort((a, b) => a[0] - b[0]).map(([, slide]) => slide)
-      if (!prepaid) refund -= slides.length
-      if (slides.length < Math.min(6, outline.items.length)) {
+      if (!prepaid && !workFile) refund -= slides.length
+      if (workFile ? slides.length !== count : slides.length < Math.min(6, outline.items.length)) {
         // No deck is delivered, so nothing of it is paid for.
         if (!prepaid) refund = cost
         throw new OsToolError("SLIDES_FAILED", "Модель не дописала слайды. Кредиты за них не списаны — повторю.", { retryable: true })
       }
+      context.signal.throwIfAborted()
       const logo = logoOf(context)
       if (logo?.url && slides[0] && ["title", "hero", "image-text"].includes(String(slides[0].layout))) {
         slides[0] = { ...slides[0], imageUrl: logo.url }
@@ -216,7 +230,7 @@ export const presentationTool: ToolDefinition = {
         createdAt: now,
         updatedAt: now,
       }
-      if (!prepaid) await context.markCharged()
+      if (!prepaid) { await context.markCharged(); if (workFile) refund = 0 }
       return {
         artifacts: [{
           projectId: context.project.id,
@@ -228,7 +242,7 @@ export const presentationTool: ToolDefinition = {
           mime: "application/vnd.malik.deck+json",
           summary: `${slides.length} слайдов · ${deck.title}`,
           links: [plan, logo].filter(Boolean).map((artifact) => ({ relation: "derived-from" as const, artifactId: artifact!.id })),
-          metadata: { role: investors ? "investor-deck" : "presentation", slides: slides.length, missing: outline.items.length - slides.length },
+          metadata: { role: investors ? "investor-deck" : "presentation", slides: slides.length, missing: outline.items.length - slides.length, ...(workFile ? { requestedSlides: count } : {}) },
         }],
       }
     } finally {
@@ -245,6 +259,10 @@ export const codeTool: ToolDefinition = {
   sideEffect: "none",
   timeoutMs: 600_000,
   async run(context) {
+    if (Array.isArray(context.task.input.workExportFormats)) {
+      const { buildWorkSource } = await import("./work-source")
+      return buildWorkSource(context)
+    }
     const instruction = String(context.task.input.instruction || "")
     const prompt = [projectContext(context, { research: 800 }), instruction ? `\nЗАДАНИЕ: ${clip(instruction, 2_000)}` : ""].join("")
     context.activity("Проектирую файлы", 0.1)

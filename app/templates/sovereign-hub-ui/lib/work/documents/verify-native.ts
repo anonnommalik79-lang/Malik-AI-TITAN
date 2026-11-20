@@ -31,7 +31,7 @@ export function nativePackage(bytes: Uint8Array): Map<string, string> {
   return files
 }
 
-export function verifyNativeArtifact(bytes: Uint8Array, format: string, contract: ExecutionContract) {
+export function verifyNativeArtifact(bytes: Uint8Array, format: string, contract: Pick<ExecutionContract, "constraints">) {
   const check = { bytes: bytes.length, packageVerified: false, formulas: 0, charts: 0, sheets: 0, slides: 0, images: 0 }
   if (["xlsx", "pptx", "docx", "zip"].includes(format)) {
     const files = nativePackage(bytes)

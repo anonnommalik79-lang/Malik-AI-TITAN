@@ -38,7 +38,7 @@ export type Brand = {
 }
 
 export function languageOf(text: string): Language {
-  if (/[әғқңөұүһі]/iu.test(text)) return "kk"
+  if (/[әғқңөұүһі]|(?<!\p{L})(?:туралы|бойынша|дайында(?:п бер)?|жаса(?:п бер)?|және|арналған)(?!\p{L})/iu.test(text)) return "kk"
   if (/[а-яё]/iu.test(text)) return "ru"
   return "en"
 }
@@ -234,7 +234,7 @@ export async function askJson<T>(context: ToolContext, input: { system: string; 
   throw new OsToolError("BAD_RESPONSE", "Модель вернула ответ в неверном формате. Повторю ещё раз.", { retryable: true })
 }
 
-export async function askText(context: ToolContext, input: { system: string; prompt: string; maxTokens: number; temperature?: number }) {
+export async function askText(context: ToolContext, input: { system: string; prompt: string; maxTokens: number; temperature?: number; minChars?: number }) {
   const result = await context.deps.text({
     system: input.system,
     prompt: `${input.prompt}${feedbackNote(context)}`,
@@ -243,8 +243,10 @@ export async function askText(context: ToolContext, input: { system: string; pro
     reasoningEffort: context.flow.quality === "deep" ? "high" : "medium",
     signal: context.signal,
   })
-  const content = String(result.content || "").replace(/^```(?:markdown|md)?\s*/i, "").replace(/```\s*$/i, "").trim()
-  if (content.length < 200) throw new OsToolError("BAD_RESPONSE", "Модель вернула слишком короткий ответ. Повторю ещё раз.", { retryable: true })
+  const raw = String(result.content || "").trim()
+  const wrapped = raw.match(/^```(?:markdown|md)?[ \t]*\r?\n([\s\S]*?)\r?\n```$/iu)
+  const content = (wrapped?.[1] ?? raw).trim()
+  if (content.length < (input.minChars ?? 200)) throw new OsToolError("BAD_RESPONSE", "Модель вернула слишком короткий ответ. Повторю ещё раз.", { retryable: true })
   return { content, provider: `${result.provider}/${result.model}` }
 }
 

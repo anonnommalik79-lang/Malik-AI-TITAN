@@ -61,8 +61,9 @@ export function validateArtifact(draft: ArtifactDraft, context: ValidationContex
     } catch {
       slides = []
     }
-    add("slides", slides.length >= 6, "в презентации должно быть минимум 6 слайдов")
-    add("titles", slides.every((slide) => Object.values(slide).some((value) => typeof value === "string" && value.trim().length > 2)), "у каждого слайда должен быть текст")
+    const requested = typeof draft.metadata?.requestedSlides === "number" ? draft.metadata.requestedSlides : null
+    add("slides", Array.isArray(slides) && (requested ? slides.length === requested : slides.length >= 6), requested ? `нужно ровно ${requested} слайдов` : "в презентации должно быть минимум 6 слайдов")
+    add("titles", Array.isArray(slides) && slides.every((slide) => slide && Object.values(slide).some((value) => typeof value === "string" && value.trim().length > 2)), "у каждого слайда должен быть текст")
     add("brand", mentions(content, context.brandName), `название «${context.brandName}» должно быть в презентации`)
     add("placeholder", !PLACEHOLDER.test(content), "в презентации остались заглушки")
   } else if (draft.kind === "image") {
@@ -77,6 +78,9 @@ export function validateArtifact(draft: ArtifactDraft, context: ValidationContex
     add("files", files.length >= 1, "в проекте нет файлов")
     if (role === "repository-patch") {
       add("patch", draft.metadata?.patchVerified === true && draft.metadata?.testsExecuted === false, "patch должен пройти заявленные проверки без ложного утверждения о запуске тестов")
+    } else if (role === "work-source") {
+      add("source-structure", draft.metadata?.structureVerified === true && files.length === draft.metadata.fileCount, "проверены структура и количество исходных файлов")
+      add("execution-status", draft.metadata?.buildExecuted === false && draft.metadata?.testsExecuted === false, "статическая проверка подтверждена, запуск кода не выполнялся")
     } else if(role==="code-edit"){
       const records=files as Array<{path?:unknown;content?:unknown}>
       add("edit-structure",draft.metadata?.structureVerified===true&&new Set(records.map(f=>f.path)).size===records.length&&records.every(f=>typeof f.path==="string"&&!/^(?:\/|[a-z]:)/i.test(f.path)&&!f.path.includes("\\")&&!f.path.split("/").some(p=>p===".."||p===".")&&typeof f.content==="string"),"проверяются структура и пути изменённого проекта")
@@ -89,7 +93,7 @@ export function validateArtifact(draft: ArtifactDraft, context: ValidationContex
     const cited = citations(content)
     const count = context.sourceCount || 0
     add("sources", count >= 2, "нужно минимум два источника")
-    add("citations", cited.length >= 2, "выводы должны ссылаться на источники [n]")
+    add("citations", (draft.metadata?.workResearch ? new Set(cited).size : cited.length) >= 2, "выводы должны ссылаться на два источника [n]")
     add("citation-range", cited.every((n) => n >= 1 && n <= count), "ссылки [n] должны указывать на существующие источники")
     add("structure", headings(content) >= 3, "нужны разделы с заголовками")
   } else if (draft.kind === "business-plan") {
@@ -101,8 +105,13 @@ export function validateArtifact(draft: ArtifactDraft, context: ValidationContex
     add("length", content.length > 2_500, "бизнес-план слишком короткий")
   } else {
     // text and document (brand book, brief, video script, summary …)
-    add("length", content.length > (role === "summary" || role === "brief" ? 60 : 400), "текст слишком короткий")
+    add("length", content.trim().length > (draft.metadata?.workFile === true ? 0 : role === "summary" || role === "brief" ? 60 : 400), "текст слишком короткий")
     add("placeholder", !PLACEHOLDER.test(content), "в тексте остались заглушки")
+    if (draft.metadata?.workFile === true && context.sourceCount) {
+      const cited = citations(content)
+      const count = context.sourceCount
+      add("verified-citations", cited.length > 0 && cited.every(n => n > 0 && n <= count), "добавь ссылки [n] на проверенные источники и убери отсутствующие номера")
+    }
     if (role === "brand") add("brand-name", Boolean(context.brandName || draft.metadata?.brand), "у бренда должно быть название")
     if (role === "video-script") add("scenes", (content.match(/^#{2,3}\s|^\*\*(?:сцена|scene|кадр)/gim) || []).length >= 4, "в сценарии должно быть минимум 4 сцены")
     if (role === "video-script" || role === "document") add("brand", mentions(content, context.brandName), `название «${context.brandName}» должно быть в тексте`, false)

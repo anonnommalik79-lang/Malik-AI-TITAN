@@ -1,6 +1,7 @@
 import { routeCapability } from "./capabilities"
 import { validateGraph } from "./task-graph"
 import type { Capability, OsTask, QualityTier, ToolName } from "./types"
+import type { WorkFileFormats } from "@/lib/work/orchestrator"
 
 /**
  * The planner: one goal and its capabilities become a task graph.
@@ -49,6 +50,7 @@ export type PlanOptions = {
   quality: QualityTier
   /** Ids of attachments the data analyst may read. */
   attachmentIds?: string[]
+  workFiles?: WorkFileFormats
 }
 
 /** A stable id for a task inside a flow. */
@@ -57,27 +59,41 @@ export function taskId(flowId: string, stepId: string) {
 }
 
 export function planFlow(options: PlanOptions): OsTask[] {
-  const { flowId, goal, capabilities, quality } = options
+  const { flowId, goal, capabilities, quality, workFiles } = options
   const wanted = new Set<Capability>(capabilities)
   const investor = /инвестор|investor|питч|pitch/iu.test(goal)
   const logo = /логотип|logo|бренд|brand|стартап|startup/iu.test(goal)
 
-  const included = STEPS.filter((step) => !step.capability || wanted.has(step.capability))
+  const included = STEPS.filter((step) => {
+    if (step.id === "understand") return !workFiles
+    if (step.id === "launch" && workFiles) return false
+    return step.capability && wanted.has(step.capability)
+  })
   const present = new Set(included.map((step) => step.id))
 
   const tasks: OsTask[] = included.map((step) => {
     const route = step.capability ? routeCapability(step.capability, quality) : undefined
     const needs = step.needs.filter((id) => present.has(id))
+    if (workFiles && present.has("research") && step.uses.includes("research")) needs.push("research")
     const uses = step.uses.filter((id) => present.has(id) && !needs.includes(id))
     let label = step.label
-    if (step.id === "deck" && !investor) label = PRESENTATION_LABEL_PLAIN
+    if (step.id === "deck" && (!investor || workFiles)) label = PRESENTATION_LABEL_PLAIN
     if (step.id === "logo" && !logo) label = IMAGE_LABEL_PLAIN
     const input: Record<string, unknown> = {
       goal,
       quality,
       route: route ? { model: route.model, reasoningEffort: route.reasoningEffort, maxTokens: route.maxTokens } : { model: "malik-max" },
     }
+    if (workFiles && step.capability && Object.hasOwn(workFiles, step.capability)) {
+      input.workExportFormats = workFiles[step.capability as keyof WorkFileFormats]
+      const format = (input.workExportFormats as string[]).join(" / ").toUpperCase()
+      label = `${label} · ${format}`
+    }
     if (step.id === "logo") input.purpose = logo ? "logo" : "illustration"
+    if (step.id === "research" && workFiles) {
+      label = "Ищу и проверяю источники"
+      input.workResearch = true
+    }
     if (step.id === "deck") input.audience = investor ? "investors" : "general"
     if (step.id === "data") input.attachmentIds = options.attachmentIds || []
     return {
@@ -90,7 +106,7 @@ export function planFlow(options: PlanOptions): OsTask[] {
       softDependencies: uses.map((id) => taskId(flowId, id)),
       input,
       artifactIds: [],
-      retry: { attempts: 0, maxAttempts: step.type === "image.generate" ? 2 : 3 },
+      retry: { attempts: 0, maxAttempts: workFiles || step.type === "image.generate" ? 2 : 3 },
       idempotencyKey: `${flowId}:${step.id}`,
       // Only a step whose result is a nice-to-have for the others is optional.
       optional: Boolean(step.optional),

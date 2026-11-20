@@ -10,7 +10,7 @@ import { readJsonBodyLimited } from "@/lib/server/request-safety"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
-const flowRequest = z.object({ goal: z.string().min(12).max(120000), clientRequestId: z.string().min(1).max(120), chatId: z.string().regex(/^[\w:.-]{1,120}$/).optional(), projectId: z.string().regex(/^[\w-]{1,120}$/).optional(), workspaceMode: z.enum(["chat", "work"]).default("chat"), force: z.boolean().optional(), demo: z.boolean().optional() }).strict()
+const flowRequest = z.object({ goal: z.string().min(1).max(120000), clientRequestId: z.string().min(1).max(120), chatId: z.string().regex(/^[\w:.-]{1,120}$/).optional(), projectId: z.string().regex(/^[\w-]{1,120}$/).optional(), workspaceMode: z.enum(["chat", "work"]).default("chat"), force: z.boolean().optional(), demo: z.boolean().optional() }).strict()
   .refine(body => body.workspaceMode === "work" || body.goal.length <= 4000)
 
 /** Mission control: this account's flows, newest first. */
@@ -41,7 +41,6 @@ export async function POST(request: Request) {
     const body = parsed.data
     const goal = body.workspaceMode === "work" ? body.goal.trim() : body.goal.replace(/\s+/g, " ").trim()
     const clientRequestId = cleanRequestId(body.clientRequestId)
-    if (goal.length < 12) throw new OsToolError("INVALID_REQUEST", "Опишите цель подробнее.", { retryable: false })
     if (!clientRequestId) throw new OsToolError("INVALID_REQUEST", "Нет идентификатора запроса.", { retryable: false })
 
     const existing = await findFlowByRequest(owner.userId, clientRequestId)
@@ -49,6 +48,7 @@ export async function POST(request: Request) {
 
     // The browser asked because auto mode said so; the server checks again.
     const decision = routeWorkRequest(goal, { mode: body.workspaceMode, signedIn: owner.authenticated })
+    if (goal.length < 12 && !decision.files) throw new OsToolError("INVALID_REQUEST", "Опишите цель подробнее.", { retryable: false })
     const repositoryWork = decision.reason === "work-repository"
     if (!repositoryWork && goal.length > 4000) throw new OsToolError("INVALID_REQUEST", "Длинный brief доступен для задач Work с конкретным GitHub-репозиторием.")
     const forced = body.force === true
@@ -69,6 +69,7 @@ export async function POST(request: Request) {
       chatId,
       projectId,
       capabilities: decision.capabilities.length ? decision.capabilities : undefined,
+      workFiles: decision.files,
       workRepository: repositoryWork,
       tasks: repositoryWork ? id => repositoryWorkPlan(id, goal) : undefined,
       demo,

@@ -19,4 +19,49 @@ for (const [goal, expected] of cases) {
   assert.equal(routeWorkRequest(goal, { mode: "chat", signedIn: true }).route, decideSuperflow(goal).run ? "flow" : "chat", `chat regression: ${goal}`); count++
   assert.equal(routeWorkRequest(goal, { mode: "work", signedIn: false }).route, "chat", `guest: ${goal}`); count++
 }
-console.log(`${count}/${count} passed (${cases.length} phrases; work/chat/guest)`)
+const deliverables = [
+  ["Разработай Python-проект для трекера привычек", { code: ["zip"] }],
+  ["Build a Python CLI project to track expenses", { code: ["zip"] }],
+  ["Подготовь PDF с инструкцией по запуску сайта на Python", { document: ["pdf"] }],
+  ["Подготовь XLSX с таблицей затрат", { document: ["xlsx"] }],
+  ["Шығындар бойынша XLSX кестесін жаса", { document: ["xlsx"] }],
+  ["Шағын Python жобасын құрастыр", { code: ["zip"] }],
+  ["Маркетинг туралы таныстырылым дайында", { presentation: ["pptx"] }],
+  ["Сделай PDF", { document: ["pdf"] }],
+  ["Write a report in DOCX and PDF about startup investments", { document: ["docx", "pdf"] }],
+  ["Сделай XLSX с диаграммой динамики", { document: ["xlsx"] }],
+  ["Создай сайт на Next.js для музея", { code: ["zip"] }],
+  ["Собери сайт для кофейни и подготовь PPTX на 3 слайда", { website: ["html"], presentation: ["pptx"] }],
+  ["Подготовь бизнес-план для кафе в PDF", { "business-plan": ["pdf"] }],
+  ["Create a business plan as a PDF", { "business-plan": ["pdf"] }],
+  ["Create a website and a presentation for our team", { website: ["html"], presentation: ["pptx"] }],
+  ["Подготовь отчёт о расходах в PDF и XLSX", { document: ["pdf", "xlsx"] }],
+  ["Create a CSV expense sheet", { document: ["csv"] }],
+  ["Сгенерируй сайт в ZIP", { code: ["zip"] }],
+  ["Подготовь отчёт о продажах, без презентации", { document: ["docx"] }],
+  ["Найди сведения о проекте и подготовь PDF", { document: ["pdf"] }, true],
+  ["Create a PDF report with official sources", { document: ["pdf"] }, true],
+  ["Сделай PDF с источниками из текста, без интернета", { document: ["pdf"] }],
+  ["Find the latest reports", null],
+  ["Напиши инструкцию по установке Python", null],
+  ["Напиши код приложения на Python", null],
+  ["Explain how to build a website", null],
+  ["Write a guide to build a website with React", null],
+  ["Не создавай сайт, объясни его структуру", null],
+  ["Don't build a website, describe the template", null],
+  ["Напиши обзор PDF", null],
+  ["Экспортируй предыдущий отчёт в PDF", null],
+  ["Write a PDF of the text above", null],
+  ["Сделай DOCX из предыдущего ответа", null],
+  ["Сделай краткий пример Python-проекта", null],
+  ["Расскажи, как экспортировать CSV", null],
+  ["Сделай HTML код простой страницы", null],
+]
+for (const [goal, expected, withResearch] of deliverables) {
+  const decision = routeWorkRequest(goal, { mode: "work", signedIn: true })
+  assert.equal(decision.route, expected ? "flow" : "chat", goal)
+  assert.deepEqual(decision.files || null, expected, goal)
+  if (expected) assert.deepEqual(decision.capabilities, [...(withResearch ? ["research"] : []), ...Object.keys(expected)], goal)
+  count++
+}
+console.log(`${count}/${count} passed (work/chat/guest and exact requested deliverables)`)

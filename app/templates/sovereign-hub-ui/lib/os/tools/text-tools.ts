@@ -1,5 +1,6 @@
 import { OsToolError } from "../failures"
 import { normalizeLaunchPack, pitchesMarkdown, roadmapMarkdown } from "@/lib/business/launch-pack"
+import { requestedDeckLanguage } from "@/lib/presentations/deck"
 import type { ProjectSource } from "../types"
 import type { ToolDefinition, WebSource } from "./contract"
 import {
@@ -129,6 +130,7 @@ export const researchTool: ToolDefinition = {
   timeoutMs: 180_000,
   async run(context) {
     const brief = briefOf(context)
+    const workResearch = context.task.input.workResearch === true
     const base = brief?.queries.length ? brief.queries : [clip(context.flow.goal, 120)]
     const queries = [...new Set(base.map((query) => clip(query, 160)).filter(Boolean))].slice(0, 3)
     context.activity(`Ищу источники: ${queries[0]}`, 0.1)
@@ -137,18 +139,19 @@ export const researchTool: ToolDefinition = {
       maxPages: 6,
       onStatus: (text) => context.activity(text, 0.35),
     })
-    const sources = found.filter((source) => /^https?:\/\//i.test(source.url)).slice(0, 8)
+    const usable = found.filter((source) => /^https?:\/\//i.test(source.url))
+    const sources = (workResearch ? [...new Map(usable.map(source => [source.url, source])).values()] : usable).slice(0, 8)
     if (sources.length < 2) {
       throw new OsToolError("NO_SOURCES", "Поиск не вернул достаточно источников. Шаг можно повторить позже.", { retryable: true })
     }
     context.activity(`Читаю ${sources.length} источников`, 0.55)
-    const language = brief?.language || languageOf(context.flow.goal)
+    const language = (workResearch && requestedDeckLanguage(context.flow.goal)) || brief?.language || languageOf(context.flow.goal)
     const answer = await askText(context, {
       system: [
-        "Ты — аналитик рынка Malik AI. Пиши исследование ТОЛЬКО по приведённым источникам.",
+        workResearch ? "Изучи конкретный вопрос пользователя по приведённым источникам." : "Ты — аналитик рынка Malik AI. Пиши исследование ТОЛЬКО по приведённым источникам.",
         "Каждый факт и каждая цифра — с номером источника в квадратных скобках, например [2]. Номера только из списка.",
         "Если источники не дают цифру (размер рынка, рост), прямо напиши, что данных в источниках нет — не придумывай.",
-        `Пиши на ${LANGUAGE_NAME[language]} языке, Markdown, разделы: ## Коротко, ## Рынок и спрос, ## Конкуренты и альтернативы, ## Тренды и возможности, ## Риски, ## Что это значит для проекта.`,
+        `Пиши на ${LANGUAGE_NAME[language]} языке в Markdown. ${workResearch ? "Разделы: ## Главное, ## Подтверждённые сведения, ## Что неизвестно." : "Разделы: ## Коротко, ## Рынок и спрос, ## Конкуренты и альтернативы, ## Тренды и возможности, ## Риски, ## Что это значит для проекта."}`,
       ].join(" "),
       prompt: `${projectContext(context)}\n\nИСТОЧНИКИ:\n${sourceBlock(sources)}`,
       maxTokens: context.flow.quality === "deep" ? 4_000 : 2_800,
@@ -161,16 +164,16 @@ export const researchTool: ToolDefinition = {
     return {
       provider: answer.provider,
       sources: projectSources,
-      facts: { marketSummary: clip(summary.replace(/\[\d+\]/g, ""), 300) },
+      facts: workResearch ? undefined : { marketSummary: clip(summary.replace(/\[\d+\]/g, ""), 300) },
       artifacts: [{
         projectId: context.project.id,
         kind: "analysis",
-        title: "Исследование рынка",
+        title: workResearch ? "Исследование по открытым источникам" : "Исследование рынка",
         sourceTool: "research.web",
         sourceTask: context.task.id,
         content: answer.content,
         summary,
-        metadata: { role: "research", sources: numbered, queries },
+        metadata: { role: "research", sources: numbered, queries, ...(workResearch ? { workResearch: true } : {}) },
       }],
     }
   },
@@ -366,19 +369,34 @@ export const documentTool: ToolDefinition = {
   timeoutMs: 240_000,
   async run(context) {
     const brief = briefOf(context)
-    const language = brief?.language || languageOf(context.flow.goal)
+    const workFormats = Array.isArray(context.task.input.workExportFormats) ? context.task.input.workExportFormats : []
+    const workFile = workFormats.length > 0
+    const goal = context.flow.goal
+    const sheet = workFormats.includes("xlsx") || workFormats.includes("csv")
+    const formulas = workFormats.includes("xlsx") && /(?:(?:с|и|добавь|with|and|include)\s+(?:excel\s+)?(?:формул|formulas)|формулалармен)/iu.test(goal)
+    const charts = workFormats.includes("xlsx") && /(?:(?:с|и|добавь|with|and|include)\s+(?:a\s+)?(?:график|диаграмм|charts?|graphs?)|диаграммамен)/iu.test(goal)
+    const language = (workFile && requestedDeckLanguage(goal)) || brief?.language || languageOf(goal)
     const instruction = String(context.task.input.instruction || "")
-    context.activity("Пишу документ", 0.2)
+    const research = workFile ? researchOf(context) : null
+    context.activity(sheet ? "Собираю таблицу" : "Пишу документ", 0.2)
     const answer = await askText(context, {
       system: [
         "Ты — редактор Malik AI. Напиши документ, который просит пользователь: ясная структура с заголовками ##, конкретика, без воды.",
         `Язык — ${LANGUAGE_NAME[language]}. Markdown.`,
+        sheet ? "Основной результат — таблица Markdown со строкой заголовков, разделителем и данными. Сохраняй числа и единицы пользователя. Для шаблона оставляй неизвестные значения пустыми." : "",
+        formulas ? "Помести запрошенные формулы Excel в ячейки таблицы, начиная с =. Используй локальные ссылки и стандартные арифметические операции или SUM, без внешних ссылок." : "",
+        charts ? "Для диаграммы используй таблицу с категориями и числовыми значениями, полученными из данных пользователя. Сохрани нужные ряды в отдельных колонках." : "",
+        research ? "Используй проверенные сведения ниже и ставь [n] рядом с каждым внешним фактом. Список ссылок добавится автоматически." : "",
         NO_INVENTION,
       ].join(" "),
-      prompt: `${projectContext(context, { research: 3_000, plan: 3_000 })}${instruction ? `\n\nЗАДАНИЕ: ${clip(instruction, 2_000)}` : ""}`,
+      prompt: `${workFile ? `Подготовь содержимое для ${workFormats.join(" / ").toUpperCase()}. Запрос пользователя:\n${goal}${research ? `\n\nПодтверждённые сведения:\n${clip(research.text, 4_000)}` : ""}` : projectContext(context, { research: 3_000, plan: 3_000 })}${instruction ? `\n\nЗАДАНИЕ: ${clip(instruction, 2_000)}` : ""}`,
       maxTokens: context.flow.quality === "deep" ? 6_000 : 4_000,
+      minChars: workFile ? 1 : undefined,
     })
     const title = answer.content.match(/^#\s+(.{2,120})$/m)?.[1] || "Документ"
+    const sources = research?.sources || []
+    const sourcesHeading = language === "en" ? "Sources" : language === "kk" ? "Дереккөздер" : "Источники"
+    const links = sources.map(source => `${source.n}. ${source.title.replace(/[[\]\r\n]/g, " ")} — <${source.url}>`)
     return {
       provider: answer.provider,
       artifacts: [{
@@ -387,9 +405,9 @@ export const documentTool: ToolDefinition = {
         title,
         sourceTool: "document.write",
         sourceTask: context.task.id,
-        content: answer.content,
+        content: links.length ? `${answer.content}\n\n## ${sourcesHeading}\n\n${links.join("\n")}` : answer.content,
         summary: clip(answer.content.replace(/[#*]/g, ""), 260),
-        metadata: { role: "document" },
+        metadata: { role: "document", ...(workFile ? { workFile: true, safeFormulas: formulas, charts, sources } : {}) },
       }],
     }
   },
@@ -415,13 +433,17 @@ export const assembleTool: ToolDefinition = {
   timeoutMs: 30_000,
   async run(context) {
     const brand = brandOf(context)
-    const produced: Array<{ label: string; title: string; score?: number; kind: string; content?: string }> = []
+    const produced: Array<{ title: string; score?: number; kind: string; content?: string; checkedSource: boolean; formats?: string }> = []
     const missing: string[] = []
     for (const task of context.flow.tasks) {
       if (task.type === "result.assemble" || task.type === "goal.understand") continue
       const output = context.dependency(task.id.slice(task.id.lastIndexOf(".") + 1))
       if (output?.artifacts.length) {
-        for (const artifact of output.artifacts) produced.push({ label: task.label, title: artifact.title, score: artifact.validation?.score, kind: artifact.kind, content: artifact.content })
+        for (const artifact of output.artifacts) produced.push({
+          title: artifact.title, score: artifact.validation?.score, kind: artifact.kind, content: artifact.content,
+          checkedSource: artifact.metadata?.role === "work-source",
+          formats: Array.isArray(task.input.workExportFormats) ? task.input.workExportFormats.join(" / ").toUpperCase() : undefined,
+        })
       } else {
         missing.push(task.label)
       }
@@ -430,7 +452,8 @@ export const assembleTool: ToolDefinition = {
       throw new OsToolError("NOTHING_PRODUCED", "Ни один шаг не дал результата, собирать нечего. Повторите шаги с ошибкой.", { retryable: false })
     }
     const repositoryWork = context.flow.tasks.some(task => task.type === "github.work")
-    context.activity(repositoryWork ? "Собираю отчёт и предлагаемые файлы" : "Сверяю бренд во всех материалах", 0.5)
+    const fileWork = context.flow.tasks.some(task => Array.isArray(task.input.workExportFormats))
+    context.activity(repositoryWork ? "Собираю отчёт и предлагаемые файлы" : fileWork ? "Сверяю готовые файлы со списком задач" : "Сверяю бренд во всех материалах", 0.5)
     // Consistency: the brand name should appear in every text deliverable.
     const inconsistent = brand
       ? produced.filter((item) => item.content && ["website", "presentation", "business-plan"].includes(item.kind) && !item.content.toLowerCase().includes(brand.name.toLowerCase())).map((item) => item.title)
@@ -439,8 +462,9 @@ export const assembleTool: ToolDefinition = {
       brand ? `# ${brand.name}${brand.tagline ? ` — ${brand.tagline}` : ""}` : "# Итог",
       "",
       "## Готово",
-      ...produced.map((item) => `- **${item.title}** — ${KIND_LABEL[item.kind] || item.kind}${!repositoryWork && typeof item.score === "number" ? ` · проверка ${item.score}/100` : ""}`),
+      ...produced.map((item) => `- **${item.title}** — ${item.formats || (fileWork && item.kind === "analysis" ? "источники" : KIND_LABEL[item.kind] || item.kind)}${item.formats ? " · проверен экспорт" : !repositoryWork && typeof item.score === "number" ? ` · проверка ${item.score}/100` : ""}`),
       repositoryWork ? "\n## Границы результата\nПредложение изменений не является выполненным commit. Build и unit tests: NOT RUN; синтаксические проверки перечислены в отчёте GitHub." : "",
+      produced.some(item => item.checkedSource) ? "\nИсходники прошли статические проверки. Сборка и тесты не запускались." : "",
       missing.length ? `\n## Не получилось\n${missing.map((label) => `- ${label} — можно повторить этот шаг`).join("\n")}` : "",
       inconsistent.length ? `\n## Требует внимания\n${inconsistent.map((title) => `- В «${title}» не найдено название ${brand?.name}`).join("\n")}` : "",
       planOf(context) || researchOf(context) ? "\n## Дальше\n- Откройте любой результат и попросите изменить его — остальные материалы проекта это учтут." : "",
@@ -454,7 +478,7 @@ export const assembleTool: ToolDefinition = {
         sourceTask: context.task.id,
         content: lines.filter((line) => line !== "").join("\n"),
         summary: `Готово: ${produced.length}${missing.length ? ` · не получилось: ${missing.length}` : ""}`,
-        metadata: { role: "summary", produced: produced.length, missing, inconsistent },
+        metadata: { role: "summary", produced: produced.length, missing, inconsistent, ...(fileWork ? { workFile: true } : {}) },
       }],
     }
   },

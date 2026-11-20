@@ -374,7 +374,7 @@ export type ArtifactDraft = Omit<Artifact, "id" | "ownerId" | "createdAt" | "lin
   createdAt?: number
 }
 
-export async function putArtifact(ownerId: string, draft: ArtifactDraft, now = Date.now()): Promise<Artifact> {
+export async function putArtifact(ownerId: string, draft: ArtifactDraft, now = Date.now(), options?: { requireWrite?: boolean }): Promise<Artifact> {
   if (draft.content && draft.content.length > MAX_INLINE_ARTIFACT_CHARS) throw new Error("ARTIFACT_TOO_LARGE")
   if (draft.url && /^data:/i.test(draft.url)) throw new Error("ARTIFACT_URL_MUST_NOT_BE_DATA")
   const artifact: Artifact = {
@@ -387,9 +387,11 @@ export async function putArtifact(ownerId: string, draft: ArtifactDraft, now = D
     metadata: draft.metadata || {},
   }
   const state = await ownerState(ownerId)
+  const target = key(ownerId, "artifacts", artifact.id)
+  if (options?.requireWrite && !await (await backend()).write(target, artifact)) throw new Error("ARTIFACT_WRITE_FAILED")
   state.artifacts.set(artifact.id, artifact)
   state.index.artifacts.unshift(artifactEntry(artifact))
-  await Promise.all([persist(key(ownerId, "artifacts", artifact.id), artifact), persistIndex(ownerId, state)])
+  await Promise.all([options?.requireWrite ? undefined : persist(target, artifact), persistIndex(ownerId, state)])
   trimArtifactCache(state)
   return artifact
 }

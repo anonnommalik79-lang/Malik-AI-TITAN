@@ -248,7 +248,8 @@ export function serverToolDeps(): ToolDeps {
         import("@/lib/ai/project-builder"),
         import("@/lib/server/project-artifact-store"),
       ])
-      const project = await generateProjectWithBrain({ prompt: request.prompt, userId: request.userId, modelId: "malik-max" })
+        const project = await generateProjectWithBrain({ prompt: request.prompt, userId: request.userId, modelId: "malik-max", signal: request.signal })
+        request.signal?.throwIfAborted()
       const passed = project.status === "completed" && Boolean(project.qa?.passed) && project.files.length > 0
       let downloadUrl: string | undefined
       let artifactId: string | undefined

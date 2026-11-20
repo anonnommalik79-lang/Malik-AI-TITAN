@@ -33,6 +33,7 @@
     "test:accuracy-routing": "node scripts/verify-accuracy-routing.mjs",
     "test:accuracy-browser": "node scripts/verify-accuracy-browser.mjs",
     "test:work-runtime": "node scripts/verify-work-runtime.mjs",
+    "test:work-delivery": "node scripts/verify-work-orchestrator.mjs && node scripts/verify-work-delivery.mjs",
     "test:work-github-snapshot": "node scripts/verify-work-github-snapshot.mjs",
     "test:work-ui-freeze": "node scripts/verify-work-ui-freeze.mjs",
     "test:work-repository-ui": "node scripts/verify-work-repository-browser.mjs",
