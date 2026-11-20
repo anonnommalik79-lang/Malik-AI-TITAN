@@ -91,7 +91,10 @@ assert.equal(gateAttributionAnswer({question:appleQuestion,answer:"Apple осн�
 
 const router = readFileSync(new URL("../lib/malik-god-router.ts", import.meta.url), "utf8")
 const policy = readFileSync(new URL("../lib/ai/web-search-policy.ts", import.meta.url), "utf8")
-assert.match(router, /onToken: \(attribution \|\| needsCurrentEvidence/)
+const bufferedConditions = router.match(/onToken:\s*\(([^\n]+)\)\s*\?\s*undefined\s*:\s*accuracyTokenGate\(/u)?.[1]
+assert.ok(bufferedConditions, "The selected model must gate unverified output before streaming")
+assert.match(bufferedConditions, /(?:^|\|\|)\s*attribution\s*(?:\|\||$)/u)
+assert.match(bufferedConditions, /(?:^|\|\|)\s*freshness\.needsSearch\s*(?:\|\||$)/u)
 assert.match(router, /gateAttributionAnswer\(\{ question: focus\.searchText/)
 assert.match(router, /legacyAttribution && !usedWeb/)
 assert.match(policy, /if \(attributionKind\(text\)\) return true/)
