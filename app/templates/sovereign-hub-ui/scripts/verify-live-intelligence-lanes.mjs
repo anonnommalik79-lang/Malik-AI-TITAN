@@ -6,10 +6,12 @@ import ts from "typescript"
 import { workTestLoader } from "./work-test-loader.mjs"
 const load = workTestLoader(), freshness = load("lib/ai/freshness-intent.ts"), evidence = load("lib/live-intelligence/evidence.ts")
 const accuracy = load("lib/ai/accuracy/engine.ts"), gates = load("lib/ai/accuracy/stream.ts"), brain = load("lib/ai/brain-v1.ts")
-const source = { title: "Next.js v99 TEST FIXTURE", url: "https://github.com/vercel/next.js/releases/tag/fixture-v99", domain: "github.com", snippet: "Stable software release TEST FIXTURE", publishedAt: new Date(Date.now() - 3600000).toISOString(), freshness: "recent", authority: "primary", checkedAt: new Date().toISOString() }
+const source = { title: "Next.js v99.1.0 TEST FIXTURE", url: "https://github.com/vercel/next.js/releases/tag/fixture-v99", domain: "github.com", snippet: "Stable software release TEST FIXTURE", publishedAt: new Date(Date.now() - 3600000).toISOString(), freshness: "recent", authority: "primary", checkedAt: new Date().toISOString() }
 let queries = [], modelInputs = [], fileInputs = [], godInputs = [], fail = false, fileKind = "answer", draft = "Current stable release [1].", checks = 0
+let incomplete, continuations = 0, continuedDraft = ""
 const deps = {
   ...load("lib/ai/conversation-history.ts"),
+  ...load("lib/ai/conversation-focus.ts"),
   ...load("lib/skills/chat-intent.ts"),
   ...load("lib/ai/do-what-user-says.ts"),
   ...load("lib/website/engine/intent.ts"),
@@ -53,8 +55,9 @@ const deps = {
   routeMalikAttachments: async input => { fileInputs.push(input); return { kind: fileKind, content: draft, prompt: "PRIVATE FILE CONTENT secret-project data", files: 1, estimatedTokens: 1, provider: "fixture", usage: {} } },
   buildChatArtifactSkillPrompt: () => "", resolveWorkspaceMode: () => "chat", workModeInstruction: () => "",
   prepareMalikAgentRuntime: async () => null,
-  malikGodAnswer: async (...args) => { godInputs.push(args); return { content: "God answer fixture", accuracy: { fixture: true }, sources: args[7]?.sources || [], provider: "fixture", model: "fixture", attempts: [] } },
+  malikGodAnswer: async (...args) => { godInputs.push(args); return { content: "God answer fixture", accuracy: { fixture: true }, sources: args[7]?.sources || [], provider: "fixture", model: "fixture", attempts: [], incomplete } },
   runMalikCoderOrchestrator: async input => { modelInputs.push(input); return { content: draft, provider: "fixture", usage: { stages: [] } } },
+  continueUnfinished: async () => { continuations++; return { content: continuedDraft } },
 }
 const raw = fs.readFileSync("app/api/stream/route-impl.ts", "utf8"), ast = ts.createSourceFile("route.ts", raw, ts.ScriptTarget.Latest, true)
 const names = ["shouldRunMalikCoder", "runSelectedAnswer", "runSelectedAnswerUnchecked"]
@@ -62,7 +65,7 @@ const functions = ast.statements.filter(node => ts.isFunctionDeclaration(node) &
 assert.equal(ast.statements.filter(node => ts.isFunctionDeclaration(node) && names.includes(node.name?.text)).length, 3)
 const js = ts.transpileModule(functions, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText
 const run = new Function(...Object.keys(deps), js + "\nreturn runSelectedAnswer;")(...Object.values(deps))
-async function check(name, fn) { queries = []; modelInputs = []; fileInputs = []; godInputs = []; fail = false; fileKind = "answer"; draft = "Current stable release [1]."; await fn(); checks++; console.log("PASS " + name) }
+async function check(name, fn) { queries = []; modelInputs = []; fileInputs = []; godInputs = []; fail = false; fileKind = "answer"; draft = "Current stable release [1]."; incomplete = undefined; continuations = 0; continuedDraft = ""; await fn(); checks++; console.log("PASS " + name) }
 const coder = { modelId: "malik-coder-32b", entitlement: { plan: "free" } }, text = { modelId: "malik-fast-120b", entitlement: { plan: "free" } }
 await check("current coder receives evidence and one checked final answer", async () => { const tokens = []; const answer = await run({ prompt: "What is the current stable Next.js version?" }, coder, undefined, undefined, chunk => tokens.push(chunk)); assert.equal(queries.length, 1); assert.match(modelInputs[0].systemPrompt, /github.com/); assert.match(answer.content, /Sources checked/); assert.equal(tokens.length, 0) })
 await check("static coder calculation uses no external source", async () => { draft = "Answer: 5"; const answer = await run({ prompt: "Calculate 2 + 2" }, coder); assert.equal(queries.length, 0); assert.equal(answer.content, "Answer: 4") })
@@ -71,4 +74,38 @@ await check("attachment context carries prepared evidence into God without searc
 await check("failed current coder lookup stops before model inference", async () => { fail = true; const answer = await run({ prompt: "Current Next.js version?" }, coder); assert.equal(modelInputs.length, 0); assert.match(answer.content, /could not confirm/) })
 await check("failed current attachment lookup stops before perception inference", async () => { fail = true; const answer = await run({ prompt: "Current Next.js version?", attachments: [{}] }, text); assert.equal(fileInputs.length, 0); assert.match(answer.content, /could not confirm/) })
 await check("connected-service commands do not search private account requests", async () => { const answer = await run({ prompt: "/github project updates today", attachments: [{}] }, text); assert.equal(queries.length, 0); assert.equal(answer.content, "Private account context") })
+await check("current coder verifies an exact version against its cited source", async () => {
+  draft = "Latest Next.js is 42.0.0 [1]."
+  const answer = await run({ prompt: "What is the current stable Next.js version?" }, coder)
+  assert.match(answer.content, /could not confirm/)
+  assert.doesNotMatch(answer.content, /42\.0\.0/)
+})
+await check("current coder search follows a changed date instead of the earlier window", async () => {
+  const answer = await run({ prompt: "А сегодня?", research: false, history: [{ role: "user", content: "Какие новости Алматы были вчера?" }] }, coder)
+  assert.equal(queries.length, 1)
+  assert.match(queries[0], /Алматы.+сегодня/u)
+  assert.doesNotMatch(queries[0], /вчера/u)
+  assert.match(answer.content, /Источники проверены/u)
+})
+await check("live structured results and evidence failures remain parseable JSON", async () => {
+  const request = { prompt: "What is the current stable Next.js version? JSON only." }
+  draft = '{"version":"99.1.0","source":"[1]"}'
+  const answer = await run(request, coder)
+  assert.deepEqual(JSON.parse(answer.content), { version: "99.1.0", source: "[1]" })
+  fail = true
+  assert.equal(JSON.parse((await run(request, coder)).content).status, "unverified")
+})
+await check("a loose continuation cannot append unsupported claims to a current answer", async () => {
+  incomplete = { reason: "length" }
+  continuedDraft = "An unsupported extra statement."
+  await run({ prompt: "What is the current stable Next.js version?" }, text)
+  assert.equal(continuations, 0)
+})
+await check("a numeric continuation is checked before the final content is returned", async () => {
+  incomplete = { reason: "length" }
+  continuedDraft = "Answer: 5"
+  const answer = await run({ prompt: "Calculate 2 + 2" }, text)
+  assert.equal(continuations, 1)
+  assert.equal(answer.content, "Answer: 4")
+})
 console.log(`${checks}/${checks} stream lane checks passed; external boundaries are fixtures`)

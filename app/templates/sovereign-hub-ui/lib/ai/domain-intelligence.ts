@@ -1,5 +1,6 @@
 import { instructionText, resolveConversationIntent, type ConversationIntent } from "./conversation-intent"
 import { conversationFocus } from "./conversation-focus"
+import { NO_WEB } from "./freshness-intent"
 import { isReferenceImageRequest } from "./image-intent"
 import { websiteIntent } from "../website/engine/intent"
 import { executionContract, type ExecutionContract } from "./execution-contract"
@@ -34,7 +35,7 @@ const DOMAIN_FEATURES: Array<[string, RegExp]> = [
   ["science", /(?:наук|научн|исследован|физик|хими[яию]|биолог|формул|теорем|гравитац|фотосинтез|планет|астроном|science|scientific|physics|chemistry|biology|planet|gravity|photosynthesis|ғылым)/iu],
   ["design", /(?:дизайн|прототип|интерфейс|палитр|типограф|концепци|design|prototype|interface|typography|palette)/iu],
   ["geography", /(?:географ|гор[аы]|горные|озер|озёр|каньон|карт[ауы]|маршрут|достопримеч|где\s+находит|geography|mountains?|lake|canyon|\bmap\b|landmarks?|travel|жер|карта)/iu],
-  ["law", /(?:юридическ|закон|правов|судебн|договор|\blegal\b|legislation|lawsuit|contract)/iu],
+  ["law", /(?:юридическ|законодательств|правов|судебн|договор|(?:трудов\p{L}*|налогов\p{L}*|гражданск\p{L}*|уголовн\p{L}*)\s+кодекс|закон\p{L}*\s+(?:о(?!\p{L})|об(?!\p{L})|для|РК|Казахстан|№)|\blegal\b|legislation|lawsuit|contract|(?:labor|employment|tax|privacy)\s+law|еңбек\s+кодекс|заңнама)/iu],
   ["education", /(?:урок|учебн|обучени|экзамен|education|lesson|curriculum|оқу)/iu],
   ["food", /(?:рецепт|приготов|кулинари|recipe|cooking|ingredients|тағам)/iu],
   ["petroleum", /(?:нефт|скважин|пластов|waterflood|reservoir|petroleum|мұнай)/iu],
@@ -42,8 +43,7 @@ const DOMAIN_FEATURES: Array<[string, RegExp]> = [
 const GREETING = /^(?:привет|сәлем|салам|спасибо|рахмет|как\s+дела|hi|hello|thanks|how\s+are\s+you)[\s!?.,]*$/iu
 const NO_IMAGES = /(?:без\s+(?:фото|картинок|изображений)|не\s+(?:добавляй|показывай)\s+(?:фото|картинки)|только\s+текст|text\s+only|no\s+(?:images?|photos?)|суретсіз)/iu
 const IMAGES = /(?:покажи|подбери|найди|добавь|show|find|with|с)\s+.{0,30}(?:фото|картинк|иллюстраци|изображени|images?|photos?|сурет)|(?:как\s+выглядит|what\s+does.+look\s+like)/iu
-const NO_WEB = /(?:без\s+(?:поиска|интернета)|не\s+(?:ищи|гугли)|do\s+not\s+(?:browse|search)|don't\s+(?:browse|search)|without\s+(?:web|internet|search)|интернетсіз|іздеме)/iu
-const RESEARCH = /(?:найди\s+(?:источник|исследован|стать|данные|новост)|проверь\s+(?:факт|источник|в\s+интернете)|по[ий]щи|загугл|по\s+(?:проверенн|официальн).{0,15}источник|\b(?:research|sources|look\s+up|search\s+online|search\s+the\s+web)\b|дереккөз)/iu
+const RESEARCH = /(?:найди\s+(?:источник|исследован|стать|данные|новост)|проверь\s+(?:факт|источник|онлайн|в\s+интернете)|по[ий]щи|загугл|по\s+(?:проверенн|официальн).{0,15}источник|\b(?:research|sources|look\s+(?:it\s+)?up|search\s+online|search\s+the\s+web|browse\s+online)\b|дереккөз|интернеттен\s+(?:ізде|тап))/iu
 const TRANSFORM = /^(?:(?:а|теперь|now|then)\s+)?(?:переведи|перепиши|сократи|резюмируй|translate|rewrite|summari[sz]e|shorten|аудар)(?!\p{L})/iu
 const RESET = /(?:^(?:другая\s+тема|новая\s+тема|забудь\s+предыдущ|new\s+topic|instead|forget\s+that)|(?:не\s+(?:об\s+этом|это)|вместо\s+этого))/iu
 const PHYSICAL = /(?:планет|космос|солнечн|здани|фасад|собор|мечет|гор[аы]|озер|озёр|каньон|артефакт|портрет|одежд|автомоб|planet|building|cathedral|mountain|lake|artifact|portrait|car\b)/iu
@@ -93,7 +93,8 @@ export function resolveDomainPlan(input: { prompt: string; messages?: unknown; a
     : RESEARCH.test(text) || intent.requiresFreshData ? "research" : "explain"
   const fiction = /^(?:(?:пожалуйста|please)\s+)?(?:напиши|сочини|придумай|write|compose)\s+(?:(?:a|an)\s+)?(?:стих|сказк|рассказ|песн|poem|story|fairy\s+tale|song)/iu.test(text)
   const safetySensitive = domains.some(d => ["medicine", "law"].includes(d)) && !transform && !quiet && !fiction
-  const web = NO_WEB.test(text) || followUp && NO_WEB.test(anchor) && !RESEARCH.test(text) || quiet || transform ? "off"
+  const inheritedEvidencePolicy = focus.followUp && focus.searchText !== text ? focus.searchText : anchor
+  const web = NO_WEB.test(text) || followUp && NO_WEB.test(inheritedEvidencePolicy) && !RESEARCH.test(text) || quiet || transform ? "off"
     : intent.requiresFreshData || RESEARCH.test(text) || safetySensitive ? "required" : "auto"
   const attachmentCount = Array.isArray(input.attachments) ? input.attachments.length : 0
   const explicitVisual = referenceRequest || IMAGES.test(text)

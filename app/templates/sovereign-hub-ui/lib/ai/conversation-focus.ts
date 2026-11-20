@@ -11,9 +11,10 @@
 
 type Turn = { role?: unknown; content?: unknown }
 import { isContinueRequest } from "./answer-completion"
+import { NO_WEB } from "./freshness-intent"
 
 const ACKNOWLEDGEMENT = /^(?:спасибо|спс|рахмет|благодарю|thanks|thank\s+you|thx|ок|окей|ok|okay|да|нет|ага|угу|yes|no|понятно|ясно|хорошо|отлично|супер|класс|круто|жақсы|иә|жоқ)[\s!.)]*$/iu
-const FOLLOW_START = /^(?:а|и|но|ну|так|тогда|ещё|еще|and|but|so|what\s+about|how\s+about|ал)(?![\p{L}])/iu
+const FOLLOW_START = /^(?:а|и|но|ну|так|тогда|ещё|еще|(?:(?:and|but)\s+)?(?:what|how)\s+about|and|but|so|ал)(?![\p{L}])[,\s]*/iu
 const BARE = /^(?:а\s+)?(?:почему|зачем|как\s+так|когда|где|откуда|сколько|подробнее|подробней|детальнее|ещё|еще|продолжай|дальше|короче|кратко|пример|примеры|почему\s+так|why|how\s+come|when|where|more|continue|go\s+on|example|examples|неге|қашан|тағы)[\s?!.]*$/iu
 const REFERENCE = /(?<![\p{L}])(?:он|она|оно|они|его|её|ее|их|ему|ей|им|ним|ними|ней|нему|него|неё|них|этот|эта|это|эти|этого|этой|этих|этому|тот|та|те|того|той|тех|там|туда|оттуда|it|its|he|him|his|she|her|they|them|their|this|that|these|those|ол|олар|оның|оған|бұл|сол)(?![\p{L}])/iu
 /** «третий?», «а следующий?» - an ordinal with nothing else; «второй президент» names its subject. */
@@ -28,6 +29,10 @@ const TRANSFORM = /^(?:(?:а|и|теперь|now|then)\s+)?(?:напиши|пе�
 const CONTEXT_EDIT = /^(?:(?:а|и|теперь|now|then|please|енді)[,\s]+)*(?:лучше|проще|улучши|исправь\s+предыдущ|better|simpler|improve(?:\s+it)?|plain\s+text|no\s+table|жақсырақ\s+жаса|қарапайымырақ|алдыңғы\s+жауаб\p{L}*\s+түзет|қысқаша|тізімсіз|қазақша|орысша|ағылшынша)(?![\p{L}])/iu
 const PREFERENCE_ONLY = /^(?:(?:а|и|теперь|now|then|please|енді|в\s+этом\s+разговоре|for\s+this\s+chat|осы\s+әңгімеде)[,\s]+)*(?:(?:отвечай|ответь|пиши|answer|reply|respond)\s+)?(?:(?:по[- ]?|на\s+|in\s+))?(?:русск\p{L}*|казахск\p{L}*|английск\p{L}*|english|russian|kazakh|қазақша|орысша|ағылшынша|кратко|подробно|briefly|қысқаша|json\s+only)(?:[,\s]+(?:(?:и|and|және)\s+)?(?:кратко|подробно|подробнее|briefly|қысқаша|без\s+списков|without\s+(?:lists|bullets)|тізімсіз))*[.!?\s]*$/iu
 const QUESTION_WORD = /(?<![\p{L}])(?:почему|зачем|как|когда|где|откуда|сколько|кто|что|чем|какой|какая|какое|какие|why|how|when|where|who|what|which|неге|қалай|қашан|кім|не)(?![\p{L}])/iu
+const SEARCH_AGAIN = /^(?:(?:а|и|теперь|then|now|actually|please|енді)[,\s]+)*(?:поищи(?:\s+в\s+(?:сети|интернете))?|проверь\s+(?:в\s+интернете|онлайн)|загугли|(?:look\s+it\s+up|search\s+the\s+web|browse\s+online)(?:\s+now)?|интернеттен\s+(?:ізде|тап))[.!?\s]*$/iu
+const TIME_SCOPE = /(?<![\p{L}\p{N}])(?:(?:за\s+)?(?:последн\p{L}*\s+)?(?:24\s+час\p{L}*|(?:7|семь)\s+дн\p{L}*)|сегодня|вчера|сейчас|на\s+данный\s+момент|на\s+этой\s+неделе|в\s+прошлом\s+(?:месяце|году)|(?:за\s+)?(?:текущ\p{L}*|прошл\p{L}*)\s+(?:недел\p{L}*|месяц\p{L}*|год\p{L}*)|(?:in\s+the\s+)?(?:last|past)\s+(?:24\s+hours|(?:7|seven)\s+days)|today|yesterday|currently|now|(?:this|last)\s+(?:week|month|year)|бүгін|кеше|қазір|соңғы\s+(?:24\s+сағат|7\s+күн|апта)|осы\s+(?:апта|ай|жыл)|(?:в|за|in)\s+(?:19|20)\d{2}(?:\s+году)?|(?:19|20)\d{2}\s+жылы)(?![\p{L}\p{N}])/giu
+const ENTITY = /^[\p{Lu}\p{Lt}\d][\p{L}\p{N}.&+-]*(?:\s+[\p{L}\p{N}][\p{L}\p{N}.&+-]*){0,3}$/u
+const ROLE_OR_VERSION = /^(.{0,120}?(?<!\p{L})(?:(?:ceo|cto|founder|chief\s+executive\s+officer|директор|основател\p{L}*|верси\p{L}*|version)(?:\s+(?:of|at|for))?)\s+)([\p{L}\p{N}][\p{L}\p{N}.&+-]*(?:\s+[\p{L}\p{N}][\p{L}\p{N}.&+-]*){0,3})$/iu
 
 function words(text: string) {
   return text.split(/\s+/u).filter(Boolean)
@@ -39,9 +44,12 @@ export function isContextDependent(prompt: string): boolean {
   if (!text || text.length > 140 || ACKNOWLEDGEMENT.test(text)) return false
   const count = words(text).length
   if (count > 10) return false
-  if (isContinueRequest(text) || CONTEXT_EDIT.test(text) || PREFERENCE_ONLY.test(text)) return true
+  if (isContinueRequest(text) || CONTEXT_EDIT.test(text) || PREFERENCE_ONLY.test(text) || SEARCH_AGAIN.test(text)) return true
   if (BARE.test(text)) return true
-  if (FOLLOW_START.test(text)) return true
+  if (FOLLOW_START.test(text)) {
+    const rest = strip(text)
+    return !QUESTION_WORD.test(rest) || !ownSubject(rest) || REFERENCE.test(rest)
+  }
   if (ORDINAL_ONLY.test(text)) return true
   return count <= 5 && REFERENCE.test(text) && !ownSubject(text)
 }
@@ -80,6 +88,21 @@ function strip(text: string) {
   return text.replace(FOLLOW_START, "").replace(/[?!.]+$/u, "").replace(/\s+/gu, " ").trim()
 }
 
+function refineSubject(text: string, subject: string, rest: string): string | undefined {
+  if (SEARCH_AGAIN.test(text)) {
+    const inheritedOptOut = new RegExp(NO_WEB.source, "giu")
+    return subject.replace(inheritedOptOut, "").trim()
+  }
+  if (rest.match(TIME_SCOPE)) {
+    return `${subject.replace(TIME_SCOPE, "").trim()} ${rest}`.replace(/\s+/gu, " ")
+  }
+  if (FOLLOW_START.test(text) && ENTITY.test(rest)) {
+    const optOut = NO_WEB.exec(subject)?.[0]
+    const previous = ROLE_OR_VERSION.exec(optOut ? subject.replace(optOut, "").trim() : subject)
+    if (previous) return `${previous[1]}${rest}${optOut ? ` ${optOut}` : ""}`
+  }
+}
+
 export function conversationFocus(prompt: string, history: unknown): ConversationFocus {
   const text = String(prompt || "").trim()
   const plain: ConversationFocus = { followUp: false, anchor: "", searchText: text, shapeText: text }
@@ -87,9 +110,16 @@ export function conversationFocus(prompt: string, history: unknown): Conversatio
   const earlier = previousUserQuestions(text, history)
   // In a chain («про второго президента» → «а третий?» → «а четвёртый?») the
   // subject comes from the last question that made sense on its own.
-  const anchor = earlier.find((question) => !ACKNOWLEDGEMENT.test(question) && !isContextDependent(question)) || earlier.find(question => !ACKNOWLEDGEMENT.test(question)) || ""
+  const index = earlier.findIndex(question => !ACKNOWLEDGEMENT.test(question) && !isContextDependent(question))
+  const anchor = (index >= 0 ? earlier[index] : earlier.find(question => !ACKNOWLEDGEMENT.test(question))) || ""
   if (!anchor) return plain
   const rest = strip(text)
+  let subject = anchor.replace(/[?!.]+$/u, "")
+  if (index > 0) {
+    // Replay concrete edits to the subject, without stacking vague follow-ups.
+    for (const turn of earlier.slice(0, Math.min(index, 8)).reverse()) subject = refineSubject(turn, subject, strip(turn)) || subject
+  }
+  const refined = refineSubject(text, subject, rest)
   // «а третий?» / «а Tesla?» swaps one part of the earlier question, so the
   // answer keeps its shape. «почему?» / «подробнее» asks something new about it.
   const substitution = FOLLOW_START.test(text) && !QUESTION_WORD.test(rest) && !BARE.test(text)
@@ -97,7 +127,9 @@ export function conversationFocus(prompt: string, history: unknown): Conversatio
     followUp: true,
     anchor,
     // «почему?», «подробнее» ask about the answer already given: no new search.
-    searchText: BARE.test(text) || TRANSFORM.test(text) ? text : rest ? `${anchor} ${rest}` : anchor,
+    searchText: SEARCH_AGAIN.test(text) ? `${refined || subject} ${text}`
+      : BARE.test(text) || TRANSFORM.test(text) ? text
+      : refined || (rest ? `${subject} ${rest}` : subject),
     shapeText: substitution ? `${anchor}\n${text}` : text,
   }
 }
@@ -109,7 +141,9 @@ export function conversationFocusInstruction(prompt: string, focus: Conversation
   return [
     "CONVERSATION FOCUS:",
     `- The latest message «${clip(prompt)}» continues the conversation. The question it builds on was «${clip(focus.anchor)}».`,
+    focus.searchText !== prompt ? `- Resolved topic for this turn: «${clip(focus.searchText)}».` : "",
     "- Resolve what it refers to (a person, an item, an ordinal such as «третий», «они», «он») from the conversation, then answer only the latest message about that subject.",
+    "- When the latest message changes the entity or time period, apply that change before answering. An earlier target is context, not a second request.",
     "- Do not repeat or re-answer the earlier question. If the reference is genuinely ambiguous, take the most likely reading and name it in a few words.",
   ].join("\n")
 }

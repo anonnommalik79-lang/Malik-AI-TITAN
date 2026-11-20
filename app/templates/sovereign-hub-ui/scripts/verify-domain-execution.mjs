@@ -16,12 +16,15 @@ const empty = () => ""
 let calls, searches, classifierNeedsWeb, classifierFails, modelInputs
 const deps = {
   ...load("lib/server/chat-website-design.ts"),
+  ...load("lib/ai/malik-models.ts"), ...load("lib/ai/premise-check.ts"), ...load("lib/live-intelligence/evidence.ts"),
+  ...load("lib/generative-ui/router.ts"),
   ...domain, ...load("lib/ai/conversation-intent.ts"), ...load("lib/ai/conversation-focus.ts"), ...load("lib/ai/conversation-history.ts"),
   ...load("lib/ai/attribution-evidence.ts"),
   ...load("lib/ai/freshness-intent.ts"), ...load("lib/ai/web-search-policy.ts"), ...load("lib/server/domain-planner.ts"),
   // The coordinator now picks a compact shape for simple chats (lib/ai/request-kind.ts).
   ...load("lib/ai/request-kind.ts"),
   extractPrompt: b => b.prompt, conversationRepairInstruction: empty,
+  selfCreatorReply: empty, CHAT_STYLE_INSTRUCTION: "Answer directly.",
   detectMalikSuperpowers: () => [], superpowerOutputBudget: () => 1000,
   requestedFusionConnectors: () => [], instantReply: () => null,
   analyzeMalikBrainV1: () => ({ task: "fixture", depth: "balanced", outputTokenTarget: 1000, temperature: 0.2 }), buildMalikBrainSystemInstruction: empty,

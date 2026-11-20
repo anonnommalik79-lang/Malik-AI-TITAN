@@ -13,6 +13,7 @@ export type MalikWebSource = {
   checkedAt?: string
   readAt?: string
   currentCatalog?: boolean
+  releaseVersion?: string
   authority?: "primary" | "reporting" | "unknown"
   freshness?: "recent" | "old" | "undated" | "outside-window" | "historical"
   /** The page's own preview picture (og:image), shown on answer cards with the page's domain. */

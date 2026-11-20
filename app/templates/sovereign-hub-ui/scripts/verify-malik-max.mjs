@@ -534,11 +534,16 @@ await check("retrieved programming excerpts do not turn an event question into a
   assert.match(JSON.stringify(log[0].body.messages), /Python JavaScript/)
 })
 
-await check("short comparisons and how-to questions use responsive chat lanes", async () => {
-  for (const prompt of ["Сравни iPhone 16 Pro Max и Samsung S24 Ultra", "Как включить вибрацию на iPhone? Объясни пошагово"]) {
+await check("short comparisons and step-by-step guides get room, while small talk stays lightweight", async () => {
+  for (const [prompt, expected] of [
+    ["Сравни iPhone 16 Pro Max и Samsung S24 Ultra", 4000],
+    ["Как включить вибрацию на iPhone? Объясни пошагово", 4000],
+    ["Привет, как дела?", 1500],
+  ]) {
     const log = []
     await engine.runMalikMax({ prompt, systemPrompt: "Answer directly.", maxTokens: 4000 }, { lanes: [lane("fast-guide")], fetcher: makeFetcher(log) })
-    assert.equal(log[0].body.max_tokens, 1500)
+    assert.equal(log[0].body.max_tokens, expected)
+    assert.equal(log.length, 1)
   }
 })
 

@@ -173,7 +173,8 @@ test("caller cancellation propagates instead of launching fallback inference", a
 })
 test("real API lanes import the shared mechanism, no client-supplied plan trust", () => {
   const route = fs.readFileSync("app/api/stream/route-impl.ts", "utf8"), god = fs.readFileSync("lib/malik-god-router.ts", "utf8")
-  assert.match(route, /domainRequiresPlainChat\(requestDomain\)/); assert.match(route, /shouldUseWeb\(originalPrompt, body, domainPlan\)/)
+  assert.match(route, /domainRequiresPlainChat\(requestDomain\)/); assert.match(route, /shouldUseWeb\(evidenceQuestion, body, domainPlan\)/)
+  assert.match(route, /const publicQuestion = hasAttachment \? originalPrompt : evidenceQuestion/)
   assert.match(god, /await refineDomainPlan/); assert.match(god, /shouldUseWeb\(focus.searchText, body, domainPlan\)/)
   assert.doesNotMatch(god, /domainPlan\s*=\s*body/)
 })

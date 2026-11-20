@@ -14,12 +14,12 @@ import { flashGoogleIntent, flashImageOperation, isFlashCodingRequest } from "@/
 import type { MalikWebSource } from "@/lib/ai/web-research-types"
 import { upsertWebSource } from "@/lib/ai/source-evidence"
 import { normalizeProviderTokenUsage } from "@/lib/ai/token-telemetry"
-import { classifyFreshness, freshnessMode, NO_WEB } from "@/lib/ai/freshness-intent"
+import { classifyFreshness, freshnessMode, NO_WEB, requireEvidence } from "@/lib/ai/freshness-intent"
 import { shouldUseWeb } from "@/lib/ai/web-search-policy"
 import { currentEvidenceAvailable, finalizeFreshAnswer, freshnessEvidenceInstruction, unavailableFreshAnswer } from "@/lib/live-intelligence/evidence"
 import { isContinueRequest, resumableAnswer, resumeText, sameAnswerText, withIncompleteNote, type AnswerIncomplete } from "@/lib/ai/answer-completion"
 import { finalizeAccuracy } from "@/lib/ai/accuracy/engine"
-import { accuracyTokenGate } from "@/lib/ai/accuracy/stream"
+import { accuracyTokenGate, isComputationalQuestion } from "@/lib/ai/accuracy/stream"
 import { buildClaimLedger } from "@/lib/ai/claim-ledger"
 import type { MalikFactAudit } from "@/lib/ai/fact-audit"
 import { after } from "next/server"
@@ -80,6 +80,7 @@ import { createScheduledTask, scheduledTasksStatus } from "@/lib/server/schedule
 import { createExecutionReporter, type ExecutionReporter } from "@/lib/ai/chat-execution"
 import {conversationIntentInstruction,requiresChatDelivery,resolveConversationIntent} from "@/lib/ai/conversation-intent"
 import { conversationHistory, conversationHistorySource } from "@/lib/ai/conversation-history"
+import { conversationFocus } from "@/lib/ai/conversation-focus"
 import { domainPlanInstruction, domainRequiresPlainChat, resolveDomainPlan } from "@/lib/ai/domain-intelligence"
 import {conversationRepairInstruction,conversationValidationFailure,validateConversationAnswer,needsActionClaimValidation} from "@/lib/ai/conversation-validation"
 import {assessExecution,createOpeningCheck,executionContractInstruction,mediaHandoffText,needsOpeningCheck,resolveMediaTurn,skipsClaimAudit,type ChatTurn} from "@/lib/ai/do-what-user-says"
@@ -571,9 +572,15 @@ async function runSelectedAnswer(
   let streamedLive=false
   const originalOnToken=streamToken?(chunk:string)=>{streamedLive=true;streamToken(chunk)}:undefined
   let body = initialBody
-  const originalPrompt = coderPrompt(body), freshness = classifyFreshness(originalPrompt, new Date(), body?.metadata?.timeZone)
-  const intent=resolveConversationIntent({prompt:originalPrompt,messages:conversationHistorySource(body),attachments:body?.attachments})
-  const domainPlan=resolveDomainPlan({prompt:originalPrompt,messages:conversationHistorySource(body),attachments:body?.attachments,intent})
+  const originalPrompt = coderPrompt(body)
+  const chatTurns = conversationHistorySource(body) as ChatTurn[]
+  const intent=resolveConversationIntent({prompt:originalPrompt,messages:chatTurns,attachments:body?.attachments})
+  const domainPlan=resolveDomainPlan({prompt:originalPrompt,messages:chatTurns,attachments:body?.attachments,intent})
+  const evidenceQuestion = domainPlan.context.followUp ? conversationFocus(originalPrompt, chatTurns).searchText : originalPrompt
+  const freshness = requireEvidence(classifyFreshness(evidenceQuestion, new Date(), body?.metadata?.timeZone),
+    domainPlan.evidence.safetySensitive && domainPlan.evidence.web === "required")
+  const holdForEvidence = freshness.needsSearch || domainPlan.evidence.web === "required"
+  const format = intent.target === "text" && intent.requirements.presentation === "json" ? "json" : undefined
   const owner=serverOwner||selection?.entitlement
   if (skillChatRequest(body)) {
     const { runSkillChat } = await import("@/lib/skills/chat")
@@ -581,7 +588,7 @@ async function runSelectedAnswer(
     if (result) return result
   }
   const fileFormat=intent.target==="document"?intent.requirements.format:undefined
-  const validateText=intent.target==="text"&&(intent.requirements.presentation==="json"||intent.action==="repair"||needsActionClaimValidation(originalPrompt))&&!hasMalikAttachments(body?.attachments)&&!freshness.needsSearch&&!routePetroleum(originalPrompt,body?.selectedSkillId).domain&&!parsePluginCommand(originalPrompt)
+  const validateText=intent.target==="text"&&(format==="json"||!freshness.needsSearch&&(intent.action==="repair"||needsActionClaimValidation(originalPrompt)))&&!hasMalikAttachments(body?.attachments)&&!routePetroleum(originalPrompt,body?.selectedSkillId).domain&&!parsePluginCommand(originalPrompt)
   const requestedCap=Number(body?.maxTokens)
   const plannedCap=validateText?analyzeMalikBrainV1({prompt:originalPrompt,historyLength:Array.isArray(body?.history)?body.history.length:0,requestedDepth:body?.responseDepth||body?.metadata?.responseDepth}).outputTokenTarget:fileFormat?12000:4000
   const validationCap=Math.min(maxOutputTokens||Number.POSITIVE_INFINITY,Number.isFinite(requestedCap)&&requestedCap>0?Math.max(1,Math.floor(requestedCap)):plannedCap)
@@ -592,7 +599,6 @@ async function runSelectedAnswer(
   if(intent.action==="stop")return localAnswer("Новые действия не запускаю. Активную генерацию можно остановить кнопкой «Стоп»; отмена другой задачи этим сообщением не подтверждена.")
   // The browser starts media on its own. Whatever slipped past it (an old tab,
   // another entry point) is still read here, before a model can talk about it.
-  const chatTurns=conversationHistorySource(body) as ChatTurn[]
   const hasAttachment=hasMalikAttachments(body?.attachments)
   const handsOffMedia=body?.supportsMediaAction===true&&!routePetroleum(originalPrompt,body?.selectedSkillId).domain&&!parsePluginCommand(originalPrompt)
   const mediaAnswer=(turn:{kind:"image"|"video";prompt:string;via:"request"|"go-ahead"|"again"|"details"})=>({content:mediaHandoffText(turn),provider:"local-smart",model:"media-handoff",selectedModelId:selection?.modelId||DEFAULT_MALIK_MODEL_ID,usedWeb:false,sources:[],attempts:[],mediaAction:{kind:turn.kind,prompt:turn.prompt}})
@@ -774,25 +780,26 @@ async function runSelectedAnswer(
   }
   if (routePetroleum(originalPrompt, body?.selectedSkillId).domain) body = { ...body, metadata: { ...body?.metadata, petroleumDomain: true } }
   const bypassesMainResearch = shouldRunMalikCoder(selection) || hasMalikAttachments(body?.attachments)
-  const needsLaneEvidence = bypassesMainResearch && !parsePluginCommand(originalPrompt) && domainPlan.evidence.web === "required"
+  const needsLaneEvidence = bypassesMainResearch && !parsePluginCommand(originalPrompt) && domainPlan.evidence.web !== "off" && holdForEvidence
   let preparedEvidence: PreparedLiveEvidence | undefined
   // Search only the original public question, never text extracted from a file.
   // Connected-service commands use their own account evidence pipeline.
-  if (needsLaneEvidence && shouldUseWeb(originalPrompt, body, domainPlan)) {
-    const sources = await gatherSourcesForPrompt(originalPrompt, onProgress, { signal, activity, mode: freshnessMode(body?.responseDepth || body?.metadata?.responseDepth), timeZone: freshness.timeZone })
-    if (!currentEvidenceAvailable(sources, freshness)) return { content: unavailableFreshAnswer(freshness), provider: "live-evidence-gate", model: "no-current-evidence", selectedModelId: selection?.modelId || DEFAULT_MALIK_MODEL_ID, usedWeb: sources.length > 0, sources, attempts: [] }
-    preparedEvidence = { prompt: originalPrompt, sources }
+  if (needsLaneEvidence && shouldUseWeb(evidenceQuestion, body, domainPlan)) {
+    const publicQuestion = hasAttachment ? originalPrompt : evidenceQuestion
+    const sources = await gatherSourcesForPrompt(publicQuestion, onProgress, { signal, activity, mode: freshnessMode(body?.responseDepth || body?.metadata?.responseDepth), timeZone: freshness.timeZone })
+    if (!currentEvidenceAvailable(sources, freshness)) return { content: unavailableFreshAnswer(freshness, format), provider: "live-evidence-gate", model: "no-current-evidence", selectedModelId: selection?.modelId || DEFAULT_MALIK_MODEL_ID, usedWeb: sources.length > 0, sources, attempts: [] }
+    preparedEvidence = { prompt: publicQuestion, originalQuestion: originalPrompt, sources }
   }
-  const answer = await runSelectedAnswerUnchecked(body, selection, onProgress, generationCap, freshness.needsSearch ? undefined : accuracyTokenGate(originalPrompt, onToken), activity, signal, preparedEvidence)
+  const answer = await runSelectedAnswerUnchecked(body, selection, onProgress, generationCap, holdForEvidence || format ? undefined : accuracyTokenGate(originalPrompt, onToken), activity, signal, preparedEvidence)
   if ("accuracy" in answer && answer.accuracy) return answer
   const verified = finalizeAccuracy(answer.content, originalPrompt, answer.sources)
-  return { ...answer, content: needsLaneEvidence ? finalizeFreshAnswer(verified.content, freshness, preparedEvidence?.sources || [], answer.sources) : verified.content, accuracy: verified.report }
+  return { ...answer, content: needsLaneEvidence ? finalizeFreshAnswer(verified.content, freshness, preparedEvidence?.sources || [], answer.sources, { question: evidenceQuestion, format }) : verified.content, accuracy: verified.report }
   }
   let answer=await runCurrent()
   // Told to do something and did not: the picture is made for real, and a false
   // «не могу» or a question back gets one more run under a fixed correction.
   opening?.finish()
-  const executed=!fileFormat&&!validateText&&!ranToolLane&&!/petroleum|site-forge|game-studio|analyst|plugin|unavailable|safety|evidence-gate|document-export/.test(answer.provider)&&!("incomplete" in answer&&answer.incomplete)
+  const executed=!fileFormat&&!validateText&&!holdForEvidence&&!ranToolLane&&!/petroleum|site-forge|game-studio|analyst|plugin|unavailable|safety|evidence-gate|document-export/.test(answer.provider)&&!("incomplete" in answer&&answer.incomplete)
     ?assessExecution({prompt:originalPrompt,answer:answer.content,history:chatTurns,hasAttachment}):null
   if(executed){
     if(executed.media&&handsOffMedia)return mediaAnswer(executed.media)
@@ -808,14 +815,18 @@ async function runSelectedAnswer(
   }
   // An answer the engine had to stop is carried on in the same message by the
   // next strongest model: never «Нажмите «Продолжить»» while time is left.
-  if(!fileFormat&&!validateText&&"incomplete" in answer&&answer.incomplete){
+  if(!fileFormat&&!validateText&&!holdForEvidence&&"incomplete" in answer&&answer.incomplete){
     const carried=await continueUnfinished({content:answer.content,incomplete:answer.incomplete},{prompt:originalPrompt,allowCatalog:Boolean(selection&&hasMalikProAccess(selection.entitlement.plan)),maxOutputTokens,onToken:streamedLive?streamToken:undefined,activity,signal,startedAt,onProgress})
-    answer={...answer,content:carried.content,incomplete:carried.incomplete}
+    const checked = isComputationalQuestion(originalPrompt) ? finalizeAccuracy(carried.content, originalPrompt, answer.sources) : undefined
+    answer={...answer,content:checked?.content ?? carried.content,incomplete:carried.incomplete,...(checked ? { accuracy: checked.report } : {})}
   }
   // A chat site's first draft is audited; a broken or flat one gets one upgrade pass.
   if(authoredWebsite&&!("incomplete" in answer&&answer.incomplete?.reason==="time"))answer={...answer,content:await upgradeChatSite({answer:answer.content,body,prompt:originalPrompt,allowCatalog:Boolean(selection&&hasMalikProAccess(selection.entitlement.plan)),maxTokens:maxOutputTokens,startedAt,activity,signal,onProgress})}
   // A site the model wrote (or finished after «Продолжить») gets the MALIK Cinema motion runtime.
   if(authoredWebsite||isContinueRequest(originalPrompt))answer={...answer,content:withSiteCinemaInAnswer(answer.content)}
+  if (format === "json" && "incomplete" in answer && answer.incomplete) {
+    return { ...answer, content: JSON.stringify({ status: "unverified", reason: "incomplete-answer" }), incomplete: undefined }
+  }
   if(validateText&&!ranToolLane&&!/petroleum|site-forge|game-studio|analyst|plugin|unavailable|safety|evidence-gate/.test(answer.provider)&&!("incomplete" in answer&&answer.incomplete)){
     const first=validateConversationAnswer(intent,answer.content,source?.content||intent.source?.content)
     answer={...answer,content:first.content}

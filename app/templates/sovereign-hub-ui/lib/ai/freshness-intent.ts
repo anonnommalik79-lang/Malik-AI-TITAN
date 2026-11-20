@@ -18,8 +18,8 @@ export type FreshnessIntent = {
   news?: boolean
 }
 
-export const NO_WEB = /(?:не\s+(?:ищи|гугли|загугливай)|без\s+(?:поиска|интернета|гугла)|do not (?:search|browse)|don't (?:search|browse)|without (?:web|search|internet)|интернетсіз|іздеме|іздеудің\s+қажеті\s+жоқ)/iu
-const ASK_WEB = /(?:по[ий]щ[иь]|загугл|найди\s+(?:в\s+(?:сети|интернете)|источник)|\b(?:browse|search the web|look up|search online)\b|интернеттен\s+(?:ізде|тап))/iu
+export const NO_WEB = /(?:не\s+(?:ищи|гугли|загугливай)|без\s+(?:(?:веб|интернет)[- ]поиска|поиска|интернета|гугла)|do\s+not\s+(?:search|browse)|don['’]t\s+(?:search|browse)|without\s+(?:web|search|internet|browsing)|интернетсіз|іздеме|іздеудің\s+қажеті\s+жоқ)/iu
+const ASK_WEB = /(?:по[ий]щ[иь]|загугл|проверь\s+(?:онлайн|в\s+интернете)|найди\s+(?:в\s+(?:сети|интернете)|источник)|\b(?:browse|search the web|look (?:it )?up|search online)\b|интернеттен\s+(?:ізде|тап))/iu
 const CREATIVE = /^(?:(?:пожалуйста|please)\s+)?(?:(?:напиши|сочини|придумай)\s+(?:стих|сказк|рассказ|песн)|(?:write|compose)\s+(?:(?:a|an)\s+)?(?:story|poem|fairy\s+tale|song|lyrics)\b|(?:өлең|ертегі|әңгіме)\s+жаз)/iu
 const SELF_CONTAINED = /^(?:(?:пожалуйста|please)\s+)?(?:переведи|перевод|translate\b|аудар|посчитай|вычисли|реши|calculate\b|compute\b|solve\b|есепте|шеш\b|докажи|prove\b)/iu
 // «Сделай сайт новостей», «приложение погоды», «3D сцену»: the changing word
@@ -131,6 +131,13 @@ export function classifyFreshness(prompt: string, now = new Date(), requestedZon
 
 export function freshnessMode(value: unknown): FreshnessMode {
   return /^(?:max|ultra)$/iu.test(String(value)) ? "max" : /^(?:deep|глубоко)$/iu.test(String(value)) ? "deep" : "fast"
+}
+
+/** A safety-sensitive question can require evidence without a time keyword. */
+export function requireEvidence(intent: FreshnessIntent, required: boolean): FreshnessIntent {
+  return required && !intent.needsSearch && intent.category === "UNCERTAIN" && intent.reason !== "user-opt-out"
+    ? { ...intent, needsSearch: true, reason: "verification-required" }
+    : intent
 }
 
 /** Public search queries must not contain account data, credentials or private attachments. */

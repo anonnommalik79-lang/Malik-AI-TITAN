@@ -7,14 +7,14 @@ import { createRequire } from "node:module"
 const require = createRequire(import.meta.url), root = process.cwd()
 const savedFetch = globalThis.fetch, savedEnv = { ...process.env }, savedInfo = console.info
 const cache = new Map(), inferences = [], calls = [], tokens = []
-let scenario = "success", checks = 0
+let scenario = "success", checks = 0, modelDraft
 const sources = [
   { title: "Introducing GPT-99 TEST FIXTURE model", link: "https://openai.com/fixture/gpt-99", snippet: "Fixture only: official AI model announcement", date: new Date(Date.now() - 3600_000).toISOString() },
   { title: "Google DeepMind Gemini 99 TEST FIXTURE model", link: "https://deepmind.google/fixture/gemini-99", snippet: "Fixture only: official AI model announcement", date: new Date(Date.now() - 3600_000).toISOString() },
   { title: "Казахстан: технологические новости TEST FIXTURE", link: "https://inform.kz/fixture/news", snippet: "Fixture only: новости Казахстана за последние 24 часа", date: new Date(Date.now() - 3600_000).toISOString() },
 ]
 const stubs = {
-  "@/lib/server/malik-model-router": { runStrictMalikModel: async (input) => { inferences.push(input); if (!/1547|2020 году|без интернета/.test(input.taskPrompt)) assert.equal(input.onToken, undefined, "current answers must not expose unchecked drafts"); return { content: /1547/.test(input.taskPrompt) ? "1547 × 829 = 1 282 463" : "Подтверждённый ответ по тестовым данным [1].", provider: "fixture", model: "fixture", selectedModelId: input.modelId, latencyMs: 0 } } },
+  "@/lib/server/malik-model-router": { runStrictMalikModel: async (input) => { inferences.push(input); if (!/1547|2020 году|без интернета/.test(input.taskPrompt)) assert.equal(input.onToken, undefined, "current answers must not expose unchecked drafts"); return { content: modelDraft || (/1547/.test(input.taskPrompt) ? "1547 × 829 = 1 282 463" : "Подтверждённый ответ по тестовым данным [1]."), provider: "fixture", model: "fixture", selectedModelId: input.modelId, latencyMs: 0 } } },
   "@/lib/server/context-fusion": { requestedFusionConnectors: () => [], collectMalikConnectedContext: async () => ({ requested: false, sources: [], context: "" }) },
   "@/lib/server/science-context": { collectMalikScienceContext: async () => ({ sources: [], context: "", providers: [] }) },
   "@/lib/live-intelligence/index-reader": { indexedSources: async () => ({ sources: [], health: { status: "unavailable" } }) },
@@ -82,6 +82,25 @@ try {
     const prepared = assessSources(prompt, [{ title: sources[0].title, url: sources[0].link, domain: "openai.com", snippet: sources[0].snippet, publishedAt: sources[0].date }])
     const answer = await god.malikGodAnswer({ originalQuestion: "PRIVATE FILE CONTENT: secret-project", responseDepth: "balanced" }, { modelId: "malik-fast-120b" }, undefined, undefined, undefined, undefined, undefined, { prompt, sources: prepared })
     assert.equal(calls.length, before); assert.equal(answer.provider, "fixture"); assert.match(answer.content, /Источники проверены/)
+  })
+  await check("the strict router replaces an unsupported version with the actual latest catalog tag", async () => {
+    modelDraft = "Текущая стабильная версия Next.js — 42.0.0 [1]."
+    try {
+      const answer = await run("Какая актуальная стабильная версия Next.js?")
+      assert.match(answer.content, /99\.0\.0/u)
+      assert.doesNotMatch(answer.content, /42\.0\.0/u)
+      assert.ok(answer.sources.some(source => source.releaseVersion === "99.0.0"))
+    } finally { modelDraft = undefined }
+  })
+  await check("a legal question with no current evidence stops before model inference", async () => {
+    scenario = "all-fail"
+    try {
+      const before = inferences.length
+      const answer = await run("Какие требования закона к трудовому договору в Казахстане?")
+      assert.equal(inferences.length, before)
+      assert.equal(answer.provider, "live-evidence-gate")
+      assert.match(answer.content, /Не удалось подтвердить/u)
+    } finally { scenario = "success" }
   })
   console.log(`${checks}/${checks} runtime acceptance checks passed (fixture transports, not live model accuracy)`)
 } finally { globalThis.fetch = savedFetch; console.info = savedInfo; process.env = savedEnv }

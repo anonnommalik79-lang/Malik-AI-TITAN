@@ -20,25 +20,17 @@ export type WebSearchOptions = {
 export function shouldUseWeb(prompt: string, options: WebSearchOptions = {}, serverPlan?: DomainPlan): boolean {
   const text = normalizeColloquial(prompt.toLowerCase().replace(/ё/g, "е").replace(/\s+/g, " ").trim())
   if (!text || options.disableResearch) return false
-  // «Без интернета» from an earlier turn may sit inside the resolved subject. A
-  // plan that requires the web read the newest message: «теперь поищи» replaced it.
-  if (NO_WEB.test(text) && serverPlan?.evidence.web !== "required") return false
   const plan = serverPlan || resolveDomainPlan({ prompt, messages: options.history || options.messages })
-  if (plan.evidence.web === "off" && options.forceResearch !== true) return false
+  if (NO_WEB.test(plan.request) || plan.evidence.web === "off") return false
   // A build brief may contain «современный», «2026» or ask for photos/video.
   // Those are project requirements, not a news-research answer. Any factual
   // content research belongs to a separate project stage.
-  if (websiteIntent(prompt)) return false
+  if (websiteIntent(plan.request)) return false
   const freshness = classifyFreshness(text)
-  if (freshness.category === "STATIC" && !freshness.historical && !freshness.needsSearch && !options.forceResearch) return false
   // An unchecked Web button is not a request to invent current facts from
   // model memory. Explicit no-web text and server restrictions above win.
-  if (options.research === false && !freshness.needsSearch) return false
-  if (freshness.needsSearch && !freshness.historical) return true
-  if (plan.evidence.web === "required") return true
-  if (/(?:не\s+(?:ищи|гугли|загугливай)|без\s+(?:поиска|интернета|гугла)|do not (?:search|browse)|don't (?:search|browse)|without (?:web|search|internet))/i.test(text)) return false
-  // An explicit opt-in forces search, except for explicit opt-out and site generation.
-  if (options.forceResearch === true) return true
+  if (freshness.needsSearch || plan.evidence.web === "required" || options.forceResearch === true) return true
+  if (freshness.category === "STATIC" && !freshness.historical || options.research === false) return false
 
   // An explicit search request always wins.
   if (/(?:по[ий]щ[иь]|поиск\s+(?:в|по)|загугл|гугл[еи]|найди\s+(?:в\s+(?:сети|интернете)|через\s+веб)|проверь\s+(?:онлайн|в\s+сети)|\b(?:google|browse|search the web|look up|search online)\b)/i.test(text)) return true
