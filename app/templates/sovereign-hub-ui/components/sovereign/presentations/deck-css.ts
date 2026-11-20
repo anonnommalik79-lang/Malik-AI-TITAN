@@ -249,10 +249,14 @@ export const DECK_CSS = `
 /* --- chart --- */
 .deck-chart { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 48px; height: 100%; }
 .deck-chart[data-takeaway="false"] { grid-template-columns: minmax(0, 1fr); }
-.deck-bars { display: flex; align-items: flex-end; gap: 18px; height: 100%; padding-bottom: 42px; position: relative; border-bottom: 2px solid var(--deck-border); }
-.deck-bar { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; position: relative; }
-.deck-bar-fill { width: 100%; max-width: 110px; border-radius: 10px 10px 0 0; background: var(--deck-accent); min-height: 4px; }
-.deck-bar-value { font-size: 18px; font-weight: 800; margin-bottom: 10px; font-variant-numeric: tabular-nums; }
+.deck-bars { height: 100%; padding-bottom: 42px; }
+.deck-plot-area { display: flex; gap: 18px; height: 100%; position: relative; }
+.deck-zero-axis { position: absolute; inset-inline: 0; border-top: 2px solid var(--deck-border); }
+.deck-bar { flex: 1 1 0; min-width: 0; height: 100%; position: relative; }
+.deck-bar-fill { position: absolute; left: 50%; translate: -50% 0; width: 100%; max-width: 110px; border-radius: 10px 10px 0 0; background: var(--deck-accent); }
+.deck-bar[data-negative="true"] .deck-bar-fill { border-radius: 0 0 10px 10px; transform-origin: center top; }
+.deck-bar-value { position: absolute; z-index: 1; inset-inline: 0; text-align: center; padding-bottom: 10px; font-size: 18px; font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.deck-bar[data-negative="true"] .deck-bar-value { padding: 8px 0 0; }
 .deck-bar-label { position: absolute; bottom: -38px; left: 0; right: 0; text-align: center; font-size: 15px; color: var(--deck-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .deck-unit { font-size: 17px; color: var(--deck-muted); margin: -24px 0 22px; }
 .deck-takeaway { align-self: start; border-left: 3px solid var(--deck-accent); padding-left: 24px; font-size: 25px; line-height: 1.35; font-family: var(--deck-heading-font); font-weight: var(--deck-heading-weight); }
@@ -572,6 +576,7 @@ export const DECK_CSS = `
   animation: deck-grow-y .8s var(--ease) both;
   animation-delay: calc((var(--t) + var(--n, 1) * 120ms) * var(--k, 1));
 }
+.deck-slide[data-build="true"] .deck-bar[data-negative="true"] .deck-bar-fill { transform-origin: center top; }
 .deck-slide[data-build="true"] .deck-bar-value {
   animation: deck-fade .4s var(--ease) both;
   animation-delay: calc((var(--t) + var(--n, 1) * 120ms + 500ms) * var(--k, 1));

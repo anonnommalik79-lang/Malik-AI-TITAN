@@ -21,7 +21,7 @@ export type PresentationQualityReport = {
 
 const FILLER = /^(?:введение|заключение|выводы|обзор|информация|о нас|основные моменты|рынок|продукт|решение|проблема|важность|introduction|overview|conclusion|our solution|market|the problem|about us|key points|қорытынды|кіріспе)$/iu
 const PLACEHOLDER = /\b(?:lorem ipsum|insert here|placeholder|coming soon|to be determined|tbd)\b|(?:вставьте текст|здесь будет|укажите значение|данные уточняются)/iu
-const EVIDENCE = /(?:источник|по данным|согласно|source|according to|dataset|зерттеу|дереккөз|расчёт|расчет|методология|methodology|получено из)/iu
+const EVIDENCE = /(?:источник|по данным|согласно|source|according to|dataset|зерттеу|дереккөз|деректерді.{0,65}ұсын|расчёт|расчет|методология|methodology|получено из|данные.{0,40}предоставил|https:\/\/)/iu
 
 function headline(slide: Slide | null | undefined, fallback = ""): string {
   if (!slide) return fallback

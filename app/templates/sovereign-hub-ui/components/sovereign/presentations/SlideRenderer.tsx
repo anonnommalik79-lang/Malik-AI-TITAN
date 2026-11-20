@@ -9,6 +9,7 @@ import { formatCounted, splitNumber } from "@/lib/presentations/count-up"
 import { DECK_ICONS } from "@/lib/presentations/icon-components"
 import { DECK_CSS } from "./deck-css"
 import { slideDensity } from "@/lib/presentations/visual-fit"
+import { chartPlot, formatChartValue } from "@/lib/presentations/chart-plot"
 import { inspectVisualOverflow, type VisualIssue } from "@/lib/presentations/visual-audit"
 
 /**
@@ -216,14 +217,6 @@ function CountUp({ value, delay, duration = 900 }: { value: string; delay: numbe
   }, [value, delay, duration])
 
   return <span>{text}</span>
-}
-
-function formatNumber(value: number, language: string) {
-  try {
-    return new Intl.NumberFormat(language === "en" ? "en-US" : "ru-RU", { maximumFractionDigits: 1 }).format(value)
-  } catch {
-    return String(value)
-  }
 }
 
 /** Who took the photo, small in its corner, as the licence asks. */
@@ -618,7 +611,7 @@ function SlideBody({
       )
 
     case "chart": {
-      const max = Math.max(...slide.data.map((datum) => datum.value), 1)
+      const plot = chartPlot(slide.data.map(({ value }) => value))
       return (
         <>
           <div className="deck-pad">
@@ -627,13 +620,21 @@ function SlideBody({
             <div className="deck-body">
               <div className="deck-chart" data-takeaway={Boolean(slide.takeaway)}>
                 <div className="deck-bars">
-                  {slide.data.map((datum, i) => (
-                    <div className="deck-bar" key={i}>
-                      <div className="deck-bar-value">{formatNumber(datum.value, language)}</div>
-                      <div className="deck-bar-fill" style={{ height: `${Math.max(1.5, (Math.max(0, datum.value) / max) * 82)}%`, opacity: 1 - (i === slide.data.length - 1 ? 0 : 0.18) }} />
-                      <div className="deck-bar-label">{datum.label}</div>
-                    </div>
-                  ))}
+                  <div className="deck-plot-area">
+                    <span className="deck-zero-axis" style={{ bottom: `${plot.zero}%` }} aria-hidden="true" />
+                    {slide.data.map((datum, i) => {
+                      const mark = plot.marks[i]
+                      const negative = datum.value < 0
+                      const labelStyle = negative ? { top: `${100 - mark.bottom}%` } : { bottom: `${mark.bottom + mark.height}%` }
+                      return (
+                        <div className="deck-bar" key={i} data-negative={negative}>
+                          <div className="deck-bar-value" style={labelStyle}>{formatChartValue(datum.value, language)}</div>
+                          <div className="deck-bar-fill" style={{ bottom: `${mark.bottom}%`, height: `${mark.height}%`, opacity: i === slide.data.length - 1 ? 1 : 0.82 }} />
+                          <div className="deck-bar-label">{datum.label}</div>
+                        </div>
+                      )
+                    })}
+                  </div>
                 </div>
                 {slide.takeaway ? <div className="deck-takeaway">{text(slide.takeaway, "takeaway")}</div> : null}
               </div>

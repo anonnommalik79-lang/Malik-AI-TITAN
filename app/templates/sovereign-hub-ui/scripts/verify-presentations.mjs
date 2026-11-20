@@ -32,6 +32,7 @@ const STUBS = {
     malikModelErrorPayload: (error) => ({ message: String(error?.message || "") }),
   },
   "@/lib/ai/malik-models": { DEFAULT_MALIK_MODEL_ID: "malik-max", hasMalikProAccess: (plan) => plan === "pro" || plan === "owner" },
+  "@/lib/server/request-entitlement": { resolveRequestEntitlement: async () => ({ userId: "presentation-qa@example.invalid", plan: "free", authenticated: true }) },
 }
 
 const cache = new Map()
@@ -78,6 +79,7 @@ function check(name, fn) {
     } catch (error) {
       failures += 1
       console.error(`  FAIL ${name}\n       ${String(error?.message || error).split("\n")[0]}`)
+      if (process.env.MALIK_QA_DEBUG) console.error(error)
     }
   }
   pending.push({ name, run })
@@ -254,8 +256,12 @@ check("an outline always opens on a cover and closes on a conclusion", () => {
   assert.equal(outline.items.at(-1).layout, "closing")
 })
 
-check("refuses an outline too short to be a deck", () => {
-  assert.equal(deck.normalizeOutline({ items: [{ title: "a" }, { title: "b" }] }, "t", 10), null)
+check("an empty outline is refused and a single content slide stays a single slide", () => {
+  assert.equal(deck.normalizeOutline({ items: [{ title: "" }] }, "t", 10), null)
+  const brief = deck.normalizeOutline({ items: [{ title: "Why it matters", layout: "comparison" }] }, "t", 1)
+  assert.equal(brief.items.length, 1)
+  assert.equal(brief.items[0].layout, "comparison")
+  assert.equal(deck.clampSlideCount(null), deck.DEFAULT_SLIDES)
 })
 
 check("accepts an outline given as plain strings", () => {
@@ -277,6 +283,12 @@ check("detects the language to write the deck in", () => {
   assert.equal(deck.detectDeckLanguage("Кофейня в Алматы"), "ru")
   assert.equal(deck.detectDeckLanguage("Қазақстандағы кофехана"), "kk")
   assert.equal(deck.detectDeckLanguage("Coffee shop in Almaty"), "en")
+  assert.equal(deck.detectDeckLanguage("Сделай презентацию об Алматы на английском"), "en")
+  assert.equal(deck.detectDeckLanguage("Prepare 3 slides on Kazakh cities in Russian"), "ru")
+  assert.equal(deck.detectDeckLanguage("Дай 2 слайда на казахском языке"), "kk")
+  assert.equal(deck.detectDeckLanguage("8 слайдтан тұратын таныстырылымды ағылшынша жаса"), "en")
+  assert.equal(deck.requestedSlideCount("13 бетонных плит"), null)
+  assert.equal(deck.requestedSlideCount("36 slides on urban history"), 36)
 })
 
 /* ========================================================= chat hand-off */
@@ -553,7 +565,7 @@ check("the model is told never to invent statistics", async () => {
   modelCalls.length = 0
   await engine.generateSlides({ topic: "кофейня", outline, startIndex: 0, count: 1, language: "ru", tone: "confident" })
   assert.match(modelCalls[0].systemPrompt, /NEVER invent statistics, traction, revenue, market size/, "the model must reject fabricated business figures")
-  assert.match(modelCalls[0].systemPrompt, /CLAIM/)
+  assert.match(modelCalls[0].systemPrompt, /Give a headline a conclusion only when the slide provides the evidence/)
 })
 
 check("never accepts a four-slide outline for a six-slide request", async () => {
@@ -823,7 +835,7 @@ function fakeFetch(routes) {
 const COMMONS_REPLY = {
   query: {
     pages: {
-      "2": { index: 2, imageinfo: [{ mime: "image/jpeg", width: 2400, height: 1600, thumburl: "https://upload.test/second.jpg", descriptionurl: "https://commons.test/File:2", extmetadata: { LicenseShortName: { value: "CC BY-SA 4.0" }, Artist: { value: "<a href='x'>Jane Doe</a>" } } }] },
+      "2": { index: 2, title: "File:Abylai Khan monument.jpg", imageinfo: [{ mime: "image/jpeg", width: 2400, height: 1600, thumburl: "https://upload.test/second.jpg", descriptionurl: "https://commons.test/File:2", extmetadata: { LicenseShortName: { value: "CC BY-SA 4.0" }, Artist: { value: "<a href='x'>Jane Doe</a>" } } }] },
       "1": { index: 1, imageinfo: [{ mime: "image/jpeg", width: 3000, height: 2000, thumburl: "https://upload.test/first.jpg", descriptionurl: "https://commons.test/File:1", extmetadata: { LicenseShortName: { value: "Fair use" }, Artist: { value: "Someone" } } }] },
       "3": { index: 3, imageinfo: [{ mime: "image/svg+xml", width: 3000, height: 2000, thumburl: "https://upload.test/map.svg", extmetadata: { LicenseShortName: { value: "CC0" } } }] },
     },
@@ -852,6 +864,13 @@ check("a general scene goes to the stock libraries first when their keys are set
   assert.equal(photo.credit, "Фото: Ann Lee · Pexels")
   assert.match(fetcher.calls[0], /api\.pexels\.com/)
   delete process.env.PEXELS_API_KEY
+})
+
+check("a subject photo cannot substitute a different monument or a portrait", async () => {
+  const photo = (index, title, path) => ({ index, title, imageinfo: [{ mime: "image/jpeg", width: 2400, height: 1600, thumburl: `https://upload.test/${path}.jpg`, extmetadata: { LicenseShortName: { value: "CC BY 4.0" } } }] })
+  const reply = { query: { pages: { 1: photo(1, "File:Victory statue park", "wrong"), 2: photo(2, "File:Amangeldy Imanov portrait", "portrait"), 3: photo(3, "File:Amangeldy Imanov memorial", "monument") } } }
+  const result = await photos.findPhoto({ query: "Amangeldy Imanov monument", kind: "subject" }, fakeFetch([[/commons\.wikimedia\.org/, reply]]))
+  assert.equal(result.url, "https://upload.test/monument.jpg")
 })
 
 check("a search that finds nothing tries broader words, and never repeats a photo", async () => {
@@ -1169,9 +1188,8 @@ check("one account cannot run more than a few generations at once", () => {
 check("the export fetches only public https images, never an address or this machine", () => {
   const route = read("app/api/presentations/export/route.ts")
   assert.match(route, /url\.protocol !== "https:"/)
-  assert.match(route, /isIP\(host\)/)
-  assert.match(route, /host === "localhost"/)
-  assert.match(route, /MAX_IMAGE_BYTES/)
+  assert.match(route, /fetchPublicPage\(url\.href, timeout, MAX_IMAGE_BYTES, \{ media: "image" \}\)/)
+  assert.match(read("lib/malik-research/public-page-fetch.ts"), /publicAddresses\(target\.hostname, lookup, signal\)/)
   assert.match(route, /IMAGE_TIMEOUT_MS/)
 })
 
@@ -1181,7 +1199,101 @@ check("partial presentations clearly label every export instead of masquerading 
   assert.ok(studio.includes('const exportStatus = exportSuffix'), "UI exposes incomplete slide count")
   assert.ok(studio.includes("PPTX{exportStatus}"), "PPTX label shows incomplete count")
   assert.ok(studio.includes("PDF{exportStatus}"), "PDF label shows incomplete count")
-  assert.ok(studio.includes("${exportSuffix}.malik.json"), "editable backups cannot be mislabeled as full")
+  assert.ok(studio.includes('presentationFileName(deckTitle, "malik.json", exportSuffix)'), "editable backups cannot be mislabeled as full")
+})
+
+check("the real planner retains layout exclusions and retries duplicate titles", async () => {
+  const good = { items: [{ title: "First claim", layout: "hero" }, { title: "Comparison", layout: "chart" }, { title: "Closing point", layout: "closing" }] }
+  modelScript = [JSON.stringify({ items: Array.from({ length: 3 }, () => ({ title: "One repeated title", layout: "hero" })) }), JSON.stringify(good)]
+  const topic = "3 slides about city logistics, no cover, without images"
+  const result = await engine.generateOutline({ topic, count: 3, language: "en", tone: "confident" })
+  assert.deepEqual(result.items.map(({ layout }) => layout), ["bullets", "bullets", "closing"])
+  assert.match(modelCalls.at(-1).prompt, /distinct title/)
+})
+
+check("the writer repairs swapped chart values and retains the approved title", async () => {
+  const context = "2 слайда о выручке на казахском\n| Қаңтар | −12,25 млн ₸ |\n| Ақпан | 16,75 млн ₸ |"
+  const outline = { title: "Кіріс", items: [{ title: "Кіріс динамикасы", layout: "chart", point: "Use the supplied data" }] }
+  const chart = (values) => JSON.stringify({ slides: [{ n: 1, layout: "chart", title: "Model invented a title", data: [{ label: "Қаңтар", value: values[0] }, { label: "Ақпан", value: values[1] }] }] })
+  modelScript = [chart([16.75, -12.25]), chart([-12.25, 16.75])]
+  const result = await engine.generateSlides({ topic: context, outline, startIndex: 0, count: 1, language: "kk", tone: "confident" })
+  assert.match(modelCalls.at(-1).prompt, /supplied value for "Қаңтар"/u)
+  assert.deepEqual(result.slides[0].slide.data.map(({ value }) => value), [-12.25, 16.75])
+  assert.equal(result.slides[0].slide.title, outline.items[0].title)
+})
+
+check("the API respects brief language, count and the accepted layout across model calls", async () => {
+  const route = load("app/api/presentations/route.ts")
+  const topic = "Сделай 1 слайд на английском: case study without a cover.\n" + "Project constraints and supporting details. ".repeat(100) + "\nRequested conclusion: independent audit."
+  const send = (body) => route.POST(new Request("http://localhost/api/presentations", { method: "POST", body: JSON.stringify({ ...body, topic }) }))
+  modelScript = [JSON.stringify({ title: "Brief", items: [{ title: "Independent audit", point: "Recommend an audit", layout: "bullets" }] })]
+  const initial = await send({ action: "outline", language: "ru" })
+  assert.equal(initial.status, 200)
+  const plan = (await initial.json()).outline
+  assert.equal(plan.items.length, 1)
+  assert.match(modelCalls.at(-1).systemPrompt, /in English/)
+  assert.match(modelCalls.at(-1).prompt, /Requested conclusion: independent audit/)
+  modelScript = [JSON.stringify({ slides: [{ n: 1, ...SAMPLES.bullets }] })]
+  const response = await send({ action: "slides", outline: plan, startIndex: 0, count: 1, language: "ru" })
+  assert.equal(response.status, 200)
+  assert.equal((await response.json()).slides[0].slide.title, "Independent audit")
+  assert.match(modelCalls.at(-1).systemPrompt, /in English/)
+  const before = modelCalls.length
+  const tooMany = await send({ action: "outline", count: 28 })
+  assert.equal(tooMany.status, 400)
+  assert.equal((await tooMany.json()).code, "PRESENTATION_SLIDE_LIMIT")
+  assert.equal(modelCalls.length, before, "the quota and the model do not silently shrink the brief")
+})
+
+check("an educational brief about investment does not become a paid investor pitch", () => {
+  const prompts = load("lib/presentations/prompts.ts")
+  assert.equal(prompts.isInvestorDeckRequest("Презентация про инвестиции и сложный процент для 8 класса"), false)
+  assert.equal(prompts.isInvestorDeckRequest("Presentation about investment for high school"), false)
+  assert.equal(prompts.isInvestorDeckRequest("Питч-дек для инвесторов"), true)
+})
+
+check("the fallback HTTP response returns every slide in a real named file and rejects corrupt slides", async () => {
+  const route = load("app/api/presentations/export/route.ts")
+  const { PPTX_MIME, makePptxFile } = load("lib/presentations/download.ts")
+  const slides = [{ ...SAMPLES.title, imageUrl: "/presentations/showcase/strategy.webp" }, SAMPLES.comparison, SAMPLES.chart]
+  const send = (items) => route.POST(new Request("http://localhost/api/presentations/export", { method: "POST", body: JSON.stringify({ deck: { title: "Кофейня", theme: "ocean", slides: items } }) }))
+  const response = await send(slides)
+  assert.equal(response.status, 200)
+  assert.equal(response.headers.get("content-type"), PPTX_MIME)
+  assert.match(decodeURIComponent(response.headers.get("content-disposition")), /Кофейня\.pptx/)
+  assert.equal(response.headers.get("x-malik-missing-photos"), "0")
+  const file = await makePptxFile(await response.blob(), "Кофейня.pptx")
+  const zip = await require("jszip").loadAsync(await file.arrayBuffer(), { checkCRC32: true })
+  assert.equal(Object.keys(zip.files).filter((name) => /^ppt\/slides\/slide\d+\.xml$/u.test(name)).length, 3)
+  assert.match(await zip.file("ppt/slides/slide2.xml").async("string"), /<a:tbl>/u)
+  assert.ok(Object.keys(zip.files).some((name) => /^ppt\/charts\/chart\d+\.xml$/u.test(name)), "native chart is inside the archive")
+  await assert.rejects(makePptxFile(file.slice(0, file.size - 10), file.name), /получен не полностью/u)
+  const damaged = await send([...slides, { layout: "chart" }])
+  assert.equal(damaged.status, 422)
+})
+
+check("an interrupted deck keeps its original brief and slide positions on reload", () => {
+  const { packPresentationDraft, readPresentationDraft } = load("lib/presentations/draft.ts")
+  const topic = "3 слайда на казахском\n\n| Қаңтар | −12,25 |"
+  const outline = { title: "Кіріс", items: [{ title: "Бірінші", layout: "title" }, { title: "Екінші", layout: "bullets" }, { title: "Үшінші", layout: "chart" }] }
+  const first = deck.normalizeSlide({ ...SAMPLES.title, imageUrl: "data:image/png;base64,YQ==" })
+  const last = deck.normalizeSlide(SAMPLES.chart)
+  const result = readPresentationDraft(packPresentationDraft({ id: "draft-fixture", title: outline.title, createdAt: 1, language: "kk", tone: "academic", theme: "steppe", topic, outline, slides: [first, null, last] }))
+  assert.equal(result.topic, topic)
+  assert.deepEqual(result.slides.map((slide) => slide?.id), [first.id, undefined, last.id])
+  assert.equal(result.slides[0].imageUrl, undefined)
+  assert.deepEqual(result.outline.items.map((item) => item.layout), ["title", "bullets", "chart"])
+})
+
+check("chart preview preserves decimals and draws negative values below zero", () => {
+  const { chartPlot, formatChartValue } = load("lib/presentations/chart-plot.ts")
+  const { marks, zero } = chartPlot([-12.25, 0, 16.75])
+  assert.ok(Math.abs(marks[0].bottom + marks[0].height - zero) < 0.000001)
+  assert.equal(marks[1].height, 0)
+  assert.equal(marks[2].bottom, zero)
+  assert.equal(formatChartValue(12.25, "kk"), "12,25")
+  assert.equal(formatChartValue(16.75, "en"), "16.75")
+  assert.notEqual(formatChartValue(0.00000012, "ru"), "0")
 })
 
 /* ================================================================== run */

@@ -1,10 +1,14 @@
 import { hasMalikProAccess } from "@/lib/ai/malik-models"
 import {
   PRESENTATION_COSTS,
+  MAX_SLIDES,
+  MAX_PRESENTATION_TOPIC_CHARS,
   clampSlideCount,
   detectDeckLanguage,
   normalizeOutline,
   normalizeSlide,
+  requestedDeckLanguage,
+  requestedSlideCount,
 } from "@/lib/presentations/deck"
 import type { DeckLanguage, DeckTone } from "@/lib/presentations/types"
 import { isSlideLayout } from "@/lib/presentations/deck"
@@ -30,7 +34,6 @@ export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
 const MAX_BODY_BYTES = 256 * 1024
-const MAX_TOPIC_CHARS = 4_000
 /** Batches a single account may have running at once. The studio uses two. */
 const MAX_PARALLEL = 3
 
@@ -49,7 +52,7 @@ function json(payload: unknown, status = 200) {
 }
 
 function languageOf(value: unknown, sample: string): DeckLanguage {
-  return value === "ru" || value === "kk" || value === "en" ? value : detectDeckLanguage(sample)
+  return requestedDeckLanguage(sample) ?? (value === "ru" || value === "kk" || value === "en" ? value : detectDeckLanguage(sample))
 }
 
 function toneOf(value: unknown): DeckTone {
@@ -95,6 +98,9 @@ export async function POST(request: Request) {
     if (error instanceof RequestSafetyError) return json({ ok: false, error: error.message }, error.status)
     return json({ ok: false, error: "Не удалось прочитать запрос." }, 400)
   }
+  if (!body || typeof body !== "object" || Array.isArray(body)) return json({ ok: false, error: "Ожидается объект запроса." }, 400)
+  const topic = typeof body.topic === "string" ? body.topic.trim() : ""
+  if (topic.length > MAX_PRESENTATION_TOPIC_CHARS) return json({ ok: false, code: "PRESENTATION_BRIEF_TOO_LONG", error: `В запросе должно быть до ${MAX_PRESENTATION_TOPIC_CHARS} символов.` }, 400)
 
   const action = String(body.action || "")
   if (!["outline", "slides", "rewrite"].includes(action)) {
@@ -113,11 +119,13 @@ export async function POST(request: Request) {
   try {
     /* -------------------------------------------------------- outline */
     if (action === "outline") {
-      const topic = String(body.topic || "").trim().slice(0, MAX_TOPIC_CHARS)
       if (topic.length < 3) return json({ ok: false, error: "Опишите, о чём презентация." }, 400)
 
       const quotaBefore = await getPresentationQuota(userId, plan, authenticated)
-      const count = Math.min(clampSlideCount(body.count), quotaBefore.maxSlides)
+      const maxSlides = Math.min(quotaBefore.maxSlides, MAX_SLIDES)
+      const requested = body.count ?? requestedSlideCount(topic)
+      if (Number(requested) > maxSlides) return json({ ok: false, code: "PRESENTATION_SLIDE_LIMIT", error: `Доступно до ${maxSlides} слайдов. Выберите количество в настройках.` }, 400)
+      const count = Math.min(clampSlideCount(requested), maxSlides)
       if (isInvestorDeckRequest(topic) && count < 10) return json({ ok: false, code: "INVESTOR_DECK_TOO_SHORT", error: "Для полного инвестиционного питч-дека выберите минимум 10 слайдов. Кредиты не списаны." }, 400)
 
       const generationCost = presentationGenerationCost(topic, count)
@@ -132,6 +140,7 @@ export async function POST(request: Request) {
         count,
         language: languageOf(body.language, topic),
         tone: toneOf(body.tone),
+        signal: request.signal,
       })
       reserved = 0
       return json({ ok: true, outline, quota: reservation.quota })
@@ -139,9 +148,8 @@ export async function POST(request: Request) {
 
     /* --------------------------------------------------------- slides */
     if (action === "slides") {
-      const topic = String(body.topic || "").trim().slice(0, MAX_TOPIC_CHARS)
       const quotaBefore = await getPresentationQuota(userId, plan, authenticated)
-      const outline = normalizeOutline(body.outline, topic, quotaBefore.maxSlides)
+      const outline = normalizeOutline(body.outline, topic, quotaBefore.maxSlides, { preserveLayouts: true })
       if (!outline) return json({ ok: false, error: "План презентации повреждён — составьте его заново." }, 400)
 
       const startIndex = Math.max(0, Math.floor(Number(body.startIndex) || 0))
@@ -162,8 +170,9 @@ export async function POST(request: Request) {
         outline,
         startIndex,
         count,
-        language: languageOf(body.language, `${topic} ${outline.title}`),
+        language: languageOf(body.language, topic || outline.title),
         tone: toneOf(body.tone),
+        signal: request.signal,
       })
 
       const quota = reservation.quota
@@ -180,7 +189,6 @@ export async function POST(request: Request) {
     if (!slide) return json({ ok: false, error: "Слайд повреждён." }, 400)
     const layout = isSlideLayout(body.layout) ? body.layout : undefined
     const instruction = String(body.instruction || "").trim().slice(0, 600)
-    const sourceTopic = String(body.topic || "").trim().slice(0, MAX_TOPIC_CHARS)
     const deckTitle = String(body.deckTitle || "").trim().slice(0, 200)
     const neighbours = Array.isArray(body.neighbours) ? body.neighbours.map((item) => String(item || "").slice(0, 120)).slice(0, 4) : []
 
@@ -192,13 +200,14 @@ export async function POST(request: Request) {
     const rewritten = await rewriteSlide({
       ...model,
       deckTitle,
-      topic: sourceTopic,
+      topic,
       slide,
       layout,
       instruction,
       neighbours,
       language: languageOf(body.language, `${deckTitle} ${instruction}`),
       tone: toneOf(body.tone),
+      signal: request.signal,
     })
     reserved = 0
     return json({ ok: true, slide: rewritten, quota: reservation.quota })

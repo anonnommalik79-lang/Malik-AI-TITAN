@@ -37,7 +37,7 @@ const IMAGE_FIELDS = `"imageQuery":"English photo search words, 2–6 words, exa
 export const INVESTOR_SECTIONS = ["problem", "market", "solution", "product", "traction", "business-model", "competition", "gtm", "team", "ask"] as const
 
 export function isInvestorDeckRequest(topic: string) {
-  return /инвестор|инвестиц|питч[ -]?дек|pitch[ -]?deck|investor|investment|инвесторлық/i.test(topic)
+  return /(?:питч[ -]?дек|pitch[ -]?deck|(?:для|перед) инвестор\p{L}*|инвестицион\p{L}+ (?:питч|предложени\p{L}*|презентаци\p{L}*)|\b(?:for investors?|investor (?:deck|pitch|presentation))\b|инвесторларға|инвесторлық)/iu.test(topic)
 }
 
 /** Validate the model's plan before any investor slides are paid for. */
@@ -77,8 +77,8 @@ export const LAYOUT_SCHEMAS: Record<SlideLayout, string> = {
 
 const WRITING_RULES = `
 WRITING RULES — these decide whether the deck is good:
-1. Every title is a CLAIM the audience should believe after the slide, not a topic label.
-   Bad: "Рынок". Good: "Покупателям у метро не хватает быстрого утреннего кофе" (only if the request supports it).
+1. Use a direct title that names the real subject. Give a headline a conclusion only when the slide provides the evidence.
+   "Утренний поток у станции Абая" is better than "Рынок". Use a literal subject title for definitions and introductions.
 2. One idea per slide. If a slide needs two ideas, it is two slides.
 3. Respect the word limits in the schema. Fewer words always beat more words.
 4. No filler: never "в современном мире", "играет важную роль", "уникальный", "инновационный", "In today's world".
@@ -87,7 +87,7 @@ WRITING RULES — these decide whether the deck is good:
 6. NEVER invent statistics, traction, revenue, market size, team members or funding. Use a figure only when supplied
    in the request with its provenance. Otherwise state "Данные не предоставлены" (translated to the deck language)
    and put the exact missing-data question in speaker notes. Do not turn an unknown into an unlabelled estimate.
-7. Speaker notes: 2–4 natural sentences the presenter actually says — not a repeat of the slide text.
+7. Speaker notes: 2–4 natural sentences that add context, evidence, or explanation. Use an exact supplied source URL when it supports the slide.
 8. PHOTOS. Every slide with an image slot gets:
    - imageQuery: English words a photographer would tag the picture with, about THIS slide's subject, not the deck in
      general. Specific beats generic: "Abylai Khan monument Almaty" not "history"; "barista pouring latte art" not
@@ -141,7 +141,7 @@ function languageLine(language: DeckLanguage) {
   return `Write every visible string in ${LANGUAGE_NAME[language]}. imageQuery and imagePrompt stay in English.`
 }
 
-export function outlineSystemPrompt(input: { language: DeckLanguage; tone: DeckTone; count: number; investor?: boolean }) {
+export function outlineSystemPrompt(input: { language: DeckLanguage; tone: DeckTone; count: number; investor?: boolean; photos?: boolean; cover?: boolean }) {
   return `
 You are the story architect of a world-class presentation studio. You plan decks; you do not design them.
 
@@ -149,6 +149,8 @@ Return ONLY a JSON object, no prose, no code fence:
 {"title":"deck title, ≤8 words","theme":"<design system id>","items":[{"title":"slide claim, ≤10 words","point":"one sentence: what this slide must make the audience believe","layout":"<layout>"}]}
 
 Produce EXACTLY ${input.count} items.
+${input.count <= 3 || input.cover === false ? "Use the requested slide count for actual content. Use a separate cover only if the person explicitly asks for it." : "Use one simple opening and one useful closing. Keep the opener about this brief."}
+${input.photos === false ? "This is a text-led brief. Do not plan an image-text, hero or gallery layout." : "Use photographs where they explain, identify or set the scene. Text and evidence alone may carry the story."}
 ${input.investor ? `This is an INVESTOR DECK. Each item MUST also have "section". Include these ten sections, in this exact order:
 ${INVESTOR_SECTIONS.join(" → ")}.
 The final item MUST have section "ask". If more than ten slides are requested, insert additional evidence/detail slides
@@ -175,10 +177,11 @@ Layouts you may choose, by what the slide's idea IS:
 - bullets: only when nothing above fits.
 - closing: the last item. The one thing to remember or do.
 
-Design like a world-class deck, not a document:
-- Photos carry a deck. In a 10-slide deck use at least 4 photo slides (title/hero, image-text, gallery).
+Plan layouts around the material:
+- Follow the requested audience, purpose, order, prescribed sections and exclusions. Read to the end of the brief.
+- Choose an organising idea suitable for the brief. A lecture, a proposal and a field report need different narratives.
 - Show structure visually: steps → process, dates → timeline, parallel ideas → features, numbers → stat or chart.
-- Never three slides of the same layout in a row; at least 6 different layouts in a 10-slide deck; bullets at most twice.
+- Vary dense and quiet compositions where the material calls for it. Avoid quotas for photos, charts and cards.
 - If the source brief has no genuine quantitative series, do NOT plan a fake chart to satisfy visual diversity:
   choose a process, a comparison, a gallery or feature cards instead.
 - Distinguish "known", "assumption" and "missing" in the slide's intended message, especially for investors.
@@ -242,6 +245,8 @@ ${input.topic}
 
 The full plan, so every slide knows its neighbours:
 ${plan}
+
+Keep each assigned title and purpose from the approved plan. Follow the original brief's terms, requested examples, language and exclusions. Use the notes for context that belongs to the presenter.
 
 ${isInvestorDeckRequest(input.topic) ? "Investor integrity: never invent traction, revenue, market figures, funding or team members. When not provided, show a factual question or 'Data not provided' in the deck language and ask for evidence in notes." : ""}
 

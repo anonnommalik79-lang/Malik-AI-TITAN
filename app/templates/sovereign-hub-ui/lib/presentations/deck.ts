@@ -34,9 +34,10 @@ import { routingScope } from "@/lib/ai/prompt-shape"
  * All of it is pure, so all of it is tested.
  */
 
-export const MIN_SLIDES = 4
+export const MIN_SLIDES = 1
 export const MAX_SLIDES = 20
 export const DEFAULT_SLIDES = 10
+export const MAX_PRESENTATION_TOPIC_CHARS = 8_000
 
 /** What each operation costs, in presentation credits. */
 export const PRESENTATION_COSTS = {
@@ -107,8 +108,10 @@ export function deckId() {
 
 /** Markdown the model adds for emphasis means nothing on a slide. */
 export function cleanText(value: unknown, limit: number): string {
-  const text = String(value ?? "")
+  if (typeof value !== "string" && (typeof value !== "number" || !Number.isFinite(value))) return ""
+  const text = String(value)
     .replace(/<think>[\s\S]*?<\/think>/gi, " ")
+    .replace(/[\p{Cc}\p{Cs}\uFFFE\uFFFF]/gu, (char) => char === "\t" || char === "\n" || char === "\r" ? char : "")
     .replace(/\*\*|__|`/g, "")
     .replace(/^\s*(?:[-•*▪►]|\d{1,2}[.)])\s+/, "")
     .replace(/\s+/g, " ")
@@ -117,7 +120,7 @@ export function cleanText(value: unknown, limit: number): string {
   // Cut at a word boundary, and say that it was cut.
   const slice = text.slice(0, limit - 1)
   const lastSpace = slice.lastIndexOf(" ")
-  return `${(lastSpace > limit * 0.6 ? slice.slice(0, lastSpace) : slice).replace(/[,;:—–-]\s*$/, "")}…`
+  return `${(lastSpace > limit * 0.6 ? slice.slice(0, lastSpace) : slice).replace(/[\uD800-\uDBFF]$/u, "").replace(/[,;:—–-]\s*$/, "")}…`
 }
 
 function optionalText(value: unknown, limit: number) {
@@ -583,7 +586,7 @@ export function normalizeSlides(value: unknown, expected: OutlineItem[] = []): S
 
 /* ---------------------------------------------------------------- outline */
 
-export function normalizeOutline(value: unknown, fallbackTitle: string, count: number): DeckOutline | null {
+export function normalizeOutline(value: unknown, fallbackTitle: string, count: number, { preserveLayouts = false } = {}): DeckOutline | null {
   const raw = (value && typeof value === "object" && !Array.isArray(value) ? value : { items: value }) as Record<string, unknown>
   const title = cleanText(firstOf(raw, "title", "deckTitle", "name"), LIMITS.title) || cleanText(fallbackTitle, LIMITS.title)
   const items = asArray(firstOf(raw, "items", "slides", "outline"))
@@ -607,11 +610,11 @@ export function normalizeOutline(value: unknown, fallbackTitle: string, count: n
 
   if (items.length < MIN_SLIDES) return null
 
-  // A deck opens with a cover and ends on a conclusion whatever the model
-  // thought, because a deck that starts on bullet points looks unfinished.
-  if (items[0].layout !== "hero") items[0] = { ...items[0], layout: "title" }
-  const last = items[items.length - 1]
-  if (last.layout !== "closing" && last.layout !== "quote" && last.layout !== "hero") items[items.length - 1] = { ...last, layout: "closing" }
+  if (!preserveLayouts && items.length >= 4) {
+    if (items[0].layout !== "hero") items[0] = { ...items[0], layout: "title" }
+    const last = items[items.length - 1]
+    if (last.layout !== "closing" && last.layout !== "quote" && last.layout !== "hero") items[items.length - 1] = { ...last, layout: "closing" }
+  }
 
   // The planner may suggest a design system for the topic; only a known
   // theme id is kept, so a made-up name can never reach the renderer.
@@ -622,19 +625,46 @@ export function normalizeOutline(value: unknown, fallbackTitle: string, count: n
 /* ------------------------------------------------------------ the request */
 
 export function clampSlideCount(value: unknown) {
+  if (value === null || value === undefined || value === "") return DEFAULT_SLIDES
   const number = Math.round(Number(value))
   if (!Number.isFinite(number)) return DEFAULT_SLIDES
   return Math.min(MAX_SLIDES, Math.max(MIN_SLIDES, number))
 }
 
 /** "на 8 слайдов", "12 slides", "8 слайдтан" → 8, 12, 8. */
+export function requestedSlideCount(text: string): number | null {
+  const match = text.match(/(?:^|[\s,(])([1-9]\d{0,2})\s*-?\s*(?:слайд(?:а|ов|ы|ами|ах|е|қа|тан|тен|тық|тік)?|slides?|бет(?:тік|тен|ке|ті|тер)?|кадр(?:а|ов)?)(?![\p{L}\p{N}])/iu)
+  return match ? Number(match[1]) : null
+}
+
 export function extractSlideCount(text: string): number | null {
-  const match = String(text || "").toLowerCase().match(/(\d{1,2})\s*(?:-?\s*)(?:слайд|slide|бет|кадр)/u)
-  return match ? clampSlideCount(match[1]) : null
+  const count = requestedSlideCount(text)
+  return count === null ? null : clampSlideCount(count)
+}
+
+const LANGUAGE_REQUESTS = {
+  en: /(?:^|[^\p{L}])(?:in english|на английском(?: языке)?|по[- ]английски|ағылшын тілінде|ағылшынша|(?:language|язык|тілі)\s*:\s*(?:en|english))(?!\p{L})/giu,
+  kk: /(?:^|[^\p{L}])(?:in kazakh|на казахском(?: языке)?|по[- ]казахски|қазақ(?:ша| тілінде)|(?:language|язык|тілі)\s*:\s*(?:kk|kazakh))(?!\p{L})/giu,
+  ru: /(?:^|[^\p{L}])(?:in russian|на русском(?: языке)?|по[- ]русски|орыс(?:ша| тілінде)|(?:language|язык|тілі)\s*:\s*(?:ru|russian))(?!\p{L})/giu,
+} as const
+
+export function requestedDeckLanguage(text: string): DeckLanguage | null {
+  let explicit: DeckLanguage | null = null
+  let at = -1
+  for (const [language, pattern] of Object.entries(LANGUAGE_REQUESTS)) {
+    const mention = [...text.matchAll(pattern)].at(-1)
+    if (mention?.index !== undefined && mention.index > at) {
+      at = mention.index
+      explicit = language as DeckLanguage
+    }
+  }
+  return explicit
 }
 
 export function detectDeckLanguage(text: string): DeckLanguage {
   const value = String(text || "")
+  const explicit = requestedDeckLanguage(value)
+  if (explicit) return explicit
   if (/[әіңғүұқөһ]/iu.test(value)) return "kk"
   if (/[а-яё]/iu.test(value)) return "ru"
   return "en"
@@ -707,6 +737,11 @@ export function normalizeDeck(value: unknown): Deck | null {
     .filter((slide): slide is Slide => Boolean(slide))
     .slice(0, 30)
   if (!slides.length) return null
+  const ids = new Set<string>()
+  for (const slide of slides) {
+    if (ids.has(slide.id)) slide.id = slideId()
+    ids.add(slide.id)
+  }
 
   const theme: Deck["theme"] = isThemeId(raw.theme) ? raw.theme : "obsidian"
   const language = DECK_LANGUAGES.includes(raw.language as DeckLanguage) ? raw.language as DeckLanguage : "ru"
@@ -717,7 +752,7 @@ export function normalizeDeck(value: unknown): Deck | null {
     theme,
     language,
     slides,
-    prompt: cleanText(raw.prompt, 4000),
+    prompt: typeof raw.prompt === "string" ? raw.prompt.trim().slice(0, MAX_PRESENTATION_TOPIC_CHARS) : "",
     createdAt: Number(raw.createdAt) || now,
     updatedAt: Number(raw.updatedAt) || now,
   }

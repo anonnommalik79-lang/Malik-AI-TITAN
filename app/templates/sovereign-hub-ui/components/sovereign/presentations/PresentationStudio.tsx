@@ -33,6 +33,7 @@ import {
   Plus,
   Presentation,
   RefreshCw,
+  Share2,
   ShieldCheck,
   StickyNote,
   Upload,
@@ -42,10 +43,15 @@ import {
 } from "lucide-react"
 import {
   PRESENTATION_COSTS,
+  DEFAULT_SLIDES,
+  MAX_SLIDES,
+  MAX_PRESENTATION_TOPIC_CHARS,
+  MIN_SLIDES,
   deckId as newDeckId,
   detectDeckLanguage,
   normalizeDeck,
   normalizeSlide,
+  requestedSlideCount,
   slideId,
 } from "@/lib/presentations/deck"
 import { DECK_THEMES, DEFAULT_THEME, THEME_IDS, nextTheme, pickTheme } from "@/lib/presentations/themes"
@@ -66,6 +72,8 @@ import { isInvestorDeckRequest } from "@/lib/presentations/prompts"
 import { applyPhoto, photoSlots, usedPhotoUrls, type PhotoSlot } from "@/lib/presentations/images"
 import { PresentationShowcase } from "./PresentationShowcase"
 import { inspectPresentation } from "@/lib/presentations/quality"
+import { makePptxFile, presentationFileName } from "@/lib/presentations/download"
+import { packPresentationDraft, readPresentationDraft, type PresentationDraft } from "@/lib/presentations/draft"
 import { slideDensity } from "@/lib/presentations/visual-fit"
 import type { VisualIssue } from "@/lib/presentations/visual-audit"
 import "./presentation-studio.css"
@@ -113,7 +121,6 @@ const TONES: Array<{ id: DeckTone; label: string }> = [
   { id: "bold", label: "Смелый" },
 ]
 
-const COUNTS = [6, 8, 10, 12, 15, 20]
 
 function presentationGenerationCost(topic: string, count: number) {
   return isInvestorDeckRequest(topic) || count >= 12
@@ -245,10 +252,14 @@ async function callApi(body: Record<string, unknown>, timeoutMs = 180_000) {
   }
 }
 
-function chunk<T>(items: T[], size: number) {
-  const out: T[][] = []
-  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size))
-  return out
+function slideBatches(indexes: number[]) {
+  const batches: number[][] = []
+  for (const index of indexes) {
+    const last = batches.at(-1)
+    if (last && last.length < BATCH && last.at(-1) === index - 1) last.push(index)
+    else batches.push([index])
+  }
+  return batches
 }
 
 async function runLimited<T>(items: T[], limit: number, task: (item: T) => Promise<void>) {
@@ -394,7 +405,7 @@ function GrowingField({ value, onChange, label }: { value: string; onChange: (va
 export function PresentationStudio({ username }: { username?: string }) {
   const [stage, setStage] = useState<Stage>("start")
   const [topic, setTopic] = useState("")
-  const [requestedCount, setCount] = useState(10)
+  const [requestedCount, setCount] = useState<number | null>(null)
   const [tone, setTone] = useState<DeckTone>("confident")
   const [theme, setTheme] = useState<ThemeId>(DEFAULT_THEME)
   // "auto" lets the planner (or the topic's words) choose the design system.
@@ -424,7 +435,9 @@ export function PresentationStudio({ username }: { username?: string }) {
   const [showQuality, setShowQuality] = useState(false)
   const [visualAudit, setVisualAudit] = useState<{ slideId: string; issues: VisualIssue[] } | null>(null)
   const importInputRef = useRef<HTMLInputElement | null>(null)
-  const [printing, setPrinting] = useState(false)
+  const [printCopy, setPrintCopy] = useState<{ version: () => Deck; ready: boolean } | null>(null)
+  const [preparedPptx, setPreparedPptx] = useState<{ version: () => Deck; file: File; url: string; missingPhotos: number } | null>(null)
+  const exportJob = useRef<AbortController | null>(null)
   const [assembling, setAssembling] = useState(false)
   const [assemblyAt, setAssemblyAt] = useState(0)
   const [spotlight, setSpotlight] = useState<{ index: number; nonce: number } | null>(null)
@@ -432,10 +445,12 @@ export function PresentationStudio({ username }: { username?: string }) {
   // Photos already on the deck, so a new search never repeats one.
   const usedPhotosRef = useRef<Set<string>>(new Set())
   const [recent, setRecent] = useState<Deck[]>([])
+  const [savedDraft, setSavedDraft] = useState<PresentationDraft | null>(null)
   const [imageProgress, setImageProgress] = useState<{ done: number; total: number } | null>(null)
 
   const createdAtRef = useRef(0)
   const handoffRef = useRef(false)
+  const draftKey = `${storageKey(username)}:draft`
 
   const applyQuota = useCallback((data: { quota?: Quota } | null) => {
     if (data?.quota) setQuota(data.quota)
@@ -454,15 +469,16 @@ export function PresentationStudio({ username }: { username?: string }) {
       })
       .catch(() => undefined)
     setRecent(readRecent(username))
+    try { setSavedDraft(readPresentationDraft(window.localStorage.getItem(draftKey))) } catch { setSavedDraft(null) }
     return () => { cancelled = true }
-  }, [applyQuota, username])
+  }, [applyQuota, draftKey, username])
 
-  const maxSlides = quota?.maxSlides || 12
-  const countOptions = COUNTS.filter((option) => option <= maxSlides)
-
-  // A plan that allows fewer slides than were asked for gets the largest
-  // size it does allow.
-  const count = requestedCount <= maxSlides ? requestedCount : Math.max(...countOptions, 6)
+  const maxSlides = Math.min(quota?.maxSlides ?? 12, MAX_SLIDES)
+  const countOptions = Array.from({ length: Math.max(0, maxSlides - MIN_SLIDES + 1) }, (_, i) => i + MIN_SLIDES)
+  const countFromText = requestedSlideCount(topic)
+  const wantedCount = requestedCount ?? countFromText ?? DEFAULT_SLIDES
+  const count = Math.min(wantedCount, maxSlides)
+  const exceedsSlideLimit = wantedCount > maxSlides
   const generationCost = presentationGenerationCost(topic, count)
 
   /* ------------------------------------------------------------- the deck */
@@ -480,6 +496,11 @@ export function PresentationStudio({ username }: { username?: string }) {
     updatedAt: Date.now(),
   }), [deckId, deckTitle, language, readySlides, theme, topic])
 
+  useEffect(() => () => exportJob.current?.abort(), [currentDeck, stage])
+  useEffect(() => () => {
+    if (preparedPptx) URL.revokeObjectURL(preparedPptx.url)
+  }, [preparedPptx])
+
   // Every change is kept, a moment after it stops.
   useEffect(() => {
     if (stage !== "deck" || !readySlides.length || !deckId) return
@@ -494,12 +515,44 @@ export function PresentationStudio({ username }: { username?: string }) {
     return () => window.clearTimeout(timer)
   }, [currentDeck, deckId, readySlides, stage, username])
 
+  useEffect(() => {
+    if (!deckId || stage === "start") return
+    const pendingOutline = stage === "outline" ? outline : { title: deckTitle, items: entries.map(({ outline }) => outline) }
+    if (!pendingOutline?.items.length) return
+    const complete = stage === "deck" && readySlides.length === entries.length
+    const draft: PresentationDraft = {
+      id: deckId, createdAt: createdAtRef.current, title: deckTitle || pendingOutline.title,
+      topic, theme, language, tone, outline: pendingOutline,
+      slides: stage === "deck" ? entries.map(({ slide }) => slide) : null,
+    }
+    try {
+      const previous = readPresentationDraft(window.localStorage.getItem(draftKey))
+      if (complete && previous?.id !== deckId) return
+      window.localStorage.setItem(draftKey, packPresentationDraft(draft))
+      if (!complete) setSavedDraft(draft)
+    } catch { /* The open deck stays editable when storage is disabled or full. */ }
+    if (!complete) return
+    const timer = window.setTimeout(() => {
+      const saved = readRecent(username).some((deck) => deck.id === deckId && deck.slides.length === entries.length)
+      if (!saved) return
+      try {
+        if (readPresentationDraft(window.localStorage.getItem(draftKey))?.id === deckId) window.localStorage.removeItem(draftKey)
+      } catch { /* A retained draft is safe to reopen. */ }
+      setSavedDraft((previous) => previous?.id === deckId ? null : previous)
+    }, 900)
+    return () => window.clearTimeout(timer)
+  }, [deckId, deckTitle, draftKey, entries, language, outline, readySlides.length, stage, theme, tone, topic, username])
+
   /* --------------------------------------------------------------- outline */
 
   const requestOutline = useCallback(async (topicValue: string, countValue: number, toneValue: DeckTone) => {
     const clean = topicValue.trim()
     if (clean.length < 3) {
       setError("Опишите, о чём презентация — хотя бы пару слов.")
+      return
+    }
+    if (clean.length > MAX_PRESENTATION_TOPIC_CHARS) {
+      setError(`Сократите задание до ${MAX_PRESENTATION_TOPIC_CHARS} символов.`)
       return
     }
     const lang = detectDeckLanguage(clean)
@@ -515,6 +568,9 @@ export function PresentationStudio({ username }: { username?: string }) {
     }
     setLanguage(lang)
     const planned = result.data.outline as DeckOutline
+    setDeckId(newDeckId())
+    createdAtRef.current = Date.now()
+    setDeckTitle(planned.title)
     // Auto: the planner's suggestion, or the theme the topic's words call for.
     setTheme(themeChoice === "auto" ? planned.theme && DECK_THEMES[planned.theme] ? planned.theme : pickTheme(clean, toneValue) : themeChoice)
     setOutline(planned)
@@ -538,7 +594,7 @@ export function PresentationStudio({ username }: { username?: string }) {
       }
       if (!handoff?.topic) return
       setTopic(handoff.topic)
-      const handoffCount = Number(handoff.count) || 10
+      const handoffCount = Number(handoff.count) || requestedSlideCount(handoff.topic) || DEFAULT_SLIDES
       setCount(handoffCount)
       void requestOutline(handoff.topic, handoffCount, "confident")
     } catch {
@@ -551,7 +607,7 @@ export function PresentationStudio({ username }: { username?: string }) {
   }
 
   const removeOutlineItem = (index: number) => {
-    setOutline((previous) => previous && previous.items.length > 4 ? { ...previous, items: previous.items.filter((_, i) => i !== index) } : previous)
+    setOutline((previous) => previous && previous.items.length > (isInvestorDeckRequest(topic) ? 10 : MIN_SLIDES) ? { ...previous, items: previous.items.filter((_, i) => i !== index) } : previous)
   }
 
   const addOutlineItem = (after: number) => {
@@ -567,7 +623,8 @@ export function PresentationStudio({ username }: { username?: string }) {
 
   const fillSlides = useCallback(async (plan: DeckOutline, indexes: number[]) => {
     const delivered = new Map<number, Slide>()
-    const batches = chunk(indexes, BATCH)
+    const batches = slideBatches(indexes)
+    const canRetry = new Set(indexes)
     await runLimited(batches, PARALLEL, async (batch) => {
       // Indexes in a batch are contiguous by construction.
       const result = await callApi({
@@ -581,6 +638,9 @@ export function PresentationStudio({ username }: { username?: string }) {
       })
       applyQuota(result.data)
       if (!result.ok) {
+        if (result.status >= 400 && result.status < 500 && result.data?.code !== "PRESENTATION_BUSY") {
+          for (const index of batch) canRetry.delete(index)
+        }
         setError(String(result.data?.error || "Часть слайдов не получилась."))
         setEntries((previous) => previous.map((entry, i) => (batch.includes(i) ? { ...entry, state: "failed" } : entry)))
         return
@@ -590,7 +650,7 @@ export function PresentationStudio({ username }: { username?: string }) {
         const slide = normalizeSlide(item.slide)
         // Ids key the editor, the pictures and the export; never trust two
         // batches not to repeat one.
-        if (slide) written.set(item.index, { ...slide, id: slideId() } as Slide)
+        if (slide && batch.includes(item.index) && slide.layout === plan.items[item.index]?.layout) written.set(item.index, { ...slide, id: slideId() } as Slide)
       }
       // Photos for these slides are searched right away. A slide waits a
       // moment for them, so it usually appears with its picture; photos that
@@ -599,16 +659,22 @@ export function PresentationStudio({ username }: { username?: string }) {
       const photoSearch = searchPhotos(slots, [...usedPhotosRef.current])
       const early = slots.length ? await Promise.race([photoSearch, new Promise<null>((resolve) => window.setTimeout(() => resolve(null), 3500))]) : null
       const place = (photos: Record<string, FoundPhoto | null>) => {
-        for (const photo of Object.values(photos)) if (photo?.url) usedPhotosRef.current.add(photo.url)
+        const unique: Record<string, FoundPhoto> = {}
+        for (const [key, photo] of Object.entries(photos)) {
+          if (!photo?.url || usedPhotosRef.current.has(photo.url)) continue
+          usedPhotosRef.current.add(photo.url)
+          unique[key] = photo
+        }
+        return unique
       }
       if (early) {
-        place(early)
-        for (const [index, slide] of written) written.set(index, withPhotos(slide, early))
+        const unique = place(early)
+        for (const [index, slide] of written) written.set(index, withPhotos(slide, unique))
       } else if (slots.length) {
         void photoSearch.then((photos) => {
-          place(photos)
+          const unique = place(photos)
           const ids = new Set([...written.values()].map((slide) => slide.id))
-          setEntries((previous) => previous.map((entry) => (entry.slide && ids.has(entry.slide.id) ? { ...entry, slide: withPhotos(entry.slide, photos) } : entry)))
+          setEntries((previous) => previous.map((entry) => (entry.slide && ids.has(entry.slide.id) ? { ...entry, slide: withPhotos(entry.slide, unique) } : entry)))
         })
       }
 
@@ -623,7 +689,7 @@ export function PresentationStudio({ username }: { username?: string }) {
     // The server's retry handles malformed JSON and individual gaps; this
     // handles a whole transiently failed batch without asking the user to
     // click every red thumbnail. Never retry indefinitely.
-    const missing = indexes.filter((index) => !delivered.has(index))
+    const missing = indexes.filter((index) => canRetry.has(index) && !delivered.has(index))
     if (missing.length) {
       await runLimited(missing, PARALLEL, async (index) => {
         const result = await callApi({
@@ -643,8 +709,11 @@ export function PresentationStudio({ username }: { username?: string }) {
         const fresh = { ...slide, id: slideId() } as Slide
         const slots = photoSlots(fresh)
         const photos = slots.length ? await searchPhotos(slots, [...usedPhotosRef.current]) : {}
+        for (const [key, photo] of Object.entries(photos)) {
+          if (!photo?.url || usedPhotosRef.current.has(photo.url)) delete photos[key]
+          else usedPhotosRef.current.add(photo.url)
+        }
         const complete = withPhotos(fresh, photos)
-        for (const photo of Object.values(photos)) if (photo?.url) usedPhotosRef.current.add(photo.url)
         delivered.set(index, complete)
         setEntries((previous) => previous.map((entry, i) =>
           i === index && entry.state !== "ready" ? { ...entry, slide: complete, state: "ready" } : entry,
@@ -660,8 +729,7 @@ export function PresentationStudio({ username }: { username?: string }) {
     const plan = { ...outline, items: outline.items.filter((item) => item.title.trim()) }
     setEntries(plan.items.map((item) => ({ key: slideId(), outline: item, slide: null, state: "pending" })))
     setDeckTitle(plan.title)
-    setDeckId(newDeckId())
-    createdAtRef.current = Date.now()
+    usedPhotosRef.current = new Set()
     setCurrent(0)
     setStage("deck")
     setError("")
@@ -671,14 +739,7 @@ export function PresentationStudio({ username }: { username?: string }) {
     setAssembling(true)
     const expected = plan.items.map((_, i) => i)
     const firstPass = await fillSlides(plan, expected)
-    // Repair only missing positions, one at a time: non-contiguous gaps must
-    // never be sent as a single range (that would overwrite other slides).
-    const missing = expected.filter((index) => !firstPass.has(index))
-    const unrecovered: number[] = []
-    for (const index of missing) {
-      const retried = await fillSlides(plan, [index])
-      if (!retried.has(index)) unrecovered.push(index)
-    }
+    const unrecovered = expected.filter((index) => !firstPass.has(index))
     setError(unrecovered.length
       ? `Готово ${expected.length - unrecovered.length} из ${expected.length} слайдов. Не удалось создать: ${unrecovered.map((i) => i + 1).join(", ")}. Нажмите «Написать ещё раз» на нужном слайде.`
       : "")
@@ -759,6 +820,20 @@ export function PresentationStudio({ username }: { username?: string }) {
     setBusy(null)
     const slide = delivered.get(index)
     if (slide) spotlightSlide(index, slide)
+  }
+
+  const finishMissingSlides = async () => {
+    const missing = entries.flatMap((entry, index) => entry.slide ? [] : [index])
+    if (!missing.length || busy) return
+    const plan = planFromEntries()
+    setEntries((previous) => previous.map((entry) => entry.slide ? entry : { ...entry, state: "pending" }))
+    setBusy("slides")
+    setError("")
+    try {
+      await fillSlides(plan, missing)
+    } finally {
+      setBusy(null)
+    }
   }
 
   /* ---------------------------------------------------------------- editing */
@@ -911,47 +986,62 @@ export function PresentationStudio({ username }: { username?: string }) {
     ? `-partial-${readySlides.length}-of-${entries.length}` : ""
   const exportStatus = exportSuffix ? ` · ${readySlides.length}/${entries.length}` : ""
 
-  // The file is built in the browser at full quality (photos, art, fitted
-  // text); the server builds a lighter copy only if that fails.
+  const downloadedPptx = preparedPptx?.version === currentDeck ? preparedPptx : null
+  const printDeck = printCopy?.version === currentDeck ? printCopy : null
+
   const exportPptx = async () => {
+    if (exportJob.current) return
+    const job = new AbortController()
+    exportJob.current = job
     setBusy("export")
     setError("")
-    setExportNote("Готовлю дизайн слайдов…")
+    setExportNote("Подготавливаю PowerPoint…")
+    const deck = currentDeck()
+    const name = presentationFileName(deck.title, "pptx", exportSuffix)
     try {
-      const deck = currentDeck()
-      let blob: Blob | null = null
+      let file: File
+      let missingPhotos: number
       try {
         const { exportDeckPptx } = await import("@/lib/presentations/pptx-browser")
-        blob = await exportDeckPptx(deck, (step, done, total) => {
+        const output = await exportDeckPptx(deck, job.signal, (step, done, total) => {
           setExportNote(step === "art" ? `Рисую фон слайдов: ${done} из ${total}` : step === "photos" ? `Готовлю фото: ${done} из ${total}` : "Собираю файл PowerPoint…")
         })
-      } catch (browserError) {
-        console.warn("[MALIK_PPTX_BROWSER]", browserError)
+        file = await makePptxFile(output.blob, name)
+        missingPhotos = output.missingPhotos
+      } catch {
+        job.signal.throwIfAborted()
         setExportNote("Собираю файл на сервере…")
         const response = await fetch("/api/presentations/export", {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({ deck }),
+          signal: job.signal,
         })
         if (!response.ok) {
           const data = await response.json().catch(() => null)
-          throw new Error(String(data?.error || "Не удалось собрать файл."), { cause: browserError })
+          throw new Error(String(data?.error || "Не удалось собрать файл PowerPoint."))
         }
-        blob = await response.blob()
+        file = await makePptxFile(await response.blob(), name)
+        missingPhotos = Number(response.headers.get("x-malik-missing-photos")) || 0
       }
-      const url = URL.createObjectURL(blob)
-      const link = document.createElement("a")
-      link.href = url
-      link.download = `${(deckTitle || "presentation").replace(/[\\/:*?"<>|]+/g, "").slice(0, 60) || "presentation"}${exportSuffix}.pptx`
-      document.body.appendChild(link)
-      link.click()
-      link.remove()
-      window.setTimeout(() => URL.revokeObjectURL(url), 4000)
+      job.signal.throwIfAborted()
+      setPreparedPptx({ version: currentDeck, file, url: URL.createObjectURL(file), missingPhotos })
     } catch (exportError) {
-      setError(exportError instanceof Error ? exportError.message : "Не удалось собрать файл.")
+      if (!job.signal.aborted) setError(exportError instanceof Error ? exportError.message : "Не удалось собрать файл.")
     } finally {
+      exportJob.current = null
       setBusy(null)
       setExportNote("")
+    }
+  }
+
+  const sharePptx = async (file: File) => {
+    try {
+      await navigator.share({ files: [file] })
+    } catch (shareError) {
+      if (!(shareError instanceof DOMException && shareError.name === "AbortError")) {
+        setError("Не удалось открыть меню отправки. Используйте «Скачать PPTX».")
+      }
     }
   }
 
@@ -963,54 +1053,50 @@ export function PresentationStudio({ username }: { username?: string }) {
     const url = URL.createObjectURL(blob)
     const link = document.createElement("a")
     link.href = url
-    link.download = `${(deckTitle || "malik-presentation").replace(/[\\/:*?"<>|]+/g, "").slice(0, 60) || "malik-presentation"}${exportSuffix}.malik.json`
+    link.download = presentationFileName(deckTitle, "malik.json", exportSuffix)
     document.body.appendChild(link)
     link.click()
     link.remove()
-    window.setTimeout(() => URL.revokeObjectURL(url), 4000)
+    window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
   }
 
-  // PDF through the browser's own print dialog, with every slide laid out as
-  // one 13.333 × 7.5 inch page. "Save as PDF" is in every browser's dialog.
+  // Prepare the printable slides first. Safari and mobile web views need the
+  // print dialog to be opened directly by the user's next tap.
   const exportPdf = () => {
-    setPrinting(true)
+    if (!printDeck?.ready) {
+      setPrintCopy({ version: currentDeck, ready: false })
+      return
+    }
+    const title = document.title
+    document.title = presentationFileName(deckTitle, "pdf", exportSuffix).replace(/\.pdf$/u, "")
+    try { window.print() } finally { document.title = title }
   }
 
+  const preparingPdf = Boolean(printDeck && !printDeck.ready)
   useEffect(() => {
-    if (!printing) return
-    const previousTitle = document.title
-    document.title = `${deckTitle || "Презентация"}${exportSuffix ? ` (частично: ${readySlides.length} из ${entries.length})` : ""}`
-    const done = () => {
-      document.title = previousTitle
-      setPrinting(false)
-    }
-    window.addEventListener("afterprint", done, { once: true })
+    if (!preparingPdf) return
     let cancelled = false
-    // Slides live in shadow roots; wait (briefly) for their pictures so the
-    // PDF does not come out with empty image panels.
+    let timer = 0
     const waitForImages = () => {
       const images = Array.from(document.querySelectorAll(".deck-print .deck-host")).flatMap((host) =>
         Array.from(host.shadowRoot?.querySelectorAll("img") || []),
       )
-      const loads = images.map((image) => (image.complete ? Promise.resolve() : image.decode().catch(() => undefined)))
-      // The theme's web fonts must be in before the page is printed, or the
-      // PDF falls back to a system face and every line wraps differently.
+      const loads = images.map((image) => { image.loading = "eager"; return image.decode().catch(() => undefined) })
       const fonts = document.fonts?.ready.catch(() => undefined) ?? Promise.resolve()
-      return Promise.race([Promise.all([...loads, fonts]), new Promise((resolve) => window.setTimeout(resolve, 5000))])
+      return Promise.race([Promise.all([...loads, fonts]), new Promise((resolve) => { timer = window.setTimeout(resolve, 5000) })])
     }
-    const frame = window.requestAnimationFrame(() =>
-      window.requestAnimationFrame(() => {
-        void waitForImages().then(() => {
-          if (!cancelled) window.print()
-        })
-      }),
-    )
+    const frame = window.requestAnimationFrame(() => {
+      void waitForImages().then(() => {
+        window.clearTimeout(timer)
+        if (!cancelled) setPrintCopy({ version: currentDeck, ready: true })
+      })
+    })
     return () => {
       cancelled = true
       window.cancelAnimationFrame(frame)
-      window.removeEventListener("afterprint", done)
+      window.clearTimeout(timer)
     }
-  }, [deckTitle, entries.length, exportSuffix, printing, readySlides.length])
+  }, [currentDeck, preparingPdf])
 
   /* ---------------------------------------------------------------- present */
 
@@ -1058,6 +1144,7 @@ export function PresentationStudio({ username }: { username?: string }) {
     setTheme(deck.theme)
     setLanguage(deck.language)
     setTopic(deck.prompt)
+    usedPhotosRef.current = new Set(usedPhotoUrls(deck.slides))
     createdAtRef.current = deck.createdAt
     setEntries(deck.slides.map((slide) => ({ key: slideId(), outline: { title: headline(slide), point: "", layout: slide.layout }, slide, state: "ready" })))
     setCurrent(0)
@@ -1065,6 +1152,23 @@ export function PresentationStudio({ username }: { username?: string }) {
     setSpotlight(null)
     setStage("deck")
     setError("")
+  }
+
+  const openDraft = (draft: PresentationDraft) => {
+    const slides = draft.slides
+    setDeckId(draft.id)
+    setDeckTitle(draft.title)
+    setTopic(draft.topic)
+    setLanguage(draft.language)
+    setTone(draft.tone)
+    setTheme(draft.theme)
+    setOutline(draft.outline)
+    createdAtRef.current = draft.createdAt
+    setEntries(slides ? draft.outline.items.map((item, index) => ({ key: slideId(), outline: item, slide: slides[index], state: slides[index] ? "ready" : "failed" })) : [])
+    usedPhotosRef.current = new Set(usedPhotoUrls(slides?.filter((slide): slide is Slide => Boolean(slide)) || []))
+    setCurrent(0)
+    setError("")
+    setStage(slides ? "deck" : "outline")
   }
 
   const importBackup = async (file?: File) => {
@@ -1199,18 +1303,20 @@ export function PresentationStudio({ username }: { username?: string }) {
               <div className="ps-prompt">
                 <textarea
                   value={topic}
+                  maxLength={MAX_PRESENTATION_TOPIC_CHARS}
                   onChange={(event) => setTopic(event.target.value)}
                   placeholder="Например: питч-дек кофейни у метро в Алматы для инвесторов — окупаемость, команда, что нужно от инвестора"
                   aria-label="Тема презентации"
                   onKeyDown={(event) => {
-                    if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) void requestOutline(topic, count, tone)
+                    if (event.key === "Enter" && (event.metaKey || event.ctrlKey) && !exceedsSlideLimit && busy !== "outline") void requestOutline(topic, count, tone)
                   }}
                 />
                 <div className="ps-prompt-row">
                   <label className="ps-field">
                     <Presentation size={15} className="ps-desk-only" aria-hidden="true" />
                     Слайдов
-                    <select className="ps-select" value={count} onChange={(event) => setCount(Number(event.target.value))}>
+                    <select className="ps-select" value={requestedCount ?? ""} onChange={(event) => setCount(event.target.value ? Number(event.target.value) : null)}>
+                      <option value="">Авто · {countFromText ?? count}</option>
                       {countOptions.map((option) => <option key={option} value={option}>{option}</option>)}
                     </select>
                   </label>
@@ -1245,7 +1351,7 @@ export function PresentationStudio({ username }: { username?: string }) {
                   </button>
                   <span className="ps-spacer" />
                   {authenticated ? (
-                    <button type="button" className="ps-btn ps-btn--primary ps-create" onClick={() => void requestOutline(topic, count, tone)} disabled={busy === "outline" || topic.trim().length < 3}>
+                    <button type="button" className="ps-btn ps-btn--primary ps-create" onClick={() => void requestOutline(topic, count, tone)} disabled={busy === "outline" || exceedsSlideLimit || topic.trim().length < 3}>
                       {busy === "outline" ? <Loader2 size={16} className="animate-spin" /> : <Wand2 size={16} />}
                       <span className="ps-mob-only">{busy === "outline" ? "Составляю план…" : `Создать · ${generationCost} кр.`}</span>
                       <span className="ps-desk-only">{busy === "outline" ? "Составляю план…" : `Создать презентацию · ${generationCost} кр.`}</span>
@@ -1255,6 +1361,8 @@ export function PresentationStudio({ username }: { username?: string }) {
                     <a className="ps-btn ps-btn--primary ps-create" href="/auth">Войти, чтобы создавать</a>
                   )}
                 </div>
+                {exceedsSlideLimit ? <p className="ps-hint" role="status">Запрошено {wantedCount} слайдов. Доступно до {maxSlides}. Выберите количество в поле «Слайдов».</p> : null}
+                {savedDraft ? <button type="button" className="ps-btn ps-btn--small" disabled={Boolean(busy)} onClick={() => openDraft(savedDraft)}><LayoutList size={14} /> Продолжить черновик</button> : null}
               </div>
               {error ? <p className="ps-error" role="alert">{error}</p> : null}
               <p className="ps-hint">
@@ -1374,7 +1482,7 @@ export function PresentationStudio({ username }: { username?: string }) {
                 </select>
                 <span style={{ display: "inline-flex" }}>
                   <button type="button" className="ps-icon-btn" onClick={() => addOutlineItem(index)} disabled={outline.items.length >= maxSlides} aria-label="Добавить слайд ниже"><Plus size={15} /></button>
-                  <button type="button" className="ps-icon-btn" onClick={() => removeOutlineItem(index)} disabled={outline.items.length <= 4} aria-label="Убрать слайд"><Trash2 size={15} /></button>
+                  <button type="button" className="ps-icon-btn" onClick={() => removeOutlineItem(index)} disabled={outline.items.length <= (isInvestorDeckRequest(topic) ? 10 : MIN_SLIDES)} aria-label="Убрать слайд"><Trash2 size={15} /></button>
                 </span>
               </li>
             ))}
@@ -1488,10 +1596,21 @@ export function PresentationStudio({ username }: { username?: string }) {
               <Dices size={16} />
             </button>
             <button type="button" className="ps-btn ps-btn--small" onClick={() => startShow(current)} disabled={!presentable.length}><Play size={14} /> Показ</button>
-            <button type="button" className="ps-btn ps-btn--small" onClick={() => void exportPptx()} disabled={!presentable.length || generating || busy === "export"}>
-              {busy === "export" ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />} PPTX{exportStatus}
+            {downloadedPptx && !generating ? (
+              <>
+                <a className="ps-btn ps-btn--small ps-btn--primary" href={downloadedPptx.url} download={downloadedPptx.file.name}><Download size={14} /> Скачать PPTX{exportStatus}</a>
+                {typeof navigator !== "undefined" && navigator.canShare?.({ files: [downloadedPptx.file] }) ? (
+                  <button type="button" className="ps-btn ps-btn--small" onClick={() => void sharePptx(downloadedPptx.file)}><Share2 size={14} /> Поделиться файлом</button>
+                ) : null}
+              </>
+            ) : (
+              <button type="button" className="ps-btn ps-btn--small" onClick={() => void exportPptx()} disabled={!presentable.length || generating || busy === "export"}>
+                {busy === "export" ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />} Подготовить PPTX{exportStatus}
+              </button>
+            )}
+            <button type="button" className="ps-btn ps-btn--small" onClick={exportPdf} disabled={!presentable.length || generating || preparingPdf}>
+              <FileDown size={14} />{printDeck?.ready ? "Печать / " : "Подготовить "}PDF{exportStatus}
             </button>
-            <button type="button" className="ps-btn ps-btn--small" onClick={exportPdf} disabled={!presentable.length || generating}><FileDown size={14} /> PDF{exportStatus}</button>
             <button type="button" className="ps-btn ps-btn--small" onClick={exportBackup} disabled={!presentable.length} title="Скачать полную редактируемую резервную копию">
               <Download size={14} /> Malik Deck
             </button>
@@ -1508,8 +1627,10 @@ export function PresentationStudio({ username }: { username?: string }) {
             </div>
           ) : null}
           {exportNote ? <p className="ps-hint" style={{ marginTop: -4, marginBottom: 12 }} aria-live="polite">{exportNote}</p> : null}
+          {downloadedPptx?.missingPhotos ? <p className="ps-hint" role="status">Файл готов. Не удалось загрузить фото: {downloadedPptx.missingPhotos}. Текст и данные сохранены.</p> : null}
           {qualityPanel}
           {generating ? <p className="ps-hint" style={{ marginTop: -4, marginBottom: 12 }} aria-live="polite">Пишу слайды: готово {readyCount} из {entries.length}</p> : null}
+          {!generating && exportSuffix ? <button type="button" className="ps-btn ps-btn--small" disabled={Boolean(busy)} onClick={() => void finishMissingSlides()}><RefreshCw size={14} /> Дописать недостающие слайды</button> : null}
           {error ? <p className="ps-error" role="alert" style={{ marginTop: 0, marginBottom: 12 }}>{error}</p> : null}
 
           {active ? (
@@ -1702,7 +1823,7 @@ export function PresentationStudio({ username }: { username?: string }) {
         document.body,
       ) : null}
 
-      {printing && typeof document !== "undefined" ? createPortal(
+      {printDeck && typeof document !== "undefined" ? createPortal(
         <div className="deck-print" aria-hidden="true">
           {presentable.map((slide, index) => (
             <div className="deck-print-page" key={slide.id}>

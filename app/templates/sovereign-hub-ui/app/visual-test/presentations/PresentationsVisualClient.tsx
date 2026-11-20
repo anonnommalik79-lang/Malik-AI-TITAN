@@ -96,7 +96,7 @@ export default function PresentationsVisualClient() {
 
   if (!params) return null
 
-  if (params.view === "studio") {
+  if (params.view === "studio" || params.view === "blank") {
     return (
       <main style={{ minHeight: "100dvh", background: "#000", color: "#fff" }}>
         <PresentationStudio username="visual-test" />

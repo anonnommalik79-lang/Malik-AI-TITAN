@@ -31,13 +31,14 @@ export type FoundPhoto = {
 }
 
 type Fetcher = typeof fetch
+type Candidate = FoundPhoto & { description: string }
 
 const REQUEST_TIMEOUT_MS = 7_000
 const CACHE_MS = 60 * 60 * 1000
 const CACHE_LIMIT = 400
 const USER_AGENT = "MalikAI-PresentationStudio/1.0 (https://malikaiworld.world)"
 
-type CacheGlobal = typeof globalThis & { __malikPhotoCache?: Map<string, { at: number; photos: FoundPhoto[] }> }
+type CacheGlobal = typeof globalThis & { __malikPhotoCache?: Map<string, { at: number; photos: Candidate[] }> }
 
 function cache() {
   const scope = globalThis as CacheGlobal
@@ -81,7 +82,7 @@ const isHttps = (value: unknown): value is string => typeof value === "string" &
 type Provider = {
   source: PhotoSource
   available: () => boolean
-  search: (fetcher: Fetcher, query: string) => Promise<FoundPhoto[]>
+  search: (fetcher: Fetcher, query: string) => Promise<Candidate[]>
 }
 
 const pexels: Provider = {
@@ -94,11 +95,12 @@ const pexels: Provider = {
       { authorization: String(process.env.PEXELS_API_KEY) },
     )
     return (Array.isArray(data?.photos) ? data.photos : [])
-      .map((photo: Record<string, any>): FoundPhoto | null => {
+      .map((photo: Record<string, any>): Candidate | null => {
         const url = photo?.src?.large2x || photo?.src?.large
         if (!isHttps(url)) return null
         return {
           url,
+          description: short(stripHtml(photo.alt), 350),
           credit: `Фото: ${short(stripHtml(photo.photographer) || "автор")} · Pexels`,
           ...(isHttps(photo.url) ? { link: photo.url } : {}),
           source: "pexels",
@@ -106,7 +108,7 @@ const pexels: Provider = {
           height: Number(photo.height) || undefined,
         }
       })
-      .filter(Boolean) as FoundPhoto[]
+      .filter((photo: Candidate | null): photo is Candidate => Boolean(photo))
   },
 }
 
@@ -121,16 +123,19 @@ const unsplash: Provider = {
       { authorization: `Client-ID ${key}`, "accept-version": "v1" },
     )
     return (Array.isArray(data?.results) ? data.results : [])
-      .map((photo: Record<string, any>): FoundPhoto | null => {
+      .map((photo: Record<string, any>): Candidate | null => {
         const raw = photo?.urls?.raw
         const url = isHttps(raw) ? `${raw}${raw.includes("?") ? "&" : "?"}w=1600&q=80&fit=max&fm=jpg` : photo?.urls?.regular
         if (!isHttps(url)) return null
         // Unsplash asks for the download to be registered when a photo is used.
         const track = photo?.links?.download_location
-        if (isHttps(track)) void fetcher(track, { headers: { authorization: `Client-ID ${key}` } }).catch(() => undefined)
+        if (typeof track === "string" && /^https:\/\/api\.unsplash\.com\/photos\//u.test(track)) {
+          void fetcher(track, { headers: { authorization: `Client-ID ${key}` }, redirect: "error" }).catch(() => undefined)
+        }
         const html = photo?.links?.html
         return {
           url,
+          description: short(stripHtml(photo.alt_description || photo.description), 350),
           credit: `Фото: ${short(stripHtml(photo?.user?.name) || "автор")} · Unsplash`,
           ...(isHttps(html) ? { link: `${html}?utm_source=malik_ai&utm_medium=referral` } : {}),
           source: "unsplash",
@@ -138,7 +143,7 @@ const unsplash: Provider = {
           height: Number(photo.height) || undefined,
         }
       })
-      .filter(Boolean) as FoundPhoto[]
+      .filter((photo: Candidate | null): photo is Candidate => Boolean(photo))
   },
 }
 
@@ -170,7 +175,7 @@ const wikimedia: Provider = {
     const pages = Object.values((data?.query?.pages || {}) as Record<string, any>)
       .sort((a, b) => (Number(a?.index) || 0) - (Number(b?.index) || 0))
     return pages
-      .map((page): FoundPhoto | null => {
+      .map((page): Candidate | null => {
         const info = page?.imageinfo?.[0]
         if (!info || !/^image\/(?:jpeg|png|webp)$/.test(String(info.mime))) return null
         if ((Number(info.width) || 0) < 800) return null
@@ -182,6 +187,7 @@ const wikimedia: Provider = {
         const artist = short(stripHtml(meta.Artist?.value) || "автор неизвестен", 50)
         return {
           url,
+          description: short(stripHtml([page.title, meta.ObjectName?.value, meta.ImageDescription?.value].filter(Boolean).join(" ")), 350),
           credit: `Фото: ${artist} · Wikimedia Commons · ${licence}`,
           ...(isHttps(info.descriptionurl) ? { link: info.descriptionurl } : {}),
           source: "wikimedia",
@@ -189,7 +195,7 @@ const wikimedia: Provider = {
           height: Number(info.height) || undefined,
         }
       })
-      .filter(Boolean) as FoundPhoto[]
+      .filter((photo): photo is Candidate => Boolean(photo))
   },
 }
 
@@ -200,12 +206,13 @@ const openverse: Provider = {
     const params = new URLSearchParams({ q: query, license_type: "commercial", page_size: "12", mature: "false", size: "large" })
     const data = await getJson(fetcher, `https://api.openverse.org/v1/images/?${params}`)
     return (Array.isArray(data?.results) ? data.results : [])
-      .map((photo: Record<string, any>): FoundPhoto | null => {
+      .map((photo: Record<string, any>): Candidate | null => {
         if (!isHttps(photo?.url)) return null
         const licence = `CC ${String(photo.license || "").toUpperCase()} ${photo.license_version || ""}`.trim()
         if (!isCommercialLicence(licence.replace(/^CC PDM/, "PDM").replace(/^CC CC0/, "CC0"))) return null
         return {
           url: photo.url,
+          description: short(stripHtml(photo.title), 350),
           credit: `Фото: ${short(stripHtml(photo.creator) || "автор", 40)} · ${short(stripHtml(photo.source) || "Openverse", 24)} · ${licence}`,
           ...(isHttps(photo.foreign_landing_url) ? { link: photo.foreign_landing_url } : {}),
           source: "openverse",
@@ -213,7 +220,7 @@ const openverse: Provider = {
           height: Number(photo.height) || undefined,
         }
       })
-      .filter(Boolean) as FoundPhoto[]
+      .filter((photo: Candidate | null): photo is Candidate => Boolean(photo))
   },
 }
 
@@ -240,35 +247,57 @@ export function queryVariants(query: string) {
   return [...new Set(variants.filter((variant) => variant.length >= 2))]
 }
 
-/** Landscape, large pictures first; a photo already on another slide is skipped. */
-function pick(photos: FoundPhoto[], exclude: Set<string>) {
-  const fresh = photos.filter((photo) => !exclude.has(photo.url))
-  const landscape = fresh.filter((photo) => !photo.width || !photo.height || photo.width >= photo.height)
-  return landscape[0] || fresh[0] || null
+const SEARCH_FILLER = new Set(["file", "photo", "image", "picture", "of", "the", "closeup", "high", "quality", "wide", "shot", "golden", "hour", "sunset", "portrait"])
+
+function subjectWords(text: string) {
+  return new Set((text.normalize("NFKD").toLowerCase().replace(/\p{M}/gu, "").match(/[\p{L}\p{N}]{2,}/gu) || []).filter((word) => !SEARCH_FILLER.has(word)))
+}
+
+/** Require the subject in the provider metadata, even after broadening the query. */
+function pick(photos: Candidate[], exclude: Set<string>, query: string, kind: PhotoKind) {
+  const words = [...subjectWords(query)]
+  const anchors = words.slice(0, 2)
+  const monument = /\b(?:monument|statue|memorial)\b/iu.test(query)
+  return photos.flatMap((photo) => {
+    if (exclude.has(photo.url)) return []
+    const names = subjectWords(photo.description)
+    if (kind === "subject" && anchors.length && (!anchors.every((anchor) => names.has(anchor)) || monument && !["monument", "statue", "memorial", "sculpture"].some((word) => names.has(word)))) return []
+    const relevance = words.filter((word) => names.has(word)).length
+    const aspect = (photo.width || 0) >= (photo.height || 0) ? 1 : 0
+    return [{ photo, score: relevance * 3 + aspect }]
+  }).sort((a, b) => b.score - a.score)[0]?.photo ?? null
 }
 
 export async function findPhoto(
-  input: { query: string; kind?: PhotoKind; exclude?: Iterable<string> },
+  input: { query: string; kind?: PhotoKind; exclude?: Iterable<string>; signal?: AbortSignal },
   fetcher: Fetcher = fetch,
 ): Promise<FoundPhoto | null> {
   const kind: PhotoKind = input.kind === "subject" ? "subject" : "mood"
   const exclude = new Set(input.exclude || [])
   const providers = ORDER[kind].filter((provider) => provider.available())
+  const deadline = AbortSignal.any([AbortSignal.timeout(12_000), ...(input.signal ? [input.signal] : [])])
+  const bounded: Fetcher = (url, init) => fetcher(url, { ...init, signal: AbortSignal.any([deadline, ...(init?.signal ? [init.signal] : [])]) })
 
   for (const variant of queryVariants(input.query)) {
     for (const provider of providers) {
+      if (deadline.aborted) return null
       const key = `${provider.source}:${variant.toLowerCase()}`
       const cached = cache().get(key)
-      let photos: FoundPhoto[]
-      if (cached && Date.now() - cached.at < CACHE_MS) {
+      let photos: Candidate[]
+      if (cached && Date.now() - cached.at < (cached.photos.length ? CACHE_MS : 45_000)) {
         photos = cached.photos
       } else {
-        photos = await provider.search(fetcher, variant)
+        photos = await provider.search(bounded, variant)
+        if (deadline.aborted) return null
         cache().set(key, { at: Date.now(), photos })
         if (cache().size > CACHE_LIMIT) cache().delete(cache().keys().next().value as string)
       }
-      const photo = pick(photos, exclude)
-      if (photo) return photo
+      const photo = pick(photos, exclude, input.query, kind)
+      if (photo) {
+        const { description: _description, ...result } = photo
+        void _description
+        return result
+      }
     }
   }
   return null

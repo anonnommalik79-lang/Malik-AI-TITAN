@@ -35,29 +35,29 @@ const jpeg = (buffer: Buffer) => `data:image/jpeg;base64,${buffer.toString("base
 async function rasterArt(deck: Pick<Deck, "theme" | "slides">, tier: Tier) {
   const theme = deckTheme(deck.theme)
   const art = new Map<string, string>()
-  await Promise.all(deck.slides.map(async (slide, index) => {
+  for (const [index, slide] of deck.slides.entries()) {
     const svg = Buffer.from(backdropSvg(theme, slide.layout, index))
     const buffer = await sharp(svg, { density: 72 }).resize(tier.artWidth, Math.round(tier.artWidth * 0.5625)).jpeg({ quality: tier.artQuality, mozjpeg: true }).toBuffer()
     art.set(slide.id, jpeg(buffer))
-  }))
+  }
   return art
 }
 
 async function rasterIcons(deck: Pick<Deck, "theme" | "slides">) {
   const icons = new Map<string, string>()
-  await Promise.all(deckIcons(deck).map(async ([name, color]) => {
+  for (const [name, color] of deckIcons(deck)) {
     const png = await sharp(Buffer.from(iconSvg(name, color, 128))).resize(128, 128).png().toBuffer()
     icons.set(`${name}:${color}`, `data:image/png;base64,${png.toString("base64")}`)
-  }))
+  }
   return icons
 }
 
 /** Photos cut to their slot's proportions (and darkened under hero text). */
 async function cutPhotos(deck: Pick<Deck, "theme" | "slides">, sources: Map<string, Buffer>, tier: Tier) {
   const placed = new Map<string, PlacedImage>()
-  await Promise.all(deckPhotoJobs(deck).map(async (job) => {
+  for (const job of deckPhotoJobs(deck)) {
     const source = sources.get(job.key)
-    if (!source) return
+    if (!source) continue
     try {
       const { w, h } = job.slot.box
       const scale = tier.photoSide / Math.max(w, h)
@@ -72,7 +72,7 @@ async function cutPhotos(deck: Pick<Deck, "theme" | "slides">, sources: Map<stri
     } catch {
       /* An unreadable picture leaves the slot's panel. */
     }
-  }))
+  }
   return placed
 }
 
@@ -80,14 +80,15 @@ async function cutPhotos(deck: Pick<Deck, "theme" | "slides">, sources: Map<stri
  * The best file that fits `budget` bytes. `photos` maps a slot key to the
  * original image bytes the caller fetched.
  */
-export async function buildServerPptx(deck: Pick<Deck, "title" | "theme" | "slides">, photos: Map<string, Buffer>, budget = Infinity): Promise<{ file: Buffer; tier: number }> {
+export async function buildServerPptx(deck: Pick<Deck, "title" | "theme" | "slides">, photos: Map<string, Buffer>, budget = Infinity) {
   let icons = new Map<string, string>()
   try {
     icons = await rasterIcons(deck)
   } catch {
     /* Icons fall back to a plain accent dot. */
   }
-  let last: Buffer | null = null
+  const photoCount = deckPhotoJobs(deck).length
+  let last: { file: Buffer; tier: number; missingPhotos: number } | undefined
   for (const [index, tier] of TIERS.entries()) {
     try {
       const assets: PptxAssets = {
@@ -96,11 +97,11 @@ export async function buildServerPptx(deck: Pick<Deck, "title" | "theme" | "slid
         ...(tier.photos && photos.size ? { images: await cutPhotos(deck, photos, tier) } : {}),
       }
       const file = await buildPptx(deck, assets)
-      last = file
-      if (file.length <= budget) return { file, tier: index }
+      last = { file, tier: index, missingPhotos: photoCount - (assets.images?.size || 0) }
+      if (file.length <= budget) return last
     } catch (error) {
       if (index === TIERS.length - 1) throw error
     }
   }
-  return { file: last || (await buildPptx(deck)), tier: TIERS.length - 1 }
+  return last ?? { file: await buildPptx(deck), tier: TIERS.length - 1, missingPhotos: photoCount }
 }

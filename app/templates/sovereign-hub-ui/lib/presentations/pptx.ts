@@ -21,6 +21,7 @@ import {
 } from "@/lib/presentations/design"
 import { IMAGE_LAYOUTS, type Deck, type DeckIconName, type Slide } from "@/lib/presentations/types"
 import { headlineScale, slideDensity, type SlideDensity } from "@/lib/presentations/visual-fit"
+import { presentationFileName } from "@/lib/presentations/download"
 
 /**
  * The deck as a real PowerPoint file.
@@ -57,7 +58,7 @@ type PptxInstance = {
   company: string
   subject: string
   addSlide: () => PptxSlide
-  write: (options: { outputType: "nodebuffer" | "blob" }) => Promise<unknown>
+  write: (options: { outputType: "nodebuffer" | "blob"; compression: boolean }) => Promise<unknown>
 }
 
 type PptxSlide = {
@@ -610,7 +611,7 @@ function drawSlide(ctx: Ctx, slide: Slide) {
       const tableH = Math.min(BODY_BOTTOM - BODY_TOP - (slide.verdict ? 70 : 0), 62 * rows.length)
       ctx.slide.addTable(rows, {
         x: I(PAD), y: I(BODY_TOP), w: I(contentW), colW: [I(contentW * 0.26), I(contentW * 0.37), I(contentW * 0.37)],
-        rowH: I(tableH / rows.length),
+        rowH: I(tableH / rows.length), autoPage: false,
         border: { type: "solid", color: theme.border, pt: 0.75 },
         fill: { color: theme.dark ? theme.surface : theme.bg, transparency: theme.surfaceStyle === "glass" ? 40 : 0 },
       })
@@ -629,8 +630,7 @@ function drawSlide(ctx: Ctx, slide: Slide) {
         top += 6
       }
       const chartW = slide.takeaway ? contentW - 348 : contentW
-      // 2.1 must not be labelled "2": keep one decimal whenever the data has one.
-      const format = slide.data.some((d) => !Number.isInteger(d.value)) ? "#,##0.0" : "#,##0"
+      const format = slide.data.some(({ value }) => value !== 0 && Math.abs(value) < 0.000001) ? "0.######E+00" : "General"
       ctx.slide.addChart("bar", [{
         name: slide.unit || slide.title,
         labels: slide.data.map((d) => d.label),
@@ -650,7 +650,7 @@ function drawSlide(ctx: Ctx, slide: Slide) {
         valGridLine: { color: theme.border, style: "solid", size: 0.5 },
         showValue: true,
         dataLabelFormatCode: format,
-        valAxisLabelFormatCode: format,
+        valAxisLabelFormatCode: "General",
         dataLabelColor: theme.text,
         dataLabelFontSize: 11,
         dataLabelPosition: "outEnd",
@@ -797,13 +797,13 @@ function normaliseAssets(input?: Map<string, string> | PptxAssets): PptxAssets {
  * this module never touches the network and can run entirely offline.
  */
 export async function buildPptx(deck: Pick<Deck, "title" | "theme" | "slides">, assets?: Map<string, string> | PptxAssets): Promise<Buffer> {
-  const output = await composePptx(deck, normaliseAssets(assets)).write({ outputType: "nodebuffer" })
+  const output = await composePptx(deck, normaliseAssets(assets)).write({ outputType: "nodebuffer", compression: true })
   return Buffer.isBuffer(output) ? output : Buffer.from(output as ArrayBuffer)
 }
 
 /** Builds the file in the browser. */
 export async function buildPptxBlob(deck: Pick<Deck, "title" | "theme" | "slides">, assets: PptxAssets): Promise<Blob> {
-  return (await composePptx(deck, assets).write({ outputType: "blob" })) as Blob
+  return (await composePptx(deck, assets).write({ outputType: "blob", compression: true })) as Blob
 }
 
 /* ------------------------------------------------------------------ icons */
@@ -869,13 +869,5 @@ export function deckIcons(deck: Pick<Deck, "theme" | "slides">): Array<[DeckIcon
 
 /** A filename that survives every operating system and every download bar. */
 export function pptxFileName(title: string) {
-  // NFC, not NFKD: decomposing turns "й" into "и" plus a combining mark, and
-  // stripping the mark then quietly renames "Кофейня" to "Кофеиня".
-  const base = String(title || "presentation")
-    .normalize("NFC")
-    .replace(/[^\p{L}\p{M}\p{N}\s-]/gu, "")
-    .trim()
-    .replace(/\s+/g, "-")
-    .slice(0, 60)
-  return `${base || "presentation"}.pptx`
+  return presentationFileName(title, "pptx")
 }

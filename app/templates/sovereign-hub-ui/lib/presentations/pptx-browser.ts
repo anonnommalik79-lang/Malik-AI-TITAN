@@ -21,9 +21,10 @@ import type { PlacedImage, TextMeasure } from "@/lib/presentations/pptx"
  * Nothing is uploaded: the deck becomes a file on this machine.
  */
 
-const ART_SCALE = 1.5
-const PHOTO_SCALE = 1.5
-const PHOTO_MAX_SIDE = 2400
+const ART_SCALE = 1.25
+const PHOTO_SCALE = 1.35
+const PHOTO_MAX_SIDE = 1920
+const MAX_PHOTO_BYTES = 8 * 1024 * 1024
 
 type Drawable = CanvasImageSource & { width: number; height: number }
 
@@ -37,28 +38,62 @@ function canvas(width: number, height: number) {
   return { element, context }
 }
 
-function loadImage(src: string): Promise<HTMLImageElement> {
+function loadImage(src: string, signal?: AbortSignal): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
+    signal?.throwIfAborted()
     const image = new Image()
     image.decoding = "async"
-    image.onload = () => resolve(image)
-    image.onerror = () => reject(new Error("image failed to load"))
+    const cleanup = () => {
+      image.onload = null
+      image.onerror = null
+      signal?.removeEventListener("abort", abort)
+    }
+    const abort = () => { cleanup(); image.removeAttribute("src"); reject(signal?.reason) }
+    image.onload = () => { cleanup(); resolve(image) }
+    image.onerror = () => { cleanup(); reject(new Error("image failed to load")) }
+    signal?.addEventListener("abort", abort, { once: true })
     image.src = src
   })
 }
 
-async function bitmapFrom(response: Response): Promise<Drawable | null> {
-  if (!response.ok) return null
-  const blob = await response.blob()
-  if (!blob.type.startsWith("image/") && blob.type !== "application/octet-stream") return null
+function releaseCanvas(canvas: HTMLCanvasElement) {
+  canvas.width = 1
+  canvas.height = 1
+}
+
+async function bitmapFrom(response: Response, signal: AbortSignal): Promise<Drawable | null> {
+  const mime = response.headers.get("content-type")?.split(";")[0] || ""
+  if (!response.ok || !response.body || !/^image\/(?:jpeg|png|webp|gif|avif)$/i.test(mime) || Number(response.headers.get("content-length")) > MAX_PHOTO_BYTES) {
+    void response.body?.cancel().catch(() => undefined)
+    return null
+  }
+  const reader = response.body.getReader()
+  const chunks: BlobPart[] = []
+  let length = 0
+  try {
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) break
+      length += value.byteLength
+      if (length > MAX_PHOTO_BYTES) {
+        void reader.cancel().catch(() => undefined)
+        return null
+      }
+      chunks.push(new Uint8Array(value))
+    }
+  } finally {
+    reader.releaseLock()
+  }
+  if (!length) return null
+  const blob = new Blob(chunks, { type: mime })
   try {
     return await createImageBitmap(blob)
   } catch {
     const url = URL.createObjectURL(blob)
     try {
-      return await loadImage(url)
+      return await loadImage(url, signal)
     } finally {
-      window.setTimeout(() => URL.revokeObjectURL(url), 10_000)
+      URL.revokeObjectURL(url)
     }
   }
 }
@@ -69,17 +104,29 @@ async function bitmapFrom(response: Response): Promise<Drawable | null> {
  * cache, which may hold a copy without the CORS header), and if its host does
  * not allow that, through the export route's one-picture proxy.
  */
-async function readablePhoto(url: string): Promise<Drawable | null> {
+async function fetchPhoto(url: string, signal: AbortSignal, options: RequestInit = {}) {
+  const controller = new AbortController()
+  const abort = () => controller.abort(signal.reason)
+  const timer = window.setTimeout(() => controller.abort(), 5000)
+  if (signal.aborted) abort()
+  else signal.addEventListener("abort", abort, { once: true })
+  try {
+    return await bitmapFrom(await fetch(url, { ...options, signal: controller.signal }), controller.signal)
+  } catch {
+    return null
+  } finally {
+    window.clearTimeout(timer)
+    signal.removeEventListener("abort", abort)
+  }
+}
+
+async function readablePhoto(url: string, signal: AbortSignal): Promise<Drawable | null> {
   try {
     const absolute = new URL(url, window.location.href)
-    if (absolute.protocol === "data:" || absolute.origin === window.location.origin) return await loadImage(absolute.href)
-    try {
-      const direct = await bitmapFrom(await fetch(absolute.href, { mode: "cors", cache: "no-store", credentials: "omit" }))
-      if (direct) return direct
-    } catch {
-      /* The host does not allow cross-origin reads; try the proxy. */
-    }
-    return await bitmapFrom(await fetch(`/api/presentations/export?image=${encodeURIComponent(absolute.href)}`, { cache: "no-store" }))
+    if (absolute.protocol === "data:" || absolute.origin === window.location.origin) return await fetchPhoto(absolute.href, signal)
+    if (absolute.protocol !== "https:") return null
+    const direct = await fetchPhoto(absolute.href, signal, { mode: "cors", cache: "no-store", credentials: "omit" })
+    return direct || await fetchPhoto(`/api/presentations/export?image=${encodeURIComponent(absolute.href)}`, signal, { cache: "no-store" })
   } catch {
     return null
   }
@@ -193,7 +240,11 @@ function bakePhoto(image: Drawable, slot: PhotoSlot, art: Drawable, theme: DeckT
     ctx.stroke()
     ctx.restore()
   }
-  return { data: element.toDataURL("image/jpeg", 0.9), box: area, baked: true }
+  try {
+    return { data: element.toDataURL("image/jpeg", 0.88), box: area, baked: true }
+  } finally {
+    releaseCanvas(element)
+  }
 }
 
 /* ------------------------------------------------------------------ text */
@@ -217,52 +268,54 @@ function canvasMeasure(): TextMeasure {
 
 export type ExportProgress = (step: "art" | "photos" | "file", done: number, total: number) => void
 
-export async function exportDeckPptx(deck: Deck, onProgress?: ExportProgress): Promise<Blob> {
+export async function exportDeckPptx(deck: Deck, signal: AbortSignal, onProgress?: ExportProgress) {
   const pptx = await import("@/lib/presentations/pptx")
   const theme = deckTheme(deck.theme)
-
-  // The background art of every slide, rasterised once and kept as pixels
-  // for the photos that are baked on top of it.
-  const artImages = new Map<string, Drawable>()
-  const backdrops = new Map<string, string>()
-  for (const [index, slide] of deck.slides.entries()) {
-    const art = await loadImage(backdropDataUrl(theme, slide.layout, index))
-    const { element, context } = canvas(CANVAS_W * ART_SCALE, CANVAS_H * ART_SCALE)
-    context.drawImage(art, 0, 0, element.width, element.height)
-    artImages.set(slide.id, element)
-    backdrops.set(slide.id, element.toDataURL("image/jpeg", 0.92))
-    onProgress?.("art", index + 1, deck.slides.length)
-  }
-
   const jobs = pptx.deckPhotoJobs(deck)
+  const backdrops = new Map<string, string>()
   const images = new Map<string, PlacedImage>()
   let done = 0
-  const queue = [...jobs]
-  await Promise.all(Array.from({ length: Math.min(4, queue.length) }, async () => {
-    while (queue.length) {
-      const job = queue.shift()!
-      const photo = await readablePhoto(job.url)
-      const slideId = job.key.split("#")[0]
-      const art = artImages.get(slideId)
-      if (photo && art) {
-        try {
-          images.set(job.key, bakePhoto(photo, job.slot, art, theme))
-        } catch {
-          /* A picture the canvas cannot read leaves the slot's panel. */
-        }
+  for (const [index, slide] of deck.slides.entries()) {
+    signal.throwIfAborted()
+    onProgress?.("art", index + 1, deck.slides.length)
+    const art = await loadImage(backdropDataUrl(theme, slide.layout, index), signal)
+    const { element, context } = canvas(CANVAS_W * ART_SCALE, CANVAS_H * ART_SCALE)
+    try {
+      context.drawImage(art, 0, 0, element.width, element.height)
+      const background = element.toDataURL("image/jpeg", 0.89)
+      if (!background.startsWith("data:image/jpeg;")) throw new Error("Could not render slide background")
+      backdrops.set(slide.id, background)
+      const pictures = jobs.filter((job) => job.slideIndex === index)
+      for (let i = 0; i < pictures.length; i += 2) {
+        await Promise.all(pictures.slice(i, i + 2).map(async (job) => {
+          const photo = await readablePhoto(job.url, signal)
+          try {
+            if (photo && !signal.aborted) images.set(job.key, bakePhoto(photo, job.slot, element, theme))
+          } catch {
+            /* Leave a readable slide if a source image failed to decode. */
+          } finally {
+            if (photo && "close" in photo) (photo as ImageBitmap).close()
+          }
+          onProgress?.("photos", ++done, jobs.length)
+        }))
+        signal.throwIfAborted()
       }
-      done += 1
-      onProgress?.("photos", done, jobs.length)
+    } finally {
+      releaseCanvas(element)
     }
-  }))
+  }
 
   const icons = new Map<string, string>()
   for (const [name, color] of pptx.deckIcons(deck)) {
     const svg = pptx.iconSvg(name, color, 192)
-    const image = await loadImage(`data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`)
+    const image = await loadImage(`data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`, signal)
     const { element, context } = canvas(192, 192)
-    context.drawImage(image, 0, 0, 192, 192)
-    icons.set(`${name}:${color}`, element.toDataURL("image/png"))
+    try {
+      context.drawImage(image, 0, 0, 192, 192)
+      icons.set(`${name}:${color}`, element.toDataURL("image/png"))
+    } finally {
+      releaseCanvas(element)
+    }
   }
 
   // The deck's text faces are web fonts; PowerPoint's are Office fonts. The
@@ -274,6 +327,7 @@ export async function exportDeckPptx(deck: Deck, onProgress?: ExportProgress): P
     icon: (name: DeckIconName, color: string) => icons.get(`${name}:${color}`),
     measure: canvasMeasure(),
   })
+  signal.throwIfAborted()
   onProgress?.("file", 1, 1)
-  return blob
+  return { blob, missingPhotos: jobs.length - images.size }
 }

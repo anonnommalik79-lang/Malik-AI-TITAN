@@ -1,0 +1,73 @@
+name: Presentation browser and export check
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'app/templates/sovereign-hub-ui/**/presentations/**'
+      - 'app/templates/sovereign-hub-ui/lib/server/presentation-*.ts'
+      - 'app/templates/sovereign-hub-ui/lib/server/pptx-assets.ts'
+      - 'app/templates/sovereign-hub-ui/scripts/verify-presentation*.mjs'
+      - '.github/workflows/presentation-browser-check.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'app/templates/sovereign-hub-ui/**/presentations/**'
+      - 'app/templates/sovereign-hub-ui/lib/server/presentation-*.ts'
+      - 'app/templates/sovereign-hub-ui/lib/server/pptx-assets.ts'
+      - 'app/templates/sovereign-hub-ui/scripts/verify-presentation*.mjs'
+      - '.github/workflows/presentation-browser-check.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  mobile-exports:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: app/templates/sovereign-hub-ui
+    env:
+      NEXT_TELEMETRY_DISABLED: '1'
+      WORKOS_CLIENT_ID: 'client_presentation_fixture_only'
+      WORKOS_COOKIE_PASSWORD: 'presentation-browser-fixture-cookie-password'
+      NEXT_PUBLIC_WORKOS_REDIRECT_URI: 'http://127.0.0.1:3021/callback'
+      MALIK_QA_BASE_URL: 'http://127.0.0.1:3021'
+      MALIK_QA_OUTPUT: '.data/presentation-tests'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/templates/sovereign-hub-ui/package-lock.json
+      - run: npm ci --legacy-peer-deps
+      - run: npm run test:presentations
+      - run: npx --no-install next build
+      - run: npm install --no-save --legacy-peer-deps playwright@1.58.0
+      - run: npx playwright install --with-deps chromium webkit
+      - name: Download and inspect PPTX in Android Chromium and iPhone WebKit
+        run: |
+          set -euo pipefail
+          mkdir -p "$MALIK_QA_OUTPUT"
+          node node_modules/next/dist/bin/next start --hostname 127.0.0.1 --port 3021 > "$MALIK_QA_OUTPUT/app.log" 2>&1 &
+          app=$!
+          trap 'kill "$app" 2>/dev/null || true' EXIT
+          for i in {1..20}; do
+            if curl -fsS "$MALIK_QA_BASE_URL/api/health" -o /dev/null; then break; fi
+            sleep 1
+          done
+          if ! curl -fsS "$MALIK_QA_BASE_URL/api/health" -o /dev/null; then
+            tail -30 "$MALIK_QA_OUTPUT/app.log"
+            exit 1
+          fi
+          MALIK_QA_BROWSER=chromium node scripts/verify-presentation-browser.mjs
+          MALIK_QA_BROWSER=chromium MALIK_QA_VIEWPORT=desktop node scripts/verify-presentation-browser.mjs
+          MALIK_QA_BROWSER=webkit node scripts/verify-presentation-browser.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: presentation-export-check
+          path: app/templates/sovereign-hub-ui/.data/presentation-tests/
+          if-no-files-found: ignore

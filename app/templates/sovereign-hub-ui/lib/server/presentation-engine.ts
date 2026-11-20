@@ -21,6 +21,8 @@ import {
 } from "@/lib/presentations/prompts"
 import type { DeckLanguage, DeckOutline, DeckTone, OutlineItem, Slide, SlideLayout } from "@/lib/presentations/types"
 import { unsupportedInvestorFigures } from "@/lib/presentations/investor-facts"
+import { briefHasChartValues, chartEvidenceError, presentationWithoutCover, presentationWithoutPhotos } from "@/lib/presentations/brief-evidence"
+import { inspectPresentation } from "@/lib/presentations/quality"
 
 /**
  * The model calls behind the studio.
@@ -50,7 +52,7 @@ export class PresentationEngineError extends Error {
 
 export const SLIDE_BATCH_SIZE = 4
 
-type ModelChoice = { modelId?: MalikModelId; allowCatalog?: boolean }
+type ModelChoice = { modelId?: MalikModelId; allowCatalog?: boolean; signal?: AbortSignal }
 
 async function ask(input: ModelChoice & { systemPrompt: string; prompt: string; maxTokens: number; temperature: number }) {
   const result = await runStrictMalikModel({
@@ -60,6 +62,7 @@ async function ask(input: ModelChoice & { systemPrompt: string; prompt: string; 
     maxTokens: input.maxTokens,
     temperature: input.temperature,
     allowCatalog: input.allowCatalog,
+    signal: input.signal,
   }, { allowFallback: true })
   return result.content
 }
@@ -74,16 +77,33 @@ export async function generateOutline(input: ModelChoice & {
 }): Promise<DeckOutline> {
   const investor = isInvestorDeckRequest(input.topic)
   if (investor && input.count < 10) throw new PresentationEngineError("Инвесторскому питч-деку нужны минимум 10 слайдов.", 400, "INVESTOR_DECK_TOO_SHORT")
-  const systemPrompt = [outlineSystemPrompt({ language: input.language, tone: input.tone, count: input.count, investor }), petroleumPresentationInstruction(input.topic)].filter(Boolean).join("\n\n")
-  let prompt = outlineUserPrompt(input.topic, input.count)
+  const cover = !presentationWithoutCover(input.topic)
+  const photos = !presentationWithoutPhotos(input.topic)
+  const canChart = briefHasChartValues(input.topic)
+  const systemPrompt = [outlineSystemPrompt({ language: input.language, tone: input.tone, count: input.count, investor, cover, photos }), petroleumPresentationInstruction(input.topic)].filter(Boolean).join("\n\n")
+  const initialPrompt = outlineUserPrompt(input.topic, input.count)
+  let prompt = initialPrompt
 
   for (let attempt = 0; attempt < 2; attempt += 1) {
     const raw = await ask({ ...input, systemPrompt, prompt, maxTokens: Math.min(4_200, Math.max(2_400, 1_100 + input.count * 140)), temperature: attempt ? 0.35 : 0.6 })
     const parsed = extractJson(raw)
-    const outline = normalizeOutline(parsed, input.topic, input.count)
-    if (outline && (investor ? outline.items.length === input.count && investorOutlineIsComplete(parsed, input.count) : outline.items.length === input.count)) return outline
+    const outline = normalizeOutline(parsed, input.topic, input.count, { preserveLayouts: !cover })
+    if (outline?.items.length === input.count && (!investor || investorOutlineIsComplete(parsed, input.count))) {
+      const issues = inspectPresentation({ outline }).issues
+      if (!issues.some(({ code }) => code === "duplicate")) {
+        return {
+          ...outline,
+          items: outline.items.map((item, index) => {
+            if (!cover && index === 0 && (item.layout === "title" || item.layout === "hero")) return { ...item, layout: "bullets" }
+            if (!canChart && item.layout === "chart") return { ...item, layout: "bullets" }
+            if (!photos && ["hero", "image-text", "gallery"].includes(item.layout)) return { ...item, layout: item.layout === "hero" && index === 0 && input.count >= 4 ? "title" : "bullets" }
+            return item
+          }),
+        }
+      }
+    }
 
-    prompt = `${outlineUserPrompt(input.topic, input.count)}\n\nYour previous answer could not be used: return a JSON object with exactly ${input.count} items.${investor ? " It must include all ten investor section ids in order, with ask last." : ""}`
+    prompt = `${initialPrompt}\n\nYour previous answer could not be used: return a JSON object with exactly ${input.count} items and a distinct title for each item.${investor ? " It must include all ten investor section ids in order, with ask last." : ""}`
   }
 
   throw new PresentationEngineError("Модель не смогла составить план презентации. Попробуйте ещё раз или переформулируйте тему.", 502, "OUTLINE_FAILED")
@@ -118,7 +138,7 @@ function placeSlides(raw: unknown, startIndex: number, items: OutlineItem[]): Wr
     const slide = normalizeSlide(entry, items[index - startIndex].layout)
     // Wrong-layout content is not a successful slide. Ask for its assigned
     // layout again instead of shipping a malformed or misleading deck.
-    if (slide && slide.layout === items[index - startIndex].layout) placed.set(index, freshSlide(slide))
+    if (slide && slide.layout === items[index - startIndex].layout) placed.set(index, slide)
   })
 
   return [...placed.entries()].sort((a, b) => a[0] - b[0]).map(([index, slide]) => ({ index, slide }))
@@ -130,10 +150,6 @@ function placeSlides(raw: unknown, startIndex: number, items: OutlineItem[]): Wr
  * the export are keyed by. A picture address is never taken from the model
  * either — pictures are drawn by the image tool and attached by the studio.
  */
-function freshSlide(slide: Slide): Slide {
-  return { ...withoutPictures(slide), id: slideId() } as Slide
-}
-
 /**
  * A slide as the model wrote it, minus any picture address or credit: those
  * are only ever attached by the studio, from a photo it actually found or an
@@ -150,6 +166,20 @@ function withoutPictures(slide: Slide): Slide {
   return rest as Slide
 }
 
+function generatedSlideIssue(slide: Slide, brief: string, investor: boolean) {
+  if (slide.layout === "chart") {
+    const issue = chartEvidenceError(slide, brief)
+    if (issue) return issue
+  }
+  if (investor && unsupportedInvestorFigures(slide, brief).length) {
+    return "Use only numeric figures supplied in the brief. Move missing evidence to a verification question in speaker notes."
+  }
+  if (inspectPresentation({ outline: null, slides: [slide] }).issues.some(({ code }) => code === "crowded-slide")) {
+    return "Keep the visible text short enough for the layout. Move secondary detail to the speaker notes."
+  }
+  return null
+}
+
 export async function generateSlides(input: ModelChoice & {
   topic: string
   outline: DeckOutline
@@ -162,6 +192,9 @@ export async function generateSlides(input: ModelChoice & {
   if (!items.length) throw new PresentationEngineError("В плане нет таких слайдов.", 400, "BAD_RANGE")
 
   const written = new Map<number, Slide>()
+  const corrections = new Map<number, string>()
+  const investor = isInvestorDeckRequest(input.topic)
+  const noPhotos = presentationWithoutPhotos(input.topic)
   let wanted = items.map((_, offset) => input.startIndex + offset)
 
   for (let attempt = 0; attempt < 2 && wanted.length; attempt += 1) {
@@ -180,12 +213,22 @@ export async function generateSlides(input: ModelChoice & {
       const systemPrompt = [slidesSystemPrompt({ language: input.language, tone: input.tone, items: runItems }), petroleumPresentationInstruction(input.topic)].filter(Boolean).join("\n\n")
       let prompt = slidesUserPrompt({ topic: input.topic, outline: input.outline, startIndex: first, items: runItems })
       prompt += `\n\nInclude "n" (the slide number) in every slide object.`
-      if (attempt) prompt += `\nYour previous answer was incomplete or used an incorrect layout. Return only {"slides":[…]} with all ${run.length} requested slide(s). Never invent unsupported facts or numbers.`
+      if (attempt) {
+        prompt += `\nReturn only {"slides":[…]} with all ${run.length} requested slide(s). Fix the assigned slide numbers and layouts.\n${run.map((index) => corrections.has(index) ? `Slide ${index + 1}: ${corrections.get(index)}` : "").filter(Boolean).join("\n")}`
+      }
 
       const raw = await ask({ ...input, systemPrompt, prompt, maxTokens: 900 * run.length + 600, temperature: attempt ? 0.4 : 0.7 })
       for (const { index, slide } of placeSlides(extractJson(raw), first, runItems)) {
-        if (isInvestorDeckRequest(input.topic) && unsupportedInvestorFigures(slide, input.topic).length) continue
-        written.set(index, slide)
+        const planned = slide.layout === "quote" ? slide : { ...slide, title: input.outline.items[index].title }
+        const issue = generatedSlideIssue(planned, input.topic, investor)
+        if (issue) { corrections.set(index, issue); continue }
+        const withId = { ...withoutPictures(planned), id: slideId() }
+        if (noPhotos) {
+          delete withId.imageQuery
+          delete withId.imagePrompt
+          if (withId.layout === "gallery") withId.items = withId.items.map(({ caption }) => ({ caption }))
+        }
+        written.set(index, withId)
       }
     }
     wanted = wanted.filter((index) => !written.has(index))
@@ -228,7 +271,12 @@ export async function rewriteSlide(input: ModelChoice & {
       ? (parsed as { slides: unknown[] }).slides[0]
       : parsed
     const slide = normalizeSlide(candidate, layout)
-    if (slide) {
+    if (slide?.layout === layout) {
+      if (slide.layout === "chart") {
+        const context = `${input.topic || ""}\n${input.instruction || ""}\n${JSON.stringify(input.slide)}`
+        const issue = chartEvidenceError(slide, context)
+        if (issue) { prompt += `\n\n${issue}`; continue }
+      }
       if (input.topic && isInvestorDeckRequest(input.topic) && unsupportedInvestorFigures(slide, `${input.topic} ${input.instruction || ""} ${JSON.stringify(input.slide)}`).length) {
         prompt += "\n\nThe previous answer invented a numeric figure. Keep only numbers supplied by the founder or in the original slide; unknowns must be explicit questions."
         continue

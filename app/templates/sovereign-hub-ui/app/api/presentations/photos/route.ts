@@ -76,8 +76,8 @@ export async function POST(request: Request) {
   await Promise.all(Array.from({ length: Math.min(3, queue.length) }, async () => {
     while (queue.length) {
       const item = queue.shift() as (typeof items)[number]
-      let photo = await findPhoto({ query: item.query, kind: item.kind, exclude })
-      if (photo && exclude.has(photo.url)) photo = await findPhoto({ query: item.query, kind: item.kind, exclude })
+      let photo = await findPhoto({ query: item.query, kind: item.kind, exclude, signal: request.signal })
+      if (photo && exclude.has(photo.url)) photo = await findPhoto({ query: item.query, kind: item.kind, exclude, signal: request.signal })
       photos[item.key] = photo && !exclude.has(photo.url) ? photo : null
       if (photo) exclude.add(photo.url)
     }
