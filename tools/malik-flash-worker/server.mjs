@@ -3,6 +3,7 @@ import { randomUUID, timingSafeEqual } from "node:crypto";
 import { GoogleBrowserWorker } from "./browser.mjs";
 import { googleAccess } from "./google-access.mjs";
 import { flashLatency } from "./telemetry.mjs";
+import { createUserLock } from "./user-lock.mjs";
 
 const secret = process.env.MALIK_FLASH_WORKER_SECRET || "";
 if (secret.length < 24) throw new Error("MALIK_FLASH_WORKER_SECRET must have 24+ characters.");
@@ -15,7 +16,7 @@ const policy = googleAccess();
 const worker = new GoogleBrowserWorker({ policy });
 const latency = flashLatency();
 const quota = new Map();
-const running = new Set();
+const userLock = createUserLock();
 const active = new Set();
 const WINDOW_MS = 60 * 60_000;
 const MAX_QUOTA_ACCOUNTS = 1024;
@@ -88,6 +89,7 @@ const server = http.createServer(async (request, response) => {
   const signal = AbortSignal.any([connection.signal, AbortSignal.timeout(110_000)]);
   active.add(connection);
   let userScope;
+  let releaseUserLock = null;
   let streamed = false;
   const onClose = () => { if (!response.writableEnded) connection.abort(); };
   response.once("close", onClose);
@@ -97,9 +99,9 @@ const server = http.createServer(async (request, response) => {
       return json(response, 400, { error: "PROTOCOL_MISMATCH", requestId });
     if (typeof body.userScope !== "string" || typeof body.chatScope !== "string" || !scopeId.test(body.userScope) || !scopeId.test(body.chatScope))
       return json(response, 400, { error: "INVALID_SCOPE", requestId });
-    if (running.has(body.userScope)) return json(response, 409, { error: "USER_BUSY", requestId });
+    releaseUserLock = userLock.acquire(body.userScope);
+    if (!releaseUserLock) return json(response, 409, { error: "USER_BUSY", requestId });
     userScope = body.userScope;
-    running.add(userScope);
     if (!rateLimit(userScope)) return json(response, 429, { error: "HOURLY_LIMIT", requestId });
     signal.throwIfAborted();
     const task = body.task === undefined ? "chat" : body.task;
@@ -131,7 +133,7 @@ const server = http.createServer(async (request, response) => {
       json(response, status, { error: code, requestId });
     }
   } finally {
-    if (userScope) running.delete(userScope);
+    releaseUserLock?.();
     active.delete(connection);
     response.off("close", onClose);
   }
