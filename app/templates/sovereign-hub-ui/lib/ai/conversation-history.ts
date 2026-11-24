@@ -80,3 +80,45 @@ export function boundedConversationHistory<T extends { role: string; content: st
   }
   return kept
 }
+
+
+// Retrieve only from the caller's current conversation, not other accounts or
+// other chats. This is a bounded lexical recall layer, not semantic embeddings.
+const RECALL_STOP = new Set("про это что как где когда кто какой какая какие сколько мне мой моя мои наш наши был была были есть еще ещё уже тогда потом снова давай сделай скажи расскажи напиши помнишь раньше прошлый прошлое the and for from about what when where which who how can could would please remember earlier that this these those your with again tell write make".split(" "))
+function recallTerms(text: string): Set<string> {
+  return new Set((text.toLowerCase().normalize("NFKC").match(/[\p{L}\p{N}][\p{L}\p{N}_-]{2,}/gu) || [])
+    .filter(term => !RECALL_STOP.has(term) && !/^\d+$/u.test(term))
+    .map(term => term.length > 7 ? term.slice(0, 7) : term))
+}
+
+/** Preserve recent dialogue and spend a small part of its existing budget on
+ * earlier relevant turns. Never insert invented messages, disclose other
+ * conversations, or send extra tokens beyond the original transport budget. */
+export function contextAwareConversationHistory<T extends { role: string; content: string }>(
+  history: T[], question: string, maxMessages: number, maxChars: number,
+): T[] {
+  const recent = boundedConversationHistory(history, maxMessages, maxChars)
+  if (recent.length >= history.length || maxMessages < 6 || maxChars < 3000 || question.length > 1200) return recent
+  const terms = recallTerms(question)
+  if (!terms.size) return recent
+  const oldEnd = history.length - recent.length
+  const candidates = history.slice(Math.max(0, oldEnd - 128), oldEnd)
+  const ranked = candidates.flatMap((turn, index) => {
+    const text = turn.content.slice(0, 16_000)
+    // Require two matching terms, or a distinctive exact single identifier.
+    const words = recallTerms(text)
+    const score = [...terms].filter(term => words.has(term)).length
+    const single = terms.size === 1 && [...terms][0].length >= 6
+    return score >= 2 || (single && score === 1) ? [{ turn, index, score }] : []
+  }).sort((a,b) => b.score - a.score || b.index - a.index).slice(0, 2)
+  if (!ranked.length) return recent
+  const recallBudget = Math.min(1800, Math.floor(maxChars * .15))
+  const recalled = ranked.sort((a,b) => a.index - b.index).map(({ turn }) => {
+    const limit = Math.floor(recallBudget / ranked.length)
+    return { ...turn, content: turn.content.length <= limit ? turn.content : turn.content.slice(0, limit - 1) + "…" }
+  })
+  const remaining = maxChars - recalled.reduce((sum, turn) => sum + turn.content.length, 0)
+  // Do not reclaim a turn twice when shortening the recent window.
+  const tail = boundedConversationHistory(history.slice(oldEnd), maxMessages - recalled.length, remaining)
+  return [...recalled, ...tail]
+}

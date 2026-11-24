@@ -79,7 +79,7 @@ export async function runResearchToolLoop(input: {
 }): Promise<Result> {
   const initial = { sources: input.sources, planningTokens: 0, searches: 0 }
   const question = input.question.trim()
-  if (!input.enabled || !question || question.length > 600 || SENSITIVE.test(question) || input.sources.length >= 20)
+  if (!input.enabled || !question || question.length > 600 || SENSITIVE.test(question) || !input.sources.length || input.sources.length >= 20)
     return { ...initial, status: "skipped" }
   input.signal?.throwIfAborted()
   const step = input.activity?.start("Проверяю, достаточно ли источников", "model", "research.plan")

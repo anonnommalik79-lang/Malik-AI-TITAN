@@ -57,7 +57,13 @@ test("stalled tools return existing sources within budget", async () => {
 
 test("aborted turns do not synthesize an invented success", async () => {
   const ctl=new AbortController()
-  const result=runResearchToolLoop({enabled:true,question,sources:[],signal:ctl.signal,plan:()=>new Promise(()=>{}),search:forbidden})
+  const result=runResearchToolLoop({enabled:true,question,sources:[source],signal:ctl.signal,plan:()=>new Promise(()=>{}),search:forbidden})
   ctl.abort()
   await assert.rejects(result,{name:"AbortError"})
+})
+
+test("a failed initial lookup cannot start a model or falsely report evidence", async () => {
+  const result = await runResearchToolLoop({ enabled:true, question, sources:[], plan:forbidden, search:forbidden })
+  assert.equal(result.status,"skipped")
+  assert.deepEqual(result.sources,[])
 })
