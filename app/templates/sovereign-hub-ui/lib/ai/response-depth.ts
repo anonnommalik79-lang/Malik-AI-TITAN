@@ -8,6 +8,8 @@ export type ChatSendOptions = {
   selectedSkillId?: "petroleum.analyze"
   workspaceMode?: WorkspaceMode
   responseDepth?: ResponseDepth
+  /** Explicit one-turn coding mode; keep the user in the chat. */
+  codeMode?: boolean
   research?: boolean
   imageSize?: "1K" | "2K" | "4K"
   imageAspectRatio?: "1:1" | "16:9" | "9:16" | "4:5" | "4:3"

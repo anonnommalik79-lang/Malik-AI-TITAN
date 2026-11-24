@@ -4614,6 +4614,7 @@ function checksumText(input: string): string {
  */
 const RETIRED_VIEW_REDIRECTS: Record<string, string> = {
   search: "home",
+  "code-generation": "home",
   analytics: "dashboard-generation",
   notifications: "support",
   design: "home",
@@ -4630,7 +4631,7 @@ function normalizeDashboardViewId(view: string | null | undefined): string {
   const byKeyword = DASHBOARD_SAFE_VIEW_IDS.find((id) =>
     DASHBOARD_VIEW_REGISTRY[id].keywords.some((keyword) => lower.includes(keyword.toLowerCase()))
   )
-  return byKeyword || "home"
+  return byKeyword ? RETIRED_VIEW_REDIRECTS[byKeyword] || byKeyword : "home"
 }
 
 function getDashboardViewMeta(view: string): DashboardViewRegistryEntry {
@@ -6283,6 +6284,8 @@ const normalizeStreamChunk = (parsed: any): string | null => {
 const handleSendMessageRef = useRef<((content: string, attachments?: ChatAttachment[], options?: ChatSendOptions) => Promise<void>) | null>(null)
 const handleSendMessage = useCallback(async (content: string, attachments: ChatAttachment[] = [], options?: ChatSendOptions) => {
   const turnWorkspaceMode = options?.workspaceMode ?? workspaceMode
+  const codeMode = options?.codeMode === true
+  const turnAiMode: AiModeId = codeMode ? "code" : activeAiMode
   const cleanContent = (content || "").trim()
   if (!cleanContent) return
   const targetChat = chatsRef.current.find((chat) => chat.id === activeChatId)
@@ -6332,7 +6335,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
   // explicit request for a file). Questions, single deliverables, long
   // briefs and numbered task lists are answered by the model in the chat.
   // Signed-in accounts only: projects are stored per account.
-  if (!flashSelected && !petroleumAnalytic && !attachments.length && !options?.skipSuperflow && routeWorkRequest(cleanContent, { mode: turnWorkspaceMode, signedIn: !guestMode && Boolean(workOSUser?.email), attachmentKinds: attachments.map((item) => item.kind) }).route === "flow") {
+  if (!codeMode && !flashSelected && !petroleumAnalytic && !attachments.length && !options?.skipSuperflow && routeWorkRequest(cleanContent, { mode: turnWorkspaceMode, signedIn: !guestMode && Boolean(workOSUser?.email), attachmentKinds: attachments.map((item) => item.kind) }).route === "flow") {
     const flowChatId = branchChatId || activeChatId || crypto.randomUUID()
     const reference: SuperflowRef = { clientRequestId: newRequestId("sf"), goal: cleanContent, workspaceMode: turnWorkspaceMode }
     const userTurn: Message = { id: crypto.randomUUID(), role: "user", content: cleanContent, timestamp: new Date() }
@@ -6388,7 +6391,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
 
   // «Создай трек про лето» is a job for the music studio: it opens with the
   // request written in. Lyrics and advice stay in the chat.
-  if (turnWorkspaceMode !== "work" && !attachments.length && !options?.forcedMedia && !petroleumRoute.domain && isMusicCreationRequest(cleanContent)) {
+  if (!codeMode && turnWorkspaceMode !== "work" && !attachments.length && !options?.forcedMedia && !petroleumRoute.domain && isMusicCreationRequest(cleanContent)) {
     try {
       window.sessionStorage.setItem("malik.music.handoff", JSON.stringify({ prompt: cleanContent }))
     } catch {
@@ -6402,7 +6405,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
   // chat reply: the topic is handed across and the studio starts the plan
   // itself. Questions *about* presentations stay in the chat — see
   // isPresentationCreationRequest for where that line is drawn.
-  if (turnWorkspaceMode !== "work" && !attachments.length && (isPresentationCreationRequest(cleanContent) || petroleumRoute.explicit && isPresentationCreationRequest(stripPetroleumToken(cleanContent)))) {
+  if (!codeMode && turnWorkspaceMode !== "work" && !attachments.length && (isPresentationCreationRequest(cleanContent) || petroleumRoute.explicit && isPresentationCreationRequest(stripPetroleumToken(cleanContent)))) {
     try {
       window.sessionStorage.setItem("malik.presentation.handoff", JSON.stringify({
         topic: presentationTopic(stripPetroleumToken(cleanContent)),
@@ -6439,7 +6442,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
   const memoryIntent = detectMalikMemoryIntent(cleanContent)
   const actionPlan = memoryIntent ? null : createMalikActionPlan({
     prompt: cleanContent,
-    mode: activeAiMode,
+    mode: turnAiMode,
     attachmentKinds: attachments.map((item) => item.kind),
   })
 
@@ -6451,7 +6454,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
   const responseDepth = resolveResponseDepth(betterDepth, userPlan)
   const depthLimits = responseDepthLimits(responseDepth)
 
-  const routeDecision = detectIntentAndRoute(cleanContent, requestAttachments, petroleumAnalytic ? "fast" : activeAiMode)
+  const routeDecision = detectIntentAndRoute(cleanContent, requestAttachments, petroleumAnalytic ? "fast" : turnAiMode)
   dashboardEventBus.emit({
     type: "intent:routed",
     source: "handleSendMessage",
@@ -6459,13 +6462,13 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
     payload: routeDecision,
   })
 
-  if (!petroleumAnalytic && routeDecision.shouldRouteBeforeSend && routeDecision.action === "open-view") {
+  if (!codeMode && !petroleumAnalytic && routeDecision.shouldRouteBeforeSend && routeDecision.action === "open-view") {
     safeOpenView(routeDecision.targetView, "intent")
-  } else if (!petroleumAnalytic && routeDecision.shouldRouteBeforeSend && routeDecision.action === "open-codex") {
+  } else if (!codeMode && !petroleumAnalytic && routeDecision.shouldRouteBeforeSend && routeDecision.action === "open-codex") {
     setCodexOpen(true)
   }
 
-  const runtimePlan = buildSovereignRuntimePlan(cleanContent, requestAttachments, petroleumAnalytic ? "fast" : activeAiMode)
+  const runtimePlan = buildSovereignRuntimePlan(cleanContent, requestAttachments, petroleumAnalytic ? "fast" : turnAiMode)
   if (petroleumAnalytic) { runtimePlan.responseMode = "chat"; runtimePlan.isProjectRequest = false }
   const mode = runtimePlan.responseMode
   const isProjReq = runtimePlan.isProjectRequest
@@ -6499,7 +6502,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
   )
   // Asked for is done: the request itself is the consent, and the composer
   // already shows what a picture costs.
-  const inlineMediaKind = flashSelected && asksWhichModelGeneratedImage(cleanContent) ? null : requestedInlineMediaKind
+  const inlineMediaKind = (codeMode && !options?.forcedMedia) || (flashSelected && asksWhichModelGeneratedImage(cleanContent)) ? null : requestedInlineMediaKind
   // Shown in the chat card: without the slash command.
   const inlineMediaPrompt = parsedMediaCommand ? parsedMediaCommand.prompt || cleanContent : mediaTurn?.prompt || cleanContent
   // Sent to the API: the server-side cost guard only accepts prompts that carry
@@ -6507,7 +6510,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
   const inlineMediaApiPrompt = parsedMediaCommand
     ? cleanContent
     : `${inlineMediaKind === "video" ? "/video" : "/image"} ${inlineMediaPrompt}`
-  setActiveGenerationKind(inlineMediaKind || detectDashboardGenerationKind(cleanContent, requestAttachments, activeAiMode))
+  setActiveGenerationKind(inlineMediaKind || detectDashboardGenerationKind(cleanContent, requestAttachments, turnAiMode))
   const chatId = branchChatId || activeChatId || crypto.randomUUID()
   const currentConversation = chatsRef.current.find((chat) => chat.id === chatId)
   if (currentConversation?.projectId) {
@@ -8157,7 +8160,6 @@ const shouldShowMobilePreviewButton =
       return <PresentationStudio username={username} />
     }
     if (
-      activeView === "code-generation" ||
       activeView === "component-generation" ||
       activeView === "website-generation" ||
       activeView === "landing-generation" ||
@@ -8305,7 +8307,6 @@ const shouldShowMobilePreviewButton =
               onOpenVideo={() => safeOpenView("video-generation", "welcome")}
               onOpenMusic={() => safeOpenView("music-generation", "welcome")}
               onOpenWebsite={() => safeOpenView("website-generation", "welcome")}
-              onOpenCode={() => safeOpenView("code-generation", "welcome")}
               onOpenBilling={() => safeOpenView("billing", "welcome")}
               onOpenCanvas={() => safeOpenCanvas(undefined, "open-canvas")}
               onOpenCommandCenter={() => safeOpenView("command-center", "welcome")}

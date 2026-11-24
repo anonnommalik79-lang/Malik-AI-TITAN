@@ -411,7 +411,8 @@ function HomeComposer({
   onToggleMemory,
   deepOn = false,
   onToggleDeep,
-  onOpenCode,
+  codeOn,
+  onToggleCode,
   onOpenVideo,
   onOpenMusic,
   onSourcePlugin,
@@ -444,7 +445,8 @@ function HomeComposer({
   /** «Глубокий анализ»: the next answer is a deep, sourced one. */
   deepOn?: boolean
   onToggleDeep?: () => void
-  onOpenCode?: () => void
+  codeOn: boolean
+  onToggleCode: () => void
   onOpenVideo?: () => void
   onOpenMusic?: () => void
   /** GitHub / Wikipedia / arXiv: search a particular source for the next question. */
@@ -696,7 +698,7 @@ function HomeComposer({
           }}
           rows={1}
           aria-label="Спросите Malik AI"
-          placeholder={composerPlaceholder(wide ? "Напишите сообщение или задайте вопрос…" : "Чем я могу помочь сегодня?", research, connector)}
+          placeholder={codeOn ? "Опишите задачу, вставьте код или прикрепите файлы…" : composerPlaceholder(wide ? "Напишите сообщение или задайте вопрос…" : "Чем я могу помочь сегодня?", research, connector)}
         />
 
         <div className="thome-composer-right">
@@ -794,7 +796,7 @@ function HomeComposer({
             <Lightbulb aria-hidden="true" />Глубокий анализ
           </button>
         ) : null}
-        {onOpenCode ? <button type="button" onClick={onOpenCode} className="thome-chip"><Code2 aria-hidden="true" />Код</button> : null}
+        <button type="button" aria-pressed={codeOn} onClick={onToggleCode} className={cn("thome-chip", codeOn && "is-active")} title="Режим программирования: код, отладка и проекты прямо в чате"><Code2 aria-hidden="true" />Код</button>
         {onCreateImage ? (
           <button type="button" onClick={onCreateImage} className="thome-chip" title={imageCredits ? `Фото: ${imageCredits.remaining > 1_000_000 ? "∞" : imageCredits.remaining} кр. сегодня` : undefined}>
             <ImageIcon aria-hidden="true" />Изображение
@@ -850,6 +852,7 @@ function MalikHybridHomeInner(props: MalikHybridHomeProps) {
   const [webOn, setWebOn] = useWebSearchEnabled()
   const [memoryOn, setMemoryOn] = useContextEnabled()
   const [deepResearch, setDeepResearch] = useState(false)
+  const [codeOn, setCodeOn] = useState(false)
   const [mobileLayout, setMobileLayout] = useState(false)
   useEffect(() => {
     const query = window.matchMedia("(max-width: 767px)")
@@ -1007,8 +1010,9 @@ function MalikHybridHomeInner(props: MalikHybridHomeProps) {
     try {
       props.onSubmit(withConnector(text || attachmentPrompt, connector), attachments, {
         selectedSkillId,
+        codeMode: codeOn,
         research: webOn,
-        responseDepth: deepResearch ? "deep" : loadResponseDepth(props.userPlan || "free"),
+        responseDepth: deepResearch || (codeOn && loadResponseDepth(props.userPlan || "free") === "fast") ? "deep" : loadResponseDepth(props.userPlan || "free"),
       })
     } catch (error) {
       setPrompt(text)
@@ -1020,6 +1024,7 @@ function MalikHybridHomeInner(props: MalikHybridHomeProps) {
     setAttachmentError("")
     setComposerNotice("")
     setDeepResearch(false)
+    setCodeOn(false)
   }
 
   const focusPrompt = (value: string) => {
@@ -1054,6 +1059,12 @@ function MalikHybridHomeInner(props: MalikHybridHomeProps) {
       field.focus()
       field.setSelectionRange(field.value.length, field.value.length)
     }, 0)
+  }
+
+  const toggleCode = () => {
+    setCodeOn((current) => !current)
+    focusVisiblePrompt()
+    prefetchChatShell()
   }
 
   /** Official OAuth; on return the connection's chip switches on by itself. */
@@ -1185,7 +1196,8 @@ function MalikHybridHomeInner(props: MalikHybridHomeProps) {
               onToggleMemory={() => setMemoryOn(!memoryOn)}
               deepOn={deepResearch}
               onToggleDeep={toggleDeepResearch}
-              onOpenCode={props.onOpenCode}
+              codeOn={codeOn}
+              onToggleCode={toggleCode}
               onOpenVideo={props.onOpenVideo}
               onOpenMusic={props.onOpenMusic}
               onSourcePlugin={openSourcePlugin}
@@ -1287,7 +1299,8 @@ function MalikHybridHomeInner(props: MalikHybridHomeProps) {
                   onToggleMemory={() => setMemoryOn(!memoryOn)}
                   deepOn={deepResearch}
                   onToggleDeep={toggleDeepResearch}
-                  onOpenCode={props.onOpenCode}
+                  codeOn={codeOn}
+                  onToggleCode={toggleCode}
                   onOpenVideo={props.onOpenVideo}
                   onOpenMusic={props.onOpenMusic}
                   onSourcePlugin={openSourcePlugin}
