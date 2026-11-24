@@ -10,6 +10,7 @@ import {conversationIntentInstruction} from "@/lib/ai/conversation-intent"
 import { conversationHistory } from "@/lib/ai/conversation-history"
 import { domainPlanInstruction } from "@/lib/ai/domain-intelligence"
 import { resolveIntelligenceTurn, refineIntelligenceTurn, intelligenceWebDecision } from "@/lib/server/intelligence-core"
+import { runResearchToolLoop, RESEARCH_PLANNER_TOKENS } from "@/lib/server/intelligence-tools"
 import {conversationRepairInstruction} from "@/lib/ai/conversation-validation"
 import {executionContractInstruction} from "@/lib/ai/do-what-user-says"
 import { computedEvidenceInstruction } from "@/lib/analysis/chat"
@@ -1179,7 +1180,7 @@ export async function malikGodAnswer(
     if (attribution && !usedWeb) {
       return { content: attributionUnavailable(attribution, "search-off"), provider: "attribution-evidence-gate", model: "no-evidence", selectedModelId: selection.modelId, usedWeb: false, sources: [], attempts: [] }
     }
-    const [webSources, connected, science, eiaEvidence] = await Promise.all([
+    const [initialWebSources, connected, science, eiaEvidence] = await Promise.all([
       usedWeb ? preparedEvidence ? Promise.resolve(preparedEvidence.sources) : gatherSources(focus.searchText, emitResearch, activity, signal, freshnessMode(body?.responseDepth || body?.metadata?.responseDepth), requestFreshness.timeZone) : Promise.resolve([] as SourceItem[]),
       serverConnected
         ? Promise.resolve({ ...serverConnected, requested: true, connectorIds: [] as string[], executions: [] as any[] })
@@ -1187,6 +1188,26 @@ export async function malikGodAnswer(
       scienceActive ? collectMalikScienceContext(prompt) : Promise.resolve({ context: "", sources: [] as any[], providers: [] as string[] }),
       fetchEiaSpotEvidence(prompt, {signal}),
     ])
+    // Deep research can inspect actual evidence, request one further lookup,
+    // and then synthesize from verified receipts. Simple chat pays no extra call.
+    const explicitDepth = String(body?.responseDepth || body?.metadata?.responseDepth || "")
+    const researchLoop = await runResearchToolLoop({
+      enabled: process.env.MALIK_V7_RESEARCH_LOOP !== "0" && usedWeb && !preparedEvidence && !attachments.length
+        && !fusionActive && !serverConnected && !scienceActive && !body?.chatRecovery
+        && /^(?:deep|ultra|high|extra-high|pro)$/i.test(explicitDepth)
+        && (!Number.isFinite(outputAllowance) || outputAllowance >= 1800 + domainPlanningBudget + RESEARCH_PLANNER_TOKENS),
+      question: focus.searchText,
+      sources: initialWebSources,
+      signal, activity,
+      plan: input => runStrictMalikModel({
+        modelId: selection.modelId, prompt: input.prompt, taskPrompt: focus.searchText,
+        systemPrompt: input.systemPrompt, maxTokens: input.maxTokens, temperature: 0,
+        reasoningEffort: "low", allowCatalog: selection.allowCatalog === true, signal: input.signal,
+      }),
+      search: (query, toolSignal) => gatherSources(query, emitResearch, activity, toolSignal, "fast", requestFreshness.timeZone),
+    })
+    const webSources = researchLoop.sources
+    domainPlanningBudget += researchLoop.planningTokens
     const sources: SourceItem[] = [...webSources, ...(connected.sources as SourceItem[]), ...(science.sources as SourceItem[])].slice(0, 32)
     // A «когда X сделал Y?» question may rest on an event that never happened.
     // The model may still say so without sources; the gate below drops every
