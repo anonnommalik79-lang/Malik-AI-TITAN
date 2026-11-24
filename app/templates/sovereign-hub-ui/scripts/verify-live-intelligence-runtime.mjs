@@ -18,7 +18,10 @@ const bridgeYear = new Date(Date.now() - 400 * 86400_000).getUTCFullYear()
 const bridgeLead = { title: `Итоги AI & Digital Bridge ${bridgeYear}`, url: bridgeUrl, content: `AI & Digital Bridge ${bridgeYear} прошёл 1–3 октября.` }
 const blockedEventPage = "https://example.com/blocked-nexus-recap"
 const readableEventPage = "https://example.org/nexus-recap"
-const nexusSummary = "Nexus Film Festival took place on September 12, 2022."
+const currentEventYear = new Date().getUTCFullYear()
+const nexusSummary = `Nexus Film Festival took place on January 1, ${currentEventYear}.`
+const auroraArchiveUrl = "https://example.com/aurora-archive"
+const auroraCurrentUrl = "https://example.org/aurora-latest"
 const readUrls = [], queries = []
 const stubs = {
   "@/lib/server/malik-model-router": { runStrictMalikModel: async (input) => { inferences.push(input); if (!/1547|2020 году|без интернета/.test(input.taskPrompt)) assert.equal(input.onToken, undefined, "current answers must not expose unchecked drafts"); return { content: modelDraft || (/1547/.test(input.taskPrompt) ? "1547 × 829 = 1 282 463" : "Подтверждённый ответ по тестовым данным [1]."), provider: "fixture", model: "fixture", selectedModelId: input.modelId, latencyMs: 0 } } },
@@ -56,6 +59,11 @@ try {
     if (scenario === "retry-event") {
       if (String(url).includes("serper.dev")) return Response.json({ organic: [{ title: "Nexus Film Festival recap", link: blockedEventPage, snippet: nexusSummary }] })
       if (String(url).includes("tavily.com")) return Response.json({ results: [{ title: "Nexus Film Festival recap", url: readableEventPage, content: nexusSummary }] })
+      return new Response("", { status: 503 })
+    }
+    if (scenario === "prefer-current-event") {
+      if (String(url).includes("serper.dev")) return Response.json({ organic: [{ title: `Aurora Robotics Expo ${currentEventYear - 1}`, link: auroraArchiveUrl, snippet: `Aurora Robotics Expo was held on October 3, ${currentEventYear - 1}.` }] })
+      if (String(url).includes("tavily.com")) return Response.json({ results: [{ title: `Aurora Robotics Expo ${currentEventYear}`, url: auroraCurrentUrl, content: `Aurora Robotics Expo was held on January 1, ${currentEventYear}.` }] })
       return new Response("", { status: 503 })
     }
     if (scenario === "last-event" || scenario === "unread-event") {
@@ -131,10 +139,10 @@ try {
   })
   scenario = "last-event"
   await check("the exact typo from chat retrieves a past edition through fallback and reads the official report before answering", async () => {
-    const before = inferences.length, searchStart = calls.length
+    const before = inferences.length, searchStart = calls.length, queryStart = queries.length
     const answer = await run("когда было последни раз ai digital bridge", "balanced", "malik-max")
-    assert.match(queries.at(-1).q, /^ai digital bridge прошёл даты итоги$/iu)
-    assert.equal(queries.at(-1).tbs, undefined, "old editions must remain searchable")
+    assert.match(queries[queryStart].q, /^ai digital bridge \d{4} прошёл даты итоги$/iu)
+    assert.equal(queries[queryStart].tbs, undefined, "old editions must remain searchable")
     assert.ok(calls.slice(searchStart).some(url => url.includes("tavily")), "an announcement must not stop provider fallback")
     assert.ok(readUrls.includes(bridgeUrl))
     assert.equal(answer.provider, "live-evidence")
@@ -159,8 +167,18 @@ try {
       assert.deepEqual(readUrls.slice(-2), [blockedEventPage, readableEventPage])
       assert.equal(answer.provider, "live-evidence")
       assert.equal(answer.sources[0].url, readableEventPage)
-      assert.match(answer.content, /September 12, 2022.*\[1\]/u)
+      assert.match(answer.content, new RegExp(`January 1, ${currentEventYear}.*\\[1\\]`, "u"))
     } finally { process.env.BRAVE_SEARCH_API_KEY = "fixture-only" }
+  })
+  scenario = "prefer-current-event"
+  await check("a previous-year result cannot stop discovery of the completed edition in the current year", async () => {
+    const before = calls.length
+    const answer = await run("When was the last Aurora Robotics Expo?")
+    assert.ok(calls.slice(before).some(url => url.includes("tavily")))
+    assert.equal(answer.provider, "live-evidence")
+    assert.equal(answer.sources[0].url, auroraCurrentUrl)
+    assert.equal(answer.sources[0].occurrence.end, `${currentEventYear}-01-01`)
+    assert.match(answer.content, new RegExp(`January 1, ${currentEventYear}.*\\[1\\]`, "u"))
   })
   console.log(`${checks}/${checks} runtime acceptance checks passed (fixture transports, not live model accuracy)`)
 } finally { globalThis.fetch = savedFetch; console.info = savedInfo; process.env = savedEnv }

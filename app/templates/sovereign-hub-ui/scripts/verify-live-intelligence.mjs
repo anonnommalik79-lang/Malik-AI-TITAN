@@ -283,6 +283,18 @@ await check("choose the latest completed edition using occurrence dates, not new
   assert.equal(sources[0].url, bridgeReport.url)
   assert.equal(sources[0].occurrence.end, "2026-10-03")
 })
+await check("a current-year report is read before a previously verified archive lead", () => {
+  const intent = classifyFreshness(lastBridge, NOVEMBER)
+  const current = { ...bridgeReport, snippet: "Итоги мероприятия, материалы организаторов и обзор прошедшего форума.", readAt: undefined }
+  const archive = { ...bridgeReport, title: "AI & Digital Bridge 2025", url: "https://digitalbridge.kz/archive", snippet: "AI & Digital Bridge 2025 прошёл 2–4 октября.", readAt: undefined }
+  assert.equal(assessSources(lastBridge, [archive, current], intent)[0].url, current.url)
+})
+await check("Kazakh event reports permit a location after an explicit date range", () => {
+  const question = "Соңғы рет Digital Bridge қай күні өткізілді?", intent = classifyFreshness(question, NOVEMBER)
+  const sources = assessSources(question, [{ ...bridgeReport, snippet: "AI & Digital Bridge 2026 1-3 қазан аралығында Астанадағы EXPO халықаралық көрме орталығында өтті." }], intent)
+  assert.deepEqual([sources[0].occurrence?.start, sources[0].occurrence?.end], ["2026-10-01", "2026-10-03"])
+  assert.equal(currentEvidenceAvailable(sources, intent), true)
+})
 await check("a date with a second question leaves the rest of the answer to the model", () => {
   const question = "Когда был последний AI Digital Bridge и кто выступал?"
   const intent = classifyFreshness(question, NOVEMBER)

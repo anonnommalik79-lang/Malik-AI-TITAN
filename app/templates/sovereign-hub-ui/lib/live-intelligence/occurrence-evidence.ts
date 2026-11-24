@@ -25,6 +25,7 @@ const edition = /^(?:[\s(–—,-]*)(?:edition\s+|форум\s+)?((?:19|20)\d{2}
 const descriptor = "(?:международн\\p{L}*|ежегодн\\p{L}*|технологическ\\p{L}*|профессиональн\\p{L}*|форум\\p{L}*|фестивал\\p{L}*|саммит\\p{L}*|конференци\\p{L}*|мероприяти\\p{L}*|конкурс\\p{L}*|выставк\\p{L}*|чемпионат\\p{L}*|финал\\p{L}*|the|a|an|edition|annual|international|technology|conference|summit|forum|festival|event|exhibition|final|tournament|championship|халықаралық|форумы|конференциясы|іс-шара)"
 const subjectLink = new RegExp(`^(?:[\\s(),–—«»“”"-]|${year}(?!\\d)|${descriptor}(?!\\p{L}))*$`, "iu")
 const dateLink = /^(?:[\s,]|(?:в|с|по|на|года?|жыл(?:ы|ғы)?|on|in|from|between)(?!\p{L}))*$/iu
+const kazakhDateRange = /^\s*аралығында(?:\s+[\p{L}\p{N}'’.-]{1,32}){0,7}\s*$/iu
 const reference = /^(?:он|она|оно|они|форум|конференция|мероприятие|фестиваль|саммит|it|the (?:forum|conference|event|festival|summit|tournament|championship)|ол|форум|іс-шара)\s*$/iu
 
 function normalized(text: string) {
@@ -88,8 +89,12 @@ export function findOccurrence(subject: string, title: string, body: string, asO
       const after = verb.index + verb[0].length
       const nameBeforeVerb = subjectEnd != null && subjectEnd <= verb.index && verb.index - subjectEnd <= 75
       const nameAfterVerb = subjectHit && subjectHit.index >= after && subjectHit.index - after <= 75 && subjectLink.test(clause.slice(after, subjectHit.index))
-      const between = nameBeforeVerb ? dates.find(date => date.index >= subjectEnd && date.index + date.length <= verb.index &&
-        dateLink.test(clause.slice(subjectEnd, date.index)) && dateLink.test(clause.slice(date.index + date.length, verb.index))) : undefined
+      const between = nameBeforeVerb ? dates.find(date => {
+        const end = date.index + date.length
+        if (date.index < subjectEnd || end > verb.index) return false
+        const beforeDate = clause.slice(subjectEnd, date.index), afterDate = clause.slice(end, verb.index)
+        return (dateLink.test(beforeDate) || subjectLink.test(beforeDate)) && (dateLink.test(afterDate) || kazakhDateRange.test(afterDate))
+      }) : undefined
       const linked = nameBeforeVerb && subjectLink.test(clause.slice(subjectEnd, verb.index))
       if (!linked && !nameAfterVerb && !between && !(anaphora && !subjectHit && reference.test(clause.slice(0, verb.index)))) continue
       // Dates after the completed action take priority. A dateline or deadline

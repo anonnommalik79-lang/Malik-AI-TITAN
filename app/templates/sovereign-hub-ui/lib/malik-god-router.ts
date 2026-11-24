@@ -591,7 +591,8 @@ function buildQueries(prompt: string, intent: FreshnessIntent) {
   if (occurrence) {
     const subject = occurrence.subject
     const report = intent.language === "kk" ? "қашан өтті қорытындысы" : intent.language === "en" ? "held dates recap" : "прошёл даты итоги"
-    return [`${subject} ${report}`, `${subject} ${year} ${report}`, `${subject} official event dates outcomes`]
+    const alternate = intent.language === "kk" ? "итоги прошёл даты" : "official held dates recap"
+    return [...new Set([`${subject} ${intent.localDate.slice(0, 4)} ${report}`, `${subject} ${intent.localDate.slice(0, 4)} ${alternate}`, `${subject} ${report}`])]
       .slice(0, Math.max(1, Math.min(3, Number(process.env.MALIK_GOD_MAX_SEARCH_QUERIES || 3))))
   }
   // «хиггсфиелд ии» is searched as Higgsfield AI: engines know brands by their Latin names.
@@ -809,7 +810,7 @@ async function gatherSources(question: string, emit?: ResearchEmitter, activity?
   }
 
   const maxSources = Math.max(1, Math.min(8, Number(process.env.MALIK_GOD_MAX_SOURCES || 8)))
-  const pageLimit = mode === "fast" ? (intent.lastOccurrence ? 3 : 2) : mode === "deep" ? 4 : 6
+  const pageLimit = mode === "fast" ? (intent.lastOccurrence ? 4 : 2) : mode === "deep" ? 4 : 6
   const triedPages = new Set<string>()
   let readPages = 0
   const readSource = async (source: SourceItem) => {
@@ -848,13 +849,17 @@ async function gatherSources(question: string, emit?: ResearchEmitter, activity?
   }
 
   const sources = await read(unique, Math.min(maxSources, pageLimit))
-  // A credible result may point to an inaccessible page. Try at most one
-  // unused provider for a readable confirmation within the original deadline.
-  if (intent.lastOccurrence && !budget.aborted && unique.some(source => source.occurrence) && !currentEvidenceAvailable(sources, intent)) {
-    const alternate = providers.find(provider => !live.attempts.some(attempt => attempt.provider === provider.name))
+  // A readable archive or a failed page is insufficient to stop looking for
+  // this year's edition. Keep past evidence in case the event hasn't returned.
+  const editionYear = intent.localDate.slice(0, 4)
+  const readThisYear = sources.some(source => source.readAt && source.occurrence?.end.startsWith(editionYear))
+  if (intent.lastOccurrence && !budget.aborted && !readThisYear && queries.length) {
+    const followUpQuery = queries[1] || queries[0]
+    const unusedProvider = providers.find(provider => !live.attempts.some(attempt => attempt.provider === provider.name))
+    const alternate = unusedProvider || (queries[1] ? providers[0] : undefined)
     if (alternate) {
       const recoveryCall = activity?.start("Ищу доступное подтверждение события", "search", "web.search", { provider: alternate.name })
-      const recovery = await search([alternate], "fast", queries.slice(0, 1)).catch(error => {
+      const recovery = await search([alternate], "fast", [followUpQuery]).catch(error => {
         if (!budget.aborted || signal?.aborted) throw error
         return null
       })

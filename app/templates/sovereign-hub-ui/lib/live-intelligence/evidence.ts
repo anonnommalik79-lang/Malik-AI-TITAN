@@ -62,6 +62,7 @@ export function sourceAuthority(prompt: string, url: string): "primary" | "repor
 
 export function assessSources(prompt: string, sources: readonly MalikWebSource[], intent = classifyFreshness(prompt)): MalikWebSource[] {
   const now = Date.parse(intent.checkedAt)
+  const editionYear = intent.lastOccurrence ? new RegExp(`(?<!\\d)${intent.localDate.slice(0, 4)}(?!\\d)`, "u") : undefined
   const seen = new Set<string>()
   return sources.flatMap((input) => {
     const url = safeEvidenceUrl(input.url)
@@ -85,9 +86,11 @@ export function assessSources(prompt: string, sources: readonly MalikWebSource[]
   }).sort((a, b) => {
     if (intent.lastOccurrence) {
       const byRead = Number(Boolean(b.readAt && b.occurrence)) - Number(Boolean(a.readAt && a.occurrence))
+      const mentionsEdition = (source: MalikWebSource) => Number(Boolean(editionYear?.test(source.title)))
+      const byEditionLead = a.readAt && b.readAt ? 0 : mentionsEdition(b) - mentionsEdition(a)
       const byEvent = (b.occurrence?.end || "").localeCompare(a.occurrence?.end || "")
         || (a.occurrence?.start || "").localeCompare(b.occurrence?.start || "")
-      return byRead || byEvent || Number(b.authority === "primary") - Number(a.authority === "primary")
+      return byRead || byEditionLead || byEvent || Number(b.authority === "primary") - Number(a.authority === "primary")
     }
     if ((isNewsRequest(prompt) || intent.window) && !intent.historical) {
       const dated = (source: MalikWebSource) => Date.parse(source.eventAt || source.publishedAt || "") || 0

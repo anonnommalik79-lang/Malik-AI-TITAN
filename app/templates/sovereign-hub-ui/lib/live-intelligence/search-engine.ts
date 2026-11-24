@@ -67,11 +67,13 @@ export async function runLiveSearch(input: {
   if (!publicSearchText(input.prompt)) return result
   const queries = [...new Set(input.queries.map(publicSearchText).filter(Boolean))].slice(0, limits.queries)
   const take = (sources: MalikWebSource[]) => assessSources(input.prompt, input.rank ? input.rank(sources) : sources, intent)
-  const hasSearchLead = (sources: MalikWebSource[]) => intent.lastOccurrence
-    ? sources.some(source => source.occurrence) // A lead can stop provider fallback. The page still has to be read.
-    : currentEvidenceAvailable(sources, intent)
   for (const query of queries) {
     if (deadline.aborted || result.calls >= limits.calls) break
+    const year = intent.localDate.slice(0, 4)
+    const seeksThisYear = intent.lastOccurrence && query.split(/\s+/u).includes(year)
+    const hasSearchLead = (sources: MalikWebSource[]) => intent.lastOccurrence
+      ? sources.some(source => source.occurrence && (!seeksThisYear || source.occurrence.end.startsWith(year)))
+      : currentEvidenceAvailable(sources, intent)
     result.queries++; input.onQuery?.(query)
     // Bucket/window prevents yesterday's cache from crossing local midnight.
     const key = JSON.stringify([query, input.mode || "fast", intent.category, intent.localDate, intent.window?.label, intent.lastOccurrence?.subject, input.providers.map((p) => p.name)])
