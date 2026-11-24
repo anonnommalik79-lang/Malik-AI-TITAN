@@ -413,7 +413,6 @@ export function AutonomousCompany({ username, accountId, plan, onOpenBilling, on
   }, [])
 
   const applyTemplate = useCallback((template: BusinessTemplate) => {
-    if (!requirePro()) return
     setActiveTemplate(template)
     setInstruction(templateInstruction(template))
     setInstructionOpen(true)
@@ -424,10 +423,9 @@ export function AutonomousCompany({ username, accountId, plan, onOpenBilling, on
     if (template.requirements) setRequirements(template.requirements)
     textareaRef.current?.focus()
     textareaRef.current?.scrollIntoView({ behavior: "smooth", block: "center" })
-  }, [requirePro])
+  }, [])
 
   const startCustom = useCallback(() => {
-    if (!requirePro()) return
     setActiveTemplate(null)
     setInstruction("")
     setPrompt("")
@@ -437,7 +435,7 @@ export function AutonomousCompany({ username, accountId, plan, onOpenBilling, on
     setRequirements("")
     textareaRef.current?.focus()
     textareaRef.current?.scrollIntoView({ behavior: "smooth", block: "center" })
-  }, [requirePro])
+  }, [])
 
   const patchStep = useCallback((id: string, patch: Partial<Step> | ((step: Step) => Partial<Step>)) => {
     const next = stepsRef.current.map((step) => (step.agent.id === id
@@ -791,7 +789,7 @@ export function AutonomousCompany({ username, accountId, plan, onOpenBilling, on
                     type="button"
                     className={styles.modelSelect}
                     data-business-model-icon="gemini"
-                    onClick={() => { if (!requirePro()) return; setOpenMenu(openMenu === "model" ? null : "model") }}
+                    onClick={() => { setOpenMenu(openMenu === "model" ? null : "model") }}
                     aria-haspopup="listbox"
                     aria-expanded={openMenu === "model"}
                   >
@@ -808,7 +806,7 @@ export function AutonomousCompany({ username, accountId, plan, onOpenBilling, on
                         type="button"
                         role="option"
                         aria-selected={modelId === AUTO_MODEL}
-                        onClick={() => { if (!requirePro()) return; setModelId(AUTO_MODEL); setOpenMenu(null) }}
+                        onClick={() => { setModelId(AUTO_MODEL); setOpenMenu(null) }}
                       >
                         Gemini · Авто
                       </button>
@@ -818,7 +816,7 @@ export function AutonomousCompany({ username, accountId, plan, onOpenBilling, on
                           type="button"
                           role="option"
                           aria-selected={id === modelId}
-                          onClick={() => { if (!requirePro()) return; setModelId(id); setOpenMenu(null) }}
+                          onClick={() => { setModelId(id); setOpenMenu(null) }}
                         >
                           {geminiName(id)}
                         </button>
@@ -827,10 +825,10 @@ export function AutonomousCompany({ username, accountId, plan, onOpenBilling, on
                   )}
                 </div>
 
-                <ControlMenu id="market" label="Рынок" value={market} icon={Globe} options={MARKETS} open={openMenu === "market"} onToggle={() => { if (!requirePro()) return; setOpenMenu(openMenu === "market" ? null : "market") }} onPick={(value) => { if (!requirePro()) return; setMarket(value); setOpenMenu(null) }} />
-                <ControlMenu id="country" label="Страна" value={country} icon={MapPin} options={COUNTRIES} open={openMenu === "country"} onToggle={() => { if (!requirePro()) return; setOpenMenu(openMenu === "country" ? null : "country") }} onPick={(value) => { if (!requirePro()) return; setCountry(value); setOpenMenu(null) }} />
-                <ControlMenu id="budget" label="Бюджет" value={budget} icon={DollarSign} options={BUDGETS} open={openMenu === "budget"} onToggle={() => { if (!requirePro()) return; setOpenMenu(openMenu === "budget" ? null : "budget") }} onPick={(value) => { if (!requirePro()) return; setBudget(value); setOpenMenu(null) }} />
-                <ControlMenu id="req" label="Особые требования" value={requirements} icon={SlidersHorizontal} freeform open={openMenu === "req"} onToggle={() => { if (!requirePro()) return; setOpenMenu(openMenu === "req" ? null : "req") }} onPick={(value) => { if (!requirePro()) return; setRequirements(value); setOpenMenu(null) }} />
+                <ControlMenu id="market" label="Рынок" value={market} icon={Globe} options={MARKETS} open={openMenu === "market"} onToggle={() => { setOpenMenu(openMenu === "market" ? null : "market") }} onPick={(value) => { setMarket(value); setOpenMenu(null) }} />
+                <ControlMenu id="country" label="Страна" value={country} icon={MapPin} options={COUNTRIES} open={openMenu === "country"} onToggle={() => { setOpenMenu(openMenu === "country" ? null : "country") }} onPick={(value) => { setCountry(value); setOpenMenu(null) }} />
+                <ControlMenu id="budget" label="Бюджет" value={budget} icon={DollarSign} options={BUDGETS} open={openMenu === "budget"} onToggle={() => { setOpenMenu(openMenu === "budget" ? null : "budget") }} onPick={(value) => { setBudget(value); setOpenMenu(null) }} />
+                <ControlMenu id="req" label="Особые требования" value={requirements} icon={SlidersHorizontal} freeform open={openMenu === "req"} onToggle={() => { setOpenMenu(openMenu === "req" ? null : "req") }} onPick={(value) => { setRequirements(value); setOpenMenu(null) }} />
 
                 <span className={styles.spacer} />
                 <button type="button" className={styles.send} onClick={() => void run()} disabled={!prompt.trim()} aria-label="Запустить Autonomous Company">
@@ -1102,7 +1100,7 @@ export function AutonomousCompany({ username, accountId, plan, onOpenBilling, on
             <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/40">Malik PRO</p>
             <h2 className="mt-2 text-xl font-semibold tracking-[-0.025em] text-white">«Бизнес под ключ» доступен в Malik PRO</h2>
             <p className="mt-3 text-sm leading-6 text-white/50">
-              Ты можешь открыть раздел, посмотреть шаблоны и написать идею. Запуск 8 AI-агентов, выбор бизнес-настроек, шаблоны и создание результата требуют Malik PRO.
+              Ты можешь открыть раздел, посмотреть шаблоны и написать идею. Настрой шаблон и параметры бесплатно. Запуск 8 AI-агентов и создание результата требуют Malik PRO.
             </p>
             <div className="mt-6 grid grid-cols-2 gap-2">
               <button type="button" onClick={() => setUpgradeOpen(false)} className="h-11 rounded-xl border border-white/10 text-sm font-medium text-white/70 hover:bg-white/[0.05]">

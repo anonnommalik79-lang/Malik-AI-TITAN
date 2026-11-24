@@ -5211,6 +5211,10 @@ export function Dashboard({ guestMode = false, initialView = "home", initialWork
   const canAccessAdmin = !guestMode && !workOSLoading && isVerifiedOwner(workOSUser)
   const [selectedModelId, setSelectedModelId] = useState<MalikModelId>(DEFAULT_MALIK_MODEL_ID)
   const [currentPlan, setCurrentPlan] = useState<AIPlan>("free")
+  // Keep the active workspace mounted while the user reviews the subscription.
+  const [proOfferOpen, setProOfferOpen] = useState(false)
+  const openProOffer = useCallback(() => setProOfferOpen(true), [])
+  useEffect(() => { if (hasMalikProAccess(currentPlan)) setProOfferOpen(false) }, [currentPlan])
   const [planResolved, setPlanResolved] = useState(false)
   const [authReady, setAuthReady] = useState(false)
   const [userAvatar, setUserAvatar] = useState<string>(safeGetStorage("malik_user_avatar", ""))
@@ -5619,6 +5623,7 @@ export function Dashboard({ guestMode = false, initialView = "home", initialWork
   }, [selectedModelId, workspaceMode])
 
   const handleCreateProject = useCallback((draft: MalikProjectDraft) => {
+    if (!hasMalikProAccess(currentPlan)) { openProOffer(); return }
     const now = new Date()
     const projectId = crypto.randomUUID()
     const threadId = crypto.randomUUID()
@@ -5659,7 +5664,7 @@ export function Dashboard({ guestMode = false, initialView = "home", initialWork
     setSelectedModelId(draft.selectedModelId)
     saveMalikModelSelection(draft.selectedModelId)
     safeOpenView("projects", "manual")
-  }, [workspaceMode, safeOpenView])
+  }, [workspaceMode, safeOpenView, currentPlan, openProOffer])
 
   const launchTemplate = useCallback((template: MalikTemplate) => {
     const targetView = targetViewForTemplate(template)
@@ -5744,6 +5749,7 @@ export function Dashboard({ guestMode = false, initialView = "home", initialWork
   }, [chats, currentPlan, workspaceMode])
 
   const handleCreateProjectThread = useCallback((projectId: string) => {
+    if (!hasMalikProAccess(currentPlan)) { openProOffer(); return }
     const project = chats.find((chat) => chat.id === projectId && chat.kind === "project")
     if (!project) return
     const thread: Chat = {
@@ -5769,7 +5775,7 @@ export function Dashboard({ guestMode = false, initialView = "home", initialWork
     setSelectedModelId(thread.selectedModelId || DEFAULT_MALIK_MODEL_ID)
     saveMalikModelSelection(thread.selectedModelId || DEFAULT_MALIK_MODEL_ID)
     safeOpenView("projects", "manual")
-  }, [chats, selectedModelId, workspaceMode])
+  }, [chats, selectedModelId, workspaceMode, currentPlan, openProOffer, safeOpenView])
 
   const handleSelectProjectThread = useCallback((threadId: string) => {
     const thread = chats.find((chat) => chat.id === threadId)
@@ -6279,6 +6285,11 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
   const turnWorkspaceMode = options?.workspaceMode ?? workspaceMode
   const cleanContent = (content || "").trim()
   if (!cleanContent) return
+  const targetChat = chatsRef.current.find((chat) => chat.id === activeChatId)
+  if (!hasMalikProAccess(currentPlan) && (activeViewRef.current === "projects" || targetChat?.projectId || targetChat?.kind === "project")) {
+    openProOffer()
+    return
+  }
   // Flash follows the browser-worker flow only while the Google integration is on.
   const flashSelected = usesMalikFlashBrowser(selectedModelId)
   const directedGoogleMode = selectedModelId === "malik-flash" && flashGoogleIntent(cleanContent) === "ai-mode"
@@ -7696,7 +7707,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
     setIsLoading(false)
     setStreamingText("")
   }
-}, [activeChatId, messages, username, isLoading, isAdmin, activeAiMode, currentPlan, selectedModelId, canAccessAdmin, guestMode, workOSUser?.email, safeOpenView, workspaceMode])
+}, [activeChatId, messages, username, isLoading, isAdmin, activeAiMode, currentPlan, selectedModelId, canAccessAdmin, guestMode, workOSUser?.email, safeOpenView, workspaceMode, openProOffer])
 handleSendMessageRef.current = handleSendMessage
 
   const handleStopGeneration = useCallback(() => {
@@ -7710,6 +7721,7 @@ handleSendMessageRef.current = handleSendMessage
     action: "confirm" | "cancel" | "generate",
     requestedSize?: ImageResolution,
   ) => {
+    if (action === "generate" && !hasMalikProAccess(currentPlan) && activeViewRef.current === "projects") { openProOffer(); return }
     const imageSize: ImageResolution = requestedSize === "2K" || requestedSize === "4K" ? requestedSize : "1K"
     const status: ImageGenerationConfirmation["status"] =
       action === "confirm" ? "confirmed" : action === "generate" ? "generating" : "cancelled"
@@ -7731,7 +7743,7 @@ handleSendMessageRef.current = handleSendMessage
     if (action === "generate") {
       void handleSendMessage(`/image ${prompt}`, [], { imageSize })
     }
-  }, [handleSendMessage])
+  }, [handleSendMessage, currentPlan, openProOffer])
 
   const handleUseTemplate = useCallback((prompt: string) => {
     safeOpenView("home", "history")
@@ -8097,7 +8109,7 @@ const shouldShowMobilePreviewButton =
           username={username}
           accountId={workOSUser?.id}
           plan={currentPlan}
-          onOpenBilling={() => safeOpenView("billing", "manual")}
+          onOpenBilling={openProOffer}
           onViewChange={(view) => safeOpenView(view, "sidebar")}
           onNewChat={handleNewChat}
         />
@@ -8139,10 +8151,7 @@ const shouldShowMobilePreviewButton =
       return <VideoGenerationStudio {...studioBridgeProps} />
     }
     if (activeView === "music-generation") {
-      if (!hasMalikProAccess(currentPlan)) {
-        return <SovereignBillingPanel plan={currentPlan} authenticated={!guestMode && Boolean(workOSUser)} onClose={closeAccountPanel} />
-      }
-      return <MusicGenerationStudio username={username} />
+      return <MusicGenerationStudio username={username} plan={currentPlan} onOpenBilling={openProOffer} />
     }
     if (activeView === "presentation-generation") {
       return <PresentationStudio username={username} />
@@ -8181,9 +8190,6 @@ const shouldShowMobilePreviewButton =
       return <ChatsListView chats={chats} onSelectChat={handleSelectChat} onNewChat={handleNewChat} libraryMode />;
     }
     if (activeView === "projects") {
-      if (!hasMalikProAccess(currentPlan)) {
-        return <SovereignBillingPanel plan={currentPlan} authenticated={!guestMode && Boolean(workOSUser)} onClose={closeAccountPanel} />
-      }
       const projectChats = modeChats.filter((chat) =>
         !chat.projectId && (
           chat.kind === "project"
@@ -8204,7 +8210,7 @@ const shouldShowMobilePreviewButton =
             handleModelChange(modelId)
             if (activeProjectWorkspaceId) handleUpdateProject(activeProjectWorkspaceId, { selectedModelId: modelId })
           }}
-          onOpenBilling={() => safeOpenView("billing", "manual")}
+          onOpenBilling={openProOffer}
           onCreateProject={handleCreateProject}
           onOpenProject={handleSelectProject}
           onCreateThread={handleCreateProjectThread}
@@ -8233,12 +8239,13 @@ const shouldShowMobilePreviewButton =
                 userPlan={currentPlan}
                 selectedModelId={selectedModelId}
                 onModelChange={handleModelChange}
-                onOpenBilling={() => safeOpenView("billing", "manual")}
+                onOpenBilling={openProOffer}
+                projectRequiresPro
                 onOpenPlugins={() => safeOpenView("plugins", "manual")}
                 onOpenProjects={() => safeOpenView("projects", "manual")}
                 onOpenCodex={() => setCodexOpen(true)}
                 onForceCanvas={() => safeOpenCanvas(undefined, "project-chat")}
-                onOpenVoice={openVoiceMode}
+                onOpenVoice={() => { if (!hasMalikProAccess(currentPlan)) openProOffer(); else openVoiceMode() }}
                 onOpenActionTarget={handleActionTarget}
                 projectName={chats.find((chat) => chat.id === activeProjectWorkspaceId)?.title}
                 projectDescription={chats.find((chat) => chat.id === activeProjectWorkspaceId)?.projectDescription}
@@ -8296,7 +8303,7 @@ const shouldShowMobilePreviewButton =
               onOpenTemplates={() => safeOpenView("templates", "welcome")}
               onOpenPhoto={() => safeOpenView("photo-generation", "welcome")}
               onOpenVideo={() => safeOpenView("video-generation", "welcome")}
-              onOpenMusic={() => safeOpenView(currentPlan === "pro" || currentPlan === "ultra" || currentPlan === "owner" ? "music-generation" : "billing", "welcome")}
+              onOpenMusic={() => safeOpenView("music-generation", "welcome")}
               onOpenWebsite={() => safeOpenView("website-generation", "welcome")}
               onOpenCode={() => safeOpenView("code-generation", "welcome")}
               onOpenBilling={() => safeOpenView("billing", "welcome")}
@@ -8683,6 +8690,7 @@ const shouldShowMobilePreviewButton =
   )}
 
   {renderActiveView()}
+  {proOfferOpen && !hasMalikProAccess(currentPlan) ? <SovereignBillingPanel plan={currentPlan} authenticated={!guestMode && Boolean(workOSUser)} onClose={() => setProOfferOpen(false)} /> : null}
   {/* Project threads have their own chat column: there the preview floats over the right side. */}
   {activeView === "projects" ? <ChatBuildPreviewPanel variant="overlay" /> : null}
   <MalikCodexModal open={codexOpen} onClose={() => setCodexOpen(false)} onSendToCanvas={(code) => safeOpenCanvas(code, "generator-panel")} />

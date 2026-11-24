@@ -203,6 +203,7 @@ function ProjectMark({ color = "gold", size = "normal" }: { color?: MalikProject
 function ProjectFormModal({
   title,
   submitLabel,
+  requiresPro = false,
   initial,
   plan,
   onOpenBilling,
@@ -211,6 +212,7 @@ function ProjectFormModal({
 }: {
   title: string
   submitLabel: string
+  requiresPro?: boolean
   initial: MalikProjectDraft
   plan: AIPlan
   onOpenBilling: () => void
@@ -219,11 +221,13 @@ function ProjectFormModal({
 }) {
   const [draft, setDraft] = useState(initial)
 
-  useEffect(() => setDraft(initial), [initial])
+  // This modal is mounted per edit/create session; parent renders (including
+  // the billing overlay) must not reset an in-progress draft.
 
   const submit = () => {
     const cleanTitle = draft.title.trim().slice(0, 80)
     if (!cleanTitle) return
+    if (requiresPro && plan !== "pro" && plan !== "ultra" && plan !== "owner") { onOpenBilling(); return }
     onSubmit({
       ...draft,
       title: cleanTitle,
@@ -500,7 +504,7 @@ function ProjectsIndex({
       </div>
 
       {createOpen ? (
-        <ProjectFormModal title="Новый проект" submitLabel="Создать проект" initial={emptyDraft} plan={plan} onOpenBilling={onOpenBilling} onClose={() => setCreateOpen(false)} onSubmit={(draft) => { onCreateProject(draft); setCreateOpen(false) }} />
+        <ProjectFormModal title="Новый проект" submitLabel="Создать проект" requiresPro initial={emptyDraft} plan={plan} onOpenBilling={onOpenBilling} onClose={() => setCreateOpen(false)} onSubmit={(draft) => { onCreateProject(draft); setCreateOpen(false) }} />
       ) : null}
 
       {editing ? (

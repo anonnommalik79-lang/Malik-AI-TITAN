@@ -1,6 +1,8 @@
 "use client"
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ChangeEvent } from "react"
+import { hasMalikProAccess } from "@/lib/ai/malik-models"
+import type { AIPlan } from "@/lib/ai/types"
 import { analyzeMusicPrompt, compileMusicBrief } from "@/lib/media/music-intent"
 import { fetchMusicStatus, musicAudioUrl } from "@/lib/media/music-client"
 import "./music-generation.css"
@@ -230,7 +232,8 @@ const IconBolt = () => <svg {...stroke} aria-hidden="true"><path d="m3 7 4 4 5-7
 const IconBack = () => <svg {...stroke} aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg>
 const IconSpinner = () => <svg {...stroke} className="mm-spin" aria-hidden="true"><path d="M21 12a9 9 0 1 1-6.2-8.6" /></svg>
 
-export function MusicGenerationStudio({ username }: { username?: string }) {
+export function MusicGenerationStudio({ username, plan, onOpenBilling }: { username?: string; plan: AIPlan; onOpenBilling: () => void }) {
+  const proAccess = hasMalikProAccess(plan)
   const [genreId, setGenreId] = useState<GenreId>("other")
   const [prompt, setPrompt] = useState("")
   // «Создай трек про лето» from the chat arrives written in.
@@ -514,6 +517,7 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
 
   const submitGeneration = async (override?: Partial<MusicHistoryItem>) => {
     if (generating) return
+    if (!proAccess) { pendingVariantsRef.current = 0; onOpenBilling(); return }
 
     const nextGenreId = override?.genreId || genreId
     const nextGenre = GENRES.find((item) => item.id === nextGenreId) || genre
@@ -663,6 +667,7 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
   }
 
   const regenerate = (item?: MusicHistoryItem) => {
+    if (!proAccess) { onOpenBilling(); return }
     const source = item || history.find((row) => row.status === "ready" && row.resultUrl)
     if (!source) {
       submitGeneration()
@@ -838,6 +843,7 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
   })
 
   const startGeneration = () => {
+    if (!proAccess) { onOpenBilling(); return }
     const allowed = musicUnlimited
       ? variants
       : Math.max(1, Math.min(variants, Number(config?.limits.remaining ?? variants)))
@@ -1152,7 +1158,7 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
                 </div>
               </div>
 
-              <button className="mm-generate" type="button" onClick={() => startGeneration()} disabled={generating || (!musicUnlimited && config?.limits.remaining === 0)}>
+              <button className="mm-generate" type="button" onClick={() => startGeneration()} disabled={generating || (proAccess && !musicUnlimited && config?.limits.remaining === 0)}>
                 {generating ? <IconSpinner /> : <IconPlay />}
                 <span>{generateLabel}</span>
               </button>
@@ -1284,7 +1290,7 @@ export function MusicGenerationStudio({ username }: { username?: string }) {
           <IconBox /><span>{modelName}</span><small>{providerName}</small>
         </div>
 
-        <button className="mm-generate" type="button" onClick={() => startGeneration()} disabled={generating || (!musicUnlimited && config?.limits.remaining === 0)}>
+        <button className="mm-generate" type="button" onClick={() => startGeneration()} disabled={generating || (proAccess && !musicUnlimited && config?.limits.remaining === 0)}>
           {generating ? <IconSpinner /> : <IconPlay />}
           <span>{generateLabel}</span>
         </button>

@@ -65,7 +65,7 @@ import { fixWrongKeyboardLayout } from "@/lib/ai/keyboard-layout"
 import type { MalikFactAudit, MalikFactClaim } from "@/lib/ai/fact-audit"
 import { worthFactAuditPanel } from "@/lib/ai/fact-audit"
 import { ClaimLedgerPanel } from "./ClaimLedgerPanel"
-import { DEFAULT_MALIK_MODEL_ID, getMalikModel, usesMalikFlashBrowser, type MalikModelId } from "@/lib/ai/malik-models"
+import { DEFAULT_MALIK_MODEL_ID, getMalikModel, hasMalikProAccess, usesMalikFlashBrowser, type MalikModelId } from "@/lib/ai/malik-models"
 import { clientFetchWithTimeout } from "@/lib/api-client"
 import { MalikModelSelector } from "./MalikModelSelector"
 import { PetroleumMentionMenu, usePetroleumMention } from "@/components/sovereign/composer-tools/PetroleumMention"
@@ -272,6 +272,7 @@ interface ChatViewProps {
   onForceCanvas?: () => void
   onOpenVoice?: () => void
   onOpenActionTarget?: (target: MalikActionTarget) => void
+  projectRequiresPro?: boolean
   projectName?: string
   projectDescription?: string
 }
@@ -2090,7 +2091,7 @@ const FOLLOW_EPSILON_PX = 6
 /** Scrolled further up than this, the round "to the newest" button appears. */
 const JUMP_BUTTON_THRESHOLD_PX = 200
 
-export function ChatView({ messages, workspaceMode = "chat", onSendMessage, onImageConfirmation, isLoading, canStopGeneration = false, onStopGeneration, currentUser = "User", userPlan = "free", selectedModelId = DEFAULT_MALIK_MODEL_ID, onModelChange, onOpenBilling, onOpenPlugins, onOpenProjects, onNewTask, onOpenCodex, onForceCanvas, onOpenVoice, onOpenActionTarget, projectName, projectDescription }: ChatViewProps) {
+export function ChatView({ messages, workspaceMode = "chat", onSendMessage, onImageConfirmation, isLoading, canStopGeneration = false, onStopGeneration, currentUser = "User", userPlan = "free", selectedModelId = DEFAULT_MALIK_MODEL_ID, onModelChange, onOpenBilling, onOpenPlugins, onOpenProjects, onNewTask, onOpenCodex, onForceCanvas, onOpenVoice, onOpenActionTarget, projectRequiresPro = false, projectName, projectDescription }: ChatViewProps) {
   // One short pulse after the complete answer lands. Passing a number (rather
   // than a pattern) deliberately keeps this to a single haptic event.
   const wasLoading = useRef(false)
@@ -2700,6 +2701,7 @@ export function ChatView({ messages, workspaceMode = "chat", onSendMessage, onIm
     // commits onChange. Never make the visible draft silently unsendable.
     const rawText = (textareaRef.current?.value || prompt).trim()
     if (!rawText && attachments.length === 0) return
+    if (projectRequiresPro && !hasMalikProAccess(userPlan)) { onOpenBilling?.(); return }
 
     // The message is sent exactly as the user wrote it. Media generation is gated
     // by the slash-command check in the dashboard and by the server-side cost

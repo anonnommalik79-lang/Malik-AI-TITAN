@@ -1,3 +1,4 @@
+import { hasMalikProAccess } from "@/lib/ai/malik-models"
 import { resolveMediaUser } from "@/lib/media/request"
 import { compileMusicBrief } from "@/lib/media/music-intent"
 import { directMediaUrl } from "@/lib/os/media-reference"
@@ -74,6 +75,9 @@ export async function POST(request: Request) {
     }, { status: 401 })
   }
 
+  if (!hasMalikProAccess(user.plan)) {
+    return Response.json({ ok: false, code: "MALIK_PRO_REQUIRED", error: "Для генерации музыки требуется Malik PRO." }, { status: 402 })
+  }
   const quota = await getMusicQuota(user.userId, user.plan)
   const ownerMode = user.plan === "owner"
   if (!ownerMode && quota.remaining <= 0) {

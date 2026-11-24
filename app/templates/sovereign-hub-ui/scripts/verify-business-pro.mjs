@@ -19,8 +19,8 @@ assert.match(company, /if \(!requirePro\(\)\) return[\s\S]{0,120}const brief = p
 assert.match(company, /Приобрести Malik PRO/)
 assert.match(company, /Ты можешь открыть раздел, посмотреть шаблоны и написать идею/)
 assert.match(company, /if \(!proAccess\) \{[\s\S]{0,100}setGemini\(null\)/, "Free preview must not ping Gemini")
-assert.match(company, /applyTemplate[\s\S]{0,140}if \(!requirePro\(\)\) return/)
-assert.match(company, /startCustom[\s\S]{0,140}if \(!requirePro\(\)\) return/)
+assert.doesNotMatch(company, /const applyTemplate[^\n]+\n\s*if \(!requirePro\(\)\) return/, "Template preparation is free")
+assert.doesNotMatch(company, /const startCustom[^\n]+\n\s*if \(!requirePro\(\)\) return/, "Custom draft preparation is free")
 
 for (const [name, code] of [["agent", agent], ["autonomous", autonomous], ["build", build], ["gemini", gemini]]) {
   assert.match(code, /hasMalikProAccess/)
