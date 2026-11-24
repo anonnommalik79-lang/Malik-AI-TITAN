@@ -9,6 +9,7 @@ const savedFetch = globalThis.fetch, savedEnv = { ...process.env }, savedInfo = 
 const cache = new Map(), inferences = [], calls = [], tokens = []
 let scenario = "success", checks = 0, modelDraft, mathEnabled = false, missingPlanningReceipt = false
 const searchPayloads = []
+let scienceCalls = 0
 const sources = [
   { title: "Introducing GPT-99 TEST FIXTURE model", link: "https://openai.com/fixture/gpt-99", snippet: "Fixture only: official AI model announcement", date: new Date(Date.now() - 3600_000).toISOString() },
   { title: "Google DeepMind Gemini 99 TEST FIXTURE model", link: "https://deepmind.google/fixture/gemini-99", snippet: "Fixture only: official AI model announcement", date: new Date(Date.now() - 3600_000).toISOString() },
@@ -17,7 +18,7 @@ const sources = [
 const stubs = {
   "@/lib/server/malik-model-router": { runStrictMalikModel: async (input) => { inferences.push(input); if (mathEnabled && input.systemPrompt === "FIXTURE_MATH_PLAN") return { content: JSON.stringify({ givens: ["5 kg", "9.81 m/s^2"], unknown: "F", tasks: [{ op: "evaluate", expression: "5 kg * 9.81 m/s^2", expectUnit: "N" }] }), usage: missingPlanningReceipt ? undefined : { prompt_tokens: 100, completion_tokens: 20, total_tokens: 120 } }; if (!mathEnabled && !/1547|2020 году|без интернета/.test(input.taskPrompt)) assert.equal(input.onToken, undefined, "current answers must not expose unchecked drafts"); return { content: modelDraft || (/1547/.test(input.taskPrompt) ? "1547 × 829 = 1 282 463" : "Подтверждённый ответ по тестовым данным [1]."), provider: "fixture", model: "fixture", selectedModelId: input.modelId, latencyMs: 0, usage: { prompt_tokens: 400, completion_tokens: 60, total_tokens: 460 } } } },
   "@/lib/server/context-fusion": { requestedFusionConnectors: () => [], collectMalikConnectedContext: async () => ({ requested: false, sources: [], context: "" }) },
-  "@/lib/server/science-context": { collectMalikScienceContext: async () => ({ sources: [], context: "", providers: [] }) },
+  "@/lib/server/science-context": { collectMalikScienceContext: async () => { scienceCalls++; return { sources: [], context: "", providers: [] } } },
   "@/lib/live-intelligence/index-reader": { indexedSources: async () => ({ sources: [], health: { status: "unavailable" } }) },
   "@/lib/malik-research/fetch-page": { fetchPageText: async (source) => ({ ...source, text: source.snippet, readAt: new Date().toISOString() }) },
   "@/lib/work/math/model-plan": { planWorkMath: (...args) => mathEnabled ? load("lib/work/math/model-plan.ts").planWorkMath(...args) : Promise.resolve(null), mathPlanningInstruction: "FIXTURE_MATH_PLAN", plannedMathInstruction: plan => mathEnabled ? load("lib/work/math/model-plan.ts").plannedMathInstruction(plan) : "", plannedMathReceiptText: (...args) => load("lib/work/math/model-plan.ts").plannedMathReceiptText(...args) },
@@ -76,6 +77,24 @@ try {
     const before = calls.length
     await run("Проведи глубокое исследование ИИ-моделей без интернета", "ultra")
     assert.equal(calls.length, before)
+  })
+  await check("explicit offline requests cannot reach specialist public sources", async () => {
+    const before = calls.length, beforeScience = scienceCalls
+    const oldKey = process.env.EIA_API_KEY
+    process.env.EIA_API_KEY = "fixture-only"
+    try {
+      for (const body of [
+        { originalQuestion: "Какая актуальная цена нефти Brent? Без интернета." },
+        { originalQuestion: "Какая актуальная цена нефти Brent?", disableResearch: true },
+        { originalQuestion: "Проведи научное исследование по PubMed без интернета." },
+        { originalQuestion: "Проведи научное исследование по PubMed", disableResearch: true },
+      ]) {
+        // These are not current web answers; don't assert the web stream fixture's token callback policy.
+        await god.malikGodAnswer(body, { modelId: "malik-fast-120b" })
+      }
+      assert.equal(calls.length, before)
+      assert.equal(scienceCalls, beforeScience)
+    } finally { if (oldKey === undefined) delete process.env.EIA_API_KEY; else process.env.EIA_API_KEY = oldKey }
   })
   await check("one final answer, no unchecked token stream", () => assert.equal(tokens.length, 0))
   await check("server-prepared evidence avoids a second search of private attachment text", async () => {

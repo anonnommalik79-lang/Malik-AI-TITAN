@@ -1195,13 +1195,17 @@ export async function malikGodAnswer(
     if (attribution && !usedWeb) {
       return { content: attributionUnavailable(attribution, "search-off"), provider: "attribution-evidence-gate", model: "no-evidence", selectedModelId: selection.modelId, usedWeb: false, sources: [], attempts: [], usage: completeUsage() }
     }
+    // Specialist public connectors obey the same explicit offline request
+    // as ordinary browsing. Connected-account authorization remains separate.
+    const publicEvidenceAllowed = !body?.disableResearch && domainPlan.evidence.web !== "off"
+      && !NO_WEB.test(requestPrompt) && !NO_WEB.test(focus.searchText)
     const [initialWebSources, connected, science, eiaEvidence] = await Promise.all([
       usedWeb ? preparedEvidence ? Promise.resolve(preparedEvidence.sources) : gatherSources(focus.searchText, emitResearch, activity, signal, freshnessMode(body?.responseDepth || body?.metadata?.responseDepth), requestFreshness.timeZone) : Promise.resolve([] as SourceItem[]),
       serverConnected
         ? Promise.resolve({ ...serverConnected, requested: true, connectorIds: [] as string[], executions: [] as any[] })
         : requestedConnected ? Promise.resolve(requestedConnected) : fusionActive ? collectMalikConnectedContext(requestPrompt, activity) : Promise.resolve({ requested: false, connectorIds: [] as string[], context: "", sources: [] as any[], executions: [] as any[] }),
-      scienceActive ? collectMalikScienceContext(requestPrompt) : Promise.resolve({ context: "", sources: [] as any[], providers: [] as string[] }),
-      fetchEiaSpotEvidence(requestPrompt, {signal}),
+      scienceActive && publicEvidenceAllowed ? collectMalikScienceContext(requestPrompt) : Promise.resolve({ context: "", sources: [] as any[], providers: [] as string[] }),
+      publicEvidenceAllowed ? fetchEiaSpotEvidence(requestPrompt, {signal}) : Promise.resolve({ context: "", status: "not-applicable" as const, points: [] }),
     ])
     // Deep research can inspect actual evidence, request one further lookup,
     // and then synthesize from verified receipts. Simple chat pays no extra call.
@@ -1401,12 +1405,14 @@ export async function malikGodAnswer(
     return { ...cache, provider: `${cache.provider}-cache` }
   }
 
+  const publicEvidenceAllowed = !body?.disableResearch && domainPlan.evidence.web !== "off"
+    && !NO_WEB.test(requestPrompt) && !NO_WEB.test(legacyFocus.searchText)
   const [webSources, connected, science] = await Promise.all([
     usedWeb ? preparedEvidence ? Promise.resolve(preparedEvidence.sources) : gatherSources(legacyFocus.searchText, emitResearch, activity, signal, freshnessMode(body?.responseDepth || body?.metadata?.responseDepth), requestFreshness.timeZone) : Promise.resolve([] as SourceItem[]),
     serverConnected
       ? Promise.resolve(serverConnected)
       : requestedConnected ? Promise.resolve(requestedConnected) : fusionActive ? collectMalikConnectedContext(requestPrompt, activity) : Promise.resolve({ context: "", sources: [] as SourceItem[] }),
-    scienceActive ? collectMalikScienceContext(requestPrompt) : Promise.resolve({ context: "", sources: [] as any[], providers: [] as string[] }),
+    scienceActive && publicEvidenceAllowed ? collectMalikScienceContext(requestPrompt) : Promise.resolve({ context: "", sources: [] as any[], providers: [] as string[] }),
   ])
   const sources: SourceItem[] = [...webSources, ...connected.sources, ...(science.sources as SourceItem[])].slice(0, 32)
   if (legacyAttribution && !webSources.length) {
