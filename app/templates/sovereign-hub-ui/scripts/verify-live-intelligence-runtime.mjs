@@ -7,7 +7,7 @@ import { createRequire } from "node:module"
 const require = createRequire(import.meta.url), root = process.cwd()
 const savedFetch = globalThis.fetch, savedEnv = { ...process.env }, savedInfo = console.info
 const cache = new Map(), inferences = [], calls = [], tokens = []
-let scenario = "success", checks = 0, modelDraft
+let scenario = "success", checks = 0, modelDraft, mathEnabled = false, missingPlanningReceipt = false
 const searchPayloads = []
 const sources = [
   { title: "Introducing GPT-99 TEST FIXTURE model", link: "https://openai.com/fixture/gpt-99", snippet: "Fixture only: official AI model announcement", date: new Date(Date.now() - 3600_000).toISOString() },
@@ -15,12 +15,12 @@ const sources = [
   { title: "Казахстан: технологические новости TEST FIXTURE", link: "https://inform.kz/fixture/news", snippet: "Fixture only: новости Казахстана за последние 24 часа", date: new Date(Date.now() - 3600_000).toISOString() },
 ]
 const stubs = {
-  "@/lib/server/malik-model-router": { runStrictMalikModel: async (input) => { inferences.push(input); if (!/1547|2020 году|без интернета/.test(input.taskPrompt)) assert.equal(input.onToken, undefined, "current answers must not expose unchecked drafts"); return { content: modelDraft || (/1547/.test(input.taskPrompt) ? "1547 × 829 = 1 282 463" : "Подтверждённый ответ по тестовым данным [1]."), provider: "fixture", model: "fixture", selectedModelId: input.modelId, latencyMs: 0 } } },
+  "@/lib/server/malik-model-router": { runStrictMalikModel: async (input) => { inferences.push(input); if (mathEnabled && input.systemPrompt === "FIXTURE_MATH_PLAN") return { content: JSON.stringify({ givens: ["5 kg", "9.81 m/s^2"], unknown: "F", tasks: [{ op: "evaluate", expression: "5 kg * 9.81 m/s^2", expectUnit: "N" }] }), usage: missingPlanningReceipt ? undefined : { prompt_tokens: 100, completion_tokens: 20, total_tokens: 120 } }; if (!mathEnabled && !/1547|2020 году|без интернета/.test(input.taskPrompt)) assert.equal(input.onToken, undefined, "current answers must not expose unchecked drafts"); return { content: modelDraft || (/1547/.test(input.taskPrompt) ? "1547 × 829 = 1 282 463" : "Подтверждённый ответ по тестовым данным [1]."), provider: "fixture", model: "fixture", selectedModelId: input.modelId, latencyMs: 0, usage: { prompt_tokens: 400, completion_tokens: 60, total_tokens: 460 } } } },
   "@/lib/server/context-fusion": { requestedFusionConnectors: () => [], collectMalikConnectedContext: async () => ({ requested: false, sources: [], context: "" }) },
   "@/lib/server/science-context": { collectMalikScienceContext: async () => ({ sources: [], context: "", providers: [] }) },
   "@/lib/live-intelligence/index-reader": { indexedSources: async () => ({ sources: [], health: { status: "unavailable" } }) },
   "@/lib/malik-research/fetch-page": { fetchPageText: async (source) => ({ ...source, text: source.snippet, readAt: new Date().toISOString() }) },
-  "@/lib/work/math/model-plan": { planWorkMath: async () => null, mathPlanningInstruction: "", plannedMathInstruction: () => "", plannedMathReceiptText: () => "" },
+  "@/lib/work/math/model-plan": { planWorkMath: (...args) => mathEnabled ? load("lib/work/math/model-plan.ts").planWorkMath(...args) : Promise.resolve(null), mathPlanningInstruction: "FIXTURE_MATH_PLAN", plannedMathInstruction: plan => mathEnabled ? load("lib/work/math/model-plan.ts").plannedMathInstruction(plan) : "", plannedMathReceiptText: (...args) => load("lib/work/math/model-plan.ts").plannedMathReceiptText(...args) },
 }
 function load(file) {
   const absolute = path.resolve(root, file)
@@ -114,6 +114,31 @@ try {
       assert.equal(answer.provider, "live-evidence-gate")
       assert.match(answer.content, /Не удалось подтвердить/u)
     } finally { scenario = "success" }
+  })
+  await check("chat formula planning runs the deterministic engine, shares the token cap and reports official receipts", async () => {
+    mathEnabled = true
+    const prompt = "Реши физическую задачу в несколько этапов. Масса 5 кг, ускорение 9.81 м/с². Найди силу и проверь размерность. Без интернета."
+    const { normalizeProviderTokenUsage } = load("lib/ai/token-telemetry.ts")
+    const { computeMathForMessage } = load("lib/work/math/skill.ts")
+    assert.equal(computeMathForMessage(prompt), null, "word problem must use the planner rather than the direct expression parser")
+    const solve = cap => god.malikGodAnswer({ originalQuestion: prompt, workspaceMode: "chat", responseDepth: "deep", maxTokens: 4000, maxTokensCap: cap }, { modelId: "malik-fast-120b" })
+    modelDraft = "Сила равна 49.05 Н."
+    try {
+      let before = inferences.length
+      const answer = await solve(4000)
+      const stages = inferences.slice(before)
+      assert.equal(stages.filter(s => s.systemPrompt === "FIXTURE_MATH_PLAN").length, 1)
+      assert.match(stages.at(-1).systemPrompt, /49\.05 N/)
+      assert.ok(stages.reduce((n,s) => n+s.maxTokens,0) <= 4000)
+      const usage = normalizeProviderTokenUsage(answer.usage)
+      assert.equal(usage.totalTokens, 120 + 460 * (stages.length - 1))
+      before = inferences.length
+      await solve(900)
+      assert.ok(inferences.slice(before).every(s => s.systemPrompt !== "FIXTURE_MATH_PLAN"))
+      assert.ok(inferences.slice(before).reduce((n,s)=>n+s.maxTokens,0) <= 900)
+      missingPlanningReceipt = true
+      assert.equal(normalizeProviderTokenUsage((await solve(4000)).usage), undefined)
+    } finally { mathEnabled = false; missingPlanningReceipt = false; modelDraft = undefined }
   })
   console.log(`${checks}/${checks} runtime acceptance checks passed (fixture transports, not live model accuracy)`)
 } finally { globalThis.fetch = savedFetch; console.info = savedInfo; process.env = savedEnv }
