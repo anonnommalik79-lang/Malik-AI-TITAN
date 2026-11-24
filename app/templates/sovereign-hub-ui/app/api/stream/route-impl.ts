@@ -16,7 +16,7 @@ import { upsertWebSource } from "@/lib/ai/source-evidence"
 import { normalizeProviderTokenUsage } from "@/lib/ai/token-telemetry"
 import { classifyFreshness, freshnessMode, NO_WEB, requireEvidence } from "@/lib/ai/freshness-intent"
 import { shouldUseWeb } from "@/lib/ai/web-search-policy"
-import { currentEvidenceAvailable, finalizeFreshAnswer, freshnessEvidenceInstruction, unavailableFreshAnswer } from "@/lib/live-intelligence/evidence"
+import { currentEvidenceAvailable, finalizeFreshAnswer, freshnessEvidenceInstruction, unavailableFreshAnswer, verifiedOccurrenceAnswer } from "@/lib/live-intelligence/evidence"
 import { isContinueRequest, resumableAnswer, resumeText, sameAnswerText, withIncompleteNote, type AnswerIncomplete } from "@/lib/ai/answer-completion"
 import { finalizeAccuracy } from "@/lib/ai/accuracy/engine"
 import { accuracyTokenGate, isComputationalQuestion } from "@/lib/ai/accuracy/stream"
@@ -788,6 +788,8 @@ async function runSelectedAnswer(
     const publicQuestion = hasAttachment ? originalPrompt : evidenceQuestion
     const sources = await gatherSourcesForPrompt(publicQuestion, onProgress, { signal, activity, mode: freshnessMode(body?.responseDepth || body?.metadata?.responseDepth), timeZone: freshness.timeZone })
     if (!currentEvidenceAvailable(sources, freshness)) return { content: unavailableFreshAnswer(freshness, format), provider: "live-evidence-gate", model: "no-current-evidence", selectedModelId: selection?.modelId || DEFAULT_MALIK_MODEL_ID, usedWeb: sources.length > 0, sources, attempts: [] }
+    const occurrenceReply = verifiedOccurrenceAnswer(freshness, sources, format)
+    if (occurrenceReply) return { content: occurrenceReply, provider: "live-evidence", model: "verified-occurrence", selectedModelId: selection?.modelId || DEFAULT_MALIK_MODEL_ID, usedWeb: true, sources, attempts: [] }
     preparedEvidence = { prompt: publicQuestion, originalQuestion: originalPrompt, sources }
   }
   const answer = await runSelectedAnswerUnchecked(body, selection, onProgress, generationCap, holdForEvidence || format ? undefined : accuracyTokenGate(originalPrompt, onToken), activity, signal, preparedEvidence)

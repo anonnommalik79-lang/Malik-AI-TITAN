@@ -85,7 +85,7 @@ async function fetchDirect(result: SearchResult, signal?: AbortSignal): Promise<
 
 function parseJinaTitle(markdown: string, fallback: string) {
   return (
-    markdown.match(/^Title:\s*(.+)$/im)?.[1]?.trim() ||
+    markdown.match(/^Title:[ \t]*([^\r\n]+)$/im)?.[1]?.trim() ||
     markdown.match(/^#\s+(.+)$/im)?.[1]?.trim() ||
     fallback
   );

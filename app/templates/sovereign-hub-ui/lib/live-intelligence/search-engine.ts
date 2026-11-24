@@ -53,12 +53,13 @@ async function slot(signal: AbortSignal): Promise<() => void> {
 
 export async function runLiveSearch(input: {
   prompt: string; queries: string[]; providers: LiveSearchProvider[]; mode?: FreshnessMode; signal?: AbortSignal
+  intent?: FreshnessIntent
   rank?: (sources: MalikWebSource[]) => MalikWebSource[]
   now?: () => number; cache?: EvidenceSearchCache; circuits?: ProviderCircuits
   onQuery?: (query: string) => void
 }): Promise<LiveSearchResult> {
   const clock = input.now || Date.now, started = clock()
-  const intent = classifyFreshness(input.prompt, new Date(started))
+  const intent = input.intent || classifyFreshness(input.prompt, new Date(started))
   const limits = LIMITS[input.mode || "fast"]
   const deadline = AbortSignal.any([AbortSignal.timeout(limits.ms), ...(input.signal ? [input.signal] : [])])
   const result: LiveSearchResult = { sources: [], attempts: [], queries: 0, calls: 0, cacheHits: 0, fallbackSuccesses: 0, tookMs: 0, cost: "no-api-calls" }
@@ -66,13 +67,16 @@ export async function runLiveSearch(input: {
   if (!publicSearchText(input.prompt)) return result
   const queries = [...new Set(input.queries.map(publicSearchText).filter(Boolean))].slice(0, limits.queries)
   const take = (sources: MalikWebSource[]) => assessSources(input.prompt, input.rank ? input.rank(sources) : sources, intent)
+  const hasSearchLead = (sources: MalikWebSource[]) => intent.lastOccurrence
+    ? sources.some(source => source.occurrence) // A lead can stop provider fallback. The page still has to be read.
+    : currentEvidenceAvailable(sources, intent)
   for (const query of queries) {
     if (deadline.aborted || result.calls >= limits.calls) break
     result.queries++; input.onQuery?.(query)
     // Bucket/window prevents yesterday's cache from crossing local midnight.
-    const key = JSON.stringify([query, input.mode || "fast", intent.category, intent.localDate, intent.window?.label, input.providers.map((p) => p.name)])
+    const key = JSON.stringify([query, input.mode || "fast", intent.category, intent.localDate, intent.window?.label, intent.lastOccurrence?.subject, input.providers.map((p) => p.name)])
     const hit = memo.get(key, clock())
-    if (hit && (!intent.needsSearch || currentEvidenceAvailable(take(hit), intent))) { result.cacheHits++; result.sources.push(...hit); continue }
+    if (hit && (!intent.needsSearch || hasSearchLead(take(hit)))) { result.cacheHits++; result.sources.push(...hit); continue }
     let attempted = 0, successes = 0
     const confirmed: MalikWebSource[] = []
     const desiredProviders = input.mode === "max" ? 3 : input.mode === "deep" ? 2 : 1
@@ -95,7 +99,7 @@ export async function runLiveSearch(input: {
         const found = take(raw)
         breaker.record(provider.name, raw.length > 0, clock())
         result.attempts.push({ provider: provider.name, outcome: found.length ? "success" : "empty", ms: clock() - before })
-        if (found.length && (intent.category === "STATIC" || !intent.needsSearch || currentEvidenceAvailable(found, intent))) {
+        if (found.length && (intent.category === "STATIC" || !intent.needsSearch || hasSearchLead(found))) {
           if (!successes && attempted > 1) result.fallbackSuccesses++
           confirmed.push(...found); successes++
           if (successes >= desiredProviders) break

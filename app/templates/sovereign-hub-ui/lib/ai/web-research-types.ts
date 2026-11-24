@@ -1,4 +1,5 @@
 import type { MalikFactAudit } from "@/lib/ai/fact-audit"
+import type { OccurrenceEvidence } from "../live-intelligence/occurrence-evidence"
 
 export type MalikWebSource = {
   title: string
@@ -8,6 +9,7 @@ export type MalikWebSource = {
   provider?: string
   publishedAt?: string
   eventAt?: string
+  occurrence?: OccurrenceEvidence
   updatedAt?: string
   indexedAt?: string
   checkedAt?: string

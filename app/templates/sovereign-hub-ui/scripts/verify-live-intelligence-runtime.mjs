@@ -13,12 +13,24 @@ const sources = [
   { title: "Google DeepMind Gemini 99 TEST FIXTURE model", link: "https://deepmind.google/fixture/gemini-99", snippet: "Fixture only: official AI model announcement", date: new Date(Date.now() - 3600_000).toISOString() },
   { title: "Казахстан: технологические новости TEST FIXTURE", link: "https://inform.kz/fixture/news", snippet: "Fixture only: новости Казахстана за последние 24 часа", date: new Date(Date.now() - 3600_000).toISOString() },
 ]
+const bridgeUrl = "https://www.gov.kz/org/maidd/press/news/details/1305413?lang=ru"
+const bridgeYear = new Date(Date.now() - 400 * 86400_000).getUTCFullYear()
+const bridgeLead = { title: `Итоги AI & Digital Bridge ${bridgeYear}`, url: bridgeUrl, content: `AI & Digital Bridge ${bridgeYear} прошёл 1–3 октября.` }
+const blockedEventPage = "https://example.com/blocked-nexus-recap"
+const readableEventPage = "https://example.org/nexus-recap"
+const nexusSummary = "Nexus Film Festival took place on September 12, 2022."
+const readUrls = [], queries = []
 const stubs = {
   "@/lib/server/malik-model-router": { runStrictMalikModel: async (input) => { inferences.push(input); if (!/1547|2020 году|без интернета/.test(input.taskPrompt)) assert.equal(input.onToken, undefined, "current answers must not expose unchecked drafts"); return { content: modelDraft || (/1547/.test(input.taskPrompt) ? "1547 × 829 = 1 282 463" : "Подтверждённый ответ по тестовым данным [1]."), provider: "fixture", model: "fixture", selectedModelId: input.modelId, latencyMs: 0 } } },
   "@/lib/server/context-fusion": { requestedFusionConnectors: () => [], collectMalikConnectedContext: async () => ({ requested: false, sources: [], context: "" }) },
   "@/lib/server/science-context": { collectMalikScienceContext: async () => ({ sources: [], context: "", providers: [] }) },
   "@/lib/live-intelligence/index-reader": { indexedSources: async () => ({ sources: [], health: { status: "unavailable" } }) },
-  "@/lib/malik-research/fetch-page": { fetchPageText: async (source) => ({ ...source, text: source.snippet, readAt: new Date().toISOString() }) },
+  "@/lib/malik-research/fetch-page": { fetchPageText: async (source) => {
+    readUrls.push(source.url)
+    if (scenario === "unread-event" || source.url === blockedEventPage) return null
+    const text = source.url === bridgeUrl ? "Обзор программы. ".repeat(240) + `AI & Digital Bridge ${bridgeYear} прошёл 1–3 октября в Астане.` : source.snippet
+    return { ...source, text, readAt: new Date().toISOString() }
+  } },
   "@/lib/work/math/model-plan": { planWorkMath: async () => null, mathPlanningInstruction: "", plannedMathInstruction: () => "", plannedMathReceiptText: () => "" },
 }
 function load(file) {
@@ -38,16 +50,31 @@ async function check(name, fn) { await fn(); checks++; console.log("PASS " + nam
 try {
   for (const key of ["SERPER_API_KEY", "TAVILY_API_KEY", "BRAVE_SEARCH_API_KEY"]) process.env[key] = "fixture-only"
   console.info = () => {}
-  globalThis.fetch = async (url) => {
+  globalThis.fetch = async (url, init) => {
     calls.push(String(url))
     if (scenario === "all-fail") return new Response("", { status: 503 })
+    if (scenario === "retry-event") {
+      if (String(url).includes("serper.dev")) return Response.json({ organic: [{ title: "Nexus Film Festival recap", link: blockedEventPage, snippet: nexusSummary }] })
+      if (String(url).includes("tavily.com")) return Response.json({ results: [{ title: "Nexus Film Festival recap", url: readableEventPage, content: nexusSummary }] })
+      return new Response("", { status: 503 })
+    }
+    if (scenario === "last-event" || scenario === "unread-event") {
+      if (String(url).includes("serper.dev")) {
+        queries.push(JSON.parse(init.body))
+        return Response.json({ organic: scenario === "last-event"
+          ? [{ title: "Digital Bridge 2099 — Programme", link: "https://digitalbridge.kz/programme", snippet: "Digital Bridge состоится в октябре 2099 года." }, ...sources]
+          : [{ title: "Metro Design Week recap", link: "https://example.com/metro-recap", snippet: "Metro Design Week was held on October 3, 2024." }] })
+      }
+      if (String(url).includes("tavily.com")) return Response.json({ results: [bridgeLead] })
+      return new Response("", { status: 503 })
+    }
     if (String(url).includes("serper.dev")) return scenario === "fallback" ? new Response("", { status: 503 }) : Response.json({ organic: scenario === "old-and-fresh" ? [{ ...sources[0], title: "GPT-99 OLD FIXTURE model", link: "https://untrusted.example/old-gpt-99", date: "2023-01-01T00:00:00Z" }, sources[0]] : sources })
     if (String(url).includes("tavily.com")) return Response.json({ results: sources.map((source) => ({ title: source.title, url: source.link, content: source.snippet, published_date: source.date })) })
     if (String(url).includes("api.github.com")) return Response.json({ tag_name: "v99.0.0", name: "Next.js v99 TEST FIXTURE", html_url: "https://github.com/vercel/next.js/releases/tag/fixture-v99", published_at: new Date(Date.now() - 45 * 86400_000).toISOString(), body: "TEST FIXTURE stable release", draft: false, prerelease: false })
     return new Response("", { status: 503 })
   }
   const god = load("lib/malik-god-router.ts")
-  const run = (prompt, depth = "balanced") => god.malikGodAnswer({ originalQuestion: prompt, responseDepth: depth }, { modelId: "malik-fast-120b" }, undefined, (token) => tokens.push(token))
+  const run = (prompt, depth = "balanced", modelId = "malik-fast-120b") => god.malikGodAnswer({ originalQuestion: prompt, responseDepth: depth }, { modelId }, undefined, (token) => tokens.push(token))
   for (const [name, prompt] of [
     ["A", "Какие новые ИИ-модели официально вышли за последние семь дней? Укажи даты и первоисточники"],
     ["B", "Какая самая новая официально представленная модель Google DeepMind на сегодняшний день?"],
@@ -101,6 +128,39 @@ try {
       assert.equal(answer.provider, "live-evidence-gate")
       assert.match(answer.content, /Не удалось подтвердить/u)
     } finally { scenario = "success" }
+  })
+  scenario = "last-event"
+  await check("the exact typo from chat retrieves a past edition through fallback and reads the official report before answering", async () => {
+    const before = inferences.length, searchStart = calls.length
+    const answer = await run("когда было последни раз ai digital bridge", "balanced", "malik-max")
+    assert.match(queries.at(-1).q, /^ai digital bridge прошёл даты итоги$/iu)
+    assert.equal(queries.at(-1).tbs, undefined, "old editions must remain searchable")
+    assert.ok(calls.slice(searchStart).some(url => url.includes("tavily")), "an announcement must not stop provider fallback")
+    assert.ok(readUrls.includes(bridgeUrl))
+    assert.equal(answer.provider, "live-evidence")
+    assert.equal(answer.selectedModelId, "malik-max")
+    assert.equal(answer.sources[0].url, bridgeUrl)
+    assert.match(answer.content, new RegExp(`1\\s*[–-]\\s*3 октября ${bridgeYear}.*\\[1\\]`, "u"))
+    assert.equal(inferences.length, before, "a date confirmed by the source needs no model guess")
+  })
+  scenario = "unread-event"
+  await check("an unread search result does not become a confirmed date in chat", async () => {
+    const answer = await run("When was the last Metro Design Week?")
+    assert.equal(answer.provider, "live-evidence-gate")
+    assert.doesNotMatch(answer.content, /October 3|2024|\[1\]/u)
+  })
+  scenario = "retry-event"
+  await check("a blocked lead gets one bounded retry from an unused provider before the final answer", async () => {
+    delete process.env.BRAVE_SEARCH_API_KEY
+    try {
+      const before = calls.length
+      const answer = await run("When was the last Nexus Film Festival?")
+      assert.deepEqual(calls.slice(before).map(url => new URL(url).hostname), ["google.serper.dev", "api.tavily.com"])
+      assert.deepEqual(readUrls.slice(-2), [blockedEventPage, readableEventPage])
+      assert.equal(answer.provider, "live-evidence")
+      assert.equal(answer.sources[0].url, readableEventPage)
+      assert.match(answer.content, /September 12, 2022.*\[1\]/u)
+    } finally { process.env.BRAVE_SEARCH_API_KEY = "fixture-only" }
   })
   console.log(`${checks}/${checks} runtime acceptance checks passed (fixture transports, not live model accuracy)`)
 } finally { globalThis.fetch = savedFetch; console.info = savedInfo; process.env = savedEnv }

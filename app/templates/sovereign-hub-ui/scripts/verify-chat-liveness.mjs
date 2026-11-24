@@ -78,7 +78,7 @@ await check("a lettered brief (А) Б) В)) counts as a large brief", async () =
 await check("the browser waits longer than the server's own MAX deadlines", async () => {
   const engine = fs.readFileSync("lib/server/malik-max-engine.ts", "utf8")
   const wallFn = engine.match(/export function maxResponseWallMs[\s\S]*?\n\}/)?.[0] || ""
-  const timingBlock = engine.match(/const timing = fastMode[\s\S]*?\n  const totalMs/)?.[0] || ""
+  const timingBlock = engine.match(/const timing = fastMode[\s\S]*?\n {2}const totalMs/)?.[0] || ""
   const windows = [...wallFn.matchAll(/(\d+)_000/g), ...timingBlock.matchAll(/firstDeadlineMs: (\d+)_000/g)].map((m) => Number(m[1]) * 1000)
   assert.ok(windows.length >= 4, "MAX deadlines must be readable from the engine")
   const longestServerWindow = Math.max(...windows)
@@ -269,7 +269,9 @@ await check("deadlines fit inside each other and inside the browser's wait", asy
   const route = fs.readFileSync("app/api/stream/route-impl.ts", "utf8")
   assert.match(route, /withinChatDeadline\(answerPromise, deadline, startedAt/, "the live chat stream is held to the deadline")
   assert.match(route, /owner !== writer/, "a stopped run cannot write into the rescue answer")
-  assert.match(fs.readFileSync("lib/malik-god-router.ts", "utf8"), /export async function malikRescueAnswer[\s\S]{0,4000}gateAttributionAnswer/, "the rescue keeps the attribution gate")
+  const router = fs.readFileSync("lib/malik-god-router.ts", "utf8")
+  const rescue = router.match(/(?:^|\r?\n)export async function malikRescueAnswer\([\s\S]*?(?=\r?\nexport |$)/u)?.[0] || ""
+  assert.match(rescue, /\bgateAttributionAnswer\(/u, "the rescue keeps the attribution gate")
 })
 
 // Regression: a three.js game stopped after 59 lines in 237 s with «Ответ не

@@ -213,6 +213,84 @@ await check("persisted index preserves feed ownership for HTTP 304 revalidation"
   assert.equal(next.items[0].checkedAt, tomorrow.toISOString()); assert.equal(next.items[0].publishedAt, index.items[0].publishedAt)
   assert.equal(retrieveKnowledge(next, prompt, tomorrow.getTime())[0].provider, "verified-index")
 })
+
+const NOVEMBER = new Date("2026-11-24T12:30:00Z")
+const lastBridge = "когда было последни раз ai digital bridge"
+const bridgeReport = {
+  title: "Итоги AI & Digital Bridge 2026", url: "https://www.gov.kz/org/maidd/press/news/details/1305413?lang=ru", domain: "gov.kz",
+  snippet: "AI & Digital Bridge 2026 прошел 1–3 октября в Астане на площадке МВЦ EXPO.", publishedAt: "2026-10-07", readAt: NOVEMBER.toISOString(),
+}
+for (const question of [lastBridge, "Когда в последний раз проходил Digital Bridge?", "Когда Digital Bridge проходил в последний раз?", "Когда прошёл последний форум Digital Bridge?", "When did Digital Bridge last take place?", "When was the last Digital Bridge held?", "When was the last time Digital Bridge was held?", "Digital Bridge соңғы рет қашан өтті?", "Соңғы рет Digital Bridge қай күні өткізілді?"]) {
+  await check(`last occurrence intent: ${question}`, () => {
+    const intent = classifyFreshness(question, NOVEMBER)
+    assert.equal(shouldUseWeb(question, { research: false }), true)
+    assert.equal(intent.reason, "last-completed-occurrence")
+    assert.equal(intent.lastOccurrence.dateOnly, true)
+    assert.equal(intent.window, undefined)
+  })
+}
+for (const question of ["Когда пройдёт следующий Digital Bridge?", "Какие новости за последние семь дней?", "Когда был последний сбой за последние 7 дней?", "Какая последняя версия Next.js?", "Когда был последний релиз Next.js?", "When was the last time the Fed raised interest rates?", "Переведи: When was the last Digital Bridge?", "Когда было последний раз AI Digital Bridge без интернета?"]) {
+  await check(`other intent stays distinct: ${question}`, () => assert.equal(classifyFreshness(question, NOVEMBER).lastOccurrence, undefined))
+}
+await check("a publicly reported event remains answerable seven weeks later and resists a draft with an invented date", () => {
+  const intent = classifyFreshness(lastBridge, NOVEMBER, "Asia/Bishkek")
+  const sources = assessSources(lastBridge, [bridgeReport], intent)
+  assert.equal(sources[0].freshness, "old")
+  assert.equal(currentEvidenceAvailable(sources, intent), true)
+  assert.equal(sources[0].occurrence.start, "2026-10-01")
+  assert.equal(sources[0].occurrence.end, "2026-10-03")
+  const answer = finalizeFreshAnswer("Событие состоялось 25 октября [11]", intent, sources)
+  assert.match(answer, /1\s*[–-]\s*3 октября 2026.*\[1\]/u)
+  assert.doesNotMatch(answer, /25 октября|\[11\]/u)
+  assert.deepEqual(JSON.parse(finalizeFreshAnswer("invalid JSON draft", intent, sources, sources, { format: "json" })), { status: "verified", startDate: "2026-10-01", endDate: "2026-10-03", sources: [sources[0].url] })
+})
+for (const [name, snippet] of [
+  ["scheduled for next year", "AI & Digital Bridge 2027 состоится 12 октября 2027 года."],
+  ["old preview date has passed", "AI & Digital Bridge 2026 состоится 1–3 октября 2026 года."],
+  ["cancellation", "AI & Digital Bridge 2026 не прошёл 1 октября 2026 года."],
+  ["related awards ceremony", "AI & Digital Bridge Awards прошла 3 октября 2026 года."],
+  ["unrelated event mentioned", "AI & Digital Bridge 2026. Night Run прошёл 24 октября 2026 года."],
+  ["source dated but no event date", "AI & Digital Bridge 2026 прошел в Астане с участием стартапов."],
+  ["impossible calendar date", "AI & Digital Bridge 2026 прошёл 29 февраля 2026 года."],
+  ["event falsely described as complete in the future", "AI & Digital Bridge 2027 прошёл 1 ноября 2027 года."],
+]) await check(`cannot support the last event: ${name}`, () => {
+  const intent = classifyFreshness(lastBridge, NOVEMBER)
+  assert.equal(currentEvidenceAvailable(assessSources(lastBridge, [{ ...bridgeReport, snippet }], intent), intent), false)
+})
+await check("search snippet without a successful page read is a lead only", () => {
+  const intent = classifyFreshness(lastBridge, NOVEMBER)
+  const sources = assessSources(lastBridge, [{ ...bridgeReport, readAt: undefined }], intent)
+  assert.equal(sources[0].occurrence.end, "2026-10-03")
+  assert.equal(currentEvidenceAvailable(sources, intent), false)
+})
+for (const [question, title, snippet, expected] of [
+  ["When did the Harbor Music Festival last take place?", "Harbor Music Festival recap", "The Harbor Music Festival took place from September 30 to October 2, 2024.", ["2024-09-30", "2024-10-02"]],
+  ["Алтын домбыра соңғы рет қашан өтті?", "Алтын домбыра", "Алтын домбыра 2025 жылғы 14 мамырда өтті.", ["2025-05-14", "2025-05-14"]],
+  ["Когда последний раз проходил Lake Marathon?", "Lake Marathon 2024", "Lake Marathon 2024 был проведён 28 февраля — 2 марта.", ["2024-02-28", "2024-03-02"]],
+  ["When was the last Next.js Conference?", "Next.js Conference recap", "The Next.js Conference was held on 2023-06-12.", ["2023-06-12", "2023-06-12"]],
+]) await check(`extract and validate a different event: ${question}`, () => {
+  const intent = classifyFreshness(question, NOVEMBER)
+  const sources = assessSources(question, [{ ...bridgeReport, title, snippet, publishedAt: undefined }], intent)
+  const { startDate, endDate } = JSON.parse(finalizeFreshAnswer("unverified", intent, sources, sources, { format: "json" }))
+  assert.deepEqual([startDate, endDate], expected)
+})
+await check("choose the latest completed edition using occurrence dates, not newer publication metadata", () => {
+  const intent = classifyFreshness(lastBridge, NOVEMBER)
+  const sources = assessSources(lastBridge, [
+    { ...bridgeReport, title: "AI & Digital Bridge archive", url: "https://digitalbridge.kz/archive", snippet: "AI & Digital Bridge прошёл 5–7 сентября 2025 года.", publishedAt: "2026-11-23" },
+    bridgeReport,
+  ], intent)
+  assert.equal(sources[0].url, bridgeReport.url)
+  assert.equal(sources[0].occurrence.end, "2026-10-03")
+})
+await check("a date with a second question leaves the rest of the answer to the model", () => {
+  const question = "Когда был последний AI Digital Bridge и кто выступал?"
+  const intent = classifyFreshness(question, NOVEMBER)
+  assert.deepEqual(intent.lastOccurrence, { subject: "AI Digital Bridge", dateOnly: false })
+  const sources = assessSources(question, [bridgeReport], intent)
+  assert.match(finalizeFreshAnswer("Подтверждённые даты и участники [1].", intent, sources), /участники \[1\]/u)
+})
+
 const timings = []
 for (let n = 0; n < 3000; n++) { const start = performance.now(); classifyFreshness(dynamicPrompts[n % dynamicPrompts.length], NOW); timings.push(performance.now() - start) }
 timings.sort((a, b) => a - b)
