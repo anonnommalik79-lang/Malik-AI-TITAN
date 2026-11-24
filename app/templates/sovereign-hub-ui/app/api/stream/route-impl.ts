@@ -15,7 +15,7 @@ import { flashGoogleIntent, flashImageOperation, isFlashCodingRequest } from "@/
 import type { MalikWebSource } from "@/lib/ai/web-research-types"
 import { upsertWebSource } from "@/lib/ai/source-evidence"
 import { normalizeProviderTokenUsage } from "@/lib/ai/token-telemetry"
-import { classifyFreshness, freshnessMode, NO_WEB, requireEvidence } from "@/lib/ai/freshness-intent"
+import { classifyFreshness, freshnessMode, NO_WEB } from "@/lib/ai/freshness-intent"
 import { shouldUseWeb } from "@/lib/ai/web-search-policy"
 import { currentEvidenceAvailable, finalizeFreshAnswer, freshnessEvidenceInstruction, unavailableFreshAnswer } from "@/lib/live-intelligence/evidence"
 import { isContinueRequest, resumableAnswer, resumeText, sameAnswerText, withIncompleteNote, type AnswerIncomplete } from "@/lib/ai/answer-completion"
@@ -81,7 +81,6 @@ import { createScheduledTask, scheduledTasksStatus } from "@/lib/server/schedule
 import { createExecutionReporter, type ExecutionReporter } from "@/lib/ai/chat-execution"
 import {conversationIntentInstruction,requiresChatDelivery,resolveConversationIntent} from "@/lib/ai/conversation-intent"
 import { conversationHistory, conversationHistorySource } from "@/lib/ai/conversation-history"
-import { conversationFocus } from "@/lib/ai/conversation-focus"
 import { domainPlanInstruction, domainRequiresPlainChat, resolveDomainPlan } from "@/lib/ai/domain-intelligence"
 import {conversationRepairInstruction,conversationValidationFailure,validateConversationAnswer,needsActionClaimValidation} from "@/lib/ai/conversation-validation"
 import {assessExecution,createOpeningCheck,executionContractInstruction,mediaHandoffText,needsOpeningCheck,resolveMediaTurn,skipsClaimAudit,type ChatTurn} from "@/lib/ai/do-what-user-says"
@@ -1545,6 +1544,8 @@ async function handlePOST(request: Request, json = false) {
       headers: { "cache-control": "no-store" },
     })
   }
+
+  if (!body || typeof body !== "object" || Array.isArray(body)) return Response.json({ ok: false, error: "INVALID_REQUEST" }, { status: 400 })
 
   if (textualContextSize(body) > MAX_TEXT_CONTEXT_CHARS) {
     return Response.json({

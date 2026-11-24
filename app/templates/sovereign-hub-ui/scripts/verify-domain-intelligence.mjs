@@ -173,9 +173,12 @@ test("caller cancellation propagates instead of launching fallback inference", a
 })
 test("real API lanes import the shared mechanism, no client-supplied plan trust", () => {
   const route = fs.readFileSync("app/api/stream/route-impl.ts", "utf8"), god = fs.readFileSync("lib/malik-god-router.ts", "utf8")
-  assert.match(route, /domainRequiresPlainChat\(requestDomain\)/); assert.match(route, /shouldUseWeb\(evidenceQuestion, body, domainPlan\)/)
+  assert.match(route, /domainRequiresPlainChat\(requestDomain\)/); assert.match(route, /intelligenceWebDecision\(turn, body\)/)
   assert.match(route, /const publicQuestion = hasAttachment \? originalPrompt : evidenceQuestion/)
-  assert.match(god, /await refineDomainPlan/); assert.match(god, /shouldUseWeb\(focus.searchText, body, domainPlan\)/)
+  assert.match(god, /await refineIntelligenceTurn/); assert.match(god, /intelligenceWebDecision\(\{ domain: domainPlan, focus \}, body, powerForcesWeb\)/)
+  const core = fs.readFileSync("lib/server/intelligence-core.ts", "utf8")
+  assert.match(core, /shouldUseWeb\(turn.focus.searchText, body, turn.domain\)/)
+  assert.match(core, /NO_WEB.test\(turn.focus.searchText\)/)
   assert.doesNotMatch(god, /domainPlan\s*=\s*body/)
 })
 test("bounded local overhead without provider calls", () => {

@@ -6,7 +6,7 @@ import { resolveDomainPlan, type DomainPlan } from "@/lib/ai/domain-intelligence
 import { conversationFocus, type ConversationFocus } from "@/lib/ai/conversation-focus"
 import { classifyFreshness, requireEvidence, NO_WEB } from "@/lib/ai/freshness-intent"
 import { shouldUseWeb, type WebSearchOptions } from "@/lib/ai/web-search-policy"
-import { refineDomainPlan, type DomainClassifier } from "./domain-planner"
+import { refineDomainPlan, type DomainClassifier } from "@/lib/server/domain-planner"
 
 type TurnBody = { history?: unknown; messages?: unknown; attachments?: unknown; metadata?: { timeZone?: unknown } } & WebSearchOptions
 type Identity = { prompt: string; history: unknown; attachments: unknown; timeZone: unknown }
@@ -40,6 +40,7 @@ function buildTurn(prompt: string, body: TurnBody, now: Date) {
 
 const EMPTY_HISTORY: unknown[] = []
 export function resolveIntelligenceTurn(prompt: string, body: TurnBody): Turn {
+  body = body && typeof body === "object" ? body : {}
   const active = scope.getStore()
   const history = conversationHistorySource(body)
   const key = { prompt, history: history.length ? history : EMPTY_HISTORY, attachments: body.attachments, timeZone: body.metadata?.timeZone }
