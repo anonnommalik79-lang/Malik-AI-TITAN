@@ -41,7 +41,7 @@ try {
   console.info = () => {}
   globalThis.fetch = async (url, init) => {
     calls.push(String(url))
-    if (init?.body && typeof init.body === "string") searchPayloads.push(init.body)
+    searchPayloads.push(String(url) + "\n" + (typeof init?.body === "string" ? init.body : ""))
     if (scenario === "all-fail") return new Response("", { status: 503 })
     if (String(url).includes("serper.dev")) return scenario === "fallback" ? new Response("", { status: 503 }) : Response.json({ organic: scenario === "old-and-fresh" ? [{ ...sources[0], title: "GPT-99 OLD FIXTURE model", link: "https://untrusted.example/old-gpt-99", date: "2023-01-01T00:00:00Z" }, sources[0]] : sources })
     if (String(url).includes("tavily.com")) return Response.json({ results: sources.map((source) => ({ title: source.title, url: source.link, content: source.snippet, published_date: source.date })) })
@@ -86,7 +86,7 @@ try {
     assert.equal(calls.length, before); assert.equal(answer.provider, "fixture"); assert.match(answer.content, /Источники проверены/)
   })
   await check("agent reports stay inside the model context, not search input", async () => {
-    const prompt = "Какая актуальная стабильная версия Next.js?"
+    const prompt = "Какие последние технологические новости Казахстана за 24 часа? Укажи дату публикации."
     const secret = "PRIVATE_AGENT_REPORT_FIXTURE_XYZ"
     const before = searchPayloads.length
     await god.malikGodAnswer({ originalQuestion: prompt + "\n\n" + secret, responseDepth: "balanced" },

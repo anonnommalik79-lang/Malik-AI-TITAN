@@ -6316,10 +6316,8 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
     : undefined
   const branchChatId = branching ? crypto.randomUUID() : null
 
-  // Superflow — a live block of real tasks in this chat — starts only on an
-  // explicit «создай бизнес / запусти стартап» (and, in Work mode, an
-  // explicit request for a file). Questions, single deliverables, long
-  // briefs and numbered task lists are answered by the model in the chat.
+  // Both modes share real Superflow tasks for explicit repository and
+  // multi-file work. Single native chat deliverables retain their own path.
   // Signed-in accounts only: projects are stored per account.
   if (!flashSelected && !petroleumAnalytic && !attachments.length && !options?.skipSuperflow && routeWorkRequest(cleanContent, { mode: turnWorkspaceMode, signedIn: !guestMode && Boolean(workOSUser?.email), attachmentKinds: attachments.map((item) => item.kind) }).route === "flow") {
     const flowChatId = branchChatId || activeChatId || crypto.randomUUID()
