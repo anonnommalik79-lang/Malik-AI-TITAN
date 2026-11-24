@@ -1070,12 +1070,14 @@ export async function malikGodAnswer(
   activity?: ExecutionReporter,
   signal?: AbortSignal,
   preparedEvidence?: PreparedLiveEvidence,
+  /** Server-owned original question, before private tool or agent reports are appended. */
+  publicRequestPrompt?: string,
 ): Promise<GodAnswer> {
   // Browser-backed Flash is taken by the chat route before this point. Flash
   // that reaches the native engine is answered by it under its real provider.
   if (selection) selection = { ...selection, modelId: nativeMalikEngineId(selection.modelId) }
   const prompt = extractPrompt(body)
-  const requestPrompt = preparedEvidence?.originalQuestion || preparedEvidence?.prompt || prompt
+  const requestPrompt = publicRequestPrompt || preparedEvidence?.originalQuestion || preparedEvidence?.prompt || prompt
   // Attachment extraction may augment `prompt` with untrusted document text.
   // Preferences must still come from the original public user question.
   let turn = resolveIntelligenceTurn(requestPrompt, body)
@@ -1096,7 +1098,7 @@ export async function malikGodAnswer(
     || activeSuperpowers.some((power) => power.id === "context-fusion")
     || connectorIds.length > 0
   const scienceActive = activeSuperpowers.some((power) => power.id === "science")
-  const fusionWantsWeb = fusionActive && /(интернет|сеть|open web|\bweb\b|online)/iu.test(prompt)
+  const fusionWantsWeb = fusionActive && /(интернет|сеть|open web|\bweb\b|online)/iu.test(requestPrompt)
   const powerForcesWeb = activeSuperpowers.some((power) =>
     power.id === "web-search" || power.id === "deep-research" || power.id === "monitoring",
   ) || fusionWantsWeb
@@ -1125,7 +1127,7 @@ export async function malikGodAnswer(
   }
 
   const requestedConnected = !serverConnected && connectorIds.length
-    ? await collectMalikConnectedContext(prompt, activity)
+    ? await collectMalikConnectedContext(requestPrompt, activity)
     : null
   if (requestedConnected?.requested && !requestedConnected.context) {
     return {
@@ -1184,9 +1186,9 @@ export async function malikGodAnswer(
       usedWeb ? preparedEvidence ? Promise.resolve(preparedEvidence.sources) : gatherSources(focus.searchText, emitResearch, activity, signal, freshnessMode(body?.responseDepth || body?.metadata?.responseDepth), requestFreshness.timeZone) : Promise.resolve([] as SourceItem[]),
       serverConnected
         ? Promise.resolve({ ...serverConnected, requested: true, connectorIds: [] as string[], executions: [] as any[] })
-        : requestedConnected ? Promise.resolve(requestedConnected) : fusionActive ? collectMalikConnectedContext(prompt, activity) : Promise.resolve({ requested: false, connectorIds: [] as string[], context: "", sources: [] as any[], executions: [] as any[] }),
-      scienceActive ? collectMalikScienceContext(prompt) : Promise.resolve({ context: "", sources: [] as any[], providers: [] as string[] }),
-      fetchEiaSpotEvidence(prompt, {signal}),
+        : requestedConnected ? Promise.resolve(requestedConnected) : fusionActive ? collectMalikConnectedContext(requestPrompt, activity) : Promise.resolve({ requested: false, connectorIds: [] as string[], context: "", sources: [] as any[], executions: [] as any[] }),
+      scienceActive ? collectMalikScienceContext(requestPrompt) : Promise.resolve({ context: "", sources: [] as any[], providers: [] as string[] }),
+      fetchEiaSpotEvidence(requestPrompt, {signal}),
     ])
     // Deep research can inspect actual evidence, request one further lookup,
     // and then synthesize from verified receipts. Simple chat pays no extra call.
@@ -1387,8 +1389,8 @@ export async function malikGodAnswer(
     usedWeb ? preparedEvidence ? Promise.resolve(preparedEvidence.sources) : gatherSources(legacyFocus.searchText, emitResearch, activity, signal, freshnessMode(body?.responseDepth || body?.metadata?.responseDepth), requestFreshness.timeZone) : Promise.resolve([] as SourceItem[]),
     serverConnected
       ? Promise.resolve(serverConnected)
-      : requestedConnected ? Promise.resolve(requestedConnected) : fusionActive ? collectMalikConnectedContext(prompt, activity) : Promise.resolve({ context: "", sources: [] as SourceItem[] }),
-    scienceActive ? collectMalikScienceContext(prompt) : Promise.resolve({ context: "", sources: [] as any[], providers: [] as string[] }),
+      : requestedConnected ? Promise.resolve(requestedConnected) : fusionActive ? collectMalikConnectedContext(requestPrompt, activity) : Promise.resolve({ context: "", sources: [] as SourceItem[] }),
+    scienceActive ? collectMalikScienceContext(requestPrompt) : Promise.resolve({ context: "", sources: [] as any[], providers: [] as string[] }),
   ])
   const sources: SourceItem[] = [...webSources, ...connected.sources, ...(science.sources as SourceItem[])].slice(0, 32)
   if (legacyAttribution && !webSources.length) {

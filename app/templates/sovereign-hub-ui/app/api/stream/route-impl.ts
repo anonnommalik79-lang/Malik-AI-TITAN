@@ -1024,6 +1024,7 @@ async function runSelectedAnswerUnchecked(
       activity,
       signal,
       preparedEvidence || (requestAttachments.length ? { prompt: coderPrompt(body), sources: [] } : undefined),
+      coderPrompt(body),
     )
     return agentRuntime ? { ...answer, agentRuntime } : answer
   }

@@ -8,6 +8,7 @@ const require = createRequire(import.meta.url), root = process.cwd()
 const savedFetch = globalThis.fetch, savedEnv = { ...process.env }, savedInfo = console.info
 const cache = new Map(), inferences = [], calls = [], tokens = []
 let scenario = "success", checks = 0, modelDraft
+const searchPayloads = []
 const sources = [
   { title: "Introducing GPT-99 TEST FIXTURE model", link: "https://openai.com/fixture/gpt-99", snippet: "Fixture only: official AI model announcement", date: new Date(Date.now() - 3600_000).toISOString() },
   { title: "Google DeepMind Gemini 99 TEST FIXTURE model", link: "https://deepmind.google/fixture/gemini-99", snippet: "Fixture only: official AI model announcement", date: new Date(Date.now() - 3600_000).toISOString() },
@@ -38,8 +39,9 @@ async function check(name, fn) { await fn(); checks++; console.log("PASS " + nam
 try {
   for (const key of ["SERPER_API_KEY", "TAVILY_API_KEY", "BRAVE_SEARCH_API_KEY"]) process.env[key] = "fixture-only"
   console.info = () => {}
-  globalThis.fetch = async (url) => {
+  globalThis.fetch = async (url, init) => {
     calls.push(String(url))
+    if (init?.body && typeof init.body === "string") searchPayloads.push(init.body)
     if (scenario === "all-fail") return new Response("", { status: 503 })
     if (String(url).includes("serper.dev")) return scenario === "fallback" ? new Response("", { status: 503 }) : Response.json({ organic: scenario === "old-and-fresh" ? [{ ...sources[0], title: "GPT-99 OLD FIXTURE model", link: "https://untrusted.example/old-gpt-99", date: "2023-01-01T00:00:00Z" }, sources[0]] : sources })
     if (String(url).includes("tavily.com")) return Response.json({ results: sources.map((source) => ({ title: source.title, url: source.link, content: source.snippet, published_date: source.date })) })
@@ -82,6 +84,17 @@ try {
     const prepared = assessSources(prompt, [{ title: sources[0].title, url: sources[0].link, domain: "openai.com", snippet: sources[0].snippet, publishedAt: sources[0].date }])
     const answer = await god.malikGodAnswer({ originalQuestion: "PRIVATE FILE CONTENT: secret-project", responseDepth: "balanced" }, { modelId: "malik-fast-120b" }, undefined, undefined, undefined, undefined, undefined, { prompt, sources: prepared })
     assert.equal(calls.length, before); assert.equal(answer.provider, "fixture"); assert.match(answer.content, /Источники проверены/)
+  })
+  await check("agent reports stay inside the model context, not search input", async () => {
+    const prompt = "Какая актуальная стабильная версия Next.js?"
+    const secret = "PRIVATE_AGENT_REPORT_FIXTURE_XYZ"
+    const before = searchPayloads.length
+    await god.malikGodAnswer({ originalQuestion: prompt + "\n\n" + secret, responseDepth: "balanced" },
+      { modelId: "malik-fast-120b" }, undefined, undefined, undefined, undefined, undefined, undefined, prompt)
+    assert.ok(searchPayloads.length > before)
+    assert.ok(searchPayloads.slice(before).every(payload => !payload.includes(secret)))
+    assert.equal(inferences.at(-1).taskPrompt, prompt)
+    assert.ok(inferences.at(-1).prompt.includes(secret))
   })
   await check("the strict router replaces an unsupported version with the actual latest catalog tag", async () => {
     modelDraft = "Текущая стабильная версия Next.js — 42.0.0 [1]."
