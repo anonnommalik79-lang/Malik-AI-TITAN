@@ -130,9 +130,12 @@ export function resolveDomainPlan(input: { prompt: string; messages?: unknown; a
   const classes = [...(attachmentCount || goal === "calculate" ? ["user-data"] : []), ...(goal === "calculate" ? ["verified-calculation"] : []), ...(!quiet && !transform && !fiction ? ["external-fact"] : []), ...(/(?:допущени|если|предполож|assum|\bif\b)/iu.test(text) ? ["assumption"] : []), ...(/(?:прогноз|предска|forecast|predict)/iu.test(text) ? ["forecast"] : [])]
   // Semantic planning is optional and bounded; it cannot authorize writes,
   // override explicit media/format consent, or replace a mandatory evidence check.
-  const needed = !quiet && !transform && delivery === "text" && text.length >= 35 && text.length <= 12_000
-    && (domains.length >= 2 && /(?:;|\n|также|затем|после|одновременно|and|then|сравни|compare)/iu.test(input.prompt)
-      || domains.length === 0 && text.length >= 100)
+  const contextualQuestion = followUp && web !== "off" && focus.searchText !== text
+    && text.length >= 8 && text.length < 100 && /[?？]|(?:кто|сколько|когда|какой|where|which|who|when|қанша|қашан)/iu.test(text)
+  const needed = !quiet && !transform && delivery === "text" && web !== "off" && text.length <= 12_000
+    && (contextualQuestion || text.length >= 35 && (
+      domains.length >= 2 && /(?:;|\n|также|затем|после|одновременно|and|then|сравни|compare)/iu.test(input.prompt)
+      || domains.length === 0 && text.length >= 100))
   return { version: 1, request: text, context: { followUp, anchor, subject: taskText.slice(0, 2400), clarification: Boolean(intent.clarification) }, goal, domains: quiet ? [] : domains, delivery, tools: quiet ? [] : tools, evidence: { web, classes, safetySensitive }, visuals, presentation: { tables: quiet || formatOnly ? "off" : intent.requirements.presentation === "table" ? "requested" : "if-useful", charts: quiet || formatOnly ? "off" : /(?:график|диаграмм|\bchart\b|\bplot\b)/iu.test(text) ? "requested" : "if-data" }, semantic: { needed, used: false }, execution: executionContract({ ...intent, target: delivery }, input.attachments) }
 }
 

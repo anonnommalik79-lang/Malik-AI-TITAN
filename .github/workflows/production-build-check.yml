@@ -47,6 +47,9 @@ jobs:
       - name: Verify short-chat token budgets and exact provider usage
         run: npm run test:token-telemetry
 
+      - name: Verify unified intelligence runtime
+        run: npm run test:unified-intelligence
+
       - name: Verify security hardening
         run: npm run test:security-hardening
 

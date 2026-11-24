@@ -9,7 +9,7 @@ import { userContextBlocks } from "@/lib/ai/client-context"
 import {conversationIntentInstruction,resolveConversationIntent} from "@/lib/ai/conversation-intent"
 import { conversationHistory, conversationHistorySource } from "@/lib/ai/conversation-history"
 import { domainPlanInstruction, resolveDomainPlan } from "@/lib/ai/domain-intelligence"
-import { refineDomainPlan } from "@/lib/server/domain-planner"
+import { resolveIntelligenceTurn, refineIntelligenceTurn, intelligenceWebDecision } from "@/lib/server/intelligence-core"
 import {conversationRepairInstruction} from "@/lib/ai/conversation-validation"
 import {executionContractInstruction} from "@/lib/ai/do-what-user-says"
 import { computedEvidenceInstruction } from "@/lib/analysis/chat"
@@ -1078,13 +1078,13 @@ export async function malikGodAnswer(
   const requestPrompt = preparedEvidence?.originalQuestion || preparedEvidence?.prompt || prompt
   // Attachment extraction may augment `prompt` with untrusted document text.
   // Preferences must still come from the original public user question.
-  const chatHistory = conversationHistory(body)
-  const universalIntent=resolveConversationIntent({prompt:requestPrompt,messages:conversationHistorySource(body),attachments:body?.attachments})
+  let turn = resolveIntelligenceTurn(requestPrompt, body)
+  const { history: chatHistory, intent: universalIntent } = turn
   const format = universalIntent.target === "text" && universalIntent.requirements.presentation === "json" ? "json" : undefined
-  let domainPlan = resolveDomainPlan({ prompt: requestPrompt, messages: chatHistory, attachments: body?.attachments, intent: universalIntent })
+  let domainPlan = turn.domain
   let universalContract=[conversationIntentInstruction(universalIntent),domainPlanInstruction(domainPlan),conversationRepairInstruction(body?.metadata?.conversationRepair)].filter(Boolean).join("\n\n")
-  const turnTime = new Date()
-  const requestFreshness = classifyFreshness(requestPrompt, turnTime, body?.metadata?.timeZone)
+  const turnTime = turn.now
+  const requestFreshness = turn.requestFreshness
   const activeSuperpowers = detectMalikSuperpowers(
     requestPrompt,
     Array.isArray(body?.attachments) ? body.attachments : [],
@@ -1153,7 +1153,8 @@ export async function malikGodAnswer(
     if (domainPlan.semantic.needed && (!Number.isFinite(outputAllowance) || outputAllowance >= 1400)) {
       domainPlanningBudget = 320
       const step = activity?.start("Уточняю цель и связанные области", "model", selection.modelId)
-      domainPlan = await refineDomainPlan(domainPlan, input => runStrictMalikModel({ modelId: selection.modelId, prompt: input.prompt, taskPrompt: requestPrompt, systemPrompt: input.systemPrompt, maxTokens: 320, temperature: 0, reasoningEffort: "low", allowCatalog: selection.allowCatalog === true, signal: input.signal }), { signal })
+      turn = await refineIntelligenceTurn(turn, input => runStrictMalikModel({ modelId: selection.modelId, prompt: input.prompt, taskPrompt: requestPrompt, systemPrompt: input.systemPrompt, maxTokens: 320, temperature: 0, reasoningEffort: "low", allowCatalog: selection.allowCatalog === true, signal: input.signal }), { signal })
+      domainPlan = turn.domain
       activity?.finish(step, { accepted: domainPlan.semantic.used, domains: domainPlan.domains, maxPlanningTokens: 320 }, domainPlan.semantic.used ? "completed" : "failed", domainPlan.semantic.used ? undefined : "Using bounded local task plan")
       universalContract=[conversationIntentInstruction(universalIntent),domainPlanInstruction(domainPlan),conversationRepairInstruction(body?.metadata?.conversationRepair)].filter(Boolean).join("\n\n")
     }
@@ -1173,10 +1174,9 @@ export async function malikGodAnswer(
     }))
     // A follow-up («а третий?») is searched and shaped together with the
     // question it continues, never as a bare fragment.
-    const focus = domainPlan.context.followUp ? conversationFocus(requestPrompt, history) : { followUp: false, anchor: "", searchText: requestPrompt, shapeText: requestPrompt }
-    if (preparedEvidence) focus.searchText = preparedEvidence.prompt
+    const focus = { ...turn.focus, ...(preparedEvidence ? { searchText: preparedEvidence.prompt } : {}) }
     const attribution = attributionKind(focus.searchText)
-    const usedWeb = domainPlan.evidence.web !== "off" && (shouldUseWeb(focus.searchText, body, domainPlan) || powerForcesWeb && body?.research !== false && !body?.disableResearch && !NO_WEB.test(focus.searchText))
+    const usedWeb = intelligenceWebDecision({ domain: domainPlan, focus }, body, powerForcesWeb)
     if (attribution && !usedWeb) {
       return { content: attributionUnavailable(attribution, "search-off"), provider: "attribution-evidence-gate", model: "no-evidence", selectedModelId: selection.modelId, usedWeb: false, sources: [], attempts: [] }
     }
@@ -1333,10 +1333,9 @@ export async function malikGodAnswer(
     }
   }
 
-  const legacyFocus = domainPlan.context.followUp ? conversationFocus(requestPrompt, chatHistory) : { followUp: false, anchor: "", searchText: requestPrompt, shapeText: requestPrompt }
-  if (preparedEvidence) legacyFocus.searchText = preparedEvidence.prompt
+  const legacyFocus = { ...turn.focus, ...(preparedEvidence ? { searchText: preparedEvidence.prompt } : {}) }
   const legacyAttribution = attributionKind(legacyFocus.searchText)
-  const usedWeb = domainPlan.evidence.web !== "off" && (shouldUseWeb(legacyFocus.searchText, body, domainPlan) || powerForcesWeb && body?.research !== false && !body?.disableResearch && !NO_WEB.test(legacyFocus.searchText))
+  const usedWeb = intelligenceWebDecision({ domain: domainPlan, focus: legacyFocus }, body, powerForcesWeb)
   if (legacyAttribution && !usedWeb) {
     return { content: attributionUnavailable(legacyAttribution, "search-off"), provider: "attribution-evidence-gate", model: "no-evidence", usedWeb: false, sources: [], attempts: [] }
   }
@@ -1423,11 +1422,8 @@ export async function malikRescueAnswer(
 ): Promise<GodAnswer> {
   selection = { ...selection, modelId: nativeMalikEngineId(selection.modelId) }
   const prompt = extractPrompt(body)
-  const history = conversationHistory(body)
-  const intent = resolveConversationIntent({ prompt, messages: history, attachments: body?.attachments })
+  const { history, intent, domain: domainPlan, focus } = resolveIntelligenceTurn(prompt, body)
   const format = intent.target === "text" && intent.requirements.presentation === "json" ? "json" : undefined
-  const domainPlan = resolveDomainPlan({ prompt, messages: history, attachments: body?.attachments, intent })
-  const focus = domainPlan.context.followUp ? conversationFocus(prompt, history) : { followUp: false, anchor: "", searchText: prompt, shapeText: prompt }
   const sources = found.slice(0, 12)
   const attribution = attributionKind(focus.searchText)
   if (attribution && !sources.length) {
