@@ -1,3 +1,4 @@
+import { takeSharedRequestFrequency } from "@/lib/server/request-frequency"
 import type { AITaskType, AIPlan } from "@/lib/ai/types"
 import { canBypassLimits, isDevBypassEnabled, type AdminUserLike } from "@/lib/ai/admin-bypass"
 import { isOwnerEmail } from "@/lib/auth/admin-policy"
@@ -109,7 +110,7 @@ export async function checkUsageLimit(input: {
   const persisted = await getPersistedUsage(userId, taskToEvent(input.task))
 
   const usedChat = Math.max(usage.chatCount, input.task === "chat" ? persisted : 0)
-  const usedUpload = Math.max(getUploadUsage(userId), input.task === "file_analysis" ? persisted : 0) + Math.max(0, input.uploadCount || 0)
+  const usedUpload = Math.max(getUploadUsage(userId), kind === "upload" ? persisted : 0) + Math.max(0, input.uploadCount || 0)
   const usedVideo = input.task === "video" ? Math.max(usage.videoCount, persisted) : usage.videoCount
 
   if (kind === "chat" && usedChat >= limits.chat) {
@@ -125,16 +126,9 @@ export async function checkUsageLimit(input: {
     return { ok: false, code: "DAILY_LIMIT_REACHED", error: "Daily video limit reached", resetAt: nextResetAt(), plan: tier, remaining: 0 }
   }
 
-  const bucketKey = `${userId}:${kind}`
-  const now = Date.now()
   const minuteLimit = tier === "guest" ? 8 : tier === "free" ? 20 : tier === "premium" ? 60 : 600
-  const current = minuteBuckets.get(bucketKey)
-  if (!current || current.resetAt <= now) {
-    minuteBuckets.set(bucketKey, { count: 1, resetAt: now + 60_000 })
-  } else if (current.count >= minuteLimit) {
-    return { ok: false, code: "RATE_LIMIT_REACHED", error: "Too many requests. Please slow down.", resetAt: new Date(current.resetAt).toISOString(), plan: tier, remaining: 0 }
-  } else {
-    current.count += 1
+  if (!await takeSharedRequestFrequency("ai-" + kind, userId, minuteLimit)) {
+    return { ok: false, code: "RATE_LIMIT_REACHED", error: "Too many requests. Please slow down.", resetAt: new Date(Date.now() + 60_000).toISOString(), plan: tier, remaining: 0 }
   }
 
   const remaining = kind === "upload"

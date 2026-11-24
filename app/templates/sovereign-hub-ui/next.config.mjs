@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 
 const projectRoot = path.dirname(fileURLToPath(import.meta.url));
 
-const SECURITY_CSP = "frame-ancestors 'self'; object-src 'none'; base-uri 'self'";
+const SECURITY_CSP = "frame-ancestors 'self'; object-src 'none'; base-uri 'self'; script-src-attr 'none'";
 const SECURITY_CSP_REPORT_ONLY = [
   "default-src 'self'",
   "script-src 'self' 'unsafe-inline' 'unsafe-eval' blob:",
@@ -54,7 +54,7 @@ const nextConfig = {
       // first, so a missed source shows in the console instead of breaking.
       source: "/:path*",
       headers: [
-        { key: "Content-Security-Policy", value: SECURITY_CSP },
+        { key: "Content-Security-Policy", value: process.env.MALIK_ENFORCE_FULL_CSP === "1" ? SECURITY_CSP_REPORT_ONLY + "; script-src-attr 'none'" : SECURITY_CSP },
         { key: "Content-Security-Policy-Report-Only", value: SECURITY_CSP_REPORT_ONLY },
         { key: "X-Frame-Options", value: "SAMEORIGIN" },
         { key: "X-Content-Type-Options", value: "nosniff" },

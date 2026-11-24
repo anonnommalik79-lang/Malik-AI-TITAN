@@ -71,6 +71,10 @@ async function ready() {
       await client.query(`CREATE TABLE IF NOT EXISTS malik_private_state_v1 (
         key_hash varchar(64) PRIMARY KEY, encrypted_payload text NOT NULL,
         revision uuid NOT NULL, updated_at timestamptz NOT NULL DEFAULT now())`)
+      await client.query(`CREATE TABLE IF NOT EXISTS malik_quota_v1 (
+        key_hash varchar(64) NOT NULL, bucket bigint NOT NULL, count bigint NOT NULL DEFAULT 0,
+        PRIMARY KEY (key_hash, bucket))`)
+      await client.query("CREATE INDEX IF NOT EXISTS malik_quota_bucket_idx ON malik_quota_v1 (bucket)")
       await client.query("COMMIT")
     } catch (error) {
       await client.query("ROLLBACK").catch(() => {})
@@ -165,4 +169,32 @@ export async function closeHistoryDatabase() {
   const db = runtime.__malikHistoryDatabase
   delete runtime.__malikHistoryDatabase
   if (db) await db.pool.end()
+}
+
+/** Counter windows are epoch minutes; shared and atomic across app instances. */
+export async function readPostgresQuota(key: string, bucket: number) {
+  const pool = await ready()
+  const result = await pool.query<{ count: string }>(
+    "SELECT count FROM malik_quota_v1 WHERE key_hash=$1 AND bucket=$2", [hash(key), bucket])
+  return Number(result.rows[0]?.count || 0)
+}
+
+export async function incrementPostgresQuota(key: string, bucket: number, delta: number, limit?: number) {
+  if (!Number.isSafeInteger(delta) || delta <= 0 || (limit !== undefined && (!Number.isSafeInteger(limit) || delta > limit))) return false
+  const pool = await ready()
+  const result = await pool.query(
+    `INSERT INTO malik_quota_v1 (key_hash,bucket,count) VALUES ($1,$2,$3)
+     ON CONFLICT (key_hash,bucket) DO UPDATE SET count=malik_quota_v1.count+EXCLUDED.count
+     WHERE ($4::bigint IS NULL OR malik_quota_v1.count+EXCLUDED.count <= $4::bigint)`,
+    [hash(key), bucket, delta, limit ?? null])
+  return result.rowCount === 1
+}
+
+let lastQuotaSweep = 0
+export function sweepPostgresQuotas(now = Date.now()) {
+  if (now - lastQuotaSweep < 3_600_000) return
+  lastQuotaSweep = now
+  void ready().then(pool => pool.query(
+    "DELETE FROM malik_quota_v1 WHERE bucket < $1", [Math.floor(now / 60_000) - 3 * 1440]
+  )).catch(() => {})
 }

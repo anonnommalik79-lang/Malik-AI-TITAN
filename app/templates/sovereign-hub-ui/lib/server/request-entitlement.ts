@@ -1,4 +1,5 @@
 import { createHmac } from "node:crypto"
+import { isIP } from "node:net"
 import type { AIPlan } from "@/lib/ai/types"
 import { entitledPlan } from "@/lib/server/billing-store"
 import { getOptionalWorkOSAuth } from "@/lib/auth/server"
@@ -11,16 +12,14 @@ export type RequestEntitlement = {
 }
 
 function anonymousGuestId(request: Request) {
-  const forwarded = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
-  const networkHint = request.headers.get("cf-connecting-ip")?.trim()
-    || forwarded
-    || request.headers.get("x-real-ip")?.trim()
-    || "unknown-network"
-  const clientHint = [
-    networkHint,
-    request.headers.get("user-agent") || "unknown-agent",
-    request.headers.get("accept-language") || "",
-  ].join("|")
+  // Only trust the header supplied/overwritten by the deployment's trusted edge.
+  // If no trusted header is configured, share a conservative anonymous bucket.
+  const trustedHeader = (process.env.MALIK_TRUST_PROXY_IP_HEADER || "").trim().toLowerCase()
+  const raw = ["cf-connecting-ip", "x-forwarded-for", "x-real-ip"].includes(trustedHeader)
+    ? request.headers.get(trustedHeader) || "" : ""
+  const candidate = raw.split(",").at(-1)?.trim() || ""
+  const networkHint = isIP(candidate) ? candidate : "unknown-network"
+  const clientHint = networkHint
   const secret = process.env.MALIK_GUEST_ID_SALT
     || process.env.WORKOS_COOKIE_PASSWORD
     || "malik-guest-rate-limit-v1"

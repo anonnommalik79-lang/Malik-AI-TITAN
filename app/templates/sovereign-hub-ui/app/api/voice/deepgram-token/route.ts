@@ -1,4 +1,6 @@
-import { getOptionalWorkOSAuth, isWorkOSConfigured } from "@/lib/auth/server"
+import { resolveRequestEntitlement } from "@/lib/server/request-entitlement"
+import { takeSharedRequestFrequency } from "@/lib/server/request-frequency"
+import { getVoiceUsage } from "@/lib/voice/usage"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -7,12 +9,15 @@ function deepgramKey() {
   return process.env.DEEPGRAM_VOICE_API_KEY?.trim() || process.env.DEEPGRAM_API_KEY?.trim() || ""
 }
 
-export async function GET() {
-  if (isWorkOSConfigured()) {
-    const auth = await getOptionalWorkOSAuth()
-    if (!auth.user) {
-      return Response.json({ ok: false, error: "Unauthorized" }, { status: 401 })
-    }
+export async function GET(request: Request) {
+  const entitlement = await resolveRequestEntitlement(request)
+  if (!entitlement.authenticated) return Response.json({ ok: false, error: "Unauthorized" }, { status: 401 })
+  if (!await takeSharedRequestFrequency("deepgram-token", entitlement.userId, 4)) {
+    return Response.json({ ok: false, error: "RATE_LIMIT_REACHED" }, { status: 429 })
+  }
+  const quota = await getVoiceUsage(entitlement.userId, entitlement.plan === "owner")
+  if (entitlement.plan !== "owner" && quota.remainingSeconds <= 0) {
+    return Response.json({ ok: false, error: "voice_daily_limit_reached" }, { status: 429 })
   }
 
   const key = deepgramKey()
@@ -29,6 +34,8 @@ export async function GET() {
       },
       body: JSON.stringify({ ttl_seconds: 120 }),
       cache: "no-store",
+      redirect: "error",
+      signal: AbortSignal.timeout(12_000),
     })
 
     const payload = await response.json().catch(() => null) as { access_token?: string; expires_in?: number; err_msg?: string } | null
