@@ -113,7 +113,7 @@ export function routeWorkRequest(goal: string, options: { mode: WorkspaceMode; s
   if (priorResult.test(scope)) return chat("artifact-follow-up")
   const files = workFiles(scope)
   if (legacy.run && options.mode === "chat") return { route: "flow", reason: legacy.reason, capabilities: legacy.capabilities }
-  const fileCount = files ? Object.values(files).reduce((total, formats) => total + formats.length, 0) : 0
+  const fileCount = files ? Object.values(files).reduce((total, formats) => total + (formats?.length || 0), 0) : 0
   if (files && (options.mode === "work" || fileCount > 1)) {
     const capabilities: Capability[] = Object.keys(files) as WorkFileCapability[]
     if (!localOnly.test(scope) && (researchCommand.test(scope) || sourcesRequested.test(scope))) capabilities.unshift("research")

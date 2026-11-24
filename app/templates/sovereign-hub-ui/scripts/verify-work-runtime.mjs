@@ -174,11 +174,11 @@ await check("corrupt checkpoint fails closed before sending data to GitHub or a 
   const failed = await done(id); assert.equal(failed.status, "failed"); assert.equal(calls.length, 0)
   assert.equal(failed.tasks.find(task => task.type === "github.work").error.code, "INVALID_CHECKPOINT")
 })
-await check("long Work goal preserves tail; ordinary chat flow retains 4000 character limit", async () => {
+await check("long repository goal in chat preserves tail; non-repository flow retains 4000 character limit", async () => {
   const long = goal + "\n" + "Обязательные проверки и ограничения.\n".repeat(300) + "TAIL_REQUIREMENT_123"
-  calls = []; decisions = [read, finish]; const result = await done(await start({ goal: long }))
+  calls = []; decisions = [read, finish]; const result = await done(await start({ goal: long, workspaceMode: "chat" }))
   assert.equal(result.goal, long); assert.ok(calls.filter(call => call.type === "model").every(call => call.request.prompt.includes("TAIL_REQUIREMENT_123")))
-  const response = await flowRoute(new Request("http://qa.invalid/api/os/flows", { method: "POST", body: JSON.stringify({ goal: long, workspaceMode: "chat", clientRequestId: "chat-long-reject", force: true }) }))
+  const response = await flowRoute(new Request("http://qa.invalid/api/os/flows", { method: "POST", body: JSON.stringify({ goal: "Создай бизнес. " + "Требование. ".repeat(500), workspaceMode: "chat", clientRequestId: "chat-long-reject", force: true }) }))
   assert.equal(response.status, 400)
 })
 await check("deterministic parsers do not execute proposed code; unsupported formats are NOT RUN", () => {
