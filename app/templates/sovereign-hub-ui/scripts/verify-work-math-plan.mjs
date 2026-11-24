@@ -16,6 +16,17 @@ await check("chat, simple prompts, explicit math and attachments do not call ext
   for (const options of [{ ...input, mode: "chat" }, { ...input, prompt: "2+2" }, { ...input, explicitMath: true }, { ...input, attachments: 1 }]) assert.equal(await planWorkMath(options, async () => { called++; return JSON.stringify(valid) }), null)
   assert.equal(called, 0)
 })
+await check("ordinary chat with explicit complex calculation and admission uses the same actual engine", async () => {
+  const plan = await planWorkMath({ ...input, mode: "chat", allowChat: true }, async () => JSON.stringify(valid))
+  assert.equal(plan.receipts[0].outcome.answer, "49.05 N")
+  assert.equal(await planWorkMath({ ...input, prompt: "Объясни физику и вероятность", mode: "chat", allowChat: true }, async () => assert.fail("not an explicit calculation")), null)
+})
+await check("cancellation returns immediately even if a provider ignores abort", async () => {
+  const controller = new AbortController()
+  const result = planWorkMath({ ...input, signal: controller.signal }, () => new Promise(() => {}))
+  controller.abort()
+  assert.equal(await result, null)
+})
 await check("bad JSON, extra fields and more than six tasks fall back without engine claims", async () => {
   for (const raw of ["```json\n{}\n```", JSON.stringify({ ...valid, result: "invented" }), JSON.stringify({ ...valid, tasks: Array(7).fill(valid.tasks[0]) }), "not JSON"]) {
     const plan = await planWorkMath(input, async () => raw); assert.equal(plan, null); assert.equal(plannedMathInstruction(plan), "")

@@ -1150,16 +1150,6 @@ export async function malikGodAnswer(
     // Only mixed/underspecified tasks need semantic classification. This one
     // bounded call may select read-only evidence, never private tools/writes.
     // It shares the selected model and fits inside the existing token quota.
-    const outputAllowance = Number(body?.maxTokens)
-    let domainPlanningBudget = 0
-    if (domainPlan.semantic.needed && (!Number.isFinite(outputAllowance) || outputAllowance >= 1400)) {
-      domainPlanningBudget = 320
-      const step = activity?.start("Уточняю цель и связанные области", "model", selection.modelId)
-      turn = await refineIntelligenceTurn(turn, input => runStrictMalikModel({ modelId: selection.modelId, prompt: input.prompt, taskPrompt: requestPrompt, systemPrompt: input.systemPrompt, maxTokens: 320, temperature: 0, reasoningEffort: "low", allowCatalog: selection.allowCatalog === true, signal: input.signal }), { signal })
-      domainPlan = turn.domain
-      activity?.finish(step, { accepted: domainPlan.semantic.used, domains: domainPlan.domains, maxPlanningTokens: 320 }, domainPlan.semantic.used ? "completed" : "failed", domainPlan.semantic.used ? undefined : "Using bounded local task plan")
-      universalContract=[conversationIntentInstruction(universalIntent),domainPlanInstruction(domainPlan),conversationRepairInstruction(body?.metadata?.conversationRepair)].filter(Boolean).join("\n\n")
-    }
     const brain = analyzeMalikBrainV1({
       prompt,
       attachments,
@@ -1174,13 +1164,36 @@ export async function malikGodAnswer(
       needsVerification: brain.needsVerification,
       needsFreshEvidence: brain.needsFreshEvidence,
     }))
+    const totalBudget = answerBudget(body, prompt, Math.max(brain.outputTokenTarget, powerOutputTokens))
+    let domainPlanningBudget = 0
+    // Capture each auxiliary model receipt, including unknown usage for
+    // failed/timed-out calls. Never display the final model alone as a total.
+    const planningUsage: unknown[] = []
+    const runPlanningModel = async (input: Parameters<typeof runStrictMalikModel>[0]) => {
+      const index = planningUsage.push(null) - 1
+      const result = await runStrictMalikModel(input)
+      planningUsage[index] = result.usage ?? null
+      return result
+    }
+    const completeUsage = (final?: unknown, hasFinal = false): unknown => {
+      const stages = hasFinal ? [...planningUsage, final ?? null] : [...planningUsage]
+      return stages.length ? stages.reduce((primary, continuation) => ({ primary, continuation })) : undefined
+    }
+    if (domainPlan.semantic.needed && totalBudget >= 1400) {
+      domainPlanningBudget = 320
+      const step = activity?.start("Уточняю цель и связанные области", "model", selection.modelId)
+      turn = await refineIntelligenceTurn(turn, input => runPlanningModel({ modelId: selection.modelId, prompt: input.prompt, taskPrompt: requestPrompt, systemPrompt: input.systemPrompt, maxTokens: 320, temperature: 0, reasoningEffort: "low", allowCatalog: selection.allowCatalog === true, signal: input.signal }), { signal })
+      domainPlan = turn.domain
+      activity?.finish(step, { accepted: domainPlan.semantic.used, domains: domainPlan.domains, maxPlanningTokens: 320 }, domainPlan.semantic.used ? "completed" : "failed", domainPlan.semantic.used ? undefined : "Using bounded local task plan")
+      universalContract=[conversationIntentInstruction(universalIntent),domainPlanInstruction(domainPlan),conversationRepairInstruction(body?.metadata?.conversationRepair)].filter(Boolean).join("\n\n")
+    }
     // A follow-up («а третий?») is searched and shaped together with the
     // question it continues, never as a bare fragment.
     const focus = { ...turn.focus, ...(preparedEvidence ? { searchText: preparedEvidence.prompt } : {}) }
     const attribution = attributionKind(focus.searchText)
     const usedWeb = intelligenceWebDecision({ domain: domainPlan, focus }, body, powerForcesWeb)
     if (attribution && !usedWeb) {
-      return { content: attributionUnavailable(attribution, "search-off"), provider: "attribution-evidence-gate", model: "no-evidence", selectedModelId: selection.modelId, usedWeb: false, sources: [], attempts: [] }
+      return { content: attributionUnavailable(attribution, "search-off"), provider: "attribution-evidence-gate", model: "no-evidence", selectedModelId: selection.modelId, usedWeb: false, sources: [], attempts: [], usage: completeUsage() }
     }
     const [initialWebSources, connected, science, eiaEvidence] = await Promise.all([
       usedWeb ? preparedEvidence ? Promise.resolve(preparedEvidence.sources) : gatherSources(focus.searchText, emitResearch, activity, signal, freshnessMode(body?.responseDepth || body?.metadata?.responseDepth), requestFreshness.timeZone) : Promise.resolve([] as SourceItem[]),
@@ -1197,11 +1210,11 @@ export async function malikGodAnswer(
       enabled: process.env.MALIK_V7_RESEARCH_LOOP !== "0" && usedWeb && !preparedEvidence && !attachments.length
         && !fusionActive && !serverConnected && !scienceActive && !body?.chatRecovery
         && /^(?:deep|ultra|high|extra-high|pro)$/i.test(explicitDepth)
-        && (!Number.isFinite(outputAllowance) || outputAllowance >= 1800 + domainPlanningBudget + RESEARCH_PLANNER_TOKENS),
+        && totalBudget >= 1800 + domainPlanningBudget + RESEARCH_PLANNER_TOKENS,
       question: focus.searchText,
       sources: initialWebSources,
       signal, activity,
-      plan: input => runStrictMalikModel({
+      plan: input => runPlanningModel({
         modelId: selection.modelId, prompt: input.prompt, taskPrompt: focus.searchText,
         systemPrompt: input.systemPrompt, maxTokens: input.maxTokens, temperature: 0,
         reasoningEffort: "low", allowCatalog: selection.allowCatalog === true, signal: input.signal,
@@ -1215,12 +1228,12 @@ export async function malikGodAnswer(
     // The model may still say so without sources; the gate below drops every
     // sentence with a date the evidence does not contain.
     if (attribution && !webSources.length && !(attribution !== "identity" && isPremiseQuestion(focus.searchText))) {
-      return { content: attributionUnavailable(attribution, "missing"), provider: "attribution-evidence-gate", model: "no-evidence", selectedModelId: selection.modelId, usedWeb: false, sources: [], attempts: [] }
+      return { content: attributionUnavailable(attribution, "missing"), provider: "attribution-evidence-gate", model: "no-evidence", selectedModelId: selection.modelId, usedWeb: false, sources: [], attempts: [], usage: completeUsage() }
     }
     const mandatory = domainPlan.evidence.safetySensitive && domainPlan.evidence.web === "required"
     const freshness = requireEvidence(classifyFreshness(focus.searchText, turnTime, requestFreshness.timeZone), mandatory)
     if ((usedWeb || mandatory) && freshness.needsSearch && freshness.category !== "STATIC" && !currentEvidenceAvailable(webSources, freshness)) {
-      return { content: unavailableFreshAnswer(freshness, format), provider: "live-evidence-gate", model: "no-current-evidence", selectedModelId: selection.modelId, usedWeb: webSources.length > 0, sources: webSources, attempts: [] }
+      return { content: unavailableFreshAnswer(freshness, format), provider: "live-evidence-gate", model: "no-current-evidence", selectedModelId: selection.modelId, usedWeb: webSources.length > 0, sources: webSources, attempts: [], usage: completeUsage() }
     }
     const usedEvidence = usedWeb || Boolean(connected.context) || science.sources.length > 0 || Boolean(eiaEvidence.context)
     const strictPrompt = [
@@ -1237,14 +1250,17 @@ export async function malikGodAnswer(
       const step = activity?.start("Вычисление в математическом движке", "code", math.outcome.engine, describeTask(math.intent.task))
       activity?.finish(step, mathReceiptText(math), math.outcome.ok ? "completed" : "failed", math.outcome.ok ? undefined : math.outcome.error)
     }
-    const plannedMath = await planWorkMath({ prompt, mode: resolveWorkspaceMode(body?.workspaceMode), explicitMath: Boolean(math), attachments: attachments.length, signal }, async (planningSignal) => {
+    const plannedMath = totalBudget >= domainPlanningBudget + 2400 && !preparedEvidence
+      ? await planWorkMath({ prompt: requestPrompt, mode: resolveWorkspaceMode(body?.workspaceMode), allowChat: true, explicitMath: Boolean(math), attachments: attachments.length, signal }, async (planningSignal) => {
+      domainPlanningBudget += 1400
       const step = activity?.start("Составление формул для расчёта", "model", selection.modelId, { maxTasks: 6, timeoutMs: 6000 })
       try {
-        const plan = await runStrictMalikModel({ modelId: selection.modelId, prompt, taskPrompt: prompt, systemPrompt: mathPlanningInstruction, maxTokens: 1400, temperature: 0.1, reasoningEffort: "low", allowCatalog: selection.allowCatalog === true, signal: planningSignal })
+        const plan = await runPlanningModel({ modelId: selection.modelId, prompt: requestPrompt, taskPrompt: requestPrompt, systemPrompt: mathPlanningInstruction, maxTokens: 1400, temperature: 0.1, reasoningEffort: "low", allowCatalog: selection.allowCatalog === true, signal: planningSignal })
         activity?.finish(step, { characters: plan.content.length, format: "JSON-план; требует проверки движком" })
         return plan.content
       } catch (error) { activity?.finish(step, undefined, "failed", "Не удалось составить план расчёта. Отвечаю обычным способом."); throw error }
-    })
+    }) : null
+    signal?.throwIfAborted()
     for (const receipt of plannedMath?.receipts || []) {
       const step = activity?.start("Расчёт формулы модели движком", "code", receipt.outcome.engine, describeTask(receipt.task))
       activity?.finish(step, plannedMathReceiptText(receipt.task, receipt.outcome))
@@ -1296,7 +1312,7 @@ export async function malikGodAnswer(
       "In Russian use respectful «Вы». Do not start with «Конечно» or a restatement of the question.",
     ].join("\n")
     const routineInstructions = [compactChatInstructions, userContextBlocks(body), conversationIntentInstruction(universalIntent), conversationFocusInstruction(requestPrompt, focus)]
-    const requestedBudget = Math.max(1, answerBudget(body, prompt, Math.max(brain.outputTokenTarget, powerOutputTokens)) - domainPlanningBudget)
+    const requestedBudget = Math.max(1, totalBudget - domainPlanningBudget)
     const outputBudget = compactSimpleChat && math ? Math.min(768, requestedBudget) : requestedBudget
     const modelCall = activity?.start("Подготовка ответа моделью", "model", selection.modelId, { sources: sources.length, attachments: attachments.length, compactSimpleChat, leanEvidenceChat, outputTokenLimit: outputBudget })
     const result = await runStrictMalikModel({
@@ -1344,7 +1360,7 @@ export async function malikGodAnswer(
       accuracy: verified.report,
       factAudit: auditGroundedAnswer(answerCardsToText(content, { sources, userText: requestPrompt }), sources, prompt, verified.report, freshness.needsSearch ? freshnessCheckLine(freshness) : undefined),
       ...(result.incomplete ? { incomplete: result.incomplete } : {}),
-      usage: result.usage,
+      usage: completeUsage(result.usage, true),
       attempts: [{
         provider: result.provider,
         model: result.model,
