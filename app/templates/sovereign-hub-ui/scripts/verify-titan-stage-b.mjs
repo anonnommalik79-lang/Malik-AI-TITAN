@@ -340,7 +340,12 @@ await check("every response carries the security baseline; the full CSP is repor
   assert.match(header("Content-Security-Policy"), /frame-ancestors 'self'/)
   assert.match(header("Content-Security-Policy"), /object-src 'none'/)
   assert.match(header("Content-Security-Policy"), /base-uri 'self'/)
-  assert.doesNotMatch(header("Content-Security-Policy"), /script-src|default-src/, "nothing the app needs is enforced yet")
+  assert.match(header("Content-Security-Policy"), /script-src-attr 'none'/, "inline event attributes must be blocked")
+  if (process.env.MALIK_ENFORCE_FULL_CSP !== "1") {
+    assert.doesNotMatch(header("Content-Security-Policy"), /(?:^|;\s*)(?:script-src|default-src)\s/, "full script and default directives remain staged")
+  } else {
+    assert.match(header("Content-Security-Policy"), /default-src 'self'/)
+  }
   assert.match(header("Content-Security-Policy-Report-Only"), /default-src 'self'/)
   assert.equal(header("X-Frame-Options"), "SAMEORIGIN")
   assert.equal(header("X-Content-Type-Options"), "nosniff")

@@ -1,4 +1,6 @@
-﻿import { publicEngineForProvider, publicErrorMessage } from "@/lib/brand-provider-map"
+import { resolveRequestEntitlement } from "@/lib/server/request-entitlement"
+import { takeSharedRequestFrequency } from "@/lib/server/request-frequency"
+import { publicEngineForProvider, publicErrorMessage } from "@/lib/brand-provider-map"
 import { getAIJob, updateAIJob } from "@/lib/ai/jobs"
 import { providerFetch } from "@/lib/ai/providers/base"
 
@@ -226,10 +228,14 @@ async function handleGET(request: Request) {
   const jobId = url.searchParams.get("jobId") || ""
   const job = jobId ? getAIJob(jobId) : null
 
-  if (!job || job.type !== "video") {
+  const entitlement = await resolveRequestEntitlement(request)
+  if (!job || job.type !== "video" || job.input.userId !== entitlement.userId) {
     return Response.json({ ok: false, status: "missing", error: "job_not_found" }, { status: 404 })
   }
 
+  if (!await takeSharedRequestFrequency("legacy-video-status", entitlement.userId, 60)) {
+    return Response.json({ ok: false, error: "RATE_LIMIT_REACHED" }, { status: 429 })
+  }
   const provider = String(job.provider || job.output?.provider || "")
   const engine = publicEngineForProvider(provider, "video")
   const storedUrl = job.output?.resultUrl

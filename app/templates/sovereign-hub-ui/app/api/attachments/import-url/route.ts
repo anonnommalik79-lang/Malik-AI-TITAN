@@ -1,6 +1,10 @@
 import { isIP } from "node:net"
 import { lookup } from "node:dns/promises"
+import { request as httpRequest, type IncomingMessage } from "node:http"
+import { request as httpsRequest, type RequestOptions } from "node:https"
 import { resolveRequestEntitlement } from "@/lib/server/request-entitlement"
+import { readJsonBodyLimited, RequestSafetyError } from "@/lib/server/request-safety"
+import { takeSharedRequestFrequency } from "@/lib/server/request-frequency"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -8,145 +12,95 @@ export const dynamic = "force-dynamic"
 const MAX_REMOTE_BYTES = 10 * 1024 * 1024
 const FETCH_TIMEOUT_MS = 15_000
 const MAX_REDIRECTS = 3
-const ALLOWED_TYPES = ["image/", "video/"]
+const ALLOWED_TYPES = /^(?:image\/(?:png|jpeg|webp|gif|avif|bmp)|video\/(?:mp4|webm|quicktime|mpeg|ogg))$/
 
-function isPrivateIpv4(address: string) {
-  const parts = address.split(".").map(Number)
-  if (parts.length !== 4 || parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255)) return true
-  const [a, b] = parts
-  return (
-    a === 10 ||
-    a === 127 ||
-    a === 0 ||
-    (a === 169 && b === 254) ||
-    (a === 172 && b >= 16 && b <= 31) ||
-    (a === 192 && b === 168) ||
-    (a === 100 && b >= 64 && b <= 127) ||
-    a >= 224
-  )
+// IPv4 only for this importer. Never connect to IPv6, mapped IPv6, non-global
+// addresses, or a different DNS answer after checking the address.
+function isPublicIpv4(address: string) {
+  if (isIP(address) !== 4) return false
+  const [a,b,c] = address.split(".").map(Number)
+  return !(a === 0 || a === 10 || a === 127 || a >= 224 ||
+    (a === 100 && b >= 64 && b <= 127) || (a === 169 && b === 254) ||
+    (a === 172 && b >= 16 && b <= 31) || (a === 192 && (b === 168 || b === 0 || (b === 88 && c === 99))) ||
+    (a === 198 && (b === 18 || b === 19 || (b === 51 && c === 100))) ||
+    (a === 203 && b === 0 && c === 113))
 }
 
-function isPrivateIpv6(address: string) {
-  const value = address.toLowerCase()
-  return value === "::1" || value === "::" || value.startsWith("fc") || value.startsWith("fd") || value.startsWith("fe8") || value.startsWith("fe9") || value.startsWith("fea") || value.startsWith("feb")
-}
-
-function isPrivateAddress(address: string) {
-  const version = isIP(address)
-  if (version === 4) return isPrivateIpv4(address)
-  if (version === 6) return isPrivateIpv6(address)
-  return true
-}
-
-async function assertPublicUrl(raw: string) {
+async function resolvePublicUrl(raw: string) {
   const url = new URL(raw)
-  if (url.protocol !== "https:" && url.protocol !== "http:") throw new Error("Разрешены только http/https ссылки")
-  if (url.username || url.password) throw new Error("Ссылки с логином/паролем не поддерживаются")
-  if (!url.hostname || url.hostname === "localhost" || url.hostname.endsWith(".local")) throw new Error("Локальные адреса запрещены")
-
-  const records = await lookup(url.hostname, { all: true, verbatim: true })
-  if (!records.length || records.some((record) => isPrivateAddress(record.address))) {
-    throw new Error("Этот адрес нельзя импортировать")
+  if (!["https:", "http:"].includes(url.protocol) || url.username || url.password ||
+      url.port || !url.hostname || url.hostname.endsWith(".local") || url.hostname.endsWith(".internal")) {
+    throw new Error("UNSAFE_REMOTE_URL")
   }
-  return url
+  const records = await lookup(url.hostname, { all: true, family: 4, verbatim: true })
+  if (!records.length || records.some(record => !isPublicIpv4(record.address))) throw new Error("UNSAFE_REMOTE_URL")
+  return { url, address: records[0].address }
 }
 
-function fileNameFrom(url: URL, contentType: string) {
-  const raw = decodeURIComponent(url.pathname.split("/").pop() || "").replace(/[^p{L}p{N}._-]+/gu, "-").slice(0, 120)
-  if (raw && /.[a-z0-9]{2,6}$/i.test(raw)) return raw
-  const ext = contentType.includes("png") ? "png"
-    : contentType.includes("webp") ? "webp"
-      : contentType.includes("gif") ? "gif"
-        : contentType.includes("mp4") ? "mp4"
-          : contentType.includes("webm") ? "webm"
-            : "jpg"
-  return `shared-media.${ext}`
+function pinnedRequest(url: URL, address: string, signal: AbortSignal) {
+  return new Promise<IncomingMessage>((resolve, reject) => {
+    const options: RequestOptions = {
+      protocol: url.protocol, hostname: address, port: url.protocol === "https:" ? 443 : 80,
+      path: url.pathname + url.search, method: "GET", signal, agent: false,
+      ...(url.protocol === "https:" && !isIP(url.hostname) ? { servername: url.hostname } : {}),
+      headers: { host: url.host, accept: "image/*,video/*", "user-agent": "MalikAI-MediaImport/1.0" },
+    }
+    const req = (url.protocol === "https:" ? httpsRequest : httpRequest)(options, resolve)
+    req.once("error", reject)
+    req.end()
+  })
 }
 
-async function fetchPublicMedia(initial: URL) {
-  let current = initial
-  for (let redirects = 0; redirects <= MAX_REDIRECTS; redirects += 1) {
-    const controller = new AbortController()
-    const timer = setTimeout(() => controller.abort(new Error("REMOTE_MEDIA_TIMEOUT")), FETCH_TIMEOUT_MS)
+async function fetchPublicMedia(raw: string) {
+  const signal = AbortSignal.timeout(FETCH_TIMEOUT_MS)
+  let next = raw
+  for (let redirects = 0; redirects <= MAX_REDIRECTS; redirects++) {
+    const { url, address } = await resolvePublicUrl(next)
+    signal.throwIfAborted()
+    const response = await pinnedRequest(url, address, signal)
     try {
-      const response = await fetch(current, {
-        method: "GET",
-        redirect: "manual",
-        cache: "no-store",
-        signal: controller.signal,
-        headers: {
-          accept: "image/*,video/*;q=0.9,*/*;q=0.1",
-          "user-agent": "MalikAI-MediaImport/1.0",
-        },
-      })
-
-      if (response.status >= 300 && response.status < 400) {
-        const location = response.headers.get("location")
-        if (!location || redirects === MAX_REDIRECTS) throw new Error("Слишком много перенаправлений")
-        current = await assertPublicUrl(new URL(location, current).toString())
+      const status = response.statusCode || 0
+      if (status >= 300 && status < 400) {
+        if (!response.headers.location || redirects === MAX_REDIRECTS) throw new Error("REMOTE_REDIRECT_LIMIT")
+        next = new URL(response.headers.location, url).toString()
         continue
       }
-
-      if (!response.ok) throw new Error(`Источник вернул HTTP ${response.status}`)
-      const contentType = String(response.headers.get("content-type") || "").split(";")[0].trim().toLowerCase()
-      if (!ALLOWED_TYPES.some((prefix) => contentType.startsWith(prefix))) {
-        throw new Error("По ссылке нет поддерживаемого фото или видео")
-      }
-
-      const contentLength = Number(response.headers.get("content-length") || 0)
-      if (contentLength > MAX_REMOTE_BYTES) throw new Error("Файл больше 10 MB")
-
-      const reader = response.body?.getReader()
-      if (!reader) throw new Error("Источник не вернул файл")
-      const chunks: Uint8Array[] = []
+      if (status !== 200) throw new Error("REMOTE_MEDIA_FAILED")
+      const mime = String(response.headers["content-type"] || "").split(";")[0].trim().toLowerCase()
+      if (!ALLOWED_TYPES.test(mime)) throw new Error("UNSUPPORTED_MEDIA")
+      if (Number(response.headers["content-length"] || 0) > MAX_REMOTE_BYTES) throw new Error("REMOTE_MEDIA_TOO_LARGE")
+      const chunks: Buffer[] = []
       let total = 0
-      while (true) {
-        const { value, done } = await reader.read()
-        if (done) break
-        if (!value) continue
-        total += value.byteLength
-        if (total > MAX_REMOTE_BYTES) {
-          try { await reader.cancel() } catch {}
-          throw new Error("Файл больше 10 MB")
-        }
-        chunks.push(value)
+      for await (const chunk of response) {
+        const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
+        total += bytes.length
+        if (total > MAX_REMOTE_BYTES) throw new Error("REMOTE_MEDIA_TOO_LARGE")
+        chunks.push(bytes)
       }
-
-      const buffer = Buffer.concat(chunks.map((chunk) => Buffer.from(chunk)))
-      return {
-        mime: contentType,
-        size: buffer.byteLength,
-        base64: buffer.toString("base64"),
-        name: fileNameFrom(current, contentType),
-        sourceUrl: current.toString(),
-      }
+      const buffer = Buffer.concat(chunks)
+      const ext = mime.split("/")[1] === "jpeg" ? "jpg" : mime.split("/")[1] === "quicktime" ? "mov" : mime.split("/")[1]
+      const rawName = decodeURIComponent(url.pathname.split("/").pop() || "").replace(/[^\p{L}\p{N}._-]+/gu, "-").slice(0, 120)
+      const name = rawName && /\.[a-z0-9]{2,6}$/i.test(rawName) ? rawName : "shared-media." + ext
+      return { mime, size: buffer.length, base64: buffer.toString("base64"), name, sourceUrl: url.toString() }
     } finally {
-      clearTimeout(timer)
+      response.destroy()
     }
   }
-  throw new Error("Не удалось импортировать медиа")
+  throw new Error("REMOTE_MEDIA_FAILED")
 }
 
 export async function POST(request: Request) {
   const entitlement = await resolveRequestEntitlement(request)
-  if (!entitlement.authenticated || !entitlement.userId || entitlement.userId === "guest") {
-    return Response.json({ ok: false, error: "Войдите в Malik AI, чтобы импортировать медиа." }, { status: 401 })
+  if (!entitlement.authenticated) return Response.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401 })
+  if (!await takeSharedRequestFrequency("media-import", entitlement.userId, 6)) {
+    return Response.json({ ok: false, error: "RATE_LIMIT_REACHED" }, { status: 429 })
   }
-
-  const body = await request.json().catch(() => ({}))
-  const rawUrl = String(body?.url || "").trim()
-  if (!rawUrl || rawUrl.length > 4096) {
-    return Response.json({ ok: false, error: "Некорректная ссылка" }, { status: 400 })
-  }
-
   try {
-    const safeUrl = await assertPublicUrl(rawUrl)
-    const file = await fetchPublicMedia(safeUrl)
-    return Response.json({ ok: true, file }, { headers: { "cache-control": "no-store" } })
+    const body = await readJsonBodyLimited<{ url?: unknown }>(request, 16 * 1024)
+    const raw = typeof body?.url === "string" ? body.url.trim() : ""
+    if (!raw || raw.length > 4096) return Response.json({ ok: false, error: "INVALID_URL" }, { status: 400 })
+    return Response.json({ ok: true, file: await fetchPublicMedia(raw) }, { headers: { "cache-control": "private, no-store" } })
   } catch (error) {
-    return Response.json({
-      ok: false,
-      error: error instanceof Error ? error.message : "Не удалось импортировать медиа",
-    }, { status: 400, headers: { "cache-control": "no-store" } })
+    return Response.json({ ok: false, error: error instanceof RequestSafetyError ? error.code : "REMOTE_MEDIA_IMPORT_FAILED" }, { status: error instanceof RequestSafetyError ? error.status : 400, headers: { "cache-control": "private, no-store" } })
   }
 }

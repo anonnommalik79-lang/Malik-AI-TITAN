@@ -1,3 +1,5 @@
+import { durablePostgresConfigured, readPostgresQuota, incrementPostgresQuota, sweepPostgresQuotas } from "@/lib/server/durable-postgres"
+
 export type UsageEventType = "chat" | "upload" | "video" | "image" | "image4k"
 
 type MalikPersistedUsageGlobal = typeof globalThis & {
@@ -41,12 +43,22 @@ export async function resolveAuthUserUuid(userId: string): Promise<string | null
 }
 
 export async function getPersistedUsage(userId: string, eventType: UsageEventType): Promise<number> {
-  return usageCache().get(cacheKey(userId, eventType)) || 0
+  const key = cacheKey(userId, eventType)
+  if (durablePostgresConfigured()) return readPostgresQuota("daily:" + key, Math.floor(Date.parse(today(eventType) + "T00:00:00Z") / 60_000))
+  return usageCache().get(key) || 0
 }
 
 export async function incrementPersistedUsage(userId: string, eventType: UsageEventType, delta = 1) {
   const store = usageCache()
   const key = cacheKey(userId, eventType)
+  if (!Number.isSafeInteger(delta) || delta <= 0) return
+  if (durablePostgresConfigured()) {
+    await incrementPostgresQuota("daily:" + key, Math.floor(Date.parse(today(eventType) + "T00:00:00Z") / 60_000), delta)
+    sweepPostgresQuotas()
+  }
+  for (const old of store.keys()) {
+    if (old.slice(0, 10) < new Date(Date.now() - 2 * 86400000).toISOString().slice(0, 10)) store.delete(old)
+  }
   store.set(key, (store.get(key) || 0) + delta)
 }
 

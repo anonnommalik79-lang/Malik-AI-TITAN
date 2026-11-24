@@ -47,6 +47,9 @@ jobs:
       - name: Verify short-chat token budgets and exact provider usage
         run: npm run test:token-telemetry
 
+      - name: Verify security hardening
+        run: npm run test:security-hardening
+
       - name: Verify P0 quota locking and operational rate-limits
         run: npm run test:p0-quotas
 

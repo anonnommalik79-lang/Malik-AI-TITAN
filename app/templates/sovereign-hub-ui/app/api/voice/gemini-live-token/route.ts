@@ -3,6 +3,7 @@ import { NextResponse } from "next/server"
 import { mintLiveToken } from "@/lib/server/gemini-live-token"
 import { LIVE_WS_URL } from "@/lib/voice/gemini-live-setup"
 import { resolveRequestEntitlement } from "@/lib/server/request-entitlement"
+import { takeSharedRequestFrequency } from "@/lib/server/request-frequency"
 import { getVoiceUsage } from "@/lib/voice/usage"
 
 export const runtime = "nodejs"
@@ -10,6 +11,10 @@ export const dynamic = "force-dynamic"
 
 export async function GET(request: Request) {
   const entitlement = await resolveRequestEntitlement(request)
+  if (!entitlement.authenticated) return NextResponse.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401 })
+  if (!await takeSharedRequestFrequency("gemini-live-token", entitlement.userId, 4)) {
+    return NextResponse.json({ ok: false, error: "RATE_LIMIT_REACHED" }, { status: 429 })
+  }
   const unlimited = entitlement.plan === "owner"
   const quota = await getVoiceUsage(entitlement.userId, unlimited)
   if (!unlimited && quota.remainingSeconds <= 0) {

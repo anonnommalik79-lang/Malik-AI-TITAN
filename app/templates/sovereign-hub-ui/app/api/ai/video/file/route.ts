@@ -1,4 +1,7 @@
-﻿export const runtime = "nodejs"
+import { resolveRequestEntitlement } from "@/lib/server/request-entitlement"
+import { takeSharedRequestFrequency } from "@/lib/server/request-frequency"
+import { listAIJobs } from "@/lib/ai/jobs"
+export const runtime = "nodejs"
 
 function renderVideoBandwidthGuard() {
   return /^(?:1|true|yes|on)$/i.test(String(process.env.MALIK_VIDEO_RENDER_BANDWIDTH_GUARD || "").trim())
@@ -18,12 +21,21 @@ function isAllowedGoogleVideoUri(uri: string) {
   try {
     const parsed = new URL(uri)
     return parsed.protocol === "https:" && parsed.hostname === "generativelanguage.googleapis.com"
+      && !parsed.port && !parsed.username && !parsed.password && !parsed.hash
+      && /^\/(?:download\/)?v1(?:beta)?\/files\/[A-Za-z0-9_-]+(?::download)?$/.test(parsed.pathname)
+      && [...parsed.searchParams.keys()].every(key => key === "alt")
+      && (!parsed.searchParams.has("alt") || parsed.searchParams.get("alt") === "media")
   } catch {
     return false
   }
 }
 
 export async function GET(request: Request) {
+  const entitlement = await resolveRequestEntitlement(request)
+  if (!entitlement.authenticated) return Response.json({ ok: false, error: "AUTH_REQUIRED" }, { status: 401 })
+  if (!await takeSharedRequestFrequency("video-file", entitlement.userId, 60)) {
+    return Response.json({ ok: false, error: "RATE_LIMIT_REACHED" }, { status: 429 })
+  }
   if (renderVideoBandwidthGuard()) {
     return Response.json({
       ok: false,
@@ -49,6 +61,10 @@ export async function GET(request: Request) {
     )
   }
 
+  const owned = listAIJobs(entitlement.userId).some(job =>
+    job.type === "video" && job.input.userId === entitlement.userId && job.status === "completed"
+    && job.output?.resultUrl === "/api/ai/video/file?uri=" + encodeURIComponent(uri))
+  if (!owned) return Response.json({ ok: false, error: "VIDEO_NOT_FOUND" }, { status: 404 })
   const headers = new Headers({
     "x-goog-api-key": apiKey,
     accept: "video/mp4,video/*,*/*",
@@ -61,19 +77,25 @@ export async function GET(request: Request) {
     method: "GET",
     headers,
     cache: "no-store",
+    redirect: "error",
+    signal: AbortSignal.timeout(60_000),
   })
 
   if (!upstream.ok || !upstream.body) {
-    const text = await upstream.text().catch(() => "")
     return Response.json(
       {
         ok: false,
-        error: text || `google_video_download_failed_${upstream.status}`,
+        error: "google_video_download_failed",
       },
       { status: upstream.status || 502 },
     )
   }
 
+  const contentType = upstream.headers.get("content-type") || ""
+  if (!/^(?:video\/|application\/octet-stream(?:;|$))/i.test(contentType)) {
+    await upstream.body.cancel().catch(() => {})
+    return Response.json({ ok: false, error: "INVALID_VIDEO_RESPONSE" }, { status: 502 })
+  }
   const out = new Headers()
 
   for (const name of [
@@ -89,7 +111,8 @@ export async function GET(request: Request) {
   }
 
   if (!out.get("content-type")) out.set("content-type", "video/mp4")
-  out.set("cache-control", "private, max-age=300")
+  out.set("cache-control", "private, no-store")
+  out.set("X-Content-Type-Options", "nosniff")
   out.set("x-malik-video-proxy", "google-veo")
 
   return new Response(upstream.body, {

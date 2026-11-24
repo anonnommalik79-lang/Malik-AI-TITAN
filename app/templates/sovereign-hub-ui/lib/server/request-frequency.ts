@@ -1,3 +1,5 @@
+import { durablePostgresConfigured, incrementPostgresQuota, sweepPostgresQuotas } from "@/lib/server/durable-postgres"
+
 /** Operational endpoints have a separate minute budget, not the AI chat quota. */
 const buckets = new Map<string, { count: number; until: number }>()
 let lastSweepAt = 0
@@ -16,4 +18,16 @@ export function takeRequestFrequency(scope: string, ownerId: string, limit: numb
   if (!current && buckets.size >= 10000) return false
   buckets.set(key, { count: (current?.count || 0) + 1, until: current?.until || now + 60000 })
   return true
+}
+
+/** Sensitive endpoints fail closed when the configured shared counter is unavailable. */
+export async function takeSharedRequestFrequency(scope: string, ownerId: string, limit: number) {
+  if (!durablePostgresConfigured()) return takeRequestFrequency(scope, ownerId, limit)
+  try {
+    const allowed = await incrementPostgresQuota("minute:" + scope + ":" + ownerId, Math.floor(Date.now() / 60_000), 1, limit)
+    sweepPostgresQuotas()
+    return allowed
+  } catch {
+    return false
+  }
 }
