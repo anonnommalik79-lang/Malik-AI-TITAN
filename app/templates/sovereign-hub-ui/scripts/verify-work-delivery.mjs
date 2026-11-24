@@ -75,11 +75,11 @@ let count = 0
 let requestId = 0
 const context = id => ({ params: Promise.resolve({ id }) })
 const body = value => ({ method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(value) })
-const submit = (goal, id = `qa-work-delivery-${++requestId}`) =>
-  postFlow(new Request("http://qa.invalid/api/os/flows", body({ goal, workspaceMode: "work", clientRequestId: id })))
+const submit = (goal, id = `qa-work-delivery-${++requestId}`, workspaceMode = "work") =>
+  postFlow(new Request("http://qa.invalid/api/os/flows", body({ goal, workspaceMode, clientRequestId: id })))
 const file = (id, format) => download(new Request(`http://qa.invalid/api/os/artifacts/${id}/export?format=${format}`), context(id))
-async function start(goal) {
-  const response = await submit(goal)
+async function start(goal, mode = "work") {
+  const response = await submit(goal, undefined, mode)
   const data = await response.json()
   assert.equal(response.status, 201, JSON.stringify(data))
   return data.flow.id
@@ -270,14 +270,14 @@ await check("an older truncated export is refused and another account cannot dow
   finally { session = owner }
 })
 
-await check("a mixed job keeps the valid DOCX and only retries the malformed code", async () => {
+await check("a mixed job from ordinary chat keeps the valid DOCX and only retries the malformed code", async () => {
   const invalid = { title: "Broken JS", files: [python.files[0], { path: "index.js", content: "export const broken = (" }] }
   actions = [
     request => request.system.startsWith("Собери полные") ? JSON.stringify(invalid) : "# Решение\nКраткий отчёт по итогам.",
     request => request.system.startsWith("Собери полные") ? JSON.stringify(invalid) : "# Решение\nКраткий отчёт по итогам.",
     invalid,
   ]
-  const id = await start("Подготовь DOCX по встрече и собери приложение на JavaScript")
+  const id = await start("Подготовь DOCX по встрече и собери приложение на JavaScript", "chat")
   const firstRun = await finished(id)
   assert.equal(firstRun.status, "partial")
   assert.equal(firstRun.tasks.find(task => task.type === "code.project").error.code, "SOURCE_CHECK_FAILED")

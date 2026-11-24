@@ -1,3 +1,4 @@
+import { resolveIntelligenceTurn, withIntelligenceTurnScope, intelligenceWebDecision } from "@/lib/server/intelligence-core"
 import { enterPremiumAccess } from "@/lib/server/claude-premium"
 import { asPlainText, malikGodAnswer, malikRescueAnswer, gatherSourcesForPrompt, sourceContext, type PreparedLiveEvidence } from "@/lib/malik-god-router"
 import { chatAnswerDeadline, withinChatDeadline } from "@/lib/ai/chat-deadline"
@@ -14,7 +15,7 @@ import { flashGoogleIntent, flashImageOperation, isFlashCodingRequest } from "@/
 import type { MalikWebSource } from "@/lib/ai/web-research-types"
 import { upsertWebSource } from "@/lib/ai/source-evidence"
 import { normalizeProviderTokenUsage } from "@/lib/ai/token-telemetry"
-import { classifyFreshness, freshnessMode, NO_WEB, requireEvidence } from "@/lib/ai/freshness-intent"
+import { classifyFreshness, freshnessMode, NO_WEB } from "@/lib/ai/freshness-intent"
 import { shouldUseWeb } from "@/lib/ai/web-search-policy"
 import { currentEvidenceAvailable, finalizeFreshAnswer, freshnessEvidenceInstruction, unavailableFreshAnswer } from "@/lib/live-intelligence/evidence"
 import { isContinueRequest, resumableAnswer, resumeText, sameAnswerText, withIncompleteNote, type AnswerIncomplete } from "@/lib/ai/answer-completion"
@@ -80,7 +81,6 @@ import { createScheduledTask, scheduledTasksStatus } from "@/lib/server/schedule
 import { createExecutionReporter, type ExecutionReporter } from "@/lib/ai/chat-execution"
 import {conversationIntentInstruction,requiresChatDelivery,resolveConversationIntent} from "@/lib/ai/conversation-intent"
 import { conversationHistory, conversationHistorySource } from "@/lib/ai/conversation-history"
-import { conversationFocus } from "@/lib/ai/conversation-focus"
 import { domainPlanInstruction, domainRequiresPlainChat, resolveDomainPlan } from "@/lib/ai/domain-intelligence"
 import {conversationRepairInstruction,conversationValidationFailure,validateConversationAnswer,needsActionClaimValidation} from "@/lib/ai/conversation-validation"
 import {assessExecution,createOpeningCheck,executionContractInstruction,mediaHandoffText,needsOpeningCheck,resolveMediaTurn,skipsClaimAudit,type ChatTurn} from "@/lib/ai/do-what-user-says"
@@ -574,12 +574,9 @@ async function runSelectedAnswer(
   let body = initialBody
   const originalPrompt = coderPrompt(body)
   const chatTurns = conversationHistorySource(body) as ChatTurn[]
-  const intent=resolveConversationIntent({prompt:originalPrompt,messages:chatTurns,attachments:body?.attachments})
-  const domainPlan=resolveDomainPlan({prompt:originalPrompt,messages:chatTurns,attachments:body?.attachments,intent})
-  const evidenceQuestion = domainPlan.context.followUp ? conversationFocus(originalPrompt, chatTurns).searchText : originalPrompt
-  const freshness = requireEvidence(classifyFreshness(evidenceQuestion, new Date(), body?.metadata?.timeZone),
-    domainPlan.evidence.safetySensitive && domainPlan.evidence.web === "required")
-  const holdForEvidence = freshness.needsSearch || domainPlan.evidence.web === "required"
+  const turn = resolveIntelligenceTurn(originalPrompt, body)
+  const { intent, domain: domainPlan, freshness, holdForEvidence } = turn
+  const evidenceQuestion = turn.focus.searchText
   const format = intent.target === "text" && intent.requirements.presentation === "json" ? "json" : undefined
   const owner=serverOwner||selection?.entitlement
   if (skillChatRequest(body)) {
@@ -784,7 +781,7 @@ async function runSelectedAnswer(
   let preparedEvidence: PreparedLiveEvidence | undefined
   // Search only the original public question, never text extracted from a file.
   // Connected-service commands use their own account evidence pipeline.
-  if (needsLaneEvidence && shouldUseWeb(evidenceQuestion, body, domainPlan)) {
+  if (needsLaneEvidence && intelligenceWebDecision(turn, body)) {
     const publicQuestion = hasAttachment ? originalPrompt : evidenceQuestion
     const sources = await gatherSourcesForPrompt(publicQuestion, onProgress, { signal, activity, mode: freshnessMode(body?.responseDepth || body?.metadata?.responseDepth), timeZone: freshness.timeZone })
     if (!currentEvidenceAvailable(sources, freshness)) return { content: unavailableFreshAnswer(freshness, format), provider: "live-evidence-gate", model: "no-current-evidence", selectedModelId: selection?.modelId || DEFAULT_MALIK_MODEL_ID, usedWeb: sources.length > 0, sources, attempts: [] }
@@ -1027,6 +1024,7 @@ async function runSelectedAnswerUnchecked(
       activity,
       signal,
       preparedEvidence || (requestAttachments.length ? { prompt: coderPrompt(body), sources: [] } : undefined),
+      coderPrompt(body),
     )
     return agentRuntime ? { ...answer, agentRuntime } : answer
   }
@@ -1516,10 +1514,10 @@ function liveSseResponse(
   })
 }
 
-export const POST = withCompute((request: Request) => handlePOST(request), chatComputeOperation)
+export const POST = withCompute((request: Request) => withIntelligenceTurnScope(() => handlePOST(request)), chatComputeOperation)
 
 export async function handleFlashJsonChat(request: Request) {
-  return handlePOST(request, true)
+  return withIntelligenceTurnScope(() => handlePOST(request, true))
 }
 
 async function handlePOST(request: Request, json = false) {
@@ -1548,6 +1546,8 @@ async function handlePOST(request: Request, json = false) {
     })
   }
 
+  if (!body || typeof body !== "object" || Array.isArray(body)) return Response.json({ ok: false, error: "INVALID_REQUEST" }, { status: 400 })
+
   if (textualContextSize(body) > MAX_TEXT_CONTEXT_CHARS) {
     return Response.json({
       ok: false,
@@ -1560,11 +1560,11 @@ async function handlePOST(request: Request, json = false) {
     })
   }
 
-  const requestIntent=resolveConversationIntent({prompt:coderPrompt(body),messages:conversationHistorySource(body),attachments:body?.attachments})
+  const admissionTurn = resolveIntelligenceTurn(coderPrompt(body), body)
+  const { intent: requestIntent, domain: requestDomain } = admissionTurn
   body = { ...body, requestId: body?.requestId || request.headers.get("x-malik-background-turn-id") || undefined }
-  const requestDomain=resolveDomainPlan({prompt:coderPrompt(body),messages:conversationHistorySource(body),attachments:body?.attachments,intent:requestIntent})
   if(requiresChatDelivery(requestIntent)||domainRequiresPlainChat(requestDomain))body={...body,isProjectRequest:false,forceCanvas:false,responseMode:"chat",isCodeRequest:false}
-  const freshness = classifyFreshness(coderPrompt(body), new Date(), body?.metadata?.timeZone)
+  const freshness = admissionTurn.requestFreshness
   console.info("[MALIK_FRESHNESS_INTENT]", { category: freshness.category, needsSearch: freshness.needsSearch })
 
   // Fail closed: an image-edit command with an image attachment must never be

@@ -6,14 +6,15 @@ import { clockReply, isPremiseQuestion, premiseInstruction } from "@/lib/ai/prem
 import { isFastChatRequest, wantsFullShape } from "@/lib/ai/request-kind"
 import { answerCardsToText } from "@/lib/ai/answer-cards"
 import { userContextBlocks } from "@/lib/ai/client-context"
-import {conversationIntentInstruction,resolveConversationIntent} from "@/lib/ai/conversation-intent"
-import { conversationHistory, conversationHistorySource } from "@/lib/ai/conversation-history"
-import { domainPlanInstruction, resolveDomainPlan } from "@/lib/ai/domain-intelligence"
-import { refineDomainPlan } from "@/lib/server/domain-planner"
+import {conversationIntentInstruction} from "@/lib/ai/conversation-intent"
+import { conversationHistory } from "@/lib/ai/conversation-history"
+import { domainPlanInstruction } from "@/lib/ai/domain-intelligence"
+import { resolveIntelligenceTurn, refineIntelligenceTurn, intelligenceWebDecision } from "@/lib/server/intelligence-core"
+import { runResearchToolLoop, RESEARCH_PLANNER_TOKENS } from "@/lib/server/intelligence-tools"
 import {conversationRepairInstruction} from "@/lib/ai/conversation-validation"
 import {executionContractInstruction} from "@/lib/ai/do-what-user-says"
 import { computedEvidenceInstruction } from "@/lib/analysis/chat"
-import { conversationFocus, conversationFocusInstruction, type ConversationFocus } from "@/lib/ai/conversation-focus"
+import { conversationFocusInstruction, type ConversationFocus } from "@/lib/ai/conversation-focus"
 import { resolveWorkspaceMode, workModeInstruction } from "@/lib/ai/work-mode"
 import { answerBudget } from "@/lib/ai/answer-budget"
 import { sharedAnswerCacheKey, mayShareAnswerCache, trimSharedAnswerCache } from "@/lib/server/public-answer-cache"
@@ -35,7 +36,6 @@ import { runLiveSearch, type LiveSearchProvider } from "@/lib/live-intelligence/
 import { mapBounded } from "@/lib/live-intelligence/concurrency"
 import { indexedSources } from "@/lib/live-intelligence/index-reader"
 import { parseKnowledgeFeed, KNOWLEDGE_FEEDS, type KnowledgeFeed } from "@/lib/live-intelligence/feed-updater"
-import { shouldUseWeb } from "@/lib/ai/web-search-policy"
 import { attributionKind, attributionSystemInstruction, attributionUnavailable, gateAttributionAnswer, selfCreatorReply } from "@/lib/ai/attribution-evidence"
 import { currentModelQueries, currentModelSubjects, currentResearchDate, currentSourcePriority, mentionedCurrentModels, needsCurrentEvidence, officialProductQuery } from "@/lib/ai/current-evidence"
 import { normalizeWebSearchQuery, eventSearchTitle, localRoleQuery } from "@/lib/ai/web-search-query"
@@ -1070,21 +1070,23 @@ export async function malikGodAnswer(
   activity?: ExecutionReporter,
   signal?: AbortSignal,
   preparedEvidence?: PreparedLiveEvidence,
+  /** Server-owned original question, before private tool or agent reports are appended. */
+  publicRequestPrompt?: string,
 ): Promise<GodAnswer> {
   // Browser-backed Flash is taken by the chat route before this point. Flash
   // that reaches the native engine is answered by it under its real provider.
   if (selection) selection = { ...selection, modelId: nativeMalikEngineId(selection.modelId) }
   const prompt = extractPrompt(body)
-  const requestPrompt = preparedEvidence?.originalQuestion || preparedEvidence?.prompt || prompt
+  const requestPrompt = publicRequestPrompt || preparedEvidence?.originalQuestion || preparedEvidence?.prompt || prompt
   // Attachment extraction may augment `prompt` with untrusted document text.
   // Preferences must still come from the original public user question.
-  const chatHistory = conversationHistory(body)
-  const universalIntent=resolveConversationIntent({prompt:requestPrompt,messages:conversationHistorySource(body),attachments:body?.attachments})
+  let turn = resolveIntelligenceTurn(requestPrompt, body)
+  const { history: chatHistory, intent: universalIntent } = turn
   const format = universalIntent.target === "text" && universalIntent.requirements.presentation === "json" ? "json" : undefined
-  let domainPlan = resolveDomainPlan({ prompt: requestPrompt, messages: chatHistory, attachments: body?.attachments, intent: universalIntent })
+  let domainPlan = turn.domain
   let universalContract=[conversationIntentInstruction(universalIntent),domainPlanInstruction(domainPlan),conversationRepairInstruction(body?.metadata?.conversationRepair)].filter(Boolean).join("\n\n")
-  const turnTime = new Date()
-  const requestFreshness = classifyFreshness(requestPrompt, turnTime, body?.metadata?.timeZone)
+  const turnTime = turn.now
+  const requestFreshness = turn.requestFreshness
   const activeSuperpowers = detectMalikSuperpowers(
     requestPrompt,
     Array.isArray(body?.attachments) ? body.attachments : [],
@@ -1096,7 +1098,7 @@ export async function malikGodAnswer(
     || activeSuperpowers.some((power) => power.id === "context-fusion")
     || connectorIds.length > 0
   const scienceActive = activeSuperpowers.some((power) => power.id === "science")
-  const fusionWantsWeb = fusionActive && /(интернет|сеть|open web|\bweb\b|online)/iu.test(prompt)
+  const fusionWantsWeb = fusionActive && /(интернет|сеть|open web|\bweb\b|online)/iu.test(requestPrompt)
   const powerForcesWeb = activeSuperpowers.some((power) =>
     power.id === "web-search" || power.id === "deep-research" || power.id === "monitoring",
   ) || fusionWantsWeb
@@ -1125,7 +1127,7 @@ export async function malikGodAnswer(
   }
 
   const requestedConnected = !serverConnected && connectorIds.length
-    ? await collectMalikConnectedContext(prompt, activity)
+    ? await collectMalikConnectedContext(requestPrompt, activity)
     : null
   if (requestedConnected?.requested && !requestedConnected.context) {
     return {
@@ -1148,15 +1150,6 @@ export async function malikGodAnswer(
     // Only mixed/underspecified tasks need semantic classification. This one
     // bounded call may select read-only evidence, never private tools/writes.
     // It shares the selected model and fits inside the existing token quota.
-    const outputAllowance = Number(body?.maxTokens)
-    let domainPlanningBudget = 0
-    if (domainPlan.semantic.needed && (!Number.isFinite(outputAllowance) || outputAllowance >= 1400)) {
-      domainPlanningBudget = 320
-      const step = activity?.start("Уточняю цель и связанные области", "model", selection.modelId)
-      domainPlan = await refineDomainPlan(domainPlan, input => runStrictMalikModel({ modelId: selection.modelId, prompt: input.prompt, taskPrompt: requestPrompt, systemPrompt: input.systemPrompt, maxTokens: 320, temperature: 0, reasoningEffort: "low", allowCatalog: selection.allowCatalog === true, signal: input.signal }), { signal })
-      activity?.finish(step, { accepted: domainPlan.semantic.used, domains: domainPlan.domains, maxPlanningTokens: 320 }, domainPlan.semantic.used ? "completed" : "failed", domainPlan.semantic.used ? undefined : "Using bounded local task plan")
-      universalContract=[conversationIntentInstruction(universalIntent),domainPlanInstruction(domainPlan),conversationRepairInstruction(body?.metadata?.conversationRepair)].filter(Boolean).join("\n\n")
-    }
     const brain = analyzeMalikBrainV1({
       prompt,
       attachments,
@@ -1171,34 +1164,80 @@ export async function malikGodAnswer(
       needsVerification: brain.needsVerification,
       needsFreshEvidence: brain.needsFreshEvidence,
     }))
+    const totalBudget = answerBudget(body, prompt, Math.max(brain.outputTokenTarget, powerOutputTokens))
+    let domainPlanningBudget = 0
+    // Capture each auxiliary model receipt, including unknown usage for
+    // failed/timed-out calls. Never display the final model alone as a total.
+    const planningUsage: unknown[] = []
+    const runPlanningModel = async (input: Parameters<typeof runStrictMalikModel>[0]) => {
+      const index = planningUsage.push(null) - 1
+      const result = await runStrictMalikModel(input)
+      planningUsage[index] = result.usage ?? null
+      return result
+    }
+    const completeUsage = (final?: unknown, hasFinal = false): unknown => {
+      const stages = hasFinal ? [...planningUsage, final ?? null] : [...planningUsage]
+      return stages.length ? stages.reduce((primary, continuation) => ({ primary, continuation })) : undefined
+    }
+    if (domainPlan.semantic.needed && totalBudget >= 1400) {
+      domainPlanningBudget = 320
+      const step = activity?.start("Уточняю цель и связанные области", "model", selection.modelId)
+      turn = await refineIntelligenceTurn(turn, input => runPlanningModel({ modelId: selection.modelId, prompt: input.prompt, taskPrompt: requestPrompt, systemPrompt: input.systemPrompt, maxTokens: 320, temperature: 0, reasoningEffort: "low", allowCatalog: selection.allowCatalog === true, signal: input.signal }), { signal })
+      domainPlan = turn.domain
+      activity?.finish(step, { accepted: domainPlan.semantic.used, domains: domainPlan.domains, maxPlanningTokens: 320 }, domainPlan.semantic.used ? "completed" : "failed", domainPlan.semantic.used ? undefined : "Using bounded local task plan")
+      universalContract=[conversationIntentInstruction(universalIntent),domainPlanInstruction(domainPlan),conversationRepairInstruction(body?.metadata?.conversationRepair)].filter(Boolean).join("\n\n")
+    }
     // A follow-up («а третий?») is searched and shaped together with the
     // question it continues, never as a bare fragment.
-    const focus = domainPlan.context.followUp ? conversationFocus(requestPrompt, history) : { followUp: false, anchor: "", searchText: requestPrompt, shapeText: requestPrompt }
-    if (preparedEvidence) focus.searchText = preparedEvidence.prompt
+    const focus = { ...turn.focus, ...(preparedEvidence ? { searchText: preparedEvidence.prompt } : {}) }
     const attribution = attributionKind(focus.searchText)
-    const usedWeb = domainPlan.evidence.web !== "off" && (shouldUseWeb(focus.searchText, body, domainPlan) || powerForcesWeb && body?.research !== false && !body?.disableResearch && !NO_WEB.test(focus.searchText))
+    const usedWeb = intelligenceWebDecision({ domain: domainPlan, focus }, body, powerForcesWeb)
     if (attribution && !usedWeb) {
-      return { content: attributionUnavailable(attribution, "search-off"), provider: "attribution-evidence-gate", model: "no-evidence", selectedModelId: selection.modelId, usedWeb: false, sources: [], attempts: [] }
+      return { content: attributionUnavailable(attribution, "search-off"), provider: "attribution-evidence-gate", model: "no-evidence", selectedModelId: selection.modelId, usedWeb: false, sources: [], attempts: [], usage: completeUsage() }
     }
-    const [webSources, connected, science, eiaEvidence] = await Promise.all([
+    // Specialist public connectors obey the same explicit offline request
+    // as ordinary browsing. Connected-account authorization remains separate.
+    const publicEvidenceAllowed = !body?.disableResearch && domainPlan.evidence.web !== "off"
+      && !NO_WEB.test(requestPrompt) && !NO_WEB.test(focus.searchText)
+    const [initialWebSources, connected, science, eiaEvidence] = await Promise.all([
       usedWeb ? preparedEvidence ? Promise.resolve(preparedEvidence.sources) : gatherSources(focus.searchText, emitResearch, activity, signal, freshnessMode(body?.responseDepth || body?.metadata?.responseDepth), requestFreshness.timeZone) : Promise.resolve([] as SourceItem[]),
       serverConnected
         ? Promise.resolve({ ...serverConnected, requested: true, connectorIds: [] as string[], executions: [] as any[] })
-        : requestedConnected ? Promise.resolve(requestedConnected) : fusionActive ? collectMalikConnectedContext(prompt, activity) : Promise.resolve({ requested: false, connectorIds: [] as string[], context: "", sources: [] as any[], executions: [] as any[] }),
-      scienceActive ? collectMalikScienceContext(prompt) : Promise.resolve({ context: "", sources: [] as any[], providers: [] as string[] }),
-      fetchEiaSpotEvidence(prompt, {signal}),
+        : requestedConnected ? Promise.resolve(requestedConnected) : fusionActive ? collectMalikConnectedContext(requestPrompt, activity) : Promise.resolve({ requested: false, connectorIds: [] as string[], context: "", sources: [] as any[], executions: [] as any[] }),
+      scienceActive && publicEvidenceAllowed ? collectMalikScienceContext(requestPrompt) : Promise.resolve({ context: "", sources: [] as any[], providers: [] as string[] }),
+      publicEvidenceAllowed ? fetchEiaSpotEvidence(requestPrompt, {signal}) : Promise.resolve({ context: "", status: "not-applicable" as const, points: [] }),
     ])
+    // Deep research can inspect actual evidence, request one further lookup,
+    // and then synthesize from verified receipts. Simple chat pays no extra call.
+    const explicitDepth = String(body?.responseDepth || body?.metadata?.responseDepth || "")
+    const researchLoop = await runResearchToolLoop({
+      enabled: process.env.MALIK_V7_RESEARCH_LOOP !== "0" && usedWeb && !preparedEvidence && !attachments.length
+        && !fusionActive && !serverConnected && !scienceActive && !body?.chatRecovery
+        && /^(?:deep|ultra|high|extra-high|pro)$/i.test(explicitDepth)
+        && totalBudget >= 1800 + domainPlanningBudget + RESEARCH_PLANNER_TOKENS,
+      question: focus.searchText,
+      sources: initialWebSources,
+      signal, activity,
+      plan: input => runPlanningModel({
+        modelId: selection.modelId, prompt: input.prompt, taskPrompt: focus.searchText,
+        systemPrompt: input.systemPrompt, maxTokens: input.maxTokens, temperature: 0,
+        reasoningEffort: "low", allowCatalog: selection.allowCatalog === true, signal: input.signal,
+      }),
+      search: (query, toolSignal) => gatherSources(query, emitResearch, activity, toolSignal, "fast", requestFreshness.timeZone),
+    })
+    const webSources = researchLoop.sources
+    domainPlanningBudget += researchLoop.planningTokens
     const sources: SourceItem[] = [...webSources, ...(connected.sources as SourceItem[]), ...(science.sources as SourceItem[])].slice(0, 32)
     // A «когда X сделал Y?» question may rest on an event that never happened.
     // The model may still say so without sources; the gate below drops every
     // sentence with a date the evidence does not contain.
     if (attribution && !webSources.length && !(attribution !== "identity" && isPremiseQuestion(focus.searchText))) {
-      return { content: attributionUnavailable(attribution, "missing"), provider: "attribution-evidence-gate", model: "no-evidence", selectedModelId: selection.modelId, usedWeb: false, sources: [], attempts: [] }
+      return { content: attributionUnavailable(attribution, "missing"), provider: "attribution-evidence-gate", model: "no-evidence", selectedModelId: selection.modelId, usedWeb: false, sources: [], attempts: [], usage: completeUsage() }
     }
     const mandatory = domainPlan.evidence.safetySensitive && domainPlan.evidence.web === "required"
     const freshness = requireEvidence(classifyFreshness(focus.searchText, turnTime, requestFreshness.timeZone), mandatory)
     if ((usedWeb || mandatory) && freshness.needsSearch && freshness.category !== "STATIC" && !currentEvidenceAvailable(webSources, freshness)) {
-      return { content: unavailableFreshAnswer(freshness, format), provider: "live-evidence-gate", model: "no-current-evidence", selectedModelId: selection.modelId, usedWeb: webSources.length > 0, sources: webSources, attempts: [] }
+      return { content: unavailableFreshAnswer(freshness, format), provider: "live-evidence-gate", model: "no-current-evidence", selectedModelId: selection.modelId, usedWeb: webSources.length > 0, sources: webSources, attempts: [], usage: completeUsage() }
     }
     const usedEvidence = usedWeb || Boolean(connected.context) || science.sources.length > 0 || Boolean(eiaEvidence.context)
     const strictPrompt = [
@@ -1215,14 +1254,17 @@ export async function malikGodAnswer(
       const step = activity?.start("Вычисление в математическом движке", "code", math.outcome.engine, describeTask(math.intent.task))
       activity?.finish(step, mathReceiptText(math), math.outcome.ok ? "completed" : "failed", math.outcome.ok ? undefined : math.outcome.error)
     }
-    const plannedMath = await planWorkMath({ prompt, mode: resolveWorkspaceMode(body?.workspaceMode), explicitMath: Boolean(math), attachments: attachments.length, signal }, async (planningSignal) => {
+    const plannedMath = totalBudget >= domainPlanningBudget + 2400 && !preparedEvidence
+      ? await planWorkMath({ prompt: requestPrompt, mode: resolveWorkspaceMode(body?.workspaceMode), allowChat: true, explicitMath: Boolean(math), attachments: attachments.length, signal }, async (planningSignal) => {
+      domainPlanningBudget += 1400
       const step = activity?.start("Составление формул для расчёта", "model", selection.modelId, { maxTasks: 6, timeoutMs: 6000 })
       try {
-        const plan = await runStrictMalikModel({ modelId: selection.modelId, prompt, taskPrompt: prompt, systemPrompt: mathPlanningInstruction, maxTokens: 1400, temperature: 0.1, reasoningEffort: "low", allowCatalog: selection.allowCatalog === true, signal: planningSignal })
+        const plan = await runPlanningModel({ modelId: selection.modelId, prompt: requestPrompt, taskPrompt: requestPrompt, systemPrompt: mathPlanningInstruction, maxTokens: 1400, temperature: 0.1, reasoningEffort: "low", allowCatalog: selection.allowCatalog === true, signal: planningSignal })
         activity?.finish(step, { characters: plan.content.length, format: "JSON-план; требует проверки движком" })
         return plan.content
       } catch (error) { activity?.finish(step, undefined, "failed", "Не удалось составить план расчёта. Отвечаю обычным способом."); throw error }
-    })
+    }) : null
+    signal?.throwIfAborted()
     for (const receipt of plannedMath?.receipts || []) {
       const step = activity?.start("Расчёт формулы модели движком", "code", receipt.outcome.engine, describeTask(receipt.task))
       activity?.finish(step, plannedMathReceiptText(receipt.task, receipt.outcome))
@@ -1274,7 +1316,7 @@ export async function malikGodAnswer(
       "In Russian use respectful «Вы». Do not start with «Конечно» or a restatement of the question.",
     ].join("\n")
     const routineInstructions = [compactChatInstructions, userContextBlocks(body), conversationIntentInstruction(universalIntent), conversationFocusInstruction(requestPrompt, focus)]
-    const requestedBudget = Math.max(1, answerBudget(body, prompt, Math.max(brain.outputTokenTarget, powerOutputTokens)) - domainPlanningBudget)
+    const requestedBudget = Math.max(1, totalBudget - domainPlanningBudget)
     const outputBudget = compactSimpleChat && math ? Math.min(768, requestedBudget) : requestedBudget
     const modelCall = activity?.start("Подготовка ответа моделью", "model", selection.modelId, { sources: sources.length, attachments: attachments.length, compactSimpleChat, leanEvidenceChat, outputTokenLimit: outputBudget })
     const result = await runStrictMalikModel({
@@ -1322,7 +1364,7 @@ export async function malikGodAnswer(
       accuracy: verified.report,
       factAudit: auditGroundedAnswer(answerCardsToText(content, { sources, userText: requestPrompt }), sources, prompt, verified.report, freshness.needsSearch ? freshnessCheckLine(freshness) : undefined),
       ...(result.incomplete ? { incomplete: result.incomplete } : {}),
-      usage: result.usage,
+      usage: completeUsage(result.usage, true),
       attempts: [{
         provider: result.provider,
         model: result.model,
@@ -1333,10 +1375,9 @@ export async function malikGodAnswer(
     }
   }
 
-  const legacyFocus = domainPlan.context.followUp ? conversationFocus(requestPrompt, chatHistory) : { followUp: false, anchor: "", searchText: requestPrompt, shapeText: requestPrompt }
-  if (preparedEvidence) legacyFocus.searchText = preparedEvidence.prompt
+  const legacyFocus = { ...turn.focus, ...(preparedEvidence ? { searchText: preparedEvidence.prompt } : {}) }
   const legacyAttribution = attributionKind(legacyFocus.searchText)
-  const usedWeb = domainPlan.evidence.web !== "off" && (shouldUseWeb(legacyFocus.searchText, body, domainPlan) || powerForcesWeb && body?.research !== false && !body?.disableResearch && !NO_WEB.test(legacyFocus.searchText))
+  const usedWeb = intelligenceWebDecision({ domain: domainPlan, focus: legacyFocus }, body, powerForcesWeb)
   if (legacyAttribution && !usedWeb) {
     return { content: attributionUnavailable(legacyAttribution, "search-off"), provider: "attribution-evidence-gate", model: "no-evidence", usedWeb: false, sources: [], attempts: [] }
   }
@@ -1364,12 +1405,14 @@ export async function malikGodAnswer(
     return { ...cache, provider: `${cache.provider}-cache` }
   }
 
+  const publicEvidenceAllowed = !body?.disableResearch && domainPlan.evidence.web !== "off"
+    && !NO_WEB.test(requestPrompt) && !NO_WEB.test(legacyFocus.searchText)
   const [webSources, connected, science] = await Promise.all([
     usedWeb ? preparedEvidence ? Promise.resolve(preparedEvidence.sources) : gatherSources(legacyFocus.searchText, emitResearch, activity, signal, freshnessMode(body?.responseDepth || body?.metadata?.responseDepth), requestFreshness.timeZone) : Promise.resolve([] as SourceItem[]),
     serverConnected
       ? Promise.resolve(serverConnected)
-      : requestedConnected ? Promise.resolve(requestedConnected) : fusionActive ? collectMalikConnectedContext(prompt, activity) : Promise.resolve({ context: "", sources: [] as SourceItem[] }),
-    scienceActive ? collectMalikScienceContext(prompt) : Promise.resolve({ context: "", sources: [] as any[], providers: [] as string[] }),
+      : requestedConnected ? Promise.resolve(requestedConnected) : fusionActive ? collectMalikConnectedContext(requestPrompt, activity) : Promise.resolve({ context: "", sources: [] as SourceItem[] }),
+    scienceActive && publicEvidenceAllowed ? collectMalikScienceContext(requestPrompt) : Promise.resolve({ context: "", sources: [] as any[], providers: [] as string[] }),
   ])
   const sources: SourceItem[] = [...webSources, ...connected.sources, ...(science.sources as SourceItem[])].slice(0, 32)
   if (legacyAttribution && !webSources.length) {
@@ -1423,11 +1466,8 @@ export async function malikRescueAnswer(
 ): Promise<GodAnswer> {
   selection = { ...selection, modelId: nativeMalikEngineId(selection.modelId) }
   const prompt = extractPrompt(body)
-  const history = conversationHistory(body)
-  const intent = resolveConversationIntent({ prompt, messages: history, attachments: body?.attachments })
+  const { history, intent, domain: domainPlan, focus } = resolveIntelligenceTurn(prompt, body)
   const format = intent.target === "text" && intent.requirements.presentation === "json" ? "json" : undefined
-  const domainPlan = resolveDomainPlan({ prompt, messages: history, attachments: body?.attachments, intent })
-  const focus = domainPlan.context.followUp ? conversationFocus(prompt, history) : { followUp: false, anchor: "", searchText: prompt, shapeText: prompt }
   const sources = found.slice(0, 12)
   const attribution = attributionKind(focus.searchText)
   if (attribution && !sources.length) {

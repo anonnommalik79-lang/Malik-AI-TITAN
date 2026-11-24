@@ -12,15 +12,24 @@ export const mathPlanningInstruction = [
   "For physics keep units in the expression and set expectUnit for evaluate or use convert. Variables/constants not supplied by the user must not be invented.",
 ].join("\n")
 export type PlannedMath = { givens: string[]; unknown: string; receipts: Array<{ task: MathTask; outcome: MathOutcome }> }
-/** Extra planning is work-only; any invalid/unverified task discards the whole plan. */
-export async function planWorkMath(input: { prompt: string; mode: WorkspaceMode; explicitMath: boolean; attachments: number; signal?: AbortSignal }, model: (signal: AbortSignal) => Promise<string>, timeoutMs = 6000): Promise<PlannedMath | null> {
-  if (input.mode !== "work" || input.explicitMath || input.attachments || !detectQuantitativeReasoning(input.prompt)?.complex) return null
+/** Explicit complex calculations in either mode can use the same deterministic engine.
+ * The chat caller must opt in after checking its remaining response budget. */
+export async function planWorkMath(input: { prompt: string; mode: WorkspaceMode; allowChat?: boolean; explicitMath: boolean; attachments: number; signal?: AbortSignal }, model: (signal: AbortSignal) => Promise<string>, timeoutMs = 6000): Promise<PlannedMath | null> {
+  const explicitCalculation = /^(?:(?:пожалуйста|please)[,\s]+)?(?:реши|рассчитай|посчитай|вычисли|найди|solve|calculate|compute|evaluate|есепте|шығар)\s/iu.test(input.prompt.trim())
+  if ((input.mode !== "work" && !(input.allowChat && explicitCalculation)) || input.explicitMath || input.attachments || !detectQuantitativeReasoning(input.prompt)?.complex) return null
   const controller = new AbortController(), abort = () => controller.abort()
   if (input.signal?.aborted) return null
   input.signal?.addEventListener("abort", abort, { once: true })
   let timer: ReturnType<typeof setTimeout> | undefined
+  let onAbort: (() => void) | undefined
   try {
-    const raw = await Promise.race([model(controller.signal), new Promise<never>((_, reject) => { timer = setTimeout(() => { controller.abort(); reject(new Error("TIMEOUT")) }, Math.min(6000, Math.max(1, timeoutMs))) })])
+    const stopped = new Promise<null>(resolve => {
+      onAbort = () => resolve(null)
+      controller.signal.addEventListener("abort", onAbort, { once: true })
+      timer = setTimeout(abort, Math.min(6000, Math.max(1, timeoutMs)))
+    })
+    const raw = await Promise.race([Promise.resolve().then(() => controller.signal.aborted ? null : model(controller.signal)), stopped])
+    if (raw === null) return null
     if (controller.signal.aborted || raw.length > 16000) return null
     const plan = planSchema.safeParse(JSON.parse(raw)); if (!plan.success) return null
     const receipts = []
@@ -32,7 +41,7 @@ export async function planWorkMath(input: { prompt: string; mode: WorkspaceMode;
     }
     return { givens: plan.data.givens, unknown: plan.data.unknown, receipts }
   } catch { return null }
-  finally { clearTimeout(timer); controller.abort(); input.signal?.removeEventListener("abort", abort) }
+  finally { clearTimeout(timer); if (onAbort) controller.signal.removeEventListener("abort", onAbort); controller.abort(); input.signal?.removeEventListener("abort", abort) }
 }
 export function plannedMathReceiptText(task: MathTask, outcome: MathOutcome) {
   if (!outcome.ok) return ""

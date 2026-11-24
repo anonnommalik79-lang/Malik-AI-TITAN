@@ -94,18 +94,15 @@ function addCommandFiles(scope: string, add: (capability: WorkFileCapability, fo
 }
 
 /**
- * Chat: a Superflow starts only on an explicit «создай бизнес» (see
- * decideSuperflow). Work: additionally, an explicit request for a file
- * («создай документ / PDF / презентацию») becomes a file task. A long brief
- * or a numbered task list is answered in the chat; only its opening
- * instruction may ask for a file.
+ * Chat and Work share the same repository and multi-deliverable executor.
+ * Single artifacts in Chat retain the native conversation delivery path.
+ * Incidental mentions, questions and quoted task lists do not start a flow.
  */
 export function routeWorkRequest(goal: string, options: { mode: WorkspaceMode; signedIn: boolean; attachmentKinds?: string[] }): WorkRoute {
   const text = String(goal || "").trim()
   const legacy = decideSuperflow(text, options.attachmentKinds || [])
   const chat = (reason: string) => ({ route: "chat" as const, reason, capabilities: legacy.capabilities })
   if (!options.signedIn) return chat("guest")
-  if (options.mode !== "work") return { route: legacy.run ? "flow" : "chat", reason: legacy.reason, capabilities: legacy.capabilities }
   if (/^\s*\//.test(text)) return chat("command")
   if (detectWorkScheduleIntent(text)) return chat("work-schedule")
   if (workRepositoryIntent(text)) return { route: "flow", reason: "work-repository", capabilities: ["code"] }
@@ -115,7 +112,9 @@ export function routeWorkRequest(goal: string, options: { mode: WorkspaceMode; s
   if (negated.test(scope)) return chat("negated")
   if (priorResult.test(scope)) return chat("artifact-follow-up")
   const files = workFiles(scope)
-  if (files) {
+  if (legacy.run && options.mode === "chat") return { route: "flow", reason: legacy.reason, capabilities: legacy.capabilities }
+  const fileCount = files ? Object.values(files).reduce((total, formats) => total + (formats?.length || 0), 0) : 0
+  if (files && (options.mode === "work" || fileCount > 1)) {
     const capabilities: Capability[] = Object.keys(files) as WorkFileCapability[]
     if (!localOnly.test(scope) && (researchCommand.test(scope) || sourcesRequested.test(scope))) capabilities.unshift("research")
     return { route: "flow", reason: "work-file-result", capabilities, files }

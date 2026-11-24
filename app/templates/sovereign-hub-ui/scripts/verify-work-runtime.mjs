@@ -66,13 +66,27 @@ await check("large engineering mission never schedules; direct reminders still w
 })
 await check("ordinary chat, guests, incidental GitHub and code examples do not start repo work", () => {
   for (const text of ["Что такое GitHub?", "Explain GitHub: https://github.com/qa-owner/qa-repository", "Когда исправят https://github.com/qa-owner/qa-repository?", "How do I fix https://github.com/qa-owner/qa-repository?", 'Объясни этот пример:\n```\ninspect https://github.com/qa-owner/qa-repository\n```']) assert.equal(intent.workRepositoryIntent(text), null)
-  assert.equal(orchestrator.routeWorkRequest(goal, { mode: "chat", signedIn: true }).route, "chat")
+  assert.equal(orchestrator.routeWorkRequest(goal, { mode: "chat", signedIn: true }).reason, "work-repository")
+  assert.equal(orchestrator.routeWorkRequest(goal, { mode: "chat", signedIn: false }).route, "chat")
   assert.equal(orchestrator.routeWorkRequest(goal, { mode: "work", signedIn: false }).route, "chat")
   assert.equal(intent.workRepositoryIntent("Inspect https://github.com/a/b and https://github.com/c/d"), null)
   assert.equal(intent.workRepositoryIntent("Inspect https://github.com/a/b/tree/feature/topic"), null)
   assert.equal(intent.workRepositoryIntent("Inspect https://github.com/a/b/tree/main and https://github.com/a/b/tree/other"), null)
   assert.equal(intent.workRepositoryIntent("Inspect https://github.com/a/b/tree/feature/topic\nBranch: feature/topic").ref, "feature/topic")
   assert.equal(intent.workRepositoryIntent("Inspect https://github.com/a/b and https://github.com/a/b/tree/release").ref, "release")
+})
+await check("normal chat runs the same repository tool pipeline and produces an owner-scoped proposed patch", async () => {
+  calls = []; decisions = [read, finish]
+  const id = await start({ workspaceMode: "chat" })
+  const flow = await done(id)
+  assert.equal(flow.status, "completed")
+  const artifacts = await store.getArtifacts(owner.userId, flow.tasks.flatMap(task => task.artifactIds))
+  const patch = artifacts.find(item => item.metadata.role === "repository-patch")
+  assert.ok(patch)
+  assert.equal(patch.metadata.baseSha, commit)
+  assert.equal(patch.metadata.testsExecuted, false)
+  assert.deepEqual(JSON.parse(patch.content).files, finish.files)
+  assert.ok(calls.filter(call => call.type === "github").every(call => ["snapshot", "file"].includes(call.input.action)))
 })
 let success, patch, report, resumedId
 await check("actual API -> executor -> read -> model decisions -> syntax -> private artifacts", async () => {
@@ -160,11 +174,11 @@ await check("corrupt checkpoint fails closed before sending data to GitHub or a 
   const failed = await done(id); assert.equal(failed.status, "failed"); assert.equal(calls.length, 0)
   assert.equal(failed.tasks.find(task => task.type === "github.work").error.code, "INVALID_CHECKPOINT")
 })
-await check("long Work goal preserves tail; ordinary chat flow retains 4000 character limit", async () => {
+await check("long repository goal in chat preserves tail; non-repository flow retains 4000 character limit", async () => {
   const long = goal + "\n" + "Обязательные проверки и ограничения.\n".repeat(300) + "TAIL_REQUIREMENT_123"
-  calls = []; decisions = [read, finish]; const result = await done(await start({ goal: long }))
+  calls = []; decisions = [read, finish]; const result = await done(await start({ goal: long, workspaceMode: "chat" }))
   assert.equal(result.goal, long); assert.ok(calls.filter(call => call.type === "model").every(call => call.request.prompt.includes("TAIL_REQUIREMENT_123")))
-  const response = await flowRoute(new Request("http://qa.invalid/api/os/flows", { method: "POST", body: JSON.stringify({ goal: long, workspaceMode: "chat", clientRequestId: "chat-long-reject", force: true }) }))
+  const response = await flowRoute(new Request("http://qa.invalid/api/os/flows", { method: "POST", body: JSON.stringify({ goal: "Создай бизнес. " + "Требование. ".repeat(500), workspaceMode: "chat", clientRequestId: "chat-long-reject", force: true }) }))
   assert.equal(response.status, 400)
 })
 await check("deterministic parsers do not execute proposed code; unsupported formats are NOT RUN", () => {

@@ -62,6 +62,15 @@ for (const [goal, expected, withResearch] of deliverables) {
   assert.equal(decision.route, expected ? "flow" : "chat", goal)
   assert.deepEqual(decision.files || null, expected, goal)
   if (expected) assert.deepEqual(decision.capabilities, [...(withResearch ? ["research"] : []), ...Object.keys(expected)], goal)
+  const chatDecision = routeWorkRequest(goal, { mode: "chat", signedIn: true })
+  const multiple = expected && Object.values(expected).flat().length > 1
+  if (multiple) {
+    assert.equal(chatDecision.route, "flow", goal)
+    assert.deepEqual(chatDecision.files, expected, goal)
+  } else if (!decideSuperflow(goal).run) {
+    assert.equal(chatDecision.route, "chat", goal)
+  }
+  assert.equal(routeWorkRequest(goal, { mode: "chat", signedIn: false }).route, "chat", goal)
   count++
 }
 console.log(`${count}/${count} passed (work/chat/guest and exact requested deliverables)`)

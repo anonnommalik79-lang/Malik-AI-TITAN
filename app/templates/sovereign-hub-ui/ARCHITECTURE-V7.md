@@ -1,0 +1,14 @@
+# Malik AI V7 — unified intelligence, phase 1
+
+This is an incremental runtime migration, not a claim of parity with another company's private architecture.
+
+- One request-owned turn plan supplies admission, response, and rescue: normalized history, intent, domain, focus, current-fact policy, and a fixed turn clock.
+- The model can refine a bounded read-only evidence decision; explicit user opt-outs and server policies take precedence. No new external write access.
+- Existing model gateway, actual web tools, artifacts, auth, history, and media remain active. No provider credential or billing changes.
+- Run npm run test:unified-intelligence, npm run typecheck, npm run build and release regression suites.
+- Phase 2 initial read-only tool loop: after the first real web results, explicit deep research can ask the selected model for one structured decision, perform at most one extra lookup, deduplicate source receipts and pass them to the existing verifier. Budget: 256 planner tokens, 2.2s planning, 6s additional search. No extra call on ordinary chat, attachment turns, connected accounts, prepared evidence, or explicit no-web. MALIK_V7_RESEARCH_LOOP=0 disables it.
+- Phase 3 initial context recall: the model transport retains recent dialogue while selecting up to two relevant older turns from the same supplied conversation, within the existing character and message cap. No global or cross-account memory, extra provider call, or claim of semantic retrieval.
+- Phase 4: ordinary signed-in chat can start the existing owner-scoped repository executor and explicit multi-file flows, sharing server validation, quotas, run receipts, and private artifacts with Work. Repository changes are proposed patches, not remote writes; no fake test claims. Single native documents, ordinary chat, guests and quoted examples retain their existing paths.
+- Phase 5: explicit complex math in ordinary chat may use the Work formula planner and real deterministic engine, subject to the remaining response budget. Auxiliary domain, research and math model calls share the output budget; provider token receipts are combined, and missing receipts make the aggregate unknown. No new background operation or arbitrary code execution.
+- Specialist scholarly discovery and EIA spot-price reads also respect explicit no-web and server disableResearch. Account-connector authorization remains independent.
+- Next phases: typed tool-call/receipt loop across tools, persistent run state, simplify prompt composition, unify artifact events and memory retrieval, then retire redundant branches after parity tests. No replacement of existing functionality before evaluation.

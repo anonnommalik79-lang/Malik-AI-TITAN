@@ -14,7 +14,7 @@ import { providerFetch } from "@/lib/ai/providers/base"
 import { hasHiddenGeminiMedia, runHiddenGeminiMultimodal } from "@/lib/server/hidden-gemini-multimodal"
 import { resolveRequestEntitlement, type RequestEntitlement } from "@/lib/server/request-entitlement"
 import { analyzeMalikBrainV1 } from "@/lib/ai/brain-v1"
-import { boundedConversationHistory, conversationTransportBudget, withoutCurrentTurn } from "@/lib/ai/conversation-history"
+import { boundedConversationHistory, contextAwareConversationHistory, conversationTransportBudget, withoutCurrentTurn } from "@/lib/ai/conversation-history"
 import type { ExecutionReporter } from "@/lib/ai/chat-execution"
 
 export type HistoryMessage = { role: "user" | "assistant"; content: string }
@@ -163,7 +163,7 @@ export function buildMessages(input: {
     configuredMessages: historyMessageLimit,
     configuredChars: configuredHistoryChars,
   })
-  const history = boundedConversationHistory(normalizedHistory, historyBudget.maxMessages, historyBudget.maxChars)
+  const history = contextAwareConversationHistory(normalizedHistory, input.taskPrompt || input.prompt, historyBudget.maxMessages, historyBudget.maxChars)
   const images = (input.attachments || [])
     .filter((attachment) => attachment?.kind === "image" || attachment?.mime?.startsWith("image/"))
     .map(imageUrl)

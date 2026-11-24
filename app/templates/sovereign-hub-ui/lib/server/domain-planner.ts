@@ -19,7 +19,7 @@ export async function refineDomainPlan(base: DomainPlan, classify: DomainClassif
       onAbort = () => resolve(null)
       controller.signal.addEventListener("abort", onAbort, { once: true })
     })
-    const result = await Promise.race([classify({ prompt: JSON.stringify({ latest: base.request.slice(0, 6000), context: base.context.anchor.slice(0, 1800), currentPlan: { goal: base.goal, domains: base.domains, delivery: base.delivery } }), systemPrompt: DOMAIN_SEMANTIC_INSTRUCTION, signal: controller.signal }), timeout])
+    const result = await Promise.race([classify({ prompt: JSON.stringify({ latest: base.request.slice(0, 6000), context: base.context.anchor.slice(0, 1800), currentPlan: { goal: base.goal, domains: base.domains, delivery: base.delivery, web: base.evidence.web, followUp: base.context.followUp } }), systemPrompt: DOMAIN_SEMANTIC_INSTRUCTION, signal: controller.signal }), timeout])
     options.signal?.throwIfAborted()
     return result ? applySemanticDomainPlan(base, result.content) : base
   } catch {

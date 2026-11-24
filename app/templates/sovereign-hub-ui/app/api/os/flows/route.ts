@@ -1,6 +1,7 @@
 import { z } from "zod"
 import { routeWorkRequest } from "@/lib/work/orchestrator"
 import { repositoryWorkPlan } from "@/lib/work/repository-plan"
+import { workRepositoryIntent } from "@/lib/work/intent"
 import { startFlow } from "@/lib/os/executor"
 import { OsToolError } from "@/lib/os/failures"
 import { cleanRequestId, flowView, isOwnerPlan, osError, osJson, osOwner, requireSignedIn, returnDailyFlow, takeDailyFlow } from "@/lib/os/http"
@@ -11,7 +12,7 @@ import { readJsonBodyLimited } from "@/lib/server/request-safety"
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 const flowRequest = z.object({ goal: z.string().min(1).max(120000), clientRequestId: z.string().min(1).max(120), chatId: z.string().regex(/^[\w:.-]{1,120}$/).optional(), projectId: z.string().regex(/^[\w-]{1,120}$/).optional(), workspaceMode: z.enum(["chat", "work"]).default("chat"), force: z.boolean().optional(), demo: z.boolean().optional() }).strict()
-  .refine(body => body.workspaceMode === "work" || body.goal.length <= 4000)
+  .refine(body => body.workspaceMode === "work" || body.goal.length <= 4000 || Boolean(workRepositoryIntent(body.goal)))
 
 /** Mission control: this account's flows, newest first. */
 export async function GET(request: Request) {
@@ -39,7 +40,7 @@ export async function POST(request: Request) {
     const parsed = flowRequest.safeParse(await readJsonBodyLimited<unknown>(request, 512 * 1024))
     if (!parsed.success) throw new OsToolError("INVALID_REQUEST", "Проверьте цель и параметры задачи.", { retryable: false })
     const body = parsed.data
-    const goal = body.workspaceMode === "work" ? body.goal.trim() : body.goal.replace(/\s+/g, " ").trim()
+    const goal = body.goal.trim()
     const clientRequestId = cleanRequestId(body.clientRequestId)
     if (!clientRequestId) throw new OsToolError("INVALID_REQUEST", "Нет идентификатора запроса.", { retryable: false })
 

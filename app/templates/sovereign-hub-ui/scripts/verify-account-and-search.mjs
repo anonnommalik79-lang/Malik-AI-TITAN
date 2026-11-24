@@ -77,7 +77,8 @@ try {
     assert.equal(shouldUseWeb("что такое React", { research: false }), false)
     assert.equal(shouldUseWeb("поищи новости", { disableResearch: true, forceResearch: true }), false)
     assert.equal(shouldUseWeb("без интернета объясни что такое React"), false)
-    assert.equal(shouldUseWeb("привет", { forceResearch: true }), true)
+    assert.equal(shouldUseWeb("привет", { forceResearch: true }), false, "greetings have no evidence task even when research is enabled")
+    assert.equal(shouldUseWeb("Найди актуальные сведения о Next.js", { forceResearch: true }), true)
     assert.equal(shouldUseWeb("write a story about today", { forceResearch: true }), true)
   })
 
@@ -126,15 +127,10 @@ try {
     user = null
     const spoof = new Request(request.url, { headers: { "x-malik-admin-email": owner } })
     assert.equal((await admin.getAdminAccessAsync(spoof)).authorized, false)
-    // Founder access follows the authenticated WorkOS session email alone.
-    // emailVerified was dropped from this gate on purpose in
-    // 081ffec "fix(founder): restore owner console access" - some identity
-    // providers report the flag inconsistently and it was hiding the console
-    // from the real owner. The guard that matters is still here: only the owner
-    // address passes, and only from the session, never from a header or an env
-    // list. Entitlement code keeps its own verified-email checks.
+    // Owner-only routes require a verified session email. A matching but
+    // unverified address is not sufficient evidence of ownership.
     user = { email: owner, emailVerified: false }
-    assert.equal((await admin.getAdminAccessAsync(request)).authorized, true)
+    assert.equal((await admin.getAdminAccessAsync(request)).authorized, false)
     user.emailVerified = true
     assert.equal((await admin.getAdminAccessAsync(request)).authorized, true)
   })
