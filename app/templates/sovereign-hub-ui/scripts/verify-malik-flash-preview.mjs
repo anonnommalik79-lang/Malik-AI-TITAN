@@ -137,7 +137,7 @@ test("Flash stays usable on the native MALIKII engine while the Google integrati
   // Every native engine entry maps Flash, so a request that names no model works while Flash is the default.
   assert.match(readFileSync("lib/malik-god-router.ts", "utf8"), /if \(selection\) selection = \{ \.\.\.selection, modelId: nativeMalikEngineId\(selection\.modelId\) \}/u)
   assert.equal(readFileSync("lib/malik-god-router.ts", "utf8").includes("FLASH_WORKER_NOT_READY"), false)
-  assert.match(readFileSync("lib/malik-god-router.ts", "utf8"), /\): Promise<GodAnswer> \{\s+selection = \{ \.\.\.selection, modelId: nativeMalikEngineId\(selection\.modelId\) \}\s+const prompt = extractPrompt\(body\)\s+const history/u)
+  assert.match(readFileSync("lib/malik-god-router.ts", "utf8"), /\): Promise<GodAnswer> \{\s+selection = \{ \.\.\.selection, modelId: nativeMalikEngineId\(selection\.modelId\) \}\s+const prompt = extractPrompt\(body\)\s+const \{ history, intent, domain: domainPlan, focus \} = resolveIntelligenceTurn\(prompt, body\)/u)
   assert.match(readFileSync("lib/server/malik-model-router.ts", "utf8"), /input = \{ \.\.\.input, modelId: nativeMalikEngineId\(input\.modelId\) \}/u)
   // The browser follows the worker flow only under the same flag as the server.
   assert.match(readFileSync("components/sovereign/dashboard.tsx", "utf8"), /const flashSelected = usesMalikFlashBrowser\(selectedModelId\)/u)

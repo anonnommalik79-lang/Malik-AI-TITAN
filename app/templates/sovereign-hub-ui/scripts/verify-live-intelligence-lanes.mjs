@@ -20,6 +20,7 @@ const deps = {
   ...load("lib/ai/web-search-policy.ts"),
   ...load("lib/ai/conversation-intent.ts"),
   ...load("lib/ai/domain-intelligence.ts"),
+  ...load("lib/server/intelligence-core.ts"),
   ...load("lib/ai/conversation-validation.ts"),
   // Petroleum execution is exercised by its dedicated suite. These seven
   // non-petroleum lane checks must not create files or call paid providers.
