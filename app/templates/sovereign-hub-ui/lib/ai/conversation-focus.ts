@@ -12,6 +12,7 @@
 type Turn = { role?: unknown; content?: unknown }
 import { isContinueRequest } from "./answer-completion"
 import { NO_WEB } from "./freshness-intent"
+import { normalizeColloquial } from "./colloquial"
 
 const ACKNOWLEDGEMENT = /^(?:спасибо|спс|рахмет|благодарю|thanks|thank\s+you|thx|ок|окей|ok|okay|да|нет|ага|угу|yes|no|понятно|ясно|хорошо|отлично|супер|класс|круто|жақсы|иә|жоқ)[\s!.)]*$/iu
 const FOLLOW_START = /^(?:а|и|но|ну|так|тогда|ещё|еще|(?:(?:and|but)\s+)?(?:what|how)\s+about|and|but|so|ал)(?![\p{L}])[,\s]*/iu
@@ -29,6 +30,10 @@ const TRANSFORM = /^(?:(?:а|и|теперь|now|then)\s+)?(?:напиши|пе�
 const CONTEXT_EDIT = /^(?:(?:а|и|теперь|now|then|please|енді)[,\s]+)*(?:лучше|проще|улучши|исправь\s+предыдущ|better|simpler|improve(?:\s+it)?|plain\s+text|no\s+table|жақсырақ\s+жаса|қарапайымырақ|алдыңғы\s+жауаб\p{L}*\s+түзет|қысқаша|тізімсіз|қазақша|орысша|ағылшынша)(?![\p{L}])/iu
 const PREFERENCE_ONLY = /^(?:(?:а|и|теперь|now|then|please|енді|в\s+этом\s+разговоре|for\s+this\s+chat|осы\s+әңгімеде)[,\s]+)*(?:(?:отвечай|ответь|пиши|answer|reply|respond)\s+)?(?:(?:по[- ]?|на\s+|in\s+))?(?:русск\p{L}*|казахск\p{L}*|английск\p{L}*|english|russian|kazakh|қазақша|орысша|ағылшынша|кратко|подробно|briefly|қысқаша|json\s+only)(?:[,\s]+(?:(?:и|and|және)\s+)?(?:кратко|подробно|подробнее|briefly|қысқаша|без\s+списков|without\s+(?:lists|bullets)|тізімсіз))*[.!?\s]*$/iu
 const QUESTION_WORD = /(?<![\p{L}])(?:почему|зачем|как|когда|где|откуда|сколько|кто|что|чем|какой|какая|какое|какие|why|how|when|where|who|what|which|неге|қалай|қашан|кім|не)(?![\p{L}])/iu
+const QUESTION_START = /^(?:почему|зачем|как|когда|где|откуда|сколько|кто|что|чем|какой|какая|какое|какие|why|how|when|where|who|what|which|неге|қалай|қашан|кім|не|қанша)(?!\p{L})/iu
+const RANK_FOLLOW_UP = /^(?:(?:\d{4}(?:\s+год)?|он|она|они)\s+)?(?:на\s+каком\s+месте(?:\s+(?:он|она|они|\d{4}))?|сколько\s+месте\s+сто[ий]т|какое\s+место(?:\s+(?:занимает|у\s+него))?|what\s+rank|where\s+(?:does\s+it|do\s+they)\s+rank)[\s?!.]*$/iu
+const REACTION = /^(?:по[чя]|почему)\s+(?:(?:так|очень)\s+)?(?:мало|много)[\s?!.]*$/iu
+const CORRECTION = /^(?:нет|неа|no|жоқ)[,\s]+/iu
 const SEARCH_AGAIN = /^(?:(?:а|и|теперь|then|now|actually|please|енді)[,\s]+)*(?:поищи(?:\s+в\s+(?:сети|интернете))?|проверь\s+(?:в\s+интернете|онлайн)|загугли|(?:look\s+it\s+up|search\s+the\s+web|browse\s+online)(?:\s+now)?|интернеттен\s+(?:ізде|тап))[.!?\s]*$/iu
 const TIME_SCOPE = /(?<![\p{L}\p{N}])(?:(?:за\s+)?(?:последн\p{L}*\s+)?(?:24\s+час\p{L}*|(?:7|семь)\s+дн\p{L}*)|сегодня|вчера|сейчас|на\s+данный\s+момент|на\s+этой\s+неделе|в\s+прошлом\s+(?:месяце|году)|(?:за\s+)?(?:текущ\p{L}*|прошл\p{L}*)\s+(?:недел\p{L}*|месяц\p{L}*|год\p{L}*)|(?:in\s+the\s+)?(?:last|past)\s+(?:24\s+hours|(?:7|seven)\s+days)|today|yesterday|currently|now|(?:this|last)\s+(?:week|month|year)|бүгін|кеше|қазір|соңғы\s+(?:24\s+сағат|7\s+күн|апта)|осы\s+(?:апта|ай|жыл)|(?:в|за|in)\s+(?:19|20)\d{2}(?:\s+году)?|(?:19|20)\d{2}\s+жылы)(?![\p{L}\p{N}])/giu
 const ENTITY = /^[\p{Lu}\p{Lt}\d][\p{L}\p{N}.&+-]*(?:\s+[\p{L}\p{N}][\p{L}\p{N}.&+-]*){0,3}$/u
@@ -45,13 +50,25 @@ export function isContextDependent(prompt: string): boolean {
   const count = words(text).length
   if (count > 10) return false
   if (isContinueRequest(text) || CONTEXT_EDIT.test(text) || PREFERENCE_ONLY.test(text) || SEARCH_AGAIN.test(text)) return true
-  if (BARE.test(text)) return true
+  if (BARE.test(text) || REACTION.test(text) || RANK_FOLLOW_UP.test(normalizeColloquial(text))) return true
+  if (CORRECTION.test(text)) {
+    const correction = text.replace(CORRECTION, "").trim()
+    return words(correction).length <= 4
+  }
   if (FOLLOW_START.test(text)) {
     const rest = strip(text)
     return !QUESTION_WORD.test(rest) || !ownSubject(rest) || REFERENCE.test(rest)
   }
   if (ORDINAL_ONLY.test(text)) return true
   return count <= 5 && REFERENCE.test(text) && !ownSubject(text)
+}
+
+/** Factual follow-ups still need an answer and may need fresh evidence. */
+export function isContextQuestion(prompt: string): boolean {
+  const text = String(prompt || "").trim()
+  const normalized = normalizeColloquial(strip(text))
+  return QUESTION_START.test(normalized) || REACTION.test(normalized) || RANK_FOLLOW_UP.test(normalized)
+    || FOLLOW_START.test(text) && /\?$/u.test(text) && !TRANSFORM.test(text) && !CONTEXT_EDIT.test(text) && !PREFERENCE_ONLY.test(text)
 }
 
 function previousUserQuestions(prompt: string, history: unknown): string[] {
@@ -120,6 +137,7 @@ export function conversationFocus(prompt: string, history: unknown): Conversatio
     for (const turn of earlier.slice(0, Math.min(index, 8)).reverse()) subject = refineSubject(turn, subject, strip(turn)) || subject
   }
   const refined = refineSubject(text, subject, rest)
+  const rank = RANK_FOLLOW_UP.test(normalizeColloquial(rest))
   // «а третий?» / «а Tesla?» swaps one part of the earlier question, so the
   // answer keeps its shape. «почему?» / «подробнее» asks something new about it.
   const substitution = FOLLOW_START.test(text) && !QUESTION_WORD.test(rest) && !BARE.test(text)
@@ -128,8 +146,8 @@ export function conversationFocus(prompt: string, history: unknown): Conversatio
     anchor,
     // «почему?», «подробнее» ask about the answer already given: no new search.
     searchText: SEARCH_AGAIN.test(text) ? `${refined || subject} ${text}`
-      : BARE.test(text) || TRANSFORM.test(text) ? text
-      : refined || (rest ? `${subject} ${rest}` : subject),
+      : BARE.test(text) || REACTION.test(text) || TRANSFORM.test(text) ? text
+      : refined || (rest ? `${subject} ${rank ? normalizeColloquial(rest).replace(/сколько\s+месте\s+сто[ий]т/iu, "место в рейтинге") : rest}` : subject),
     shapeText: substitution ? `${anchor}\n${text}` : text,
   }
 }

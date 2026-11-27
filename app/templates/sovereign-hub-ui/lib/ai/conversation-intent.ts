@@ -2,7 +2,7 @@ import {classifyFreshness} from "./freshness-intent"
 import {isExplicitImageEditRequest,isExplicitImageGenerationRequest,isExplicitVideoGenerationRequest} from "./image-intent"
 import {primaryNonMediaArtifact} from "./artifact-intent"
 import { conversationTurns, withoutCurrentTurn } from "./conversation-history"
-import { isContextDependent } from "./conversation-focus"
+import { isContextDependent, isContextQuestion } from "./conversation-focus"
 import { isContinueRequest } from "./answer-completion"
 
 export type OutputFormat="pdf"|"docx"|"pptx"|"xlsx"|"csv"|"txt"|"md"|"html"|"json"|"zip"
@@ -93,7 +93,7 @@ export function resolveConversationIntent(input:{prompt:string;messages?:unknown
  if(RESET_PREFERENCES.test(text))for(const key of Object.keys(active))delete active[key as keyof ConversationRequirements]
  Object.assign(active,current);if(CANCEL_FILE.test(text)||current.presentation==="json"&&!current.format)delete active.format
  if(PLAIN_PRESENTATION.test(text))delete active.presentation
- const followUpQuestion=followUp&&!TRANSFORM.test(text)&&!preferenceOnly&&!isContinueRequest(text)&&/^(?:почему|зачем|откуда|как|когда|где|сколько|чем|why|how|when|where|what|which|неге|қалай|қашан|қайдан|қанша)(?:[\s?!.]|$)/iu.test(text)
+ const followUpQuestion=followUp&&!TRANSFORM.test(text)&&!preferenceOnly&&!isContinueRequest(text)&&isContextQuestion(text)
  if(followUpQuestion&&!current.format)delete active.format
  if(/верни.*(?:стар|предыдущ|прежн).*(?:стиль|тон)|restore.*(?:previous|old).*(?:style|tone)/iu.test(text)&&tones.length>1&&!current.tone)active.tone=tones.at(-2)
  const directCreation=/(?<!\p{L})(?:создай|созда[йи]|сдела[йи]|сгенерируй|подготовь|напиши|дай|выдай|create|build|generate|design|make|write|export|жаса)/iu.test(text)

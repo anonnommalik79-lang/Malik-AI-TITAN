@@ -31,6 +31,8 @@ const BUILD_NEEDS_WEB = /(?:актуальн|свеж|последн|новей�
 const WRITING = /(?:напиши|создай|сделай|объясни|рассчитай|write\b|build\b|create\b|explain\b|implement\b|жаз|түсіндір|жаса)/iu
 const LIVE_WORDS = /(?:последние?\s+24\s+час|за\s+24\s+час|сегодня|вчера|прямо\s+сейчас|в\s+реальном\s+времени|\btoday\b|\byesterday\b|last\s+24\s+hours|right\s+now|бүгін|кеше|соңғы\s+24\s+сағат)/iu
 const TIME_WORDS = /(?:последн|новейш|свеж|актуальн|сейчас|на\s+данный\s+момент|на\s+сегодняшний\s+день|на\s+этой\s+неделе|текущ|\blatest\b|\bcurrent\b|\brecent\b|\bnow\b|this\s+(?:week|month|year)|соңғы|қазіргі|қазір|жаңа)/iu
+const DEMOGRAPHIC_SUBJECT = /(?:люд(?:ей|и|ям)|человек|населени|жител|рождаемост|\b(?:population|people|inhabitants|birth cohort)\b|адам|халық\s+саны)/iu
+const DEMOGRAPHIC_QUANTITY = /(?:сколько|численност|процент|рейтинг|какого\s+года|месте|\b(?:how many|rank|size|percent|percentage)\b|қанша)/iu
 // What a company is worth, what it raised and earns changes with every round.
 const MONEY_NOW = /(?:оценива\p{L}*ся|(?<!\p{L})оценк[аиуе]\s+(?:компани|стартап|бизнес|фирм|бренд|проект)|капитализац|рыночн\p{L}*\s+стоимост|стоимост\p{L}*\s+(?:компани|стартап|бизнес)|сколько\s+(?:сейчас\s+)?(?:стоит|стоят)\s+(?:компани|стартап|акци)|привлек\p{L}*\s+(?:\$|инвестиц|деньг|раунд|финансир)|раунд\p{L}*\s+(?:финансир|инвестиц|seed|series|сид)|выручк|(?<!\p{L})(?:valuation|valued|market\s+cap|funding|raised|revenue|ipo|series\s+[a-f])(?!\p{L})|бағаланады|капитализация)/iu
 /** «Сколько стоит/оценивается компания», funding rounds, revenue. */
@@ -110,7 +112,7 @@ export function classifyFreshness(prompt: string, now = new Date(), requestedZon
     const window = needsSearch && !historical ? temporalWindow(text, now, timeZone) : undefined
     // "Latest model today" asks what is current as of today, not what was released today.
     const asOf = window?.label === "today" && !isNewsRequest(text) && !/(?:произошл|выш|выпуст|released|announced|launch|опублик|событ|не\s+болды|шығарыл)/iu.test(text)
-      && /(?:модел|models?|верс|version|price|pricing|цен|погод|weather|президент|president|министр|minister|бағам|нұсқа)/iu.test(text)
+      && (reason === "demographic-statistic" || /(?:модел|models?|верс|version|price|pricing|цен|погод|weather|президент|president|министр|minister|бағам|нұсқа)/iu.test(text))
     return { ...base, category, needsSearch, reason, news: needsSearch && !historical && isNewsRequest(text), ttlMs: category === "LIVE" || needsSearch && isNewsRequest(text) ? 60_000 : category === "STATIC" ? 1_200_000 : 300_000, ...(window && !asOf ? { window } : {}) }
   }
   if (!text) return result("STATIC", false, "empty")
@@ -123,6 +125,7 @@ export function classifyFreshness(prompt: string, now = new Date(), requestedZon
   if (SELF_CONTAINED.test(text) && !VOLATILE.test(text) && !/(?:актуальн|current|latest|соңғы|қазіргі)/iu.test(text)) return result("STATIC", false, "self-contained")
   if (historical) return result("STATIC", false, "historical")
   if (BUILD.test(text) && !BUILD_NEEDS_WEB.test(text)) return result("STATIC", false, "build-task")
+  if ((TIME_WORDS.test(text) || LIVE_WORDS.test(text)) && DEMOGRAPHIC_SUBJECT.test(text) && DEMOGRAPHIC_QUANTITY.test(text) && !isNewsRequest(text)) return result("CURRENT", true, "demographic-statistic")
   const changing = isNewsRequest(text) || isModelLeaderboardRequest(text) || VOLATILE.test(text) || MONEY_NOW.test(text) || AI.test(text) && (COMPARISON.test(text) || TIME_WORDS.test(text) || /(?:модел|models?|GPT[ -]?\d|Claude[ -]?\d|Gemini[ -]?\d|Grok[ -]?\d)/iu.test(text))
     || TECH.test(text) && /(?:(?<!\p{L})нов[а-я]*|latest|current|recent|new|жаңа|соңғы)/iu.test(text)
     || EVENT.test(text) && /(?:форум|конференц|мероприяти|выставк|conference|summit|forum|event|expo)/iu.test(text)

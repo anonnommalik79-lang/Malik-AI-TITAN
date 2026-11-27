@@ -13,12 +13,14 @@ const SLANG: Array<[RegExp, string]> = [
   [/(?<!\p{L})(?:седня|сення|сёдня|седня)(?!\p{L})/giu, "сегодня"],
   [/(?<!\p{L})(?:плиз|плз|пж|пжлст)(?!\p{L})/giu, "пожалуйста"],
   [/(?<!\p{L})(?:када|кода)(?!\p{L})/giu, "когда"],
+  [/(?<!\p{L})даный(?!\p{L})/giu, "данный"],
+  [/(?<!\p{L})родившився(?!\p{L})/giu, "родившихся"],
   [/(?<!\p{L})(?:слушай|а\s+вот)\s+/giu, ""],
 ]
 
 /** «а щя скоко оценивается …» → «сейчас сколько оценивается …». */
 export function normalizeColloquial(input: string): string {
-  let text = String(input || "")
+  let text = String(input || "").replace(/(?<=\d)(?=(?:скок(?:о|а|лько)?|сколько|када)(?!\p{L}))/giu, " ")
   for (const [pattern, replacement] of SLANG) text = text.replace(pattern, replacement)
   // A leading «а», «и», «ну», «так» opens a new question as often as it continues one.
   return text.replace(/^(?:\s*(?:а|и|ну|так|ок|окей|да)(?:[\s,]+|$))+/iu, "").replace(/\s+/gu, " ").trim()

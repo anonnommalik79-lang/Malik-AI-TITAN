@@ -18,6 +18,7 @@ const { resolveDomainPlan } = load("lib/ai/domain-intelligence.ts")
 const { shouldUseWeb } = load("lib/ai/web-search-policy.ts")
 const { classifyFreshness } = load("lib/ai/freshness-intent.ts")
 const { assessSources, finalizeFreshAnswer } = load("lib/live-intelligence/evidence.ts")
+const { normalizeWebSearchQuery, birthCohortDataQuery } = load("lib/ai/web-search-query.ts")
 const asOf = new Date("2026-11-20T12:00:00Z")
 const history = (...questions) => questions.map(content => ({ role: "user", content }))
 
@@ -102,6 +103,40 @@ check("Newton's laws and a self-contained calculation do not use the web", () =>
   assert.equal(lookup("Calculate 17 × 23", []).web, false)
 })
 
+const birthQuestion = "сколько сейчас на данный момент людей всех мире 2009 года"
+const birthCorrection = "Нет щяс люди родившився 2009скок штуков в мире на даный момент"
+const birthConversation = [
+  ...history(birthQuestion),
+  { role: "assistant", content: "Население Земли в 2009 году." },
+  ...history(birthCorrection),
+  { role: "assistant", content: "Оценка числа живущих людей 2009 года рождения." },
+]
+check("colloquial questions about people alive now use current demographic data", () => {
+  for (const question of [birthQuestion, birthCorrection, "How many people born in 2009 are alive today worldwide?"]) {
+    const result = lookup(question, [])
+    assert.equal(result.web, true)
+    assert.equal(result.freshness.reason, "demographic-statistic")
+    assert.equal(result.freshness.window, undefined)
+    assert.match(birthCohortDataQuery(normalizeWebSearchQuery(question), "2026"), /single year of age 2026.*2009/u)
+  }
+})
+check("the screenshot's short ranking question keeps the latest correction and searches", () => {
+  const result = lookup("2009скок месте стойт", birthConversation, { research: false })
+  assert.equal(result.anchor, birthCorrection)
+  assert.match(result.searchText, /место в рейтинге/u)
+  assert.equal(result.freshness.reason, "demographic-statistic")
+  assert.equal(result.web, true)
+})
+check("a short reaction explains the preceding statistic without another search", () => {
+  const result = lookup("Поя мало", birthConversation)
+  assert.equal(result.anchor, birthCorrection)
+  assert.equal(result.searchText, "Поя мало")
+  assert.equal(result.web, false)
+})
+check("a new named ranking has its own subject", () => {
+  assert.equal(conversationFocus("Кто первый в рейтинге теннисистов мира?", birthConversation).anchor, "")
+})
+
 const question = "Какая актуальная стабильная версия React?"
 const intent = classifyFreshness(question, asOf)
 const source = assessSources(question, [{
@@ -121,6 +156,10 @@ check("the cited release keeps its exact version and date receipt", () => {
   const answer = verify("Актуальная версия React — `19.2.0` [1].")
   assert.match(answer, /19\.2\.0/u)
   assert.match(answer, /Источники проверены/u)
+})
+check("the typographic citation used by live providers keeps the supported answer", () => {
+  assert.match(verify("Актуальная версия React 19.2.0 【1】."), /19\.2\.0 \[1\]/u)
+  assert.match(verify("Актуальная версия React 19.2.0 【99】."), /Не удалось подтвердить/u)
 })
 check("an unsourced current claim cannot acquire an automatic citation", () => {
   assert.match(verify("Версия React 99.0.0."), /Не удалось подтвердить/u)

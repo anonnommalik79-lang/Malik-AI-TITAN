@@ -39,7 +39,7 @@ import { parseKnowledgeFeed, KNOWLEDGE_FEEDS, type KnowledgeFeed } from "@/lib/l
 import { shouldUseWeb } from "@/lib/ai/web-search-policy"
 import { attributionKind, attributionSystemInstruction, attributionUnavailable, gateAttributionAnswer, selfCreatorReply } from "@/lib/ai/attribution-evidence"
 import { currentModelQueries, currentModelSubjects, currentResearchDate, currentSourcePriority, mentionedCurrentModels, needsCurrentEvidence, officialProductQuery } from "@/lib/ai/current-evidence"
-import { normalizeWebSearchQuery, eventSearchTitle, localRoleQuery } from "@/lib/ai/web-search-query"
+import { normalizeWebSearchQuery, eventSearchTitle, localRoleQuery, birthCohortDataQuery } from "@/lib/ai/web-search-query"
 import { fetchResearchResponse } from "@/lib/malik-research/bounded-fetch"
 import { buildMalikResponseSystemPrompt, cleanModelText } from "@/lib/ai/response-intelligence"
 import { analyzeMalikBrainV1, buildMalikBrainSystemInstruction } from "@/lib/ai/brain-v1"
@@ -132,6 +132,7 @@ export type PreparedLiveEvidence = { prompt: string; originalQuestion?: string; 
 export const CHAT_STYLE_INSTRUCTION = [
   "STYLE: Write like a friendly expert talking to a person, in the user's language: warm, natural, confident, no bureaucratic phrasing, no filler such as «Конечно! Вот ответ».",
   "Start with the answer itself. Use Markdown for structure only when it helps: short paragraphs, a list for steps or options, a table only for comparisons.",
+  "Read typos and short follow-ups in context. A correction should change the answer immediately. For factual questions, give the result or best supported estimate first, then explain the evidence or calculation. Mention only limitations that change what the reader can conclude.",
   "In everyday and casual answers use 1-3 fitting emoji where they add warmth or mark a point (for example 🍲 for a recipe, ✅ for a tip, 🚀 for a plan). Never put emoji inside code, formulas, calculations, tables, formal documents or letters the user will send, and never in answers about illness, death, grief, danger or other painful topics.",
 ].join(" ")
 
@@ -595,6 +596,10 @@ function buildQueries(prompt: string, intent: FreshnessIntent) {
     return [...new Set([`${subject} ${intent.localDate.slice(0, 4)} ${report}`, `${subject} ${intent.localDate.slice(0, 4)} ${alternate}`, `${subject} ${report}`])]
       .slice(0, Math.max(1, Math.min(3, Number(process.env.MALIK_GOD_MAX_SEARCH_QUERIES || 3))))
   }
+  if (intent.reason === "demographic-statistic") {
+    const cohort = birthCohortDataQuery(q, intent.localDate.slice(0, 4))
+    if (cohort) return [cohort, q].slice(0, Math.max(1, Math.min(3, Number(process.env.MALIK_GOD_MAX_SEARCH_QUERIES || 3))))
+  }
   // «хиггсфиелд ии» is searched as Higgsfield AI: engines know brands by their Latin names.
   const brand = latinBrandName(prompt)
   if (brand) {
@@ -702,7 +707,9 @@ function rankSourcesForPrompt(prompt: string, sources: SourceItem[], intent: Fre
     return sources.filter(source => matches(`${source.title} ${source.snippet || ""} ${source.url}`))
       .sort((a, b) => Number(matches(b.title)) - Number(matches(a.title)))
   }
-  const tokens = Array.from(new Set([...searchTokens(normalizeWebSearchQuery(prompt)), ...knownNameAliases(prompt)]))
+  const cohortTokens = intent.reason === "demographic-statistic" && birthCohortDataQuery(normalizeWebSearchQuery(prompt), intent.localDate.slice(0, 4))
+    ? ["population", "age", "cohort"] : []
+  const tokens = Array.from(new Set([...searchTokens(normalizeWebSearchQuery(prompt)), ...knownNameAliases(prompt), ...cohortTokens]))
   const eventIdentity = searchTokens(eventSearchTitle(prompt))
   const namedSubject = extractNamedSubject(prompt)
   const subjectTokens = Array.from(new Set([...searchTokens(namedSubject), ...(namedSubject ? knownNameAliases(prompt) : [])]))
@@ -1260,7 +1267,7 @@ export async function malikGodAnswer(
     const usedEvidence = usedWeb || Boolean(connected.context) || science.sources.length > 0 || Boolean(eiaEvidence.context)
     const strictPrompt = [
       `Question:\n${prompt}`,
-      usedWeb ? webSources.length ? `Web sources:\n${sourceContext(webSources, focus.searchText)}` : "LIVE WEB CHECK: This attempt returned no usable evidence. Say you could not verify the requested current facts; do not claim that no public information exists. Never invent speaker or participant lists." : "",
+      usedWeb ? webSources.length ? `Web sources:\n${sourceContext(webSources, focus.searchText)}` : "LIVE WEB CHECK: This attempt returned no usable evidence. Give the stable facts that answer part of the question or explain how to obtain the result. State the specific missing input when necessary. Never invent current facts, source links or tool results." : "",
       connected.context,
       science.context,
       eiaEvidence.context,

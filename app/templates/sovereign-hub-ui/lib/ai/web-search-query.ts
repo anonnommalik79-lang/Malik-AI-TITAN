@@ -2,6 +2,9 @@ import { normalizeColloquial } from "./colloquial"
 /** Remove conversational instructions without changing the named subject. */
 export function normalizeWebSearchQuery(prompt: string): string {
   return normalizeColloquial(prompt).replace(/\[(?:system|assistant|developer|internal)[^\]]*\][\s\S]*$/iu, "")
+    .replace(/^(?:нет|неа|no|жоқ)[,\s]+/iu, "")
+    .replace(/(?<!\p{L})на\s+данный\s+момент(?!\p{L})/giu, "сейчас")
+    .replace(/(?<!\p{L})всех\s+мире(?!\p{L})/giu, "во всём мире")
     .replace(/^(?:что\s+)?(?:ты\s+)?(?:знаеш[ь]?|знаете|расскажи(?:те)?|скажи(?:те)?|поведай|опиши|дай\s+(?:инфу|информацию|справку))(?:\s+(?:мне|нам|пожалуйста))?(?:\s+(?:ли|что[- ]нибудь))?\s+(?:про|о|об|обо)\s+/iu, "")
     .replace(/^(?:tell\s+me\s+(?:about|more\s+about)|what\s+do\s+you\s+know\s+about)\s+/iu, "")
     // «сравни жёстко/на глубоком уровне X и Y» searches for «X и Y сравнение».
@@ -9,6 +12,14 @@ export function normalizeWebSearchQuery(prompt: string): string {
     .replace(/(?:дай|покажи|перечисли|назови)(?:\s+(?:мне|пожалуйста))?\s+(?:всех\s+)?спикер[\p{L}]*/giu, "спикеры")
     .replace(/^(?:поищи|найди|покажи)(?:\s+мне)?\s+(?:информацию\s+)?(?:про\s+|о\s+)?/iu, "")
     .replace(/\s+/gu, " ").trim().slice(0, 260)
+}
+
+/** A data lookup for living cohorts needs the current age distribution. */
+export function birthCohortDataQuery(text: string, asOfYear: string): string {
+  if (!/(?:во\s+вс[её]м\s+мире|\bworld(?:wide)?\b|(?<!\p{L})в\s+мире)/iu.test(text)) return ""
+  const year = [...text.matchAll(/(?<!\d)(?:19|20)\d{2}(?!\d)/gu)].at(-1)?.[0]
+  if (!year && !/(?:родивш|рожден|рождён|год[ау]?\s+рождени|\bborn\b|birth\s+cohort)/iu.test(text)) return ""
+  return ["World population by single year of age", asOfYear, "UN World Population Prospects", year && `cohort born ${year}`].filter(Boolean).join(" ")
 }
 
 /** Keep named events as a whole, rather than matching any generic 'AI' page. */

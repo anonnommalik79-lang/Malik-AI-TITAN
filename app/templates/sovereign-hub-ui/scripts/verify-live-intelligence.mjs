@@ -91,6 +91,26 @@ await check("broken structured date is ignored", () => assert.equal(pageDates('<
 const search = (overrides = {}) => runLiveSearch({ prompt, queries: [prompt], providers: [{ name: "fixture", run: async () => [fresh] }], now: clock, cache: new EvidenceSearchCache(), circuits: new ProviderCircuits(), ...overrides })
 await check("primary failure uses working fallback", async () => { const result = await search({ providers: [{ name: "broken", run: async () => { throw Error("401") } }, { name: "backup", run: async () => [fresh] }] }); assert.equal(result.sources.length, 1); assert.equal(result.fallbackSuccesses, 1); assert.equal(result.calls, 2) })
 await check("empty primary uses fallback", async () => { const result = await search({ providers: [{ name: "empty", run: async () => [] }, { name: "backup", run: async () => [fresh] }] }); assert.equal(result.fallbackSuccesses, 1) })
+await check("fast search reformulates the question after irrelevant hits", async () => {
+  const alternate = "GPT-99 announcement official source"
+  const requested = []
+  const result = await search({
+    queries: [prompt, alternate],
+    providers: [
+      { name: "primary", run: async query => { requested.push(query); return query === alternate ? [fresh] : [old] } },
+      { name: "backup", run: async query => { requested.push(query); return [] } },
+    ],
+  })
+  assert.deepEqual(requested, [prompt, prompt, alternate])
+  assert.equal(result.calls, 3)
+  assert.equal(result.fallbackSuccesses, 1)
+  assert.equal(result.sources[0]?.url, fresh.url)
+})
+await check("fast search uses one query when it finds current evidence", async () => {
+  const result = await search({ queries: [prompt, "another formulation"] })
+  assert.equal(result.queries, 1)
+  assert.equal(result.calls, 1)
+})
 await check("outdated result does not prevent fresh fallback", async () => { const result = await search({ providers: [{ name: "old", run: async () => [old] }, { name: "fresh", run: async () => [fresh] }] }); assert.equal(result.sources[0].url, fresh.url); assert.equal(result.calls, 2) })
 await check("all provider failures never fake successful evidence", async () => { const result = await search({ providers: [{ name: "bad", run: async () => { throw Error("down") } }] }); assert.equal(result.sources.length, 0); assert.equal(result.attempts[0].outcome, "failed") })
 await check("public-query safety stops all external calls", async () => { const result = await search({ prompt: "api_key=secret latest AI", queries: ["secret"] }); assert.equal(result.calls, 0) })

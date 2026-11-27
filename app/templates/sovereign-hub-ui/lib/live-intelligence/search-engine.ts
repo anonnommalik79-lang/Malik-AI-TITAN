@@ -5,7 +5,7 @@ import { assessSources, currentEvidenceAvailable, currentNewsSources } from "./e
 export type LiveSearchProvider = { name: string; timeoutMs?: number; run: (query: string, limit: number, signal: AbortSignal, intent: FreshnessIntent) => Promise<MalikWebSource[]> }
 export type SearchAttempt = { provider: string; outcome: "success" | "empty" | "failed" | "circuit-open"; ms: number }
 export type LiveSearchResult = { sources: MalikWebSource[]; attempts: SearchAttempt[]; queries: number; calls: number; cacheHits: number; fallbackSuccesses: number; tookMs: number; cost: "provider-dependent" | "no-api-calls" }
-const LIMITS = { fast: { queries: 1, calls: 4, results: 4, ms: 10_000 }, deep: { queries: 2, calls: 6, results: 6, ms: 14_000 }, max: { queries: 3, calls: 8, results: 8, ms: 18_000 } } as const
+const LIMITS = { fast: { queries: 2, calls: 4, results: 4, ms: 10_000 }, deep: { queries: 2, calls: 6, results: 6, ms: 14_000 }, max: { queries: 3, calls: 8, results: 8, ms: 18_000 } } as const
 
 export class EvidenceSearchCache {
   private entries = new Map<string, { expires: number; sources: MalikWebSource[] }>()
@@ -67,8 +67,12 @@ export async function runLiveSearch(input: {
   if (!publicSearchText(input.prompt)) return result
   const queries = [...new Set(input.queries.map(publicSearchText).filter(Boolean))].slice(0, limits.queries)
   const take = (sources: MalikWebSource[]) => assessSources(input.prompt, input.rank ? input.rank(sources) : sources, intent)
-  for (const query of queries) {
+  const fastRetry = limits === LIMITS.fast && queries.length > 1
+  for (const [index, query] of queries.entries()) {
     if (deadline.aborted || result.calls >= limits.calls) break
+    const reserveAlternate = fastRetry && index === 0
+    const queryDeadline = reserveAlternate ? AbortSignal.any([deadline, AbortSignal.timeout(4800)]) : deadline
+    const callLimit = reserveAlternate ? 2 : limits.calls
     const year = intent.localDate.slice(0, 4)
     const seeksThisYear = intent.lastOccurrence && query.split(/\s+/u).includes(year)
     const hasSearchLead = (sources: MalikWebSource[]) => intent.lastOccurrence
@@ -78,19 +82,26 @@ export async function runLiveSearch(input: {
     // Bucket/window prevents yesterday's cache from crossing local midnight.
     const key = JSON.stringify([query, input.mode || "fast", intent.category, intent.localDate, intent.window?.label, intent.lastOccurrence?.subject, input.providers.map((p) => p.name)])
     const hit = memo.get(key, clock())
-    if (hit && (!intent.needsSearch || hasSearchLead(take(hit)))) { result.cacheHits++; result.sources.push(...hit); continue }
+    if (hit && (!intent.needsSearch || hasSearchLead(take(hit)))) {
+      result.cacheHits++; result.sources.push(...hit)
+      if (fastRetry) break
+      continue
+    }
     let attempted = 0, successes = 0
     const confirmed: MalikWebSource[] = []
     const desiredProviders = input.mode === "max" ? 3 : input.mode === "deep" ? 2 : 1
-    for (const provider of input.providers) {
-      if (deadline.aborted || result.calls >= limits.calls) break
+    const previous = new Map(result.attempts.map(attempt => [attempt.provider, attempt.outcome]))
+    const retryPriority = (provider: LiveSearchProvider) => previous.get(provider.name) === "empty" ? 0 : previous.has(provider.name) ? 2 : 1
+    const providers = fastRetry && index > 0 ? [...input.providers].sort((a, b) => retryPriority(a) - retryPriority(b)) : input.providers
+    for (const provider of providers) {
+      if (queryDeadline.aborted || result.calls >= callLimit) break
       if (breaker.open(provider.name, clock())) { result.attempts.push({ provider: provider.name, outcome: "circuit-open", ms: 0 }); continue }
       const before = clock()
       result.calls++; attempted++
       let release: (() => void) | undefined
       try {
-        release = await slot(deadline)
-        const attemptSignal = AbortSignal.any([deadline, AbortSignal.timeout(Math.max(1, Math.min(6000, provider.timeoutMs || 3500)))])
+        release = await slot(queryDeadline)
+        const attemptSignal = AbortSignal.any([queryDeadline, AbortSignal.timeout(Math.max(1, Math.min(6000, provider.timeoutMs || 3500)))])
         // The adapter must cancel fetches; this race also bounds a faulty adapter.
         let abort: () => void = () => {}
         const cancelled = new Promise<never>((_, reject) => { abort = () => reject(attemptSignal.reason); attemptSignal.addEventListener("abort", abort, { once: true }); if (attemptSignal.aborted) abort() })
@@ -99,10 +110,11 @@ export async function runLiveSearch(input: {
         finally { attemptSignal.removeEventListener("abort", abort) }
         deadline.throwIfAborted()
         const found = take(raw)
+        const usable = found.length > 0 && (intent.category === "STATIC" || !intent.needsSearch || hasSearchLead(found))
         breaker.record(provider.name, raw.length > 0, clock())
-        result.attempts.push({ provider: provider.name, outcome: found.length ? "success" : "empty", ms: clock() - before })
-        if (found.length && (intent.category === "STATIC" || !intent.needsSearch || hasSearchLead(found))) {
-          if (!successes && attempted > 1) result.fallbackSuccesses++
+        result.attempts.push({ provider: provider.name, outcome: usable ? "success" : "empty", ms: clock() - before })
+        if (usable) {
+          if (!successes && (attempted > 1 || fastRetry && index > 0)) result.fallbackSuccesses++
           confirmed.push(...found); successes++
           if (successes >= desiredProviders) break
           continue
@@ -110,12 +122,13 @@ export async function runLiveSearch(input: {
         // Old/undated news may be retained as background, but cannot stop fallback.
         result.sources.push(...found)
       } catch {
-        breaker.record(provider.name, false, clock())
+        if (!queryDeadline.aborted) breaker.record(provider.name, false, clock())
         result.attempts.push({ provider: provider.name, outcome: "failed", ms: clock() - before })
       } finally { release?.() }
     }
     if (confirmed.length) memo.set(key, take(confirmed), clock(), intent.ttlMs)
     result.sources.push(...confirmed)
+    if (fastRetry && confirmed.length) break
   }
   if (input.signal?.aborted) input.signal.throwIfAborted()
   result.sources = currentNewsSources(input.prompt, take(result.sources), intent).slice(0, limits.results)
