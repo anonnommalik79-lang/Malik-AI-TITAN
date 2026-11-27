@@ -69,3 +69,18 @@ export function worldBirthCohortAnswer(
   if (rankQuestion) return `People born in **${birthYear}** rank **No. ${cohort.rank}** among living birth cohorts worldwide, at about **${millions} million** ${snapshot}.`
   return `About **${millions} million** people born in ${birthYear} were alive worldwide ${snapshot}.`
 }
+
+export function explainWorldBirthCohort(
+  referenceQuestion: string,
+  evidence: NonNullable<ReturnType<typeof worldBirthCohortEvidence>>,
+) {
+  const years = [...new Set(referenceQuestion.match(/(?<!\d)(?:19|20)\d{2}(?!\d)/gu))]
+  if (years.length !== 1) return
+  const cohort = evidence.cohorts.find(item => item.birthYear === Number(years[0]))
+  const leader = evidence.cohorts[0]
+  if (!cohort || !leader) return
+  const millions = (count: number) => new Intl.NumberFormat("ru", { maximumFractionDigits: 1 }).format(count / 1_000_000)
+  const snapshot = `По среднему прогнозу ООН на 1 января ${evidence.referenceYear} года [1].`
+  if (cohort.rank === 1) return `**${millions(cohort.count)} млн человек для одного года рождения — первое место в мире.** ${snapshot}`
+  return `**${millions(cohort.count)} млн для одного года рождения — это ${cohort.rank}-е место в мире.** Для сравнения, у самого многочисленного ${leader.birthYear} года рождения около ${millions(leader.count)} млн человек, всего на ${millions(leader.count - cohort.count)} млн больше. ${snapshot}`
+}

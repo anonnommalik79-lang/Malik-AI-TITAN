@@ -34,6 +34,10 @@ const QUESTION_START = /^(?:почему|зачем|как|когда|где|о�
 const RANK_FOLLOW_UP = /^(?:(?:\d{4}(?:\s+год)?|он|она|они)\s+)?(?:на\s+каком\s+месте(?:\s+(?:он|она|они|\d{4}))?|сколько\s+месте\s+сто[ий]т|какое\s+место(?:\s+(?:занимает|у\s+него))?|what\s+rank|where\s+(?:does\s+it|do\s+they)\s+rank)[\s?!.]*$/iu
 const REACTION = /^(?:по[чя]|почему)\s+(?:(?:так|очень)\s+)?(?:мало|много)[\s?!.]*$/iu
 const CORRECTION = /^(?:нет|неа|no|жоқ)[,\s]+/iu
+
+export function isNumberReaction(prompt: string): boolean {
+  return REACTION.test(prompt.trim())
+}
 const SEARCH_AGAIN = /^(?:(?:а|и|теперь|then|now|actually|please|енді)[,\s]+)*(?:поищи(?:\s+в\s+(?:сети|интернете))?|проверь\s+(?:в\s+интернете|онлайн)|загугли|(?:look\s+it\s+up|search\s+the\s+web|browse\s+online)(?:\s+now)?|интернеттен\s+(?:ізде|тап))[.!?\s]*$/iu
 const TIME_SCOPE = /(?<![\p{L}\p{N}])(?:(?:за\s+)?(?:последн\p{L}*\s+)?(?:24\s+час\p{L}*|(?:7|семь)\s+дн\p{L}*)|сегодня|вчера|сейчас|на\s+данный\s+момент|на\s+этой\s+неделе|в\s+прошлом\s+(?:месяце|году)|(?:за\s+)?(?:текущ\p{L}*|прошл\p{L}*)\s+(?:недел\p{L}*|месяц\p{L}*|год\p{L}*)|(?:in\s+the\s+)?(?:last|past)\s+(?:24\s+hours|(?:7|seven)\s+days)|today|yesterday|currently|now|(?:this|last)\s+(?:week|month|year)|бүгін|кеше|қазір|соңғы\s+(?:24\s+сағат|7\s+күн|апта)|осы\s+(?:апта|ай|жыл)|(?:в|за|in)\s+(?:19|20)\d{2}(?:\s+году)?|(?:19|20)\d{2}\s+жылы)(?![\p{L}\p{N}])/giu
 const ENTITY = /^[\p{Lu}\p{Lt}\d][\p{L}\p{N}.&+-]*(?:\s+[\p{L}\p{N}][\p{L}\p{N}.&+-]*){0,3}$/u

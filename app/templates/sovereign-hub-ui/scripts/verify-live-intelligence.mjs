@@ -11,7 +11,7 @@ import { emptyKnowledgeIndex, validateKnowledgeIndex, modelsFromItems, retrieveK
 import { pageDates } from "../lib/live-intelligence/page-dates.ts"
 import { mapBounded } from "../lib/live-intelligence/concurrency.ts"
 import { publicAddresses, publicIp } from "../lib/malik-research/public-page-fetch.ts"
-import { worldBirthCohorts, worldBirthCohortAnswer, worldBirthCohortEvidence } from "../lib/live-intelligence/birth-cohort-evidence.ts"
+import { explainWorldBirthCohort, worldBirthCohorts, worldBirthCohortAnswer, worldBirthCohortEvidence } from "../lib/live-intelligence/birth-cohort-evidence.ts"
 
 const NOW = new Date("2026-10-11T13:00:00Z"), clock = () => NOW.getTime()
 const fresh = { title: "Introducing GPT-99 (TEST FIXTURE)", url: "https://openai.com/fixture/gpt-99", domain: "spoof.invalid", snippet: "TEST FIXTURE: official release announcement on 2026-10-11; no real product claim.", publishedAt: "2026-10-11T09:00:00Z" }
@@ -127,6 +127,7 @@ await check("the screenshot's questions receive the projected count, leader and 
   assert.match(answer("Нет щяс люди родившився 2009скок штуков в мире на даный момент"), /134,6 млн/u)
   assert.match(answer("А какого года людей родившився щя много на данный много"), /2012.*138,9 млн/u)
   assert.match(answer("2009скок месте стойт"), /9-м месте.*134,6 млн/u)
+  assert.match(explainWorldBirthCohort("Люди 2009 года рождения", evidence), /9-е место.*2012.*138,9 млн.*4,3 млн/u)
   assert.equal(answer("Сравни численность людей 2009 года рождения с родившимися в 2012"), undefined)
 })
 await check("outdated result does not prevent fresh fallback", async () => { const result = await search({ providers: [{ name: "old", run: async () => [old] }, { name: "fresh", run: async () => [fresh] }] }); assert.equal(result.sources[0].url, fresh.url); assert.equal(result.calls, 2) })

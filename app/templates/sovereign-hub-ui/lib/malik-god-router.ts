@@ -13,7 +13,7 @@ import { refineDomainPlan } from "@/lib/server/domain-planner"
 import {conversationRepairInstruction} from "@/lib/ai/conversation-validation"
 import {executionContractInstruction} from "@/lib/ai/do-what-user-says"
 import { computedEvidenceInstruction } from "@/lib/analysis/chat"
-import { conversationFocus, conversationFocusInstruction, type ConversationFocus } from "@/lib/ai/conversation-focus"
+import { conversationFocus, conversationFocusInstruction, isNumberReaction, type ConversationFocus } from "@/lib/ai/conversation-focus"
 import { resolveWorkspaceMode, workModeInstruction } from "@/lib/ai/work-mode"
 import { answerBudget } from "@/lib/ai/answer-budget"
 import { sharedAnswerCacheKey, mayShareAnswerCache, trimSharedAnswerCache } from "@/lib/server/public-answer-cache"
@@ -33,7 +33,7 @@ import { lastOccurrenceRequest, occurrenceSubjectPattern } from "@/lib/ai/last-o
 import { searchTimeFilters } from "@/lib/live-intelligence/search-time-filters"
 import { searchNewsFeed } from "@/lib/live-intelligence/news-search"
 import { runLiveSearch, type LiveSearchProvider } from "@/lib/live-intelligence/search-engine"
-import { worldBirthCohortEvidence, worldBirthCohortAnswer } from "@/lib/live-intelligence/birth-cohort-evidence"
+import { worldBirthCohortEvidence, worldBirthCohortAnswer, explainWorldBirthCohort } from "@/lib/live-intelligence/birth-cohort-evidence"
 import { mapBounded } from "@/lib/live-intelligence/concurrency"
 import { indexedSources } from "@/lib/live-intelligence/index-reader"
 import { parseKnowledgeFeed, KNOWLEDGE_FEEDS, type KnowledgeFeed } from "@/lib/live-intelligence/feed-updater"
@@ -1247,12 +1247,15 @@ export async function malikGodAnswer(
     }
     const mandatory = domainPlan.evidence.safetySensitive && domainPlan.evidence.web === "required"
     const freshness = requireEvidence(classifyFreshness(focus.searchText, turnTime, requestFreshness.timeZone), mandatory)
-    const publicQuestion = publicSearchText(focus.searchText)
-    const cohortLookup = usedWeb && !preparedEvidence && !attribution && !attachments.length && !fusionActive && !scienceActive && !mandatory
-      && freshness.reason === "demographic-statistic" && birthCohortDataQuery(normalizeWebSearchQuery(publicQuestion), freshness.localDate.slice(0, 4))
+    const reactionAnchor = isNumberReaction(requestPrompt) ? focus.anchor : ""
+    const publicQuestion = publicSearchText(reactionAnchor || focus.searchText)
+    const cohortIntent = reactionAnchor ? classifyFreshness(reactionAnchor, turnTime, requestFreshness.timeZone) : freshness
+    const cohortLookup = !preparedEvidence && !attribution && !attachments.length && !fusionActive && !scienceActive && !mandatory
+      && cohortIntent.reason === "demographic-statistic" && (usedWeb || reactionAnchor && shouldUseWeb(reactionAnchor, body, domainPlan))
+      && birthCohortDataQuery(normalizeWebSearchQuery(publicQuestion), freshness.localDate.slice(0, 4))
     const cohort = cohortLookup ? worldBirthCohortEvidence(publicQuestion, freshness.localDate) : undefined
     if (cohort && !Object.keys(universalIntent.requirements).length && freshness.language !== "kk") {
-      const content = worldBirthCohortAnswer(requestPrompt, cohort, freshness.language)
+      const content = reactionAnchor ? explainWorldBirthCohort(publicQuestion, cohort) : worldBirthCohortAnswer(requestPrompt, cohort, freshness.language)
       if (content) {
         const sources = assessSources(focus.searchText, [cohort.source], freshness)
         emitResearch?.({ kind: "source", text: "Получена статистика · Anthrotempo", source: sources[0], url: cohort.source.url })
