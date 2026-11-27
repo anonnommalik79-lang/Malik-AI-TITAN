@@ -61,11 +61,11 @@ try {
   })
   await check("search keeps the named event and rejects generic AI links", () => {
     const router = functionsFrom("lib/malik-god-router.ts", ["extractNamedSubject", "knownPersonSearchName", "buildQueries", "SEARCH_STOP_WORDS", "searchTokens", "knownNameAliases", "identityTokensForNamedSubject", "rankSourcesForPrompt"], { ...query, ...currentEvidence, ...truth, ...freshness })
-    assert.ok(router.buildQueries(screenshotPrompt).every((q) => /Ai Digital Bridge/i.test(q)))
-    assert.ok(!router.buildQueries(screenshotPrompt).some((q) => /hackathon accelerator/i.test(q)))
+    assert.ok(router.buildQueries(screenshotPrompt, freshness.classifyFreshness(screenshotPrompt)).every((q) => /Ai Digital Bridge/i.test(q)))
+    assert.ok(!router.buildQueries(screenshotPrompt, freshness.classifyFreshness(screenshotPrompt)).some((q) => /hackathon accelerator/i.test(q)))
     const event = { title: "AI Digital Bridge programme and speakers", url: "https://example.test/digital-bridge", domain: "example.test", snippet: "Confirmed programme" }
     const unrelated = { title: "AI founder interview", url: "https://example.test/ai", domain: "example.test", snippet: "Speaker discusses artificial intelligence" }
-    assert.deepEqual(router.rankSourcesForPrompt(screenshotPrompt, [unrelated, event]), [event])
+    assert.deepEqual(router.rankSourcesForPrompt(screenshotPrompt, [unrelated, event], freshness.classifyFreshness(screenshotPrompt)), [event])
   })
   await check("new model comparisons check exact versions separately, not an older model", () => {
     const prompt = "Сравни Gemini 4 pro и GPT 6.1S SOL"
@@ -75,7 +75,7 @@ try {
     assert.equal(shouldUseWeb(prompt, { research: false }), true)
     assert.deepEqual(currentEvidence.currentModelSubjects(prompt), ["Gemini 4 pro", "GPT 6.1S SOL"])
     const router = functionsFrom("lib/malik-god-router.ts", ["extractNamedSubject", "knownPersonSearchName", "buildQueries"], { ...query, ...currentEvidence, ...truth, ...freshness })
-    const queries = router.buildQueries(prompt)
+    const queries = router.buildQueries(prompt, freshness.classifyFreshness(prompt))
     assert.equal(queries.length, 3)
     assert.ok(queries.some((q) => q.includes('"Gemini 4 pro"') && q.includes("site:deepmind.google")))
     assert.ok(queries.some((q) => q.includes('"GPT 6.1S SOL"') && q.includes("site:openai.com")))
@@ -85,7 +85,7 @@ try {
     const old = { domain: "deepmind.google", title: "Gemini 3.1 Pro", snippet: "Previous model" }
     const exact = { domain: "deepmind.google", title: "Gemini 4 Pro", snippet: "Announcement" }
     assert.ok(currentEvidence.currentSourcePriority(prompt, exact) > currentEvidence.currentSourcePriority(prompt, old))
-    assert.ok(router.buildQueries("Как зарегистрироваться в NVIDIA").some((q) => q.includes("site:nvidia.com")))
+    assert.ok(router.buildQueries("Как зарегистрироваться в NVIDIA", freshness.classifyFreshness("Как зарегистрироваться в NVIDIA")).some((q) => q.includes("site:nvidia.com")))
     assert.ok(currentEvidence.currentSourcePriority("Как зарегистрироваться в NVIDIA", { domain: "accounts.nvidia.com" }) > currentEvidence.currentSourcePriority("Как зарегистрироваться в NVIDIA", { domain: "smsfast.test" }))
     assert.equal(currentEvidence.currentResearchDate(new Date("2026-10-05T21:00:00Z")), "2026-10-06")
     assert.ok(currentEvidence.currentSourcePriority(prompt, { domain: "openai.com" }) > currentEvidence.currentSourcePriority(prompt, { domain: "random.test" }))

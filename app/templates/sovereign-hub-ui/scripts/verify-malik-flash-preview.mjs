@@ -213,3 +213,16 @@ test("normal chat endpoints share the Flash handler and preserve existing MAX en
   assert.match(stream, /const settledAnswer = flash\s*\? runFlashChat\([\s\S]*?: getNativeChatAnswer\(\)/u)
   assert.match(json, /if \(selectsMalikFlash\(requestBody\)\) \{[\s\S]*?if \(MALIK_FLASH_BROWSER_ENABLED[\s\S]*?return handleFlashJsonChat\(request\)/)
 })
+
+
+test("browser health distinguishes configuration from live Google verification", t => {
+  configure(t)
+  assert.equal(flash.isMalikFlashBrowserReady(), true)
+  process.env.MALIK_FLASH_ISOLATED_WORKER = "0"
+  assert.equal(flash.isMalikFlashBrowserReady(), false)
+  const health = readFileSync("app/api/health/route.ts", "utf8")
+  assert.match(health, /flashGoogleAiMode:/u)
+  assert.match(health, /configured-unverified/u)
+  assert.match(health, /liveVerified: false/u)
+  assert.doesNotMatch(health, /MALIK_FLASH_WORKER_SECRET/u)
+})

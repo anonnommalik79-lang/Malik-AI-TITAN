@@ -46,7 +46,10 @@ check("the words are real text, not painted into a picture", () => {
 check("every chip does something real", () => {
   assert.match(home, /aria-pressed=\{webOn\} onClick=\{onToggleWeb\}/)
   assert.match(home, /aria-pressed=\{deepOn\} onClick=\{onToggleDeep\}/)
-  assert.match(home, /onClick=\{onOpenCode\}/)
+  assert.match(home, /aria-pressed=\{codeOn\} onClick=\{onToggleCode\}/)
+  assert.match(home, /onToggleCode=\{toggleCode\}/)
+  assert.match(home, /setCodeOn\(\(current\) => !current\)/)
+  assert.match(home, /codeMode: codeOn/)
   assert.match(home, /onClick=\{onCreateImage\}/)
   assert.match(home, /onClick=\{onOpenVideo\}/)
   assert.match(home, /onClick=\{onOpenMusic\}/)
@@ -54,7 +57,11 @@ check("every chip does something real", () => {
   assert.match(home, /role="menuitemcheckbox" aria-checked=\{memoryOn\}/)
   // Deep analysis needs the web.
   assert.match(home, /if \(next\) setWebOn\(true\)/)
-  assert.match(read("components/sovereign/dashboard.tsx"), /onOpenMusic=\{\(\) => safeOpenView\(currentPlan === "pro"/)
+  const dashboard = read("components/sovereign/dashboard.tsx")
+  const music = read("components/sovereign/music-generation/MusicGenerationStudio.tsx")
+  assert.match(dashboard, /onOpenMusic=\{\(\) => safeOpenView\("music-generation", "welcome"\)\}/)
+  assert.match(dashboard, /<MusicGenerationStudio username=\{username\} plan=\{currentPlan\} onOpenBilling=\{openProOffer\}/)
+  assert.match(music, /const proAccess = hasMalikProAccess\(plan\)/)
 })
 
 check("the artwork is shown only while the home is on screen", () => {

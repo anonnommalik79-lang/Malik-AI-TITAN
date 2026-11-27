@@ -9,7 +9,7 @@ assert.match(home, /if \(!mobileLayout\)[\s\S]*?openSourcePlugin\(plugin.prompt\
 assert.match(home, /setImageCreatorOpen\(true\)/, "Create opens image studio")
 assert.match(home, /setWebOn\(true\)[\s\S]*?setDeepResearch\(true\)/, "research activates web + deep")
 assert.match(home, /props.onOpenCapabilities\?\.\(\)/, "More opens capabilities")
-assert.match(home, /responseDepth: deepResearch \? "deep" : loadResponseDepth\(props.userPlan \|\| "free"\)/)
+assert.match(home, /responseDepth: deepResearch \|\| \(codeOn && loadResponseDepth\(props.userPlan \|\| "free"\) === "fast"\) \? "deep" : loadResponseDepth\(props.userPlan \|\| "free"\)/, "deep research and code mode preserve the intended depth policy")
 assert.match(cosmos, /@media \(max-width: 767px\)[\s\S]*?thome-welcome > div\[aria-label="Бесплатные плагины источников"\]\s*\{\s*display: none !important;/, "four mobile bottom shortcuts hidden")
 assert.doesNotMatch(cosmos, /thome-welcome > div\[aria-label="Бесплатные плагины источников"\]\s*\{\s*display: grid !important;/, "removed shortcuts must never be restored on mobile")
 for(const label of ["Создать","Исследовать","Помощь","Больше"]) assert.ok(home.includes('"'+label+'"')&&mobile.includes(label), "label "+label)
