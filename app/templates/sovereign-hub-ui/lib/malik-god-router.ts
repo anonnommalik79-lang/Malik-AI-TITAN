@@ -33,6 +33,7 @@ import { lastOccurrenceRequest, occurrenceSubjectPattern } from "@/lib/ai/last-o
 import { searchTimeFilters } from "@/lib/live-intelligence/search-time-filters"
 import { searchNewsFeed } from "@/lib/live-intelligence/news-search"
 import { runLiveSearch, type LiveSearchProvider } from "@/lib/live-intelligence/search-engine"
+import { worldBirthCohortEvidence, worldBirthCohortAnswer } from "@/lib/live-intelligence/birth-cohort-evidence"
 import { mapBounded } from "@/lib/live-intelligence/concurrency"
 import { indexedSources } from "@/lib/live-intelligence/index-reader"
 import { parseKnowledgeFeed, KNOWLEDGE_FEEDS, type KnowledgeFeed } from "@/lib/live-intelligence/feed-updater"
@@ -748,7 +749,7 @@ function rankSourcesForPrompt(prompt: string, sources: SourceItem[], intent: Fre
   return scored.filter((item) => item.relevant).map((item) => item.source)
 }
 
-async function gatherSources(question: string, emit?: ResearchEmitter, activity?: ExecutionReporter, signal?: AbortSignal, mode: FreshnessMode = "fast", timeZone?: unknown): Promise<SourceItem[]> {
+async function gatherSources(question: string, emit?: ResearchEmitter, activity?: ExecutionReporter, signal?: AbortSignal, mode: FreshnessMode = "fast", timeZone?: unknown, cohortSource?: SourceItem): Promise<SourceItem[]> {
   // Ranking and relevance checks compare sources with this text: the brand's
   // Latin name must be in it, or every English source about it looks off-topic.
   const prompt = withLatinBrand(question)
@@ -795,6 +796,7 @@ async function gatherSources(question: string, emit?: ResearchEmitter, activity?
   // allowed one noisy provider to crowd Wikipedia and other relevant sources
   // out of consideration.
   const ranked = rankSourcesForPrompt(prompt, uniqueSources(all, Math.max(maxSearchResults * 8, 96)), intent)
+  if (cohortSource) ranked.unshift(cohortSource)
   const unique = diverseSources(
     intent.news || intent.lastOccurrence ? currentNewsSources(prompt, assessSources(prompt, ranked, intent), intent) : ranked,
     maxSearchResults,
@@ -855,7 +857,8 @@ async function gatherSources(question: string, emit?: ResearchEmitter, activity?
     return rows.flatMap(item => item.status === "fulfilled" ? [item.value] : [])
   }
 
-  const sources = await read(unique, Math.min(maxSources, pageLimit))
+  const sources = await read(unique.filter(source => source !== cohortSource), Math.min(maxSources, pageLimit))
+  if (cohortSource) sources.unshift(cohortSource)
   // A readable archive or a failed page is insufficient to stop looking for
   // this year's edition. Keep past evidence in case the event hasn't returned.
   const editionYear = intent.localDate.slice(0, 4)
@@ -1242,8 +1245,22 @@ export async function malikGodAnswer(
     if (attribution && !usedWeb) {
       return { content: attributionUnavailable(attribution, "search-off"), provider: "attribution-evidence-gate", model: "no-evidence", selectedModelId: selection.modelId, usedWeb: false, sources: [], attempts: [] }
     }
+    const mandatory = domainPlan.evidence.safetySensitive && domainPlan.evidence.web === "required"
+    const freshness = requireEvidence(classifyFreshness(focus.searchText, turnTime, requestFreshness.timeZone), mandatory)
+    const publicQuestion = publicSearchText(focus.searchText)
+    const cohortLookup = usedWeb && !preparedEvidence && !attribution && !attachments.length && !fusionActive && !scienceActive && !mandatory
+      && freshness.reason === "demographic-statistic" && birthCohortDataQuery(normalizeWebSearchQuery(publicQuestion), freshness.localDate.slice(0, 4))
+    const cohort = cohortLookup ? worldBirthCohortEvidence(publicQuestion, freshness.localDate) : undefined
+    if (cohort && !Object.keys(universalIntent.requirements).length && freshness.language !== "kk") {
+      const content = worldBirthCohortAnswer(requestPrompt, cohort, freshness.language)
+      if (content) {
+        const sources = assessSources(focus.searchText, [cohort.source], freshness)
+        emitResearch?.({ kind: "source", text: "Получена статистика · Anthrotempo", source: sources[0], url: cohort.source.url })
+        return { content, provider: "live-evidence", model: "verified-birth-cohort", selectedModelId: selection.modelId, usedWeb: true, sources, attempts: [] }
+      }
+    }
     const [webSources, connected, science, eiaEvidence] = await Promise.all([
-      usedWeb ? preparedEvidence ? Promise.resolve(preparedEvidence.sources) : gatherSources(focus.searchText, emitResearch, activity, signal, freshnessMode(body?.responseDepth || body?.metadata?.responseDepth), requestFreshness.timeZone) : Promise.resolve([] as SourceItem[]),
+      usedWeb ? preparedEvidence ? Promise.resolve(preparedEvidence.sources) : gatherSources(focus.searchText, emitResearch, activity, signal, freshnessMode(body?.responseDepth || body?.metadata?.responseDepth), requestFreshness.timeZone, cohort?.source) : Promise.resolve([] as SourceItem[]),
       serverConnected
         ? Promise.resolve({ ...serverConnected, requested: true, connectorIds: [] as string[], executions: [] as any[] })
         : requestedConnected ? Promise.resolve(requestedConnected) : fusionActive ? collectMalikConnectedContext(prompt, activity) : Promise.resolve({ requested: false, connectorIds: [] as string[], context: "", sources: [] as any[], executions: [] as any[] }),
@@ -1257,8 +1274,6 @@ export async function malikGodAnswer(
     if (attribution && !webSources.length && !(attribution !== "identity" && isPremiseQuestion(focus.searchText))) {
       return { content: attributionUnavailable(attribution, "missing"), provider: "attribution-evidence-gate", model: "no-evidence", selectedModelId: selection.modelId, usedWeb: false, sources: [], attempts: [] }
     }
-    const mandatory = domainPlan.evidence.safetySensitive && domainPlan.evidence.web === "required"
-    const freshness = requireEvidence(classifyFreshness(focus.searchText, turnTime, requestFreshness.timeZone), mandatory)
     if ((usedWeb || mandatory) && freshness.needsSearch && freshness.category !== "STATIC" && !currentEvidenceAvailable(webSources, freshness)) {
       return { content: unavailableFreshAnswer(freshness, format), provider: "live-evidence-gate", model: "no-current-evidence", selectedModelId: selection.modelId, usedWeb: webSources.length > 0, sources: webSources, attempts: [] }
     }

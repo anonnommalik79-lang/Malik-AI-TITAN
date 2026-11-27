@@ -11,6 +11,7 @@ import { emptyKnowledgeIndex, validateKnowledgeIndex, modelsFromItems, retrieveK
 import { pageDates } from "../lib/live-intelligence/page-dates.ts"
 import { mapBounded } from "../lib/live-intelligence/concurrency.ts"
 import { publicAddresses, publicIp } from "../lib/malik-research/public-page-fetch.ts"
+import { worldBirthCohorts, worldBirthCohortAnswer, worldBirthCohortEvidence } from "../lib/live-intelligence/birth-cohort-evidence.ts"
 
 const NOW = new Date("2026-10-11T13:00:00Z"), clock = () => NOW.getTime()
 const fresh = { title: "Introducing GPT-99 (TEST FIXTURE)", url: "https://openai.com/fixture/gpt-99", domain: "spoof.invalid", snippet: "TEST FIXTURE: official release announcement on 2026-10-11; no real product claim.", publishedAt: "2026-10-11T09:00:00Z" }
@@ -110,6 +111,23 @@ await check("fast search uses one query when it finds current evidence", async (
   const result = await search({ queries: [prompt, "another formulation"] })
   assert.equal(result.queries, 1)
   assert.equal(result.calls, 1)
+})
+await check("world birth-cohort lookup compares single birth years in the same projection", () => {
+  const cohorts = worldBirthCohorts(2026)
+  assert.deepEqual(cohorts[0], { count: 138851864, birthYear: 2012, rank: 1 })
+  assert.deepEqual(cohorts.find(item => item.birthYear === 2009), { count: 134586435, birthYear: 2009, rank: 9 })
+  assert.equal(cohorts.length, 100)
+  assert.notEqual(worldBirthCohorts(2027).find(item => item.birthYear === 2009).count, 134586435)
+  assert.equal(worldBirthCohorts(2031), undefined)
+})
+await check("the screenshot's questions receive the projected count, leader and rank directly", () => {
+  const evidence = worldBirthCohortEvidence("Люди 2009 года рождения", "2026-11-28")
+  const answer = question => worldBirthCohortAnswer(question, evidence, "ru")
+  assert.match(answer("сколько сейчас на данный момент людей всех мире 2009 года"), /134,6 млн.*1 января 2026/u)
+  assert.match(answer("Нет щяс люди родившився 2009скок штуков в мире на даный момент"), /134,6 млн/u)
+  assert.match(answer("А какого года людей родившився щя много на данный много"), /2012.*138,9 млн/u)
+  assert.match(answer("2009скок месте стойт"), /9-м месте.*134,6 млн/u)
+  assert.equal(answer("Сравни численность людей 2009 года рождения с родившимися в 2012"), undefined)
 })
 await check("outdated result does not prevent fresh fallback", async () => { const result = await search({ providers: [{ name: "old", run: async () => [old] }, { name: "fresh", run: async () => [fresh] }] }); assert.equal(result.sources[0].url, fresh.url); assert.equal(result.calls, 2) })
 await check("all provider failures never fake successful evidence", async () => { const result = await search({ providers: [{ name: "bad", run: async () => { throw Error("down") } }] }); assert.equal(result.sources.length, 0); assert.equal(result.attempts[0].outcome, "failed") })

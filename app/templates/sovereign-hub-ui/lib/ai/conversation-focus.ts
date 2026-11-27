@@ -161,7 +161,8 @@ export function conversationFocusInstruction(prompt: string, focus: Conversation
     `- The latest message «${clip(prompt)}» continues the conversation. The question it builds on was «${clip(focus.anchor)}».`,
     focus.searchText !== prompt ? `- Resolved topic for this turn: «${clip(focus.searchText)}».` : "",
     "- Resolve what it refers to (a person, an item, an ordinal such as «третий», «они», «он») from the conversation, then answer only the latest message about that subject.",
+    REACTION.test(prompt.trim()) ? "- This is a question about why the previous number seems small or large. Explain it with a meaningful comparison and show the scale. A standalone repetition of the number does not answer the question." : "",
     "- When the latest message changes the entity or time period, apply that change before answering. An earlier target is context, not a second request.",
     "- Do not repeat or re-answer the earlier question. If the reference is genuinely ambiguous, take the most likely reading and name it in a few words.",
-  ].join("\n")
+  ].filter(Boolean).join("\n")
 }
