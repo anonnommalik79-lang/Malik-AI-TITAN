@@ -23,7 +23,7 @@ import {
 
 assert.deepEqual(ROUTER_CATALOG_COUNTS, { total: 138, text: 123, image: 9, video: 6 }, "Three-router catalogue must stay 138 = 123 text + 9 image + 6 video")
 assert.equal(ROUTER_CATALOG.length, 138)
-assert.equal(DEFAULT_MALIK_MODEL_ID, "malik-max", "MAX is the free default; Flash is PRO")
+assert.equal(DEFAULT_MALIK_MODEL_ID, "malik-max", "MAX remains the free default")
 assert.equal(getMalikModel("malik-max").tier, "free")
 assert.equal(canUseMalikModel("malik-max", "free"), true)
 assert.equal(PUBLIC_MALIK_MODELS[0]?.id, DEFAULT_MALIK_MODEL_ID)
@@ -32,7 +32,7 @@ if (MALIK_FLASH_PREVIEW_ENABLED) {
   assert.equal(getMalikModel("malik-flash").brand, "malik")
   assert.deepEqual(getMalikModel("malik-flash"), MALIK_FLASH_MODEL)
   assert.equal(PUBLIC_MALIK_MODELS[1]?.id, "malik-flash", "Flash follows MAX")
-  assert.equal(canUseMalikModel("malik-flash", "free"), false)
+  assert.equal(canUseMalikModel("malik-flash", "free"), true)
   assert.equal(canUseMalikModel("malik-flash", "pro"), true)
 }
 assert.equal(getMalikModel("malik-max").label, "MalikLLM MAX")
@@ -52,8 +52,8 @@ assert.ok(GOOGLE_AI_POOL_MODELS.every((model) => model.provider === "google-ai" 
 assert.equal(PUBLIC_MALIK_MODELS.length, MALIK_FLASH_PREVIEW_ENABLED ? 134 : 133)
 // Oil BETA is publicly selectable second, while remaining special provider
 // availability is reported by the real runtime rather than promising 3/3.
-assert.deepEqual(FREE_MALIK_MODELS.map((model) => model.id), ["malik-max", "malik-oil-1tb"], "MAX is free; Flash is PRO")
-assert.equal(PRO_MALIK_MODELS.length, MALIK_FLASH_PREVIEW_ENABLED ? 132 : 131, "Paid choices must remain gated")
+assert.deepEqual(FREE_MALIK_MODELS.map((model) => model.id), MALIK_FLASH_PREVIEW_ENABLED ? ["malik-max", "malik-flash", "malik-oil-1tb"] : ["malik-max", "malik-oil-1tb"], "Only the intended models are free")
+assert.equal(PRO_MALIK_MODELS.length, 131, "Paid choices must remain gated")
 assert.equal(new Set(MALIK_MODELS.map((model) => model.id)).size, MALIK_MODELS.length, "Model IDs must be unique")
 
 for (const model of FREE_MALIK_MODELS) {

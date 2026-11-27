@@ -107,8 +107,8 @@ export const MALIK_FLASH_PREVIEW_ENABLED = process.env.NEXT_PUBLIC_MALIK_FLASH_P
 export const MALIK_FLASH_MODEL: MalikModelDefinition = {
   id: "malik-flash",
   label: "MalikLLM Flash",
-  description: "PRO · быстрые ответы с поиском Google, анализ фото и изображения",
-  tier: "pro",
+  description: "Бесплатно · быстрые ответы, поиск и анализ фото",
+  tier: "free",
   provider: "malik-browser-bridge",
   providerModel: "google-ai-mode-browser",
   capabilities: ["text", "vision", "tools", "reasoning"],
@@ -250,7 +250,7 @@ export const MALIK_MODELS: readonly MalikModelDefinition[] = [
 ]
 
 export const PUBLIC_MALIK_MODELS = MALIK_MODELS.filter((model) => !model.hidden)
-// MAX is the free model everyone starts on; Flash is a PRO choice.
+// MAX is the default; Flash is also available on Free.
 export const DEFAULT_MALIK_MODEL_ID: MalikModelId = "malik-max"
 
 export function selectsMalikFlash(body: { model?: unknown; modelId?: unknown } | null | undefined) {
