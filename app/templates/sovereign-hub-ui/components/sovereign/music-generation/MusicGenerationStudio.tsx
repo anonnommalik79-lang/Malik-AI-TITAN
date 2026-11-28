@@ -282,6 +282,9 @@ export function MusicGenerationStudio({ username, plan, onOpenBilling }: { usern
   const toastTimerRef = useRef<number | undefined>(undefined)
   /** How many more variants of the current request are still to be sent. */
   const pendingVariantsRef = useRef(0)
+  const submittingRef = useRef(false)
+  const validationRef = useRef<{ id: string; url: string } | null>(null)
+  const variantBriefRef = useRef<Partial<MusicHistoryItem> | null>(null)
   const variantTimerRef = useRef<number | undefined>(undefined)
   /**
    * Hands over the next variant once the current one is finished.
@@ -291,11 +294,11 @@ export function MusicGenerationStudio({ username, plan, onOpenBilling }: { usern
    * counted per request, and four in flight would report four different
    * request ids into one player.
    */
-  const submitRef = useRef<(() => void) | null>(null)
+  const submitRef = useRef<((override?: Partial<MusicHistoryItem>) => void) | null>(null)
   const queueNextVariant = () => {
     if (pendingVariantsRef.current <= 0) return
     pendingVariantsRef.current -= 1
-    variantTimerRef.current = window.setTimeout(() => submitRef.current?.(), 400)
+    variantTimerRef.current = window.setTimeout(() => submitRef.current?.(variantBriefRef.current || undefined), 400)
   }
 
   const genre = GENRES.find((item) => item.id === genreId) || GENRES[0]
@@ -358,9 +361,16 @@ export function MusicGenerationStudio({ username, plan, onOpenBilling }: { usern
       const rows = safeHistory(stored)
       setHistory(rows)
       const pending = rows.find((item) => item.status === "queued" || item.status === "processing")
-      if (pending) setActiveRequestId(pending.requestId)
+      if (pending) {
+        setGenerating(true)
+        if (pending.resultUrl) {
+          validationRef.current = { id: pending.requestId, url: pending.resultUrl }
+          setTrackUrl(pending.resultUrl)
+          setTrackTitle(pending.title)
+        } else setActiveRequestId(pending.requestId)
+      }
       const ready = rows.find((item) => item.status === "ready" && item.resultUrl)
-      if (ready?.resultUrl) {
+      if (!pending && ready?.resultUrl) {
         setTrackUrl(ready.resultUrl)
         setTrackTitle(ready.title)
       }
@@ -440,6 +450,7 @@ export function MusicGenerationStudio({ username, plan, onOpenBilling }: { usern
               : item,
           ))
           const item = history.find((row) => row.requestId === activeRequestId)
+          validationRef.current = { id: activeRequestId, url: resultUrl }
           setTrackTitle(item?.title || trackTitle)
           setTrackUrl(resultUrl)
           setCurrentTime(0)
@@ -516,7 +527,7 @@ export function MusicGenerationStudio({ username, plan, onOpenBilling }: { usern
   }
 
   const submitGeneration = async (override?: Partial<MusicHistoryItem>) => {
-    if (generating) return
+    if (generating || submittingRef.current || validationRef.current || activeRequestId) return
     if (!proAccess) { pendingVariantsRef.current = 0; onOpenBilling(); return }
 
     const nextGenreId = override?.genreId || genreId
@@ -545,6 +556,7 @@ export function MusicGenerationStudio({ username, plan, onOpenBilling }: { usern
       setNotice("Максимальная длительность вашего тарифа: " + config.limits.maxDurationSeconds + " сек.")
       return
     }
+    submittingRef.current = true
     setGenerating(true)
     setLastSubmitFailed(false)
     setNotice(
@@ -569,6 +581,7 @@ export function MusicGenerationStudio({ username, plan, onOpenBilling }: { usern
           genre: nextGenreId,
           mood: nextMood,
         }),
+        signal: AbortSignal.timeout(180_000),
       })
       const data = await response.json().catch(() => null)
 
@@ -628,6 +641,7 @@ export function MusicGenerationStudio({ username, plan, onOpenBilling }: { usern
       if (immediateUrl) {
         // Avoid another status request and recover even without durable job
         // storage: the browser validates actual audio metadata before "ready".
+        validationRef.current = { id: item.requestId, url: immediateUrl }
         setActiveRequestId("")
         setTrackUrl(immediateUrl)
         setCurrentTime(0)
@@ -663,10 +677,11 @@ export function MusicGenerationStudio({ username, plan, onOpenBilling }: { usern
       setLastSubmitFailed(true)
       pendingVariantsRef.current = 0
       setNotice(error instanceof Error ? error.message : "Не удалось отправить запрос.")
-    }
+    } finally { submittingRef.current = false }
   }
 
   const regenerate = (item?: MusicHistoryItem) => {
+    if (generating || submittingRef.current) return
     if (!proAccess) { onOpenBilling(); return }
     const source = item || history.find((row) => row.status === "ready" && row.resultUrl)
     if (!source) {
@@ -806,6 +821,7 @@ export function MusicGenerationStudio({ username, plan, onOpenBilling }: { usern
   }
 
   const openTrack = (item: MusicHistoryItem, play = false) => {
+    if (generating || submittingRef.current) { flash("Дождитесь проверки текущего трека"); return }
     if (!item.resultUrl) {
       flash(item.status === "failed" ? "Этот трек не сгенерировался" : "Трек ещё генерируется")
       return
@@ -819,6 +835,7 @@ export function MusicGenerationStudio({ username, plan, onOpenBilling }: { usern
   }
 
   const removeTrack = (item: MusicHistoryItem) => {
+    if (item.requestId === activeRequestId || item.requestId === validationRef.current?.id) { flash("Нельзя удалить активную генерацию"); return }
     setHistory((rows) => rows.filter((row) => row.requestId !== item.requestId))
     if (item.resultUrl && item.resultUrl === trackUrl) {
       audioRef.current?.pause()
@@ -838,22 +855,24 @@ export function MusicGenerationStudio({ username, plan, onOpenBilling }: { usern
    * the queue below hands them over.
    */
   useEffect(() => {
-    submitRef.current = () => { void submitGeneration() }
+    submitRef.current = (override) => { void submitGeneration(override) }
     return () => { submitRef.current = null }
   })
 
   const startGeneration = () => {
+    if (generating || submittingRef.current || activeRequestId || validationRef.current) return
     if (!proAccess) { onOpenBilling(); return }
     const allowed = musicUnlimited
       ? variants
       : Math.max(1, Math.min(variants, Number(config?.limits.remaining ?? variants)))
+    variantBriefRef.current = { prompt: prompt.trim() || genre.seed, genreId, lyrics, lyricsEnabled, lyricsLanguage, instrumental, duration, mood }
     pendingVariantsRef.current = allowed - 1
     if (allowed < variants) {
       flash("Осталось генераций: " + allowed)
     } else if (allowed > 1) {
       flash("Ставлю в очередь " + variantLabel(allowed))
     }
-    void submitGeneration()
+    void submitGeneration(variantBriefRef.current || undefined)
   }
 
   /* ------------------------------------------------------------------ view */
@@ -1009,8 +1028,10 @@ export function MusicGenerationStudio({ username, plan, onOpenBilling }: { usern
           const value = event.currentTarget.duration
           const valid = Number.isFinite(value) && value > 0
           setAudioDuration(valid ? value : 0)
-          if (!valid || !trackUrl) return
-          setHistory((rows) => rows.map((item) => item.resultUrl === trackUrl
+          const validating = validationRef.current
+          if (!valid || !trackUrl || validating?.url !== trackUrl) return
+          validationRef.current = null
+          setHistory((rows) => rows.map((item) => item.requestId === validating.id
             ? { ...item, status: "ready", progress: 100, error: undefined }
             : item))
           setGenerating(false)
@@ -1021,11 +1042,14 @@ export function MusicGenerationStudio({ username, plan, onOpenBilling }: { usern
         }}
         onError={() => {
           if (!trackUrl) return
+          const validating = validationRef.current
+          if (validating?.url !== trackUrl) { setPlaying(false); setNotice("Не удалось воспроизвести сохранённый трек."); return }
+          validationRef.current = null
           setNotice("Провайдер не вернул воспроизводимый аудиотрек. Генерация не засчитана как готовая.")
           setPlaying(false)
           setGenerating(false)
           setLastSubmitFailed(true)
-          setHistory((rows) => rows.map((item) => item.resultUrl === trackUrl ? { ...item, status: "failed", error: "Провайдер вернул невалидный аудиофайл." } : item))
+          setHistory((rows) => rows.map((item) => item.requestId === validating.id ? { ...item, status: "failed", error: "Провайдер вернул невалидный аудиофайл." } : item))
           setTrackUrl("")
           queueNextVariant()
         }}
