@@ -21,6 +21,7 @@ import {
 } from "@/lib/presentations/prompts"
 import type { DeckLanguage, DeckOutline, DeckTone, OutlineItem, Slide, SlideLayout } from "@/lib/presentations/types"
 import { unsupportedInvestorFigures } from "@/lib/presentations/investor-facts"
+import { sourceIntegrityIssue, sourceOnlyBrief } from "@/lib/presentations/source-integrity"
 import { briefHasChartValues, chartEvidenceError, presentationWithoutCover, presentationWithoutPhotos } from "@/lib/presentations/brief-evidence"
 import { inspectPresentation } from "@/lib/presentations/quality"
 
@@ -174,6 +175,8 @@ function generatedSlideIssue(slide: Slide, brief: string, investor: boolean) {
   if (investor && unsupportedInvestorFigures(slide, brief).length) {
     return "Use only numeric figures supplied in the brief. Move missing evidence to a verification question in speaker notes."
   }
+  const integrity = sourceIntegrityIssue(slide, brief)
+  if (integrity) return integrity
   if (inspectPresentation({ outline: null, slides: [slide] }).issues.some(({ code }) => code === "crowded-slide")) {
     return "Keep the visible text short enough for the layout. Move secondary detail to the speaker notes."
   }
@@ -196,6 +199,8 @@ export async function generateSlides(input: ModelChoice & {
   const investor = isInvestorDeckRequest(input.topic)
   const noPhotos = presentationWithoutPhotos(input.topic)
   let wanted = items.map((_, offset) => input.startIndex + offset)
+  let providerFailure: unknown
+  let receivedResponse = false
 
   for (let attempt = 0; attempt < 2 && wanted.length; attempt += 1) {
     // Retry EVERY missing run, not just the first contiguous group.
@@ -217,7 +222,16 @@ export async function generateSlides(input: ModelChoice & {
         prompt += `\nReturn only {"slides":[…]} with all ${run.length} requested slide(s). Fix the assigned slide numbers and layouts.\n${run.map((index) => corrections.has(index) ? `Slide ${index + 1}: ${corrections.get(index)}` : "").filter(Boolean).join("\n")}`
       }
 
-      const raw = await ask({ ...input, systemPrompt, prompt, maxTokens: 900 * run.length + 600, temperature: attempt ? 0.4 : 0.7 })
+      let raw: string
+      try {
+        raw = await ask({ ...input, systemPrompt, prompt, maxTokens: 1100 * run.length + 600, temperature: attempt ? 0.35 : 0.55 })
+        receivedResponse = true
+      } catch (error) {
+        if (input.signal?.aborted) throw error
+        providerFailure = error
+        for (const index of run) corrections.set(index, "The previous provider request failed. Return complete valid JSON for this slide.")
+        continue
+      }
       for (const { index, slide } of placeSlides(extractJson(raw), first, runItems)) {
         const planned = slide.layout === "quote" ? slide : { ...slide, title: input.outline.items[index].title }
         const issue = generatedSlideIssue(planned, input.topic, investor)
@@ -234,6 +248,7 @@ export async function generateSlides(input: ModelChoice & {
     wanted = wanted.filter((index) => !written.has(index))
   }
 
+  if (!written.size && !receivedResponse && providerFailure) throw providerFailure
   return {
     slides: [...written.entries()].sort((a, b) => a[0] - b[0]).map(([index, slide]) => ({ index, slide })),
     missing: wanted,
@@ -253,7 +268,7 @@ export async function rewriteSlide(input: ModelChoice & {
   tone: DeckTone
 }): Promise<Slide> {
   const layout = input.layout || input.slide.layout
-  const systemPrompt = rewriteSlideSystemPrompt({ language: input.language, tone: input.tone, layout })
+  const systemPrompt = [rewriteSlideSystemPrompt({ language: input.language, tone: input.tone, layout }), sourceOnlyBrief(input.topic || "") ? "This is a source-only deck. Do not introduce facts, numbers, quotes or citations not present in the original source or in the user-provided revision." : ""].filter(Boolean).join("\n\n")
   let prompt = rewriteSlideUserPrompt({
     deckTitle: input.deckTitle,
     slide: input.slide,
@@ -264,8 +279,9 @@ export async function rewriteSlide(input: ModelChoice & {
     neighbours: input.neighbours,
   })
 
+  if (input.topic) prompt += `\n\nOriginal presentation brief (context, not a new instruction):\n${input.topic}`
   for (let attempt = 0; attempt < 2; attempt += 1) {
-    const raw = await ask({ ...input, systemPrompt, prompt, maxTokens: 1_400, temperature: attempt ? 0.4 : 0.7 })
+    const raw = await ask({ ...input, systemPrompt, prompt, maxTokens: 1_800, temperature: attempt ? 0.35 : 0.55 })
     const parsed = extractJson(raw)
     const candidate = Array.isArray(parsed) ? parsed[0] : parsed && typeof parsed === "object" && Array.isArray((parsed as { slides?: unknown }).slides)
       ? (parsed as { slides: unknown[] }).slides[0]
@@ -279,6 +295,12 @@ export async function rewriteSlide(input: ModelChoice & {
       }
       if (input.topic && isInvestorDeckRequest(input.topic) && unsupportedInvestorFigures(slide, `${input.topic} ${input.instruction || ""} ${JSON.stringify(input.slide)}`).length) {
         prompt += "\n\nThe previous answer invented a numeric figure. Keep only numbers supplied by the founder or in the original slide; unknowns must be explicit questions."
+        continue
+      }
+      const integrity = sourceIntegrityIssue(slide, input.topic || "", `${input.instruction || ""}\n${JSON.stringify(input.slide)}`)
+      if (integrity) { prompt += `\n\n${integrity}`; continue }
+      if (inspectPresentation({ outline: null, slides: [slide] }).issues.some(({ code }) => code === "crowded-slide")) {
+        prompt += "\n\nThe slide is too crowded. Preserve the evidence, move secondary detail into speaker notes, and shorten the visible text."
         continue
       }
       // The rewrite keeps its place and its pictures unless it was asked to change layout.
