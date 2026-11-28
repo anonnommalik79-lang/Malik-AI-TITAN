@@ -91,6 +91,7 @@ import { prepareFolder } from "@/lib/uploads/folder-digest"
 import { PREFILL_EVENT, takePrefillPrompt } from "@/lib/malik-context"
 import { AnswerSheet } from "./answer-sheet/AnswerSheet"
 import { ChatExecution } from "./ChatExecution"
+import { MalikLiveActivity } from "./MalikLiveActivity"
 import { chatAnswerNotice, stripIncompleteNote } from "@/lib/ai/answer-completion"
 import { ChatBuildResult, ChatBuildSteps } from "./ChatBuild"
 import { chatBuildFiles, chatBuildIsProse, chatBuildKind, chatBuildKindFromContent, chatBuildKindFromTrace, chatBuildPrimary } from "@/lib/ai/chat-build"
@@ -1301,25 +1302,15 @@ function SourceDeck({ research }: { research: MalikMessageResearch }) {
   const distinctSources = sources.filter((source, index, list) =>
     list.findIndex((candidate) => candidate.domain === source.domain) === index
   )
-  const uniqueIconSources = distinctSources.slice(0, 4)
+  const uniqueIconSources = distinctSources.slice(0, 2)
 
   return (
     <section className="malik-source-inline" aria-label="Источники ответа">
-      <p className="malik-source-inline__links">
-        <strong>Источники:</strong>{" "}
-        {distinctSources.slice(0, 5).map((source, index) => (
-          <React.Fragment key={source.url}>
-            {index > 0 ? ", " : null}
-            <a href={source.url} target="_blank" rel="noreferrer">{sourceDisplayName(source)}</a>
-          </React.Fragment>
-        ))}
-        {distinctSources.length > 5 ? ` и ещё ${distinctSources.length - 5}` : null}.
-      </p>
-      <button type="button" onClick={() => setDrawerOpen(true)} className="malik-source-pill" aria-label={`Открыть ${sources.length} источников`}>
+      <button type="button" onClick={() => setDrawerOpen(true)} className="malik-source-pill malik-source-square" aria-label={`Открыть ${sources.length} источников`} aria-haspopup="dialog" aria-expanded={drawerOpen}>
         <span className="malik-source-pill__icons">
           {uniqueIconSources.map((source) => <SourceIcon key={source.url} source={source} />)}
         </span>
-        <span>sources</span>
+        <span>Sources</span>
       </button>
       {drawerOpen ? <SourceDrawer research={research} onClose={() => setDrawerOpen(false)} /> : null}
     </section>
@@ -1839,6 +1830,7 @@ function MessageBubble({
     <div
       data-malik-message={message.role}
       data-malik-text-turn={isTextAnswer ? "" : undefined}
+      data-malik-compact-answer={compactTurn ? "1" : undefined}
       data-malik-response-state={answerState}
       data-malik-stopped={notice?.kind === "stopped" ? "1" : undefined}
       className={cn(
@@ -1866,7 +1858,7 @@ function MessageBubble({
               // source newlines on top of the spacing those blocks already have.
               : "malik-message-card-assistant text-[#e9e3d6]",
         )}>
-          {responseModel && !message.generatedMedia && !message.imageConfirmation ? (
+          {responseModel && !compactTurn && !message.generatedMedia && !message.imageConfirmation ? (
             <div className="malik-response-model" aria-label={`Ответ модели ${responseModel.label}`}>
               <span className="malik-response-model__mark" aria-hidden="true">
                 <svg viewBox="0 0 44 44"><path d="M9 29 L22 15 L22 29 Z" fill="currentColor" /><path d="M24 15 H38 L24 29 Z" fill="currentColor" /></svg>
@@ -1875,7 +1867,8 @@ function MessageBubble({
             </div>
           ) : null}
           {!isUser && message.actionPlan ? <MalikActionPlanCard plan={message.actionPlan} onOpenTarget={onOpenActionTarget} /> : null}
-          {!isUser && !buildLive && !buildDone ? <ChatExecution key={`${message.id}:${shownVersion}`} trace={olderVersion ? undefined : message.execution} legacyThought={olderVersion ? undefined : message.thought} live={streaming} sources={olderVersion ? [] : message.research?.sources} compact={compactTurn} workMode={workspaceMode === "work"} writing={Boolean(displayContent)} browserTask={olderVersion ? "" : question} latest={isLatest} stages={!olderVersion && !message.generatedMedia && !message.imageConfirmation && !message.superflow && !videoAnalysis} /> : null}
+          {compactTurn && streaming && !displayContent && !buildLive ? <MalikLiveActivity /> : null}
+          {!isUser && !compactTurn && !buildLive && !buildDone ? <ChatExecution key={`${message.id}:${shownVersion}`} trace={olderVersion ? undefined : message.execution} legacyThought={olderVersion ? undefined : message.thought} live={streaming} sources={olderVersion ? [] : message.research?.sources} compact={compactTurn} workMode={workspaceMode === "work"} writing={Boolean(displayContent)} browserTask={olderVersion ? "" : question} latest={isLatest} stages={!olderVersion && !message.generatedMedia && !message.imageConfirmation && !message.superflow && !videoAnalysis} /> : null}
           {isUser && message.attachments?.length ? <UserAttachmentGallery items={message.attachments} /> : null}
           {!isUser && message.superflow ? (
             <SuperflowBlock messageId={message.id} reference={message.superflow} />
@@ -1990,7 +1983,7 @@ function MessageBubble({
           ) : null}
           {/* The verdict on the text above comes before the reading list it was
               written from. */}
-          {!isUser && !streaming && visibleResearch?.factAudit && worthFactAuditPanel(visibleResearch.factAudit, displayContent) ? (
+          {!isUser && !compactTurn && !streaming && visibleResearch?.factAudit && worthFactAuditPanel(visibleResearch.factAudit, displayContent) ? (
             <FactAuditPanel
               audit={visibleResearch.factAudit}
               sources={visibleResearch.sources}
@@ -2029,7 +2022,7 @@ function MessageBubble({
               {onOpenSheet && displayContent.trim() ? (
                 <button type="button" title="Открыть на листе" aria-label="Открыть ответ на листе с экспортом PDF" onClick={() => onOpenSheet(message.id, olderVersion ?? undefined)} className="malik-open-sheet inline-flex items-center gap-1.5 rounded-md px-1.5 py-1 text-[12.5px] font-medium hover:bg-white/10 hover:text-white">
                   <FileText className="h-4 w-4" />
-                  <span>Лист / PDF</span>
+                  {!compactTurn ? <span>Лист / PDF</span> : null}
                 </button>
               ) : null}
             </> : null}
@@ -2037,7 +2030,7 @@ function MessageBubble({
         )}
         {/* Compact, inspectable completion statistics, directly below the answer.
             No token number is shown unless the provider reported it. */}
-        {!isUser && !streaming && Boolean(displayContent) && !message.imageConfirmation && visibleMetrics ? (
+        {!isUser && !compactTurn && !streaming && Boolean(displayContent) && !message.imageConfirmation && visibleMetrics ? (
           <details className="malik-response-telemetry mt-2 w-fit max-w-full rounded-lg border border-white/[0.09] bg-white/[0.025] px-3 py-1.5 text-xs text-zinc-400 open:bg-white/[0.045]">
             <summary className="flex cursor-pointer list-none items-center gap-1.5 text-[12px] transition hover:text-zinc-200 [&::-webkit-details-marker]:hidden" aria-label="Статистика ответа MALIK AI">
               <Timer size={12} aria-hidden="true" />
@@ -2071,7 +2064,7 @@ function MessageBubble({
             </div>
           </details>
         ) : null}
-        {!isUser && showFollowUps && onFollowUp && displayContent.trim() && (notice || message.execution?.state !== "failed")
+        {!isUser && (!compactTurn || Boolean(notice)) && showFollowUps && onFollowUp && displayContent.trim() && (notice || message.execution?.state !== "failed")
           ? <FollowUpChips onSend={onFollowUp} question={question} answer={notice ? rawAnswer : displayContent} hasAttachment={questionHasAttachment} onlyContinue={Boolean(notice)} /> : null}
         {isUser && message.content ? <UserMessageActions id={message.id} text={message.content} onEdit={onEditPrompt} /> : null}
       </div>
@@ -3044,6 +3037,42 @@ export function ChatView({ messages, workspaceMode = "chat", onSendMessage, onIm
   return (
     <div data-malik-chat-fullwidth="1" data-workspace-mode={workspaceMode} data-work-home={workHome ? "1" : undefined} className="malik-chat-fullwidth relative z-[2] flex h-full min-h-0 w-full max-w-none flex-1 flex-col overflow-hidden bg-transparent text-white">
       <style>{`
+        /* One clean source control and a light, compact answer toolbar. */
+        #malik-root .malik-chat-fullwidth .malik-message-row .malik-source-inline {
+          display: flex !important; align-items: flex-start !important; width: fit-content !important;
+          margin: 10px 0 0 !important; padding: 0 !important; border: 0 !important;
+          background: transparent !important; box-shadow: none !important;
+        }
+        #malik-root .malik-chat-fullwidth .malik-message-row .malik-source-square {
+          box-sizing: border-box !important; display: inline-flex !important;
+          flex-direction: column !important; align-items: center !important; justify-content: center !important;
+          gap: 3px !important; width: 56px !important; min-width: 56px !important; max-width: 56px !important;
+          height: 56px !important; min-height: 56px !important; max-height: 56px !important;
+          padding: 4px !important; margin: 0 !important; border: 1px solid #303030 !important;
+          border-radius: 8px !important; background: #080808 !important; box-shadow: none !important;
+          color: #d4d4d8 !important; font-size: 10px !important; line-height: 12px !important;
+        }
+        #malik-root .malik-chat-fullwidth .malik-message-row .malik-source-square:hover { background: #181818 !important; }
+        #malik-root .malik-chat-fullwidth .malik-message-row .malik-source-square .malik-source-pill__icons { height: 18px !important; }
+        #malik-root .malik-chat-fullwidth .malik-message-row .malik-source-square .malik-source-icon {
+          width: 18px !important; height: 18px !important; min-width: 18px !important; min-height: 18px !important;
+          max-width: 18px !important; max-height: 18px !important; flex: 0 0 18px !important;
+        }
+        #malik-root .malik-chat-fullwidth .malik-message-row .malik-source-square .malik-source-icon img { width: 13px !important; height: 13px !important; }
+        #malik-root .malik-chat-fullwidth [data-malik-compact-answer="1"] .malik-message-actions {
+          gap: 3px !important; margin-top: 6px !important; width: 100% !important;
+          justify-content: flex-start !important; align-items: center !important;
+        }
+        #malik-root .malik-chat-fullwidth [data-malik-compact-answer="1"] .malik-message-actions button {
+          display: inline-grid !important; place-items: center !important;
+          width: 30px !important; height: 30px !important; min-width: 30px !important; min-height: 30px !important;
+          padding: 0 !important; border: 0 !important; border-radius: 6px !important;
+          background: transparent !important; box-shadow: none !important; color: #a1a1aa !important;
+        }
+        #malik-root .malik-chat-fullwidth [data-malik-compact-answer="1"] .malik-message-actions button:hover,
+        #malik-root .malik-chat-fullwidth [data-malik-compact-answer="1"] .malik-message-actions button[aria-pressed="true"] {
+          background: #222 !important; color: #fff !important;
+        }
         @media (min-width: 1024px) {
           .malik-dashboard-shell main > section {
             flex: 1 1 100% !important;
