@@ -94,6 +94,13 @@ try {
         assert.equal(JSON.parse(init.body).type, "lite")
         return Response.json({ results: [{ title: "Нуркентский планетарий", url: parallelUrl, highlights: [parallelText] }] })
       }
+      if (host === "api.tavily.com" && String(url).endsWith("/search") && process.env.TAVILY_FREE_API_KEY) {
+        assert.equal(new Headers(init.headers).get("authorization"), "Bearer free-tavily-fixture")
+        const body = JSON.parse(init.body)
+        assert.equal(body.search_depth, "basic")
+        assert.equal(body.api_key, undefined)
+        return new Response("", { status: 429 })
+      }
       if (host === "api.tavily.com" && String(url).endsWith("/extract")) {
         assert.equal(new Headers(init.headers).get("authorization"), "Bearer fixture-only")
         return Response.json({ results: [{ url: parallelUrl, raw_content: parallelText }] })
@@ -230,6 +237,22 @@ try {
       assert.match(answer.content, /1 января/u)
       assert.match(answer.sources[0].url, /gov\.kz/u)
     } finally { scenario = "success" }
+  })
+  await check("the new Tavily key wins over a legacy key and Exa takes over on quota exhaustion", async () => {
+    scenario = "free-web"
+    process.env.TAVILY_FREE_API_KEY = "free-tavily-fixture"
+    process.env.EXA_FREE_API_KEY = "fixture-only"
+    try {
+      const before = calls.length
+      const sources = await god.gatherSourcesForPrompt("Найди официальный отчёт об открытии планетария в Нуркенте", undefined, { mode: "fast" })
+      assert.deepEqual(calls.slice(before).map(url => new URL(url).hostname), ["api.tavily.com", "api.exa.ai"])
+      assert.ok(sources.some(source => source.url === parallelUrl && source.provider === "exa"))
+      assert.deepEqual(load("lib/malik-research/free-web.ts").webSearchConfiguration(), { tavily: true, exa: true, parallel: false })
+    } finally {
+      delete process.env.TAVILY_FREE_API_KEY
+      delete process.env.EXA_FREE_API_KEY
+      scenario = "success"
+    }
   })
   for (const [name, prompt] of [
     ["A", "Какие новые ИИ-модели официально вышли за последние семь дней? Укажи даты и первоисточники"],

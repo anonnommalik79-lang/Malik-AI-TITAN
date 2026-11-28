@@ -172,6 +172,20 @@ await check("fast search reformulates the question after irrelevant hits", async
   assert.equal(result.fallbackSuccesses, 1)
   assert.equal(result.sources[0]?.url, fresh.url)
 })
+await check("an alternate query tries unused providers before repeating an empty result", async () => {
+  const alternate = "GPT-99 announcement official source"
+  const requested = []
+  const providers = ["empty-a", "empty-b", "exa", "parallel"].map(name => ({
+    name,
+    run: async query => {
+      requested.push([name, query])
+      return name === "exa" && query === alternate ? [fresh] : []
+    },
+  }))
+  const result = await search({ queries: [prompt, alternate], providers })
+  assert.deepEqual(requested, [["empty-a", prompt], ["empty-b", prompt], ["exa", alternate]])
+  assert.equal(result.sources[0]?.url, fresh.url)
+})
 await check("fast search uses one query when it finds current evidence", async () => {
   const result = await search({ queries: [prompt, "another formulation"] })
   assert.equal(result.queries, 1)
@@ -207,6 +221,14 @@ await check("expired search cache fetches again", async () => { const cache = ne
 await check("bounded cache evicts oldest entries", () => { const cache = new EvidenceSearchCache(2); for (const key of ["a", "b", "c"]) cache.set(key, [fresh], clock(), 1000); assert.equal(cache.size, 2); assert.equal(cache.get("a", clock()), null) })
 await check("cached source cannot be mutated by another turn", () => { const cache = new EvidenceSearchCache(); cache.set("a", [fresh], clock(), 1000); cache.get("a", clock())[0].title = "poisoned"; assert.equal(cache.get("a", clock())[0].title, fresh.title) })
 await check("provider circuit closes after cooldown and success", () => { const breaker = new ProviderCircuits(); for (let n = 0; n < 3; n++) breaker.record("p", false, clock()); assert.equal(breaker.open("p", clock()), true); assert.equal(breaker.open("p", clock() + 61_000), false); breaker.record("p", true, clock()); assert.equal(breaker.open("p", clock()), false) })
+await check("empty queries do not disable the provider for a different topic", async () => {
+  const circuits = new ProviderCircuits()
+  for (let index = 0; index < 3; index++) {
+    await search({ circuits, providers: [{ name: "primary", run: async () => [] }] })
+  }
+  const recovered = await search({ circuits, providers: [{ name: "primary", run: async () => [fresh] }] })
+  assert.equal(recovered.sources[0]?.url, fresh.url)
+})
 await check("failure cache does not suppress recovery", async () => { const cache = new EvidenceSearchCache(); await search({ cache, providers: [{ name: "fixture", run: async () => [] }] }); assert.equal((await search({ cache })).calls, 1) })
 await check("valid citations and source check date are included once", () => { const intent = classifyFreshness(prompt, NOW), sources = assessSources(prompt, [fresh], intent); const answer = finalizeFreshAnswer("Fixture answer [1]", intent, sources); assert.match(answer, /Fixture answer \[1\]/); assert.match(answer, /2026-10-11/); assert.equal(answer.match(/Источники проверены/g).length, 1) })
 for (const value of ["Invented fact [99]", "Invented citation https://fake.example/story", "Invented news [0]"]) await check("invalid citation rejects current answer: " + value, () => assert.match(finalizeFreshAnswer(value, classifyFreshness(prompt, NOW), assessSources(prompt, [fresh], classifyFreshness(prompt, NOW))), /Не удалось подтвердить/))

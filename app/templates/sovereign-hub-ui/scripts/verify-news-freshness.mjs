@@ -102,7 +102,7 @@ for (const prompt of ["Кто сейчас CEO NVIDIA?", "Какие огран�
 // fixture; no fabricated model output is returned or scored.
 for (const provider of ["serper", "brave", "tavily", "all-fail"]) {
   test(`actual adapter request filters and sequential fallback: ${provider}`, async () => {
-    const keys = ["SERPER_API_KEY", "BRAVE_SEARCH_API_KEY", "TAVILY_API_KEY", "JINA_SEARCH_DISABLED", "SEARXNG_URL"]
+    const keys = ["SERPER_API_KEY", "BRAVE_SEARCH_API_KEY", "TAVILY_API_KEY", "JINA_SEARCH_DISABLED", "SEARXNG_URL", "PARALLEL_MCP_DISABLED", "TAVILY_FREE_API_KEY", "EXA_FREE_API_KEY"]
     const saved = Object.fromEntries(keys.map(key => [key, process.env[key]])), calls = []
     let active = 0, maximum = 0
     try {
@@ -110,6 +110,7 @@ for (const provider of ["serper", "brave", "tavily", "all-fail"]) {
       const keyNames = { serper: "SERPER_API_KEY", brave: "BRAVE_SEARCH_API_KEY", tavily: "TAVILY_API_KEY" }
       for (const [name, key] of Object.entries(keyNames)) if (provider === name || provider === "all-fail") process.env[key] = "fixture-only-not-a-real-key"
       process.env.JINA_SEARCH_DISABLED = "true"
+      process.env.PARALLEL_MCP_DISABLED = "true"
       const utils = load("lib/malik-research/utils.ts")
       const transport = async (url, init) => {
         calls.push({ url: String(url), body: init?.body ? JSON.parse(init.body) : null })

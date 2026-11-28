@@ -1,8 +1,10 @@
 import type { FreshnessIntent } from "../ai/freshness-intent"
+import type { LiveSearchProvider } from "../live-intelligence/search-engine"
+import { searchTimeFilters } from "../live-intelligence/search-time-filters"
 import { assertPublicHttpUrl } from "../server/request-safety"
 import { fetchResearchResponse } from "./bounded-fetch"
 import type { FetchedSource, SearchResult } from "./types"
-import { clampText, cleanTitle, domainOf, stripHtml } from "./utils"
+import { clampText, cleanTitle, domainOf, fetchWithTimeout, stripHtml } from "./utils"
 
 type WebRecord = Record<string, unknown>
 const object = (value: unknown): WebRecord => value && typeof value === "object" && !Array.isArray(value) ? value as WebRecord : {}
@@ -22,12 +24,30 @@ export function parallelSearchEnabled() {
   return process.env.PARALLEL_MCP_DISABLED !== "true"
 }
 
-export function tavilySearchKey() {
-  return process.env.TAVILY_API_KEY?.trim() || process.env.TAVILY_FREE_API_KEY?.trim()
+function freeTavilyKey() {
+  return process.env.TAVILY_FREE_API_KEY?.trim()
 }
 
-export function exaSearchEnabled() {
-  return Boolean(process.env.EXA_FREE_API_KEY?.trim())
+function exaKey() {
+  return process.env.EXA_FREE_API_KEY?.trim()
+}
+
+export function webSearchConfiguration() {
+  return { tavily: Boolean(freeTavilyKey()), exa: Boolean(exaKey()), parallel: parallelSearchEnabled() }
+}
+
+export function freeSearchProviders() {
+  const config = webSearchConfiguration()
+  const keyed: LiveSearchProvider[] = [
+    ...(config.tavily ? [{ name: "tavily", run: searchTavily }] : []),
+    ...(config.exa ? [{ name: "exa", run: searchExa }] : []),
+  ]
+  const parallel: LiveSearchProvider[] = config.parallel ? [{ name: "parallel", timeoutMs: 5600, run: searchParallel }] : []
+  return { primary: keyed.length ? [...keyed, ...parallel] : [], fallback: keyed.length ? [] : parallel }
+}
+
+export function legacyTavilySearchProviders(): LiveSearchProvider[] {
+  return !freeTavilyKey() && process.env.TAVILY_API_KEY?.trim() ? [{ name: "tavily", run: searchTavily }] : []
 }
 
 async function parallelTool(name: "web_search" | "web_fetch", args: WebRecord, signal: AbortSignal) {
@@ -79,8 +99,9 @@ function searchSources(rows: WebRecord[], provider: string, limit: number): Sear
     return [{
       title: cleanTitle(string(row.title) || url),
       url, domain: domainOf(url), provider,
-      snippet: clampText(stripHtml(passages(row.excerpts) || passages(row.highlights)), 4500),
-      publishedAt: string(row.publish_date || row.publishedDate) || undefined,
+      snippet: clampText(stripHtml(passages(row.excerpts) || passages(row.highlights) || string(row.content)), 4500),
+      publishedAt: string(row.publish_date || row.published_date || row.publishedDate) || undefined,
+      score: typeof row.score === "number" && Number.isFinite(row.score) ? row.score : undefined,
     }]
   }).slice(0, limit)
 }
@@ -95,13 +116,32 @@ export async function searchParallel(query: string, limit: number, signal: Abort
   return searchSources(await parallelTool("web_search", { objective, search_queries: [keywords] }, signal), "parallel", limit)
 }
 
-export async function searchExa(query: string, limit: number, signal: AbortSignal) {
-  const key = process.env.EXA_FREE_API_KEY?.trim()
+export async function searchTavily(query: string, limit: number, signal: AbortSignal, intent: FreshnessIntent) {
+  const key = freeTavilyKey() || process.env.TAVILY_API_KEY?.trim()
+  if (!key) return []
+  const response = await fetchWithTimeout("https://api.tavily.com/search", {
+    method: "POST",
+    headers: { authorization: "Bearer " + key, "content-type": "application/json" },
+    body: JSON.stringify({
+      query, search_depth: "basic", max_results: Math.min(limit, 10),
+      include_answer: false, include_raw_content: false, ...searchTimeFilters(intent).tavily,
+    }),
+    redirect: "error", cache: "no-store",
+  }, 3500, signal)
+  if (!response.ok) throw new Error("Tavily search HTTP " + response.status)
+  return searchSources(records(object(await response.json()).results), "tavily", limit)
+}
+
+export async function searchExa(query: string, limit: number, signal: AbortSignal, intent?: FreshnessIntent) {
+  const key = exaKey()
   if (!key) return []
   const response = await fetchResearchResponse("https://api.exa.ai/search", {
     method: "POST",
     headers: { "x-api-key": key, "content-type": "application/json" },
-    body: JSON.stringify({ query, type: "lite", numResults: Math.min(8, limit), contents: { highlights: true } }),
+    body: JSON.stringify({
+      query, type: "lite", numResults: Math.min(8, limit), contents: { highlights: true },
+      ...(intent?.news && intent.window ? { startPublishedDate: intent.window.from, endPublishedDate: intent.window.to } : {}),
+    }),
     signal, redirect: "error", cache: "no-store",
   }, 3500, 256_000)
   if (!response.ok) throw new Error("Exa HTTP " + response.status)
@@ -129,7 +169,7 @@ export async function readParallelPage(result: SearchResult, target: string, sig
 }
 
 export async function readTavilyPage(result: SearchResult, target: string, signal: AbortSignal) {
-  const key = process.env.TAVILY_FREE_API_KEY?.trim()
+  const key = freeTavilyKey()
   if (!key) return null
   const response = await fetchResearchResponse("https://api.tavily.com/extract", {
     method: "POST",

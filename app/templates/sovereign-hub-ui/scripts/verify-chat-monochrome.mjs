@@ -81,7 +81,7 @@ check("source favicon colours survive monochrome chrome", () => {
   assert.match(chrome, /#malik-root \.malik-source-icon img \{[^}]*filter: none !important;/)
   assert.match(chrome, /#malik-root \.malik-source-pill \{[^}]*height: 36px !important;/)
   assert.match(chrome, /#malik-root \.malik-source-pill \{[^}]*width: fit-content !important;/)
-  assert.match(view, /className="malik-source-pill"/)
+  assert.match(view, /className="malik-source-pill(?:\s[^"]*)?"/)
   assert.match(view, /onClick=\{\(\) => setDrawerOpen\(true\)\}/)
 })
 

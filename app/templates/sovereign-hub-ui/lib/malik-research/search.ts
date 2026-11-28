@@ -4,7 +4,7 @@ import { runLiveSearch } from "../live-intelligence/search-engine";
 import { classifyFreshness, type FreshnessIntent } from "../ai/freshness-intent";
 import { searchTimeFilters } from "../live-intelligence/search-time-filters";
 import { searchNewsFeed } from "../live-intelligence/news-search";
-import { exaSearchEnabled, parallelSearchEnabled, searchExa, searchParallel, tavilySearchKey } from "./free-web";
+import { freeSearchProviders, legacyTavilySearchProviders } from "./free-web";
 
 function uniqueResults(results: SearchResult[], limit: number) {
   const seen = new Set<string>();
@@ -89,63 +89,6 @@ async function searchSerper(query: string, limit: number, signal?: AbortSignal, 
             publishedAt: x.date,
           },
           "serper"
-        )
-      )
-      .filter(Boolean) as SearchResult[],
-    limit
-  );
-}
-
-async function tavilyFetch(query: string, limit: number, key: string, useBearer: boolean, signal?: AbortSignal, intent = classifyFreshness(query)) {
-  return fetchWithTimeout(
-    "https://api.tavily.com/search",
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...(useBearer ? { Authorization: `Bearer ${key}` } : {}),
-      },
-      body: JSON.stringify({
-        ...(useBearer ? {} : { api_key: key }),
-        query,
-        max_results: Math.min(limit, 10),
-        search_depth: "basic",
-        include_answer: false,
-        include_raw_content: false,
-        ...searchTimeFilters(intent).tavily,
-      }),
-    },
-    8000, signal
-  );
-}
-
-async function searchTavily(query: string, limit: number, signal?: AbortSignal, intent = classifyFreshness(query)): Promise<SearchResult[]> {
-  const key = tavilySearchKey();
-  if (!key) return [];
-
-  let res = await tavilyFetch(query, limit, key, false, signal, intent);
-
-  if (!res.ok && [401, 403, 422].includes(res.status)) {
-    res = await tavilyFetch(query, limit, key, true, signal, intent);
-  }
-
-  if (!res.ok) return [];
-
-  const data = await res.json();
-  const results = Array.isArray(data.results) ? data.results : [];
-
-  return uniqueResults(
-    results
-      .map((x: any) =>
-        normalizeResult(
-          {
-            title: x.title,
-            url: x.url,
-            snippet: x.content,
-            publishedAt: x.published_date,
-            score: x.score,
-          },
-          "tavily"
         )
       )
       .filter(Boolean) as SearchResult[],
@@ -328,13 +271,14 @@ async function runProvider(name: string, fn: () => Promise<SearchResult[]>) {
 }
 
 function availableProviders(intent: FreshnessIntent) {
+  const freeSearch = freeSearchProviders()
   return [
+    ...freeSearch.primary,
     ...(process.env.SERPER_API_KEY?.trim() ? [{ name: "serper", run: searchSerper }] : []),
     ...(process.env.BRAVE_SEARCH_API_KEY?.trim() ? [{ name: "brave", run: searchBrave }] : []),
-    ...(tavilySearchKey() ? [{ name: "tavily", run: searchTavily }] : []),
+    ...legacyTavilySearchProviders(),
     ...(intent.news ? [{ name: "google-news", run: searchNewsFeed }] : []),
-    ...(exaSearchEnabled() ? [{ name: "exa", run: searchExa }] : []),
-    ...(parallelSearchEnabled() ? [{ name: "parallel", timeoutMs: 5600, run: searchParallel }] : []),
+    ...freeSearch.fallback,
     ...(process.env.SEARXNG_URL?.trim() ? [{ name: "searxng", run: searchSearxng }] : []),
     ...(process.env.JINA_SEARCH_DISABLED === "true" ? [] : [{ name: "jina", run: searchJina }]),
     { name: "duckduckgo", run: searchDuckDuckGo },

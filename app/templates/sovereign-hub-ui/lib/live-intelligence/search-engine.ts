@@ -93,7 +93,11 @@ export async function runLiveSearch(input: {
     const confirmed: MalikWebSource[] = []
     const desiredProviders = input.mode === "max" ? 3 : input.mode === "deep" ? 2 : 1
     const previous = new Map(result.attempts.map(attempt => [attempt.provider, attempt.outcome]))
-    const retryPriority = (provider: LiveSearchProvider) => previous.get(provider.name) === "empty" ? 0 : previous.has(provider.name) ? 2 : 1
+    const previousPriority = { success: 0, empty: 2, failed: 3, "circuit-open": 3 }
+    const retryPriority = (provider: LiveSearchProvider) => {
+      const outcome = previous.get(provider.name)
+      return outcome ? previousPriority[outcome] : 1
+    }
     const providers = fastRetry && index > 0 ? [...input.providers].sort((a, b) => retryPriority(a) - retryPriority(b)) : input.providers
     for (const provider of providers) {
       if (queryDeadline.aborted || result.calls >= callLimit) break
@@ -113,7 +117,9 @@ export async function runLiveSearch(input: {
         deadline.throwIfAborted()
         const found = take(raw)
         const usable = found.length > 0 && (intent.category === "STATIC" || !intent.needsSearch || hasSearchLead(found))
-        breaker.record(provider.name, raw.length > 0, clock())
+        // An empty result is specific to this query. Only a transport failure
+        // should pause a provider for other users and topics.
+        breaker.record(provider.name, true, clock())
         result.attempts.push({ provider: provider.name, outcome: usable ? "success" : "empty", ms: clock() - before })
         if (usable) {
           if (!successes && (attempted > 1 || fastRetry && index > 0)) result.fallbackSuccesses++
