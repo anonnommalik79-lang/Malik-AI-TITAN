@@ -1,6 +1,6 @@
 import type { MalikWebSource } from "../ai/web-research-types"
 import { classifyFreshness, publicSearchText, type FreshnessMode, type FreshnessIntent } from "../ai/freshness-intent"
-import { assessSources, currentEvidenceAvailable, currentNewsSources } from "./evidence"
+import { assessSources, currentEvidenceAvailable, currentNewsSources, isSocialEvidenceSource } from "./evidence"
 
 export type LiveSearchProvider = { name: string; timeoutMs?: number; run: (query: string, limit: number, signal: AbortSignal, intent: FreshnessIntent) => Promise<MalikWebSource[]> }
 export type SearchAttempt = { provider: string; outcome: "success" | "empty" | "failed" | "circuit-open"; ms: number }
@@ -77,7 +77,7 @@ export async function runLiveSearch(input: {
     const year = intent.localDate.slice(0, 4)
     const seeksThisYear = intent.lastOccurrence && query.split(/\s+/u).includes(year)
     const hasSearchLead = (sources: MalikWebSource[]) => intent.lastOccurrence
-      ? sources.some(source => source.occurrence && (!seeksThisYear || source.occurrence.end.startsWith(year)))
+      ? sources.some(source => !isSocialEvidenceSource(source) && source.occurrence && (!seeksThisYear || source.occurrence.end.startsWith(year)))
       : currentEvidenceAvailable(sources, intent) && (!input.isUsefulLead || input.isUsefulLead(sources))
     result.queries++; input.onQuery?.(query)
     // Bucket/window prevents yesterday's cache from crossing local midnight.

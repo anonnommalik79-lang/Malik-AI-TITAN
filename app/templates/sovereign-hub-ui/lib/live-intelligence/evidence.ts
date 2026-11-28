@@ -10,6 +10,11 @@ const SCIENCE_DOMAINS = ["arxiv.org", "nature.com", "science.org", "nasa.gov", "
 const NEWS_DOMAINS = ["reuters.com", "apnews.com", "bbc.com", "bbc.co.uk", "inform.kz", "kazinform.com", "astanatimes.com"]
 export const isDomain = (host: string, root: string) => host === root || host.endsWith("." + root)
 
+/** Reposts can point toward a report, but should not crowd out the original. */
+export function isSocialEvidenceSource(source: MalikWebSource): boolean {
+  return ["facebook.com", "instagram.com", "tiktok.com", "linkedin.com", "threads.net", "x.com", "twitter.com"].some(domain => isDomain(source.domain, domain))
+}
+
 export function safeEvidenceUrl(value: string): string | null {
   try {
     if (typeof value !== "string" || value.length > 4096) return null
@@ -95,6 +100,7 @@ export function assessSources(prompt: string, sources: readonly MalikWebSource[]
       const byEvent = (b.occurrence?.end || "").localeCompare(a.occurrence?.end || "")
         || (a.occurrence?.start || "").localeCompare(b.occurrence?.start || "")
       return byRead || byEditionLead || byEvent || Number(b.authority === "primary") - Number(a.authority === "primary")
+        || Number(isSocialEvidenceSource(a)) - Number(isSocialEvidenceSource(b))
     }
     if ((isNewsRequest(prompt) || intent.window) && !intent.historical) {
       const dated = (source: MalikWebSource) => Date.parse(source.eventAt || source.publishedAt || "") || 0

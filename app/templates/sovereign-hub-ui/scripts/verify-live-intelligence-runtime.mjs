@@ -63,6 +63,18 @@ try {
     if (scenario === "quote-repair" && String(url).includes("serper.dev")) {
       return Response.json({ organic: [{ title: "Телефон Atlas — цена в магазине", link: "https://shop.example.org/atlas", snippet: "Телефон Atlas продаётся по цене 319 990 ₸." }] })
     }
+    if (scenario === "reposted-local-event") {
+      if (String(url).includes("serper.dev")) {
+        const query = JSON.parse(init.body).q
+        queries.push(query)
+        const official = query.includes("site:gov.kz")
+        return Response.json({ organic: [{ title: `Open Data Forum ${currentEventYear}`,
+          link: official ? "https://www.gov.kz/example/open-data-forum" : "https://www.facebook.com/example/post",
+          snippet: `Open Data Forum took place on January 1, ${currentEventYear}, in Astana.`,
+        }] })
+      }
+      return new Response("", { status: 503 })
+    }
     if (scenario === "publisher-catalog") {
       if (String(url).endsWith("openai.com/news/rss.xml")) {
         const recent = new Date(Date.now() - 4 * 86_400_000).toUTCString()
@@ -121,6 +133,17 @@ try {
       assert.match(answer.content, /319 990/u)
       assert.doesNotMatch(answer.content, /449 990/u)
       assert.equal(inferences.length - before, 2)
+    } finally { scenario = "success" }
+  })
+  await check("a social repost leads discovery to the local official event report", async () => {
+    scenario = "reposted-local-event"
+    try {
+      const before = queries.length
+      const answer = await run("Когда последний раз проходил Open Data Forum?")
+      assert.ok(queries.slice(before).some(query => query.includes('site:gov.kz')))
+      assert.equal(answer.model, "verified-occurrence")
+      assert.match(answer.content, /1 января/u)
+      assert.match(answer.sources[0].url, /gov\.kz/u)
     } finally { scenario = "success" }
   })
   for (const [name, prompt] of [

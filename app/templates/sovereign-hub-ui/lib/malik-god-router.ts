@@ -28,7 +28,7 @@ import { chatWebsiteInstruction } from "@/lib/server/chat-website-design"
 import { fetchEiaSpotEvidence } from "@/lib/server/petroleum-eia"
 import { asksCompanyMoney, classifyFreshness, freshnessMode, isModelLeaderboardRequest, NO_WEB, publicSearchText, requireEvidence, type FreshnessMode, type FreshnessIntent } from "@/lib/ai/freshness-intent"
 import { latinBrandName, withLatinBrand } from "@/lib/ai/colloquial"
-import { assessSources, currentEvidenceAvailable, currentNewsSources, finalizeFreshAnswer, freshnessCheckLine, freshnessEvidenceInstruction, safeEvidenceUrl, sourceDisagreements, unavailableFreshAnswer, verifiedOccurrenceAnswer } from "@/lib/live-intelligence/evidence"
+import { assessSources, currentEvidenceAvailable, currentNewsSources, finalizeFreshAnswer, freshnessCheckLine, freshnessEvidenceInstruction, isSocialEvidenceSource, safeEvidenceUrl, sourceDisagreements, unavailableFreshAnswer, verifiedOccurrenceAnswer } from "@/lib/live-intelligence/evidence"
 import { lastOccurrenceRequest, occurrenceSubjectPattern } from "@/lib/ai/last-occurrence"
 import { searchTimeFilters } from "@/lib/live-intelligence/search-time-filters"
 import { searchNewsFeed } from "@/lib/live-intelligence/news-search"
@@ -879,19 +879,26 @@ async function gatherSources(question: string, emit?: ResearchEmitter, activity?
   // A readable archive or a failed page is insufficient to stop looking for
   // this year's edition. Keep past evidence in case the event hasn't returned.
   const editionYear = intent.localDate.slice(0, 4)
-  const readThisYear = sources.some(source => source.readAt && source.occurrence?.end.startsWith(editionYear))
+  const readThisYear = sources.some(source => !isSocialEvidenceSource(source) && source.readAt && source.occurrence?.end.startsWith(editionYear))
   if (intent.lastOccurrence && !budget.aborted && !readThisYear && queries.length) {
-    const followUpQuery = queries[1] || queries[0]
+    const safeSubject = lastOccurrenceRequest(publicSearchText(prompt))?.subject
+    const context = [prompt, ...unique.map(source => `${source.title} ${source.domain} ${source.snippet || ""}`)].join(" ")
+    const localRecap = safeSubject && /(?:казахстан|астан[аеыу]|алмат[ыа]|қазақстан|kazakhstan|astana|almaty|\.kz\b)/iu.test(context)
+      ? `"${safeSubject.replace(/^(?:ai|ии)\s*&\s*/iu, "").replace(/"/gu, "")}" ${editionYear} итоги прошел site:gov.kz`
+      : ""
+    const followUpQuery = localRecap || queries[1] || queries[0]
     const unusedProvider = providers.find(provider => !live.attempts.some(attempt => attempt.provider === provider.name))
-    const alternate = unusedProvider || (queries[1] ? providers[0] : undefined)
-    if (alternate) {
-      const recoveryCall = activity?.start("Ищу доступное подтверждение события", "search", "web.search", { provider: alternate.name })
-      const recovery = await search([alternate], "fast", [followUpQuery]).catch(error => {
+    // A differently scoped query through the working provider can recover an original report behind reposts.
+    const alternativesToTry = localRecap ? [providers[0], unusedProvider].filter((provider): provider is LiveSearchProvider => Boolean(provider))
+      : [unusedProvider || (queries[1] ? providers[0] : undefined)].filter((provider): provider is LiveSearchProvider => Boolean(provider))
+    if (alternativesToTry.length) {
+      const recoveryCall = activity?.start("Ищу доступное подтверждение события", "search", "web.search", { provider: alternativesToTry[0].name })
+      const recovery = await search([...new Set(alternativesToTry)], "fast", [followUpQuery]).catch(error => {
         if (!budget.aborted || signal?.aborted) throw error
         return null
       })
-      const alternatives = recovery?.sources.filter(source => !triedPages.has(source.url)) || []
-      activity?.finish(recoveryCall, compactSearchReceipt(alternatives, { provider: alternate.name, calls: recovery?.calls || 0 }), alternatives.length ? "completed" : "failed")
+      const alternatives = recovery?.sources.filter(source => !triedPages.has(source.url) && !isSocialEvidenceSource(source)) || []
+      activity?.finish(recoveryCall, compactSearchReceipt(alternatives, { provider: alternativesToTry[0].name, calls: recovery?.calls || 0 }), alternatives.length ? "completed" : "failed")
       sources.push(...await read(alternatives, Math.min(maxSources, 2)))
       const known = new Set(unique.map(source => source.url))
       unique.push(...alternatives.filter(source => !known.has(source.url)))
