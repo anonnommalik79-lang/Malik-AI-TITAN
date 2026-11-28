@@ -63,3 +63,94 @@ export function chatCompletionError(payload: Record<string, unknown>): string {
     ? (payload.error as Record<string, unknown>).message : payload.error
   return String(payload.message || detail || "Stream reported an unsuccessful answer").slice(0, 4000)
 }
+
+/** Incremental SSE framing. CR, LF and CRLF are legal, even across byte reads.
+ * UTF-8 is decoded once; a malformed/truncated code point fails closed.
+ */
+export class ChatSseDecoder {
+  private decoder = new TextDecoder("utf-8", { fatal: true })
+  private pending = ""
+  private cr = false
+  push(bytes?: Uint8Array, done = false): string[] {
+    let chunk = (this.cr ? "\r" : "") + this.decoder.decode(bytes, { stream: !done })
+    this.cr = !done && chunk.endsWith("\r")
+    if (this.cr) chunk = chunk.slice(0, -1)
+    this.pending += chunk.replace(/\r\n?/g, "\n")
+    const frames = this.pending.split("\n\n")
+    this.pending = frames.pop() || ""
+    if (done && this.pending.trim()) { frames.push(this.pending); this.pending = "" }
+    if (this.pending.length > MAX_CHAT_SSE_FRAME_CHARS || frames.some(frame => frame.length > MAX_CHAT_SSE_FRAME_CHARS)) {
+      throw new Error("Chat stream frame exceeds the safe size limit")
+    }
+    return frames
+  }
+}
+
+export function sseFrameData(frame: string): string | null {
+  const lines = frame.split(/\r\n|\r|\n/).filter(line => line === "data" || line.startsWith("data:"))
+  return lines.length ? lines.map(line => line.slice(5).replace(/^ /, "")).join("\n") : null
+}
+
+/** The canonical text ledger: one generation, ordered UTF-16 offsets.
+ * Repeated legitimate deltas have different offsets. A replay has the same
+ * offset and identical bytes. Never guess an overlap or splice conflicting text.
+ * Legacy streams without offsets retain the previous explicit-mode contract.
+ */
+export class ChatTextBuffer {
+  content = ""
+  private generation = ""
+  private finished = false
+
+  private identify(payload: Record<string, unknown>) {
+    if (payload.generationId === undefined) return
+    const id = payload.generationId
+    if (typeof id !== "string" || !id || id.length > 128) throw new Error("Invalid chat generation identity")
+    if (this.generation && id !== this.generation) throw new Error("Chat stream generation mismatch")
+    this.generation = id
+  }
+
+  apply(payload: Record<string, unknown>): boolean {
+    this.identify(payload)
+    if (this.finished) return false
+    const next = payload.content ?? payload.text
+    if (typeof next !== "string" || !next) return false
+    const old = this.content
+    if (payload.offset !== undefined) {
+      const offset = payload.offset
+      if (payload.contentMode !== "delta" || typeof offset !== "number" || !Number.isSafeInteger(offset) || offset < 0) throw new Error("Invalid chat stream offset")
+      if (offset < old.length) {
+        if (offset + next.length <= old.length && old.slice(offset, offset + next.length) === next) return false
+        throw new Error("Chat stream replay conflicts with received text")
+      }
+      if (offset !== old.length) throw new Error("Chat stream gap: received text was retained")
+    }
+    this.content = mergeChatStreamText(old, next, payload.contentMode)
+    return this.content !== old
+  }
+
+  complete(payload: Record<string, unknown>): string {
+    this.identify(payload)
+    if (this.finished) return this.content
+    const error = chatCompletionError(payload)
+    if (error) throw new Error(error)
+    const final = payload.finalContent
+    if (typeof final === "string" && final.trim()) {
+      if (final.length > MAX_CHAT_RESULT_CHARS) throw new Error("Chat final answer exceeds the safe size limit")
+      this.content = final
+    } else if (typeof payload.content === "string") {
+      this.content = mergeChatStreamText(this.content, payload.content, "snapshot")
+    }
+    if (!this.content.trim()) throw new Error("Chat stream completed without an answer")
+    this.finished = true
+    return this.content
+  }
+}
+
+/** Provider adapters may carry a full message, not a delta. Convert it once
+ * before reasoning filtering or publishing tokens. A divergent snapshot is
+ * an interruption, not permission to concatenate two different answers.
+ */
+export function providerTextDelta(previous: string, next: string, mode: "delta" | "snapshot" = "delta") {
+  const content = mergeChatStreamText(previous, next, mode)
+  return { content, delta: content.slice(previous.length) }
+}
