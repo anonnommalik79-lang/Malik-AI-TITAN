@@ -48,6 +48,18 @@ let checks = 0
 async function check(name, fn) { await fn(); checks += 1; console.log(`  ok  ${name}`) }
 
 try {
+  await check("colloquial model names resolve to the official publisher without conflating comparisons", () => {
+    const { releasePublisher } = load("lib/live-intelligence/release-catalog.ts")
+    for (const [question, publisher] of [
+      ["Какая модель самая последняя гемини", "deepmind"],
+      ["Последняя модель джемини", "deepmind"],
+      ["Новейшая версия клод", "anthropic"],
+      ["Последняя версия GPT", "openai"],
+      ["Какая последняя модель чат гпт", "openai"],
+      ["последняя модель Claude и Gemini", undefined],
+      ["что такое гемини", undefined],
+    ]) assert.equal(releasePublisher(question)?.id, publisher)
+  })
   await check("speaker requests search automatically and respect explicit opt-out", () => {
     assert.equal(shouldUseWeb(screenshotPrompt), true)
     assert.equal(shouldUseWeb("Дай программу конференции Web Summit"), true)
