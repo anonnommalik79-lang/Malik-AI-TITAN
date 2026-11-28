@@ -1296,6 +1296,38 @@ check("chart preview preserves decimals and draws negative values below zero", (
   assert.notEqual(formatChartValue(0.00000012, "ru"), "0")
 })
 
+
+check("source-only decks reject unsupported numbers, direct quotes and URLs", () => {
+  const { sourceIntegrityIssue } = load("lib/presentations/source-integrity.ts")
+  const source = 'Revenue: 12.5%. Quote: "A better way". https://example.org/report' +
+    "\n\nPresentation requirements:\nCreate a deck from the supplied source material. Preserve its facts."
+  assert.equal(sourceIntegrityIssue({layout:"stat",stats:[{value:"12,5%",label:"Revenue"}],notes:"https://example.org/report"}, source), null)
+  assert.ok(sourceIntegrityIssue({layout:"stat",stats:[{value:"22%",label:"Revenue"}]}, source))
+  assert.ok(sourceIntegrityIssue({layout:"quote",quote:"Invented quote"}, source))
+  assert.equal(sourceIntegrityIssue({layout:"quote",quote:"A better way"}, source), null)
+  assert.ok(sourceIntegrityIssue({layout:"bullets",notes:"https://invented.example/claim"}, source))
+})
+
+check("a provider outage during repair does not discard accepted slides", async () => {
+  const outline = { title:"Test", items:[
+    {title:"First",point:"",layout:"bullets"},
+    {title:"Second",point:"",layout:"bullets"},
+    {title:"Third",point:"",layout:"bullets"},
+  ]}
+  modelScript = [JSON.stringify({slides:[{n:2,...SAMPLES.bullets}]}),new Error("provider unavailable"),JSON.stringify({slides:[{n:3,...SAMPLES.bullets}]})]
+  const result = await engine.generateSlides({topic:"Test deck",outline,startIndex:0,count:3,language:"en",tone:"confident"})
+  assert.deepEqual(result.slides.map(item=>item.index),[1,2])
+  assert.deepEqual(result.missing,[0])
+})
+
+check("rewrite passes original brief as context", async () => {
+  const original = deck.normalizeSlide(SAMPLES.bullets)
+  modelScript = [JSON.stringify(SAMPLES.bullets)]
+  modelCalls.length = 0
+  await engine.rewriteSlide({deckTitle:"Test",topic:"Original requirement: keep the exact terms",slide:original,neighbours:[],language:"en",tone:"confident"})
+  assert.match(modelCalls[0].prompt,/Original requirement: keep the exact terms/)
+})
+
 /* ================================================================== run */
 
 for (const { run } of pending) await run()
