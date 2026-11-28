@@ -505,7 +505,7 @@ check("display maths is typeset, not shown as LaTeX", () => {
 })
 
 check("display formulas never swallow trailing prose or adjacent formulas", () => {
-  const html = render("$x=1$ Первый вывод.\n\n\\[\n\\frac{1}{2}\n\\] Второй вывод.\n\n$y=2$ $z=3$ Последний вывод.")
+  const html = render("$$x=1$$ Первый вывод.\n\n\\[\n\\frac{1}{2}\n\\] Второй вывод.\n\n$$y=2$$ $$z=3$$ Последний вывод.")
   assert.equal((html.match(/class="mtx mtx-display"/g) || []).length, 4)
   for (const text of ["Первый вывод.", "Второй вывод.", "Последний вывод."]) assert.ok(html.includes(text), text)
 })
