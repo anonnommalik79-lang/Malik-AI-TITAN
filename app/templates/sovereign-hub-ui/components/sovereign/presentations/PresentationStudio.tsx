@@ -9,6 +9,8 @@ import {
   BarChart3,
   Check,
   Globe2,
+  Grid2X2,
+  FileText,
   GraduationCap,
   HeartPulse,
   Landmark,
@@ -405,6 +407,12 @@ function GrowingField({ value, onChange, label }: { value: string; onChange: (va
 export function PresentationStudio({ username }: { username?: string }) {
   const [stage, setStage] = useState<Stage>("start")
   const [topic, setTopic] = useState("")
+  const [briefMode, setBriefMode] = useState<"generate" | "source">("generate")
+  const [audience, setAudience] = useState("")
+  const [detail, setDetail] = useState<"balanced" | "concise" | "detailed">("balanced")
+  const [editorView, setEditorView] = useState<"slide" | "overview">("slide")
+  const [recentQuery, setRecentQuery] = useState("")
+  const sourceInputRef = useRef<HTMLInputElement>(null)
   const [requestedCount, setCount] = useState<number | null>(null)
   const [tone, setTone] = useState<DeckTone>("confident")
   const [theme, setTheme] = useState<ThemeId>(DEFAULT_THEME)
@@ -545,7 +553,7 @@ export function PresentationStudio({ username }: { username?: string }) {
 
   /* --------------------------------------------------------------- outline */
 
-  const requestOutline = useCallback(async (topicValue: string, countValue: number, toneValue: DeckTone) => {
+  const requestOutline = useCallback(async (topicValue: string, countValue: number, toneValue: DeckTone, languageOverride?: DeckLanguage) => {
     const clean = topicValue.trim()
     if (clean.length < 3) {
       setError("Опишите, о чём презентация — хотя бы пару слов.")
@@ -555,7 +563,7 @@ export function PresentationStudio({ username }: { username?: string }) {
       setError(`Сократите задание до ${MAX_PRESENTATION_TOPIC_CHARS} символов.`)
       return
     }
-    const lang = detectDeckLanguage(clean)
+    const lang = languageOverride || detectDeckLanguage(clean)
     setBusy("outline")
     setError("")
     const result = await callApi({ action: "outline", topic: clean, count: countValue, language: lang, tone: toneValue })
@@ -567,6 +575,11 @@ export function PresentationStudio({ username }: { username?: string }) {
       return
     }
     setLanguage(lang)
+    setTopic(clean)
+    setBriefMode("generate")
+    setAudience("")
+    setDetail("balanced")
+    setEditorView("slide")
     const planned = result.data.outline as DeckOutline
     setDeckId(newDeckId())
     createdAtRef.current = Date.now()
@@ -576,6 +589,34 @@ export function PresentationStudio({ username }: { username?: string }) {
     setOutline(planned)
     setStage("outline")
   }, [applyQuota, themeChoice])
+
+  const submitBrief = () => {
+    if (busy || !authenticated || exceedsSlideLimit || topic.trim().length < 3) return
+    const original = topic.trim()
+    const lang = detectDeckLanguage(original)
+    const guidance = [
+      briefMode === "source" ? "Create a deck from the supplied source material. Preserve its facts, figures and terminology; do not invent missing evidence." : "",
+      audience.trim() ? "Target audience: " + audience.trim() : "",
+      detail === "concise" ? "Keep visible text very concise; one strong message per slide." : detail === "detailed" ? "Include substantive explanations in speaker notes, keeping the slide itself readable." : "",
+    ].filter(Boolean)
+    const brief = guidance.length ? original + "\n\nPresentation requirements:\n" + guidance.join("\n") : original
+    void requestOutline(brief, count, tone, lang)
+  }
+
+  const importSource = async (file?: File) => {
+    if (!file) return
+    try {
+      if (file.size > 128 * 1024) throw new Error("Выберите текстовый файл до 128 КБ.")
+      const content = (await file.text()).replace(/^\uFEFF/, "").trim()
+      if (!content || content.includes("\u0000")) throw new Error("Файл не содержит читаемого текста.")
+      if (content.length > MAX_PRESENTATION_TOPIC_CHARS) throw new Error(`Сократите текст до ${MAX_PRESENTATION_TOPIC_CHARS} символов — материал не будет обрезан автоматически.`)
+      setTopic(content)
+      setBriefMode("source")
+      setError("")
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Не удалось прочитать файл.")
+    }
+  }
 
   // A deck asked for in the chat arrives here with its topic already set.
   useEffect(() => {
@@ -604,6 +645,16 @@ export function PresentationStudio({ username }: { username?: string }) {
 
   const updateOutlineItem = (index: number, patch: Partial<OutlineItem>) => {
     setOutline((previous) => previous ? { ...previous, items: previous.items.map((item, i) => (i === index ? { ...item, ...patch } : item)) } : previous)
+  }
+
+  const moveOutlineItem = (index: number, delta: number) => {
+    setOutline((previous) => {
+      if (!previous || index + delta < 0 || index + delta >= previous.items.length) return previous
+      const items = [...previous.items]
+      const [item] = items.splice(index, 1)
+      items.splice(index + delta, 0, item)
+      return { ...previous, items }
+    })
   }
 
   const removeOutlineItem = (index: number) => {
@@ -842,9 +893,9 @@ export function PresentationStudio({ username }: { username?: string }) {
     setEntries((previous) => previous.map((entry, i) => (i === index && entry.slide ? { ...entry, slide: { ...entry.slide, ...patch } as Slide } : entry)))
   }
 
-  const rewrite = async (index: number, layout?: SlideLayout) => {
+  const rewrite = async (index: number, layout?: SlideLayout, instructionOverride?: string) => {
     const entry = entries[index]
-    if (!entry?.slide) return
+    if (!entry?.slide || busy) return
     setBusy("rewrite")
     setError("")
     const result = await callApi({
@@ -853,7 +904,7 @@ export function PresentationStudio({ username }: { username?: string }) {
       deckTitle,
       slide: entry.slide,
       layout,
-      instruction,
+      instruction: instructionOverride ?? instruction,
       neighbours: [entries[index - 1]?.slide, entries[index + 1]?.slide].map((slide) => (slide ? headline(slide) : "")),
       language,
       tone,
@@ -890,7 +941,7 @@ export function PresentationStudio({ username }: { username?: string }) {
 
   const duplicate = (index: number) => {
     const entry = entries[index]
-    if (!entry?.slide) return
+    if (!entry?.slide || entries.length >= maxSlides || busy) return
     const copy: Entry = { ...entry, key: slideId(), slide: { ...entry.slide, id: slideId() } as Slide }
     setEntries((previous) => [...previous.slice(0, index + 1), copy, ...previous.slice(index + 1)])
     setCurrent(index + 1)
@@ -1139,6 +1190,7 @@ export function PresentationStudio({ username }: { username?: string }) {
   /* ----------------------------------------------------------- open & reset */
 
   const openDeck = (deck: Deck) => {
+    setEditorView("slide")
     setDeckId(deck.id)
     setDeckTitle(deck.title)
     setTheme(deck.theme)
@@ -1155,6 +1207,7 @@ export function PresentationStudio({ username }: { username?: string }) {
   }
 
   const openDraft = (draft: PresentationDraft) => {
+    setEditorView("slide")
     const slides = draft.slides
     setDeckId(draft.id)
     setDeckTitle(draft.title)
@@ -1196,6 +1249,10 @@ export function PresentationStudio({ username }: { username?: string }) {
   }
 
   const newDeck = () => {
+    setEditorView("slide")
+    setBriefMode("generate")
+    setAudience("")
+    setDetail("balanced")
     setAssembling(false)
     setSpotlight(null)
     setStage("start")
@@ -1205,6 +1262,25 @@ export function PresentationStudio({ username }: { username?: string }) {
     setDeckTitle("")
     setError("")
     setInstruction("")
+  }
+
+  const startBlank = () => {
+    if (busy) return
+    const now = Date.now()
+    const lang = detectDeckLanguage(topic)
+    const title = topic.trim().slice(0, 90) || "Новая презентация"
+    const slide: Slide = { id: slideId(), layout: "title", title, subtitle: "Добавьте подзаголовок" }
+    openDeck({ id: newDeckId(), title, theme: themeChoice === "auto" ? DEFAULT_THEME : themeChoice, language: lang, slides: [slide], createdAt: now, updatedAt: now, prompt: topic.trim() })
+  }
+
+  const addManualSlide = () => {
+    if (busy || entries.length >= maxSlides) return
+    const slide: Slide = { id: slideId(), layout: "bullets", title: "Новый слайд", points: [{ title: "Основная мысль", body: "Добавьте текст" }, { title: "Следующий пункт", body: "Добавьте детали" }] }
+    const entry: Entry = { key: slideId(), outline: { title: slide.title, point: "", layout: slide.layout }, slide, state: "ready" }
+    const at = Math.min(current + 1, entries.length)
+    setEntries(previous => [...previous.slice(0, at), entry, ...previous.slice(at)])
+    setCurrent(at)
+    setEditorView("slide")
   }
 
   /* ------------------------------------------------------------------- view */
@@ -1272,6 +1348,7 @@ export function PresentationStudio({ username }: { username?: string }) {
   /* ------------------------------------------------------------ start */
   if (stage === "start") {
     const examples = showAllExamples ? [...EXAMPLES, ...MORE_EXAMPLES] : EXAMPLES
+    const visibleRecent = recent.filter(deck => deck.title.toLowerCase().includes(recentQuery.trim().toLowerCase()))
     return (
       <div className="ps-root" data-preserve-brand-color="true">
         {header}
@@ -1287,7 +1364,8 @@ export function PresentationStudio({ username }: { username?: string }) {
 
           <div className="ps-start">
             <div className="ps-start-main">
-              <h2 className="ps-start-title">Презентация <span className="ps-grad">за минуту</span></h2>
+              <div className="ps-create-kicker"><Sparkles size={15} /> MALIK AI STUDIO</div>
+              <h2 className="ps-start-title">От идеи до <span className="ps-grad">презентации</span></h2>
               <p className="ps-start-sub">
                 <span className="ps-mob-only">Опишите тему — Malik AI составит план, напишет слайды и соберёт дизайн. Любой текст потом можно поправить прямо на слайде.</span>
                 <span className="ps-desk-only">Опишите тему — Malik AI составит план, напишет слайды, подберёт дизайн и создаст готовую презентацию. Просто, быстро, профессионально.</span>
@@ -1300,17 +1378,31 @@ export function PresentationStudio({ username }: { username?: string }) {
                 <span><MonitorPlay size={15} /> Готово к презентации</span>
               </div>
 
+              <div className="ps-create-modes" role="group" aria-label="Способ создания презентации">
+                <button type="button" aria-pressed={briefMode === "generate"} onClick={() => setBriefMode("generate")}><Sparkles size={19} /><b>Создать с ИИ</b><small>Из темы или идеи</small></button>
+                <button type="button" aria-pressed={briefMode === "source"} onClick={() => setBriefMode("source")}><FileText size={19} /><b>Из текста</b><small>Вставить материал</small></button>
+                <button type="button" disabled={Boolean(busy)} onClick={startBlank}><Plus size={19} /><b>С нуля</b><small>Ручной редактор</small></button>
+              </div>
               <div className="ps-prompt">
                 <textarea
                   value={topic}
                   maxLength={MAX_PRESENTATION_TOPIC_CHARS}
                   onChange={(event) => setTopic(event.target.value)}
-                  placeholder="Например: питч-дек кофейни у метро в Алматы для инвесторов — окупаемость, команда, что нужно от инвестора"
+                  placeholder={briefMode === "source" ? "Вставьте исходный текст, факты, конспект или готовый план…" : "Например: питч-дек кофейни в Алматы — продукт, рынок, команда, план развития…"}
                   aria-label="Тема презентации"
                   onKeyDown={(event) => {
-                    if (event.key === "Enter" && (event.metaKey || event.ctrlKey) && !exceedsSlideLimit && busy !== "outline") void requestOutline(topic, count, tone)
+                    if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) { event.preventDefault(); submitBrief() }
                   }}
                 />
+                <div className="ps-source-tools">
+                  <input ref={sourceInputRef} type="file" accept=".txt,.md,text/plain,text/markdown" hidden onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ""; void importSource(file) }} />
+                  <button type="button" className="ps-btn ps-btn--small" disabled={Boolean(busy)} onClick={() => sourceInputRef.current?.click()}><Upload size={15} /> Текстовый файл</button>
+                  <span className="ps-cost">{topic.length.toLocaleString("ru-RU")} / {MAX_PRESENTATION_TOPIC_CHARS.toLocaleString("ru-RU")}</span>
+                </div>
+                <div className="ps-brief-settings">
+                  <label>Аудитория<input value={audience} onChange={event => setAudience(event.target.value)} maxLength={140} placeholder="Например, инвесторы" /></label>
+                  <label>Детализация<select className="ps-select" value={detail} onChange={event => setDetail(event.target.value as typeof detail)}><option value="balanced">Сбалансированно</option><option value="concise">Кратко</option><option value="detailed">Подробно в заметках</option></select></label>
+                </div>
                 <div className="ps-prompt-row">
                   <label className="ps-field">
                     <Presentation size={15} className="ps-desk-only" aria-hidden="true" />
@@ -1351,7 +1443,7 @@ export function PresentationStudio({ username }: { username?: string }) {
                   </button>
                   <span className="ps-spacer" />
                   {authenticated ? (
-                    <button type="button" className="ps-btn ps-btn--primary ps-create" onClick={() => void requestOutline(topic, count, tone)} disabled={busy === "outline" || exceedsSlideLimit || topic.trim().length < 3}>
+                    <button type="button" className="ps-btn ps-btn--primary ps-create" onClick={submitBrief} disabled={Boolean(busy) || exceedsSlideLimit || topic.trim().length < 3}>
                       {busy === "outline" ? <Loader2 size={16} className="animate-spin" /> : <Wand2 size={16} />}
                       <span className="ps-mob-only">{busy === "outline" ? "Составляю план…" : `Создать · ${generationCost} кр.`}</span>
                       <span className="ps-desk-only">{busy === "outline" ? "Составляю план…" : `Создать презентацию · ${generationCost} кр.`}</span>
@@ -1438,8 +1530,10 @@ export function PresentationStudio({ username }: { username?: string }) {
             {recent.length ? (
               <div className="ps-start-recent">
                 <div className="ps-section-label">Мои презентации</div>
+                <label className="ps-library-search"><input value={recentQuery} onChange={event => setRecentQuery(event.target.value)} placeholder="Поиск презентаций" aria-label="Поиск презентаций" /></label>
+                {!visibleRecent.length ? <p className="ps-hint">Ничего не найдено.</p> : null}
                 <div className="ps-recent">
-                  {recent.map((deck) => (
+                  {visibleRecent.map((deck) => (
                     <div key={deck.id} style={{ position: "relative" }}>
                       <button type="button" className="ps-recent-card" onClick={() => openDeck(deck)}>
                         <SlideFrame slide={deck.slides[0]} theme={deck.theme} index={0} total={deck.slides.length} language={deck.language} />
@@ -1475,12 +1569,14 @@ export function PresentationStudio({ username }: { username?: string }) {
                 <b>{String(index + 1).padStart(2, "0")}</b>
                 <div style={{ minWidth: 0 }}>
                   <GrowingField value={item.title} onChange={(title) => updateOutlineItem(index, { title })} label={`Слайд ${index + 1}`} />
-                  {item.point ? <small>{item.point}</small> : null}
+                  <div className="ps-outline-point"><GrowingField value={item.point} onChange={point => updateOutlineItem(index, { point })} label={`Содержание слайда ${index + 1}`} /></div>
                 </div>
                 <select className="ps-select" value={item.layout} onChange={(event) => updateOutlineItem(index, { layout: event.target.value as SlideLayout })} aria-label="Макет слайда">
                   {SLIDE_LAYOUTS.map((layout) => <option key={layout} value={layout}>{LAYOUT_LABELS[layout]}</option>)}
                 </select>
-                <span style={{ display: "inline-flex" }}>
+                <span className="ps-outline-controls">
+                  <button type="button" className="ps-icon-btn" disabled={index === 0} onClick={() => moveOutlineItem(index, -1)} aria-label="Сдвинуть слайд вверх"><ArrowUp size={15} /></button>
+                  <button type="button" className="ps-icon-btn" disabled={index === outline.items.length - 1} onClick={() => moveOutlineItem(index, 1)} aria-label="Сдвинуть слайд вниз"><ArrowDown size={15} /></button>
                   <button type="button" className="ps-icon-btn" onClick={() => addOutlineItem(index)} disabled={outline.items.length >= maxSlides} aria-label="Добавить слайд ниже"><Plus size={15} /></button>
                   <button type="button" className="ps-icon-btn" onClick={() => removeOutlineItem(index)} disabled={outline.items.length <= (isInvestorDeckRequest(topic) ? 10 : MIN_SLIDES)} aria-label="Убрать слайд"><Trash2 size={15} /></button>
                 </span>
@@ -1564,7 +1660,7 @@ export function PresentationStudio({ username }: { username?: string }) {
   return (
     <div className="ps-root" data-preserve-brand-color="true">
       {header}
-      <div className="ps-editor">
+      <div className="ps-editor" data-editor-view={editorView}>
         <nav className="ps-rail" aria-label="Слайды">
           {entries.map((entry, index) => (
             <button key={entry.key} type="button" className="ps-thumb" aria-current={index === current} onClick={() => setCurrent(index)} aria-label={`Слайд ${index + 1}`}>
@@ -1589,6 +1685,7 @@ export function PresentationStudio({ username }: { username?: string }) {
               onChange={(event) => setDeckTitle(event.target.value)}
               aria-label="Название презентации"
             />
+            <button type="button" className="ps-btn ps-btn--small" aria-pressed={editorView === "overview"} onClick={() => setEditorView(value => value === "slide" ? "overview" : "slide")}><Grid2X2 size={15} /> {editorView === "overview" ? "Редактор" : "Все слайды"}</button>
             <button type="button" className="ps-btn ps-btn--small ps-style-toggle" onClick={() => setStylePicker((value) => !value)} aria-expanded={stylePicker} title="Стиль оформления: превью каждого стиля на этом слайде">
               <Palette size={14} /> Стиль · {DECK_THEMES[theme].name}
             </button>
@@ -1633,7 +1730,19 @@ export function PresentationStudio({ username }: { username?: string }) {
           {!generating && exportSuffix ? <button type="button" className="ps-btn ps-btn--small" disabled={Boolean(busy)} onClick={() => void finishMissingSlides()}><RefreshCw size={14} /> Дописать недостающие слайды</button> : null}
           {error ? <p className="ps-error" role="alert" style={{ marginTop: 0, marginBottom: 12 }}>{error}</p> : null}
 
-          {active ? (
+          {editorView === "overview" ? (
+            <section className="ps-storyboard" aria-label="Обзор всех слайдов">
+              {entries.map((entry, index) => (
+                <article className="ps-story-card" key={entry.key} data-current={current === index}>
+                  <button type="button" className="ps-story-preview" onClick={() => { setCurrent(index); setEditorView("slide") }} aria-label={`Редактировать слайд ${index + 1}`}>
+                    {entry.slide ? <SlideFrame slide={entry.slide} theme={theme} index={index} total={entries.length} language={language} /> : <div className="ps-story-pending">{entry.state === "failed" ? "Не удалось создать" : "Создаю слайд…"}</div>}
+                  </button>
+                  <div className="ps-story-meta"><span><small>{String(index + 1).padStart(2,"0")} · {LAYOUT_LABELS[entry.slide?.layout || entry.outline.layout]}</small><b>{entry.slide ? headline(entry.slide) : entry.outline.title}</b></span><button type="button" className="ps-icon-btn" disabled={Boolean(busy) || index === 0} aria-label={`Переместить слайд ${index + 1} выше`} onClick={() => move(index,-1)}><ArrowUp size={15} /></button><button type="button" className="ps-icon-btn" disabled={Boolean(busy) || index === entries.length - 1} aria-label={`Переместить слайд ${index + 1} ниже`} onClick={() => move(index,1)}><ArrowDown size={15} /></button></div>
+                </article>
+              ))}
+              <button type="button" className="ps-story-add" onClick={addManualSlide} disabled={Boolean(busy) || entries.length >= maxSlides}><Plus size={23} /> Добавить слайд вручную</button>
+            </section>
+          ) : active ? (
             <>
               <div className="ps-main-slide">
                 {active.slide ? (
@@ -1687,6 +1796,15 @@ export function PresentationStudio({ username }: { username?: string }) {
                 </div>
               ) : null}
 
+              {active.slide ? <div className="ps-ai-actions" role="group" aria-label="Быстрые AI-правки">
+                <span><Sparkles size={15} /> AI-редактор</span>
+                {[
+                  ["Сократить", "Сократи видимый текст без потери важных фактов, детали перенеси в заметки."],
+                  ["Усилить", "Сделай заголовок конкретным, усили аргументацию, не придумывай данные."],
+                  ["Упростить", "Объясни содержание более простыми словами, сохрани факты и структуру."],
+                ].map(([label, command]) => <button key={label} type="button" className="ps-btn ps-btn--small" title="AI-правка · 1 кредит" disabled={Boolean(busy)} onClick={() => void rewrite(current, undefined, command)}>{label} · 1 кр.</button>)}
+                <button type="button" className="ps-btn ps-btn--small" onClick={addManualSlide} disabled={Boolean(busy) || entries.length >= maxSlides}><Plus size={14} /> Пустой слайд</button>
+              </div> : null}
               <div className="ps-slide-tools">
                 <button type="button" className="ps-icon-btn" onClick={() => setCurrent((value) => Math.max(0, value - 1))} disabled={current === 0} aria-label="Предыдущий слайд"><ChevronLeft size={18} /></button>
                 <span className="ps-cost" style={{ fontVariantNumeric: "tabular-nums" }}>{current + 1} / {entries.length}</span>
@@ -1737,7 +1855,7 @@ export function PresentationStudio({ username }: { username?: string }) {
                     {IMAGE_LAYOUTS.has(active.slide.layout) || active.slide.layout === "gallery" ? (
                       <button type="button" className="ps-icon-btn" onClick={() => void otherPhotos(current)} disabled={Boolean(busy)} aria-label="Другое фото" title="Подобрать другое фото"><ImageIcon size={16} /></button>
                     ) : null}
-                    <button type="button" className="ps-icon-btn" onClick={() => duplicate(current)} disabled={generating} aria-label="Дублировать"><Copy size={16} /></button>
+                    <button type="button" className="ps-icon-btn" onClick={() => duplicate(current)} disabled={Boolean(busy) || entries.length >= maxSlides} aria-label="Дублировать"><Copy size={16} /></button>
                     <button type="button" className="ps-icon-btn" onClick={() => remove(current)} disabled={generating || entries.length <= 1} aria-label="Удалить слайд"><Trash2 size={16} /></button>
                   </>
                 ) : null}
