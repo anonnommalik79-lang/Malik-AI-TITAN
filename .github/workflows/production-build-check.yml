@@ -122,6 +122,10 @@ jobs:
         if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
         run: npm run test:live-intelligence
 
+      - name: Lint (report all repository diagnostics)
+        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
+        run: npm run lint
+
       - name: Typecheck
         if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
         run: npm run typecheck
