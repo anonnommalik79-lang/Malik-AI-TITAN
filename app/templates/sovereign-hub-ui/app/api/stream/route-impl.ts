@@ -1369,6 +1369,7 @@ function liveSseResponse(
           game: Boolean(gameStudioTurn(coderPrompt(body), { messages: body?.messages || body?.history, attachments: body?.attachments })),
         })
         return skillChatRequest(body) || !canRetryChat(body) ? answerPromise : withinChatDeadline(answerPromise, deadline, startedAt, {
+          signal: AbortSignal.any([generation.signal, ...(requestSignal ? [requestSignal] : [])]),
           wrote: () => streamedAny,
           stop: () => { writer = "rescue"; mainRun.abort() },
           rescue: () => {
