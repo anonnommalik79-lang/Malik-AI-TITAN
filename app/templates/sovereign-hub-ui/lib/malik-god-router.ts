@@ -949,7 +949,7 @@ async function gatherSources(question: string, emit?: ResearchEmitter, activity?
         live.cacheHits += recovery.cacheHits
       }
       const alternatives = diverseSources(recovery?.sources.filter(source => !triedPages.has(source.url) && !offers.has(source.domain)) || [], 3)
-      activity?.finish(call, compactSearchReceipt(alternatives), alternatives.length ? "completed" : "failed")
+      activity?.finish(call, compactSearchReceipt(alternatives, { calls: recovery?.calls || 0 }), alternatives.length ? "completed" : "failed")
       sources.push(...await read(alternatives, 3))
       unique.push(...alternatives)
     }

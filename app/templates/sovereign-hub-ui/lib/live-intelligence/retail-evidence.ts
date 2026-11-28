@@ -102,7 +102,10 @@ export function retailAnswer(question: string, sources: readonly MalikWebSource[
     const text = source.snippet || ""
     const inRequestedCity = !retail.location || source.title.toLowerCase().includes(retail.location.toLowerCase())
     if (readOnly && (!offer || offer.variantConflict || !inRequestedCity)) return []
-    const values = [...new Set([...text.matchAll(/(?<!\d)(?:от\s+)?\d[\d\s\u00a0\u202f]{1,12}\s*(?:₸|тенге|KZT|₽|руб\.)(?!\p{L})/giu)].map(match => match[0].replace(/\s+/gu, " ").trim()))]
+    const price = String.raw`(?<![\d.,])(?:от\s+)?(?:\d{1,3}(?:[ \u00a0\u202f]\d{3})+|\d+)(?:[.,]\d{1,2})?\s*(?:₸|тенге|тг\.?|KZT|₽|руб\.)(?!\p{L})(?!\s*[/×])`
+    const labelled = [...text.matchAll(new RegExp(`(?:цена|price)\\s*[:=]\\s*(${price})`, "giu"))].map(match => match[1])
+    const rawValues = labelled.length ? labelled : [...text.matchAll(new RegExp(price, "giu"))].map(match => match[0])
+    const values = [...new Set(rawValues.map(value => value.replace(/\s+/gu, " ").trim()))]
     const amount = offer ? new Intl.NumberFormat("ru", { maximumFractionDigits: 2 }).format(offer.price) + " " + (offer.currency === "KZT" ? "₸" : offer.currency)
       : values.length === 1 ? values[0] : "Цена не подтверждена"
     const availability = offer?.availability === "in-stock" ? "В наличии по данным карточки"
