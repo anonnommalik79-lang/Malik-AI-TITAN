@@ -291,6 +291,7 @@ async function searchPhotos(slots: PhotoSlot[], exclude: string[]): Promise<Reco
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ items: slots.slice(0, 12), exclude: exclude.slice(-60) }),
+      signal: AbortSignal.timeout(30_000),
     })
     const data = await response.json().catch(() => null)
     return response.ok && data?.ok && data.photos && typeof data.photos === "object" ? data.photos : {}
@@ -703,31 +704,17 @@ export function PresentationStudio({ username }: { username?: string }) {
         // batches not to repeat one.
         if (slide && batch.includes(item.index) && slide.layout === plan.items[item.index]?.layout) written.set(item.index, { ...slide, id: slideId() } as Slide)
       }
-      // Photos for these slides are searched right away. A slide waits a
-      // moment for them, so it usually appears with its picture; photos that
-      // take longer are put in as soon as they arrive.
+      // Finish bounded image lookup before marking this batch ready. Late
+      // photo writes must never invalidate a PowerPoint export in progress.
       const slots = [...written.values()].flatMap(photoSlots)
-      const photoSearch = searchPhotos(slots, [...usedPhotosRef.current])
-      const early = slots.length ? await Promise.race([photoSearch, new Promise<null>((resolve) => window.setTimeout(() => resolve(null), 3500))]) : null
-      const place = (photos: Record<string, FoundPhoto | null>) => {
-        const unique: Record<string, FoundPhoto> = {}
-        for (const [key, photo] of Object.entries(photos)) {
-          if (!photo?.url || usedPhotosRef.current.has(photo.url)) continue
-          usedPhotosRef.current.add(photo.url)
-          unique[key] = photo
-        }
-        return unique
+      const photos = slots.length ? await searchPhotos(slots, [...usedPhotosRef.current]) : {}
+      const unique: Record<string, FoundPhoto> = {}
+      for (const [key, photo] of Object.entries(photos)) {
+        if (!photo?.url || usedPhotosRef.current.has(photo.url)) continue
+        usedPhotosRef.current.add(photo.url)
+        unique[key] = photo
       }
-      if (early) {
-        const unique = place(early)
-        for (const [index, slide] of written) written.set(index, withPhotos(slide, unique))
-      } else if (slots.length) {
-        void photoSearch.then((photos) => {
-          const unique = place(photos)
-          const ids = new Set([...written.values()].map((slide) => slide.id))
-          setEntries((previous) => previous.map((entry) => (entry.slide && ids.has(entry.slide.id) ? { ...entry, slide: withPhotos(entry.slide, unique) } : entry)))
-        })
-      }
+      for (const [index, slide] of written) written.set(index, withPhotos(slide, unique))
 
       for (const [index, slide] of written) delivered.set(index, slide)
       setEntries((previous) => previous.map((entry, i) => {
@@ -776,8 +763,9 @@ export function PresentationStudio({ username }: { username?: string }) {
   }, [applyQuota, language, tone, topic])
 
   const buildDeck = useCallback(async () => {
-    if (!outline) return
-    const plan = { ...outline, items: outline.items.filter((item) => item.title.trim()) }
+    if (!outline || busy) return
+    if (!outline.title.trim() || outline.items.some(item => !item.title.trim())) { setError("Заполните название презентации и заголовки всех слайдов."); return }
+    const plan = { ...outline, items: outline.items.map(item => ({ ...item, title: item.title.trim(), point: item.point.trim() })) }
     setEntries(plan.items.map((item) => ({ key: slideId(), outline: item, slide: null, state: "pending" })))
     setDeckTitle(plan.title)
     usedPhotosRef.current = new Set()
@@ -789,13 +777,17 @@ export function PresentationStudio({ username }: { username?: string }) {
     setAssemblyAt(0)
     setAssembling(true)
     const expected = plan.items.map((_, i) => i)
-    const firstPass = await fillSlides(plan, expected)
-    const unrecovered = expected.filter((index) => !firstPass.has(index))
-    setError(unrecovered.length
-      ? `Готово ${expected.length - unrecovered.length} из ${expected.length} слайдов. Не удалось создать: ${unrecovered.map((i) => i + 1).join(", ")}. Нажмите «Написать ещё раз» на нужном слайде.`
-      : "")
-    setBusy(null)
-  }, [fillSlides, outline])
+    try {
+      const firstPass = await fillSlides(plan, expected)
+      const unrecovered = expected.filter((index) => !firstPass.has(index))
+      setError(unrecovered.length
+        ? `Готово ${expected.length - unrecovered.length} из ${expected.length} слайдов. Не удалось создать: ${unrecovered.map((i) => i + 1).join(", ")}. Нажмите «Написать ещё раз» на нужном слайде.`
+        : "")
+    } catch {
+      setEntries(previous => previous.map(entry => entry.state === "pending" ? { ...entry, state: "failed" } : entry))
+      setError("Сборка прервана. Готовые слайды сохранены, недостающие можно создать повторно.")
+    } finally { setBusy(null) }
+  }, [fillSlides, outline, busy])
 
   /* --------------------------------------------------------------- assembly */
 
@@ -844,7 +836,7 @@ export function PresentationStudio({ username }: { username?: string }) {
   // should still end on its conclusion.
   const addSlide = async () => {
     const title = newSlideText.trim()
-    if (title.length < 3 || entries.length >= maxSlides) return
+    if (busy || title.length < 3 || entries.length >= maxSlides) return
     const last = entries[entries.length - 1]
     const lastIsClosing = (last?.slide?.layout || last?.outline.layout) === "closing"
     let at = current + 1
@@ -864,6 +856,7 @@ export function PresentationStudio({ username }: { username?: string }) {
   }
 
   const retrySlide = async (index: number) => {
+    if (busy) return
     setEntries((previous) => previous.map((entry, i) => (i === index ? { ...entry, state: "pending" } : entry)))
     setBusy("slides")
     setError("")
@@ -910,8 +903,8 @@ export function PresentationStudio({ username }: { username?: string }) {
       tone,
     })
     applyQuota(result.data)
-    setBusy(null)
     if (!result.ok) {
+      setBusy(null)
       setError(String(result.data?.error || "Не удалось переписать слайд."))
       return
     }
@@ -921,15 +914,16 @@ export function PresentationStudio({ username }: { username?: string }) {
       const photos = slots.length ? await searchPhotos(slots, [...usedPhotosRef.current]) : {}
       for (const photo of Object.values(photos)) if (photo?.url) usedPhotosRef.current.add(photo.url)
       const slide = withPhotos(written, photos)
-      setEntries((previous) => previous.map((item, i) => (i === index ? { ...item, slide, state: "ready" } : item)))
+      setEntries((previous) => previous.map((item) => (item.key === entry.key ? { ...item, slide, state: "ready" } : item)))
       setInstruction("")
       spotlightSlide(index, slide)
-    }
+    } else setError("Ответ редактора не содержит корректного слайда. Исходная версия сохранена.")
+    setBusy(null)
   }
 
   const move = (index: number, delta: number) => {
     const target = index + delta
-    if (target < 0 || target >= entries.length) return
+    if (busy || target < 0 || target >= entries.length) return
     setEntries((previous) => {
       const next = [...previous]
       const [item] = next.splice(index, 1)
@@ -948,7 +942,7 @@ export function PresentationStudio({ username }: { username?: string }) {
   }
 
   const remove = (index: number) => {
-    if (entries.length <= 1) return
+    if (busy || entries.length <= 1) return
     setEntries((previous) => previous.filter((_, i) => i !== index))
     setCurrent((value) => Math.max(0, Math.min(value, entries.length - 2)))
   }
@@ -1041,7 +1035,7 @@ export function PresentationStudio({ username }: { username?: string }) {
   const printDeck = printCopy?.version === currentDeck ? printCopy : null
 
   const exportPptx = async () => {
-    if (exportJob.current) return
+    if (busy || exportJob.current) return
     const job = new AbortController()
     exportJob.current = job
     setBusy("export")
@@ -1114,6 +1108,7 @@ export function PresentationStudio({ username }: { username?: string }) {
   // Prepare the printable slides first. Safari and mobile web views need the
   // print dialog to be opened directly by the user's next tap.
   const exportPdf = () => {
+    if (busy) return
     if (!printDeck?.ready) {
       setPrintCopy({ version: currentDeck, ready: false })
       return
@@ -1318,7 +1313,7 @@ export function PresentationStudio({ username }: { username?: string }) {
           {quality.issues.length ? quality.issues.slice(0, 20).map((issue, index) => (
             <button key={`${issue.slideIndex}-${issue.code}-${index}`} type="button" className="ps-quality-issue"
               disabled={stage !== "deck"}
-              onClick={() => { setCurrent(issue.slideIndex); setInstruction(issue.recommendation); setAssembling(false) }}>
+              onClick={() => { setCurrent(issue.slideIndex); setInstruction(issue.recommendation); setEditorView("slide"); setAssembling(false) }}>
               <b>Слайд {issue.slideIndex + 1}</b>
               <span><strong>{issue.message}</strong><small>{issue.recommendation}</small></span>
               {stage === "deck" ? <ArrowRight size={14} /> : null}
@@ -1338,7 +1333,7 @@ export function PresentationStudio({ username }: { username?: string }) {
         Кредиты <strong>{creditsLabel(quota)}</strong>
       </span>
       {stage !== "start" ? (
-        <button type="button" className="ps-btn ps-btn--small" onClick={newDeck} disabled={generating}>
+        <button type="button" className="ps-btn ps-btn--small" onClick={newDeck} disabled={Boolean(busy)}>
           <Plus size={15} /> Новая
         </button>
       ) : null}
@@ -1701,11 +1696,11 @@ export function PresentationStudio({ username }: { username?: string }) {
                 ) : null}
               </>
             ) : (
-              <button type="button" className="ps-btn ps-btn--small" onClick={() => void exportPptx()} disabled={!presentable.length || generating || busy === "export"}>
+              <button type="button" className="ps-btn ps-btn--small" onClick={() => void exportPptx()} disabled={!presentable.length || Boolean(busy)}>
                 {busy === "export" ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />} Подготовить PPTX{exportStatus}
               </button>
             )}
-            <button type="button" className="ps-btn ps-btn--small" onClick={exportPdf} disabled={!presentable.length || generating || preparingPdf}>
+            <button type="button" className="ps-btn ps-btn--small" onClick={exportPdf} disabled={!presentable.length || Boolean(busy) || preparingPdf}>
               <FileDown size={14} />{printDeck?.ready ? "Печать / " : "Подготовить "}PDF{exportStatus}
             </button>
             <button type="button" className="ps-btn ps-btn--small" onClick={exportBackup} disabled={!presentable.length} title="Скачать полную редактируемую резервную копию">
@@ -1726,6 +1721,7 @@ export function PresentationStudio({ username }: { username?: string }) {
           {exportNote ? <p className="ps-hint" style={{ marginTop: -4, marginBottom: 12 }} aria-live="polite">{exportNote}</p> : null}
           {downloadedPptx?.missingPhotos ? <p className="ps-hint" role="status">Файл готов. Не удалось загрузить фото: {downloadedPptx.missingPhotos}. Текст и данные сохранены.</p> : null}
           {qualityPanel}
+          {!generating && exportSuffix ? <p className="ps-hint" role="status">Презентация неполная: готово {readySlides.length} из {entries.length}. Экспорт сохранит только готовые слайды и будет помечен как частичный.</p> : null}
           {generating ? <p className="ps-hint" style={{ marginTop: -4, marginBottom: 12 }} aria-live="polite">Пишу слайды: готово {readyCount} из {entries.length}</p> : null}
           {!generating && exportSuffix ? <button type="button" className="ps-btn ps-btn--small" disabled={Boolean(busy)} onClick={() => void finishMissingSlides()}><RefreshCw size={14} /> Дописать недостающие слайды</button> : null}
           {error ? <p className="ps-error" role="alert" style={{ marginTop: 0, marginBottom: 12 }}>{error}</p> : null}
@@ -1752,7 +1748,7 @@ export function PresentationStudio({ username }: { username?: string }) {
                     theme={theme}
                     index={current}
                     total={entries.length}
-                    editable={busy !== "rewrite"}
+                    editable={!busy}
                     build={spotlight?.index === current}
                     language={language}
                     onChange={(patch) => patchSlide(current, patch)}
