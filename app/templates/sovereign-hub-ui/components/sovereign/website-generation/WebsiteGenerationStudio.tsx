@@ -200,22 +200,26 @@ function LiveTemplate({ template, priority = false }: { template: Premium; prior
   useEffect(() => {
     const element = box.current
     if (!element) return
-    const measure = () => setScale(element.clientWidth / 1440)
+    const measure = () => {
+      // Scale the desktop viewport once against the actual card interior.
+      const width = element.clientWidth
+      if (width > 0) setScale(width / 1440)
+    }
     measure()
     const resize = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measure)
     resize?.observe(element)
+    window.addEventListener("resize", measure)
     let watch: IntersectionObserver | null = null
     if (!visible) {
       if (typeof IntersectionObserver === "undefined") setVisible(true)
       else {
-        const root = element.closest(".malikSites")
         watch = new IntersectionObserver((entries) => {
           if (entries.some((entry) => entry.isIntersecting)) { setVisible(true); watch?.disconnect() }
-        }, { root, rootMargin: "500px 0px" })
+        }, { root: null, rootMargin: "700px 0px" })
         watch.observe(element)
       }
     }
-    return () => { resize?.disconnect(); watch?.disconnect() }
+    return () => { resize?.disconnect(); watch?.disconnect(); window.removeEventListener("resize", measure) }
   }, [visible])
 
   return (
@@ -224,15 +228,28 @@ function LiveTemplate({ template, priority = false }: { template: Premium; prior
       {visible && scale > 0 && (
         <iframe
           className="liveFrame"
+          ref={(frame) => {
+            if (!frame) return
+            // The app shell and Safari mobile media rules must not resize a
+            // miniature's layout viewport to its already-scaled card width.
+            const fixed: Record<string, string> = {
+              position: "absolute", left: "0", top: "0",
+              width: "1440px", "min-width": "1440px", "max-width": "none",
+              height: "810px", "min-height": "810px", "max-height": "none",
+              margin: "0", padding: "0", border: "0", display: "block",
+              "transform-origin": "0 0", transform: `scale(${scale})`,
+              "pointer-events": "none", flex: "none",
+            }
+            for (const [key, value] of Object.entries(fixed)) frame.style.setProperty(key, value, "important")
+          }}
           src={`${premiumUrl(template.id)}?preview=1`}
           title={`Превью ${template.title}`}
           tabIndex={-1}
           width={1440}
           height={810}
-          loading={priority ? "eager" : "lazy"}
+          loading="eager"
           sandbox="allow-scripts"
           onLoad={() => setReady(true)}
-          style={{ transform: `scale(${scale})` }}
         />
       )}
     </span>
