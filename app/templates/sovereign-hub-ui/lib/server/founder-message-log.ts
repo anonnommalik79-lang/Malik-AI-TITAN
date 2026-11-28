@@ -201,16 +201,25 @@ async function writeCloud(userId: string, entry: FounderMessageEntry) {
   }), { abortSignal: AbortSignal.timeout(5_000) })
   return true
 }
-export async function readFounderMessageLog(userId: string) {
+export async function readFounderMessageLog(userId: string, onPartial?: () => void) {
   const id = normalize(userId)
   if (!id || id === "guest") return []
-  // Connecting cloud storage later must not hide records still on this host.
-  // This is a read merge, not a claim that ephemeral records were migrated.
-  const cloud = (await Promise.all([
-    config() ? readCloud(id) : [],
-    readDisk(id),
-    durablePostgresConfigured() ? readPostgresAudit(ownerHash(id)).then(rows => rows.flatMap(raw => decrypt(raw, encryptionSecret()))) : [],
-  ])).flatMap(list => list || [])
+  // Strict by default; the timeline can explicitly accept partial results.
+  // Keep source precedence: cloud, disk, PostgreSQL. Never change stored data.
+  const sources = [
+    { name: "cloud", read: async () => config() ? await readCloud(id) : [] },
+    { name: "disk", read: async () => readDisk(id) },
+    { name: "postgres", read: async () => durablePostgresConfigured() ? (await readPostgresAudit(ownerHash(id))).flatMap(raw => decrypt(raw, encryptionSecret())) : [] },
+  ]
+  const lists = onPartial ? await Promise.all(sources.map(async source => {
+    try { return await source.read() }
+    catch {
+      console.error("[FOUNDER AUDIT] Timeline source read failed:", source.name)
+      onPartial()
+      return []
+    }
+  })) : await Promise.all(sources.map(source => source.read()))
+  const cloud = lists.flatMap(list => list || [])
   if (!cloud) return []
   const merged = new Map<string, FounderMessageEntry>()
   for (const item of cloud) {
