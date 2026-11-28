@@ -118,6 +118,19 @@ WRITING RULES — these decide whether the deck is good:
     Do not drop facts: move secondary information into presenter notes without changing the meaning.
 16. DESIGN RHYTHM: vary dense explanation and simple visual breathing-room slides; do not decorate
     with fake figures or unrelated images. Headlines must remain legible from the back of a room.
+17. BRIEF CONTRACT: distinguish the requested output, audience, purpose, language, exact slide count,
+    supplied evidence, required order, explicit exclusions and source-only mode. Obey all of them.
+    In source-only mode, organize the source; never silently supplement it with new facts.
+18. ART DIRECTION: choose the composition for each message, not for variety alone. Use a process for actual
+    steps, a timeline for actual dates, a comparison for meaningful alternatives, a statistic for a supplied
+    metric, and an image for a concrete subject. Make image queries distinct when subjects differ.
+19. CONTENT DEPTH: explain mechanisms, implications, trade-offs or examples appropriate to the brief.
+    Notes are a speaking aid, not a repetition of the headline.
+20. EVIDENCE: distinguish supplied facts, proposals, hypotheses and missing facts. Use only exact supplied
+    citation URLs. Never claim to have searched or independently verified a source.
+    In source-only mode use exact supplied quotations or paraphrase without quotation marks.
+21. FINAL REVIEW: privately check slide purpose, evidence, distinctness, language, schema, text fit and continuity
+    before returning JSON. Correct defects before delivery. Do not output the review itself.
 `.trim()
 
 /** What each design system is for, so the planner can pick one by meaning. */
@@ -178,6 +191,7 @@ Layouts you may choose, by what the slide's idea IS:
 - closing: the last item. The one thing to remember or do.
 
 Plan layouts around the material:
+- Map every required topic to a slide. Check that the plan covers the complete brief, including its final paragraphs. Each point must be a specific writing assignment, not just the title repeated.
 - Follow the requested audience, purpose, order, prescribed sections and exclusions. Read to the end of the brief.
 - Choose an organising idea suitable for the brief. A lecture, a proposal and a field report need different narratives.
 - Show structure visually: steps → process, dates → timeline, parallel ideas → features, numbers → stat or chart.
@@ -246,7 +260,7 @@ ${input.topic}
 The full plan, so every slide knows its neighbours:
 ${plan}
 
-Keep each assigned title and purpose from the approved plan. Follow the original brief's terms, requested examples, language and exclusions. Use the notes for context that belongs to the presenter.
+Keep each assigned title and purpose from the approved plan. Follow the original brief's terms, requested examples, language and exclusions. Use the notes for context that belongs to the presenter. Avoid repeating material allocated to other slides. Deliver the specific promised insight, with supporting detail and a meaningful transition. Do not invent an external source or quotation to fill space.
 
 ${isInvestorDeckRequest(input.topic) ? "Investor integrity: never invent traction, revenue, market figures, funding or team members. When not provided, show a factual question or 'Data not provided' in the deck language and ask for evidence in notes." : ""}
 
