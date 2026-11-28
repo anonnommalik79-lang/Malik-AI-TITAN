@@ -489,3 +489,38 @@ html body #malik-root#malik-root .malik-music .mm-desktop {
   box-shadow: none !important;
 }
 html body #malik-root#malik-root .malik-music .mm-m-prompt textarea::placeholder { color: #aaa !important; }
+
+
+/* Video Studio: flat OLED chrome, no grey surfaces or colored selection glow.
+   Scope to interface elements only; posters, video pixels and provider logos
+   keep their original colors. */
+html body #malik-root#malik-root .mv2[data-view="video-generation-v2"],
+html body #malik-root#malik-root .mv2[data-view="video-generation-v2"] :is(.mv2__preview-column,.mv2__mobile-only,.mv2__controls-column,.mv2__thumb-strip,.mv2__thumbs,.mv2__preview-info,.mv2__preview-copy,.mv2__preview-actions,.mv2__chips,.mv2__mobile-badges,.mv2m__tabs,.mv2m__prompt,.mv2m__prompt-foot,.mv2m__prompt-tools,.mv2m__counter,.mv2m__model-picker,.mv2m__model-top,.mv2m__model-head,.mv2m__controls,.mv2m__styles,.mv2m__examples,.mv2m__source,.mv2__prompt-card,.mv2__prompt-foot,.mv2__helper-row,.mv2__source-card,.mv2__mode-tabs,.mv2__models,.mv2__gallery,.mv2__history,.mv2__history-list,.mv2__model-notice,.mv2m__status,.mv2m__brand,.mv2__arrow) {
+  background-color: #000 !important; background-image: none !important; box-shadow: none !important;
+  color: #f5f5f5 !important; border-color: #303030 !important;
+}
+html body #malik-root#malik-root .mv2[data-view="video-generation-v2"] :is(.mv2__preview-actions button,.mv2__chips span,.mv2__mobile-badges span,.mv2m__tabs button,.mv2m__prompt-tools button,.mv2m__counter button,.mv2m__model-picker button,.mv2m__controls button,.mv2m__styles button,.mv2m__source-remove,.mv2__mode-tabs button,.mv2__helper-row button,.mv2__model,.mv2__camera button,.mv2__history-list button,.mv2__recover button,.mv2__recover a,.mv2__gallery-tabs button) {
+  background-color: #000 !important; background-image: none !important;
+  color: #eee !important; border-color: #333 !important; box-shadow: none !important;
+}
+html body #malik-root#malik-root .mv2[data-view="video-generation-v2"] :is(.mv2m__model-picker button.is-active,.mv2__model.is-active,.mv2__thumb.is-active,.mv2m__styles button.is-active,.mv2__gallery-card.is-active,.mv2m__examples button.is-active,.mv2__camera button.is-active,.mv2__history-list button.is-active,.mv2__gallery-tabs button.is-active) {
+  border-color: #fff !important; outline-color: #fff !important; box-shadow: none !important;
+}
+html body #malik-root#malik-root .mv2[data-view="video-generation-v2"] :is(.mv2m__tabs button.is-active,.mv2__mode-tabs button.is-active) {
+  color: #fff !important; border-color: #fff !important;
+}
+html body #malik-root#malik-root .mv2[data-view="video-generation-v2"] .mv2m__tabs button.is-active::after {
+  background: #fff !important; box-shadow: none !important;
+}
+html body #malik-root#malik-root .mv2[data-view="video-generation-v2"] :is(.mv2m__generate,.mv2__generate) {
+  background: #fff !important; color: #000 !important; border-color: #fff !important; box-shadow: none !important;
+}
+html body #malik-root#malik-root .mv2[data-view="video-generation-v2"] :is(textarea,textarea:focus) {
+  background: #000 !important; color: #fff !important; box-shadow: none !important;
+}
+html body #malik-root#malik-root .mv2[data-view="video-generation-v2"] textarea::placeholder { color: #999 !important; }
+html body #malik-root#malik-root .mv2[data-view="video-generation-v2"] :is(.mv2__preview-info,.mv2m__prompt,.mv2m__model-picker,.mv2m__model-picker button,.mv2__model) {
+  border: 1px solid #333 !important; background: #000 !important;
+}
+html body #malik-root#malik-root .mv2[data-view="video-generation-v2"] :is(.mv2m__model-picker button.is-active,.mv2__model.is-active) { border-color: #fff !important; }
+html body #malik-root#malik-root .mv2[data-view="video-generation-v2"] :is(.mv2m__brand svg,.mv2__mobile-badges span,.mv2m__model-tier) { color: #fff !important; }
