@@ -38,13 +38,14 @@ export default function FounderHistoryClient() {
   const [mobileFilters, setMobileFilters] = useState(false)
   const [mobileLimit, setMobileLimit] = useState(30)
   const inFlight = useRef<AbortController | null>(null)
+  const nextPollAt = useRef(0)
+  const failureCount = useRef(0)
   const refresh = useCallback(async (silent = false) => {
-    if (silent && inFlight.current) return
+    if (silent && (inFlight.current || Date.now() < nextPollAt.current)) return
     inFlight.current?.abort()
     const controller = new AbortController()
     inFlight.current = controller
     if (!silent) setLoading(true)
-    setError("")
     try {
       const [a, b] = await Promise.all([
         fetch("/api/founder/overview", { credentials: "same-origin", cache: "no-store", signal: controller.signal }),
@@ -60,7 +61,16 @@ export default function FounderHistoryClient() {
       if (a.ok && users.ok) setOverview(users)
       if (b.ok && logs.ok) setActivity(logs)
       if (!a.ok || !b.ok || !users.ok || !logs.ok) throw new Error(logs.error || users.error || "Сервер временно недоступен")
-    } catch (e) { if (!controller.signal.aborted) setError(e instanceof Error ? e.message : "Не удалось загрузить данные") }
+      failureCount.current = logs.partial ? Math.min(5, failureCount.current + 1) : 0
+      nextPollAt.current = Date.now() + (logs.partial ? Math.min(900_000, 60_000 * 2 ** failureCount.current) : (logs.items?.some(row => row.status === "pending") ? 30_000 : 120_000))
+      setError("")
+    } catch (e) {
+      if (!controller.signal.aborted) {
+        failureCount.current = Math.min(5, failureCount.current + 1)
+        nextPollAt.current = Date.now() + Math.min(900_000, 60_000 * 2 ** failureCount.current)
+        setError(e instanceof Error ? e.message : "Не удалось загрузить данные")
+      }
+    }
     finally { if (inFlight.current === controller) { inFlight.current = null; setLoading(false) } }
   }, [])
   useEffect(() => {
@@ -107,14 +117,14 @@ export default function FounderHistoryClient() {
           </div>
           <p className="mb-1 text-[9px] font-semibold tracking-[.16em] text-zinc-400">MALIK AI / PRIVATE FOUNDER DATABASE</p>
           <h1 className="text-[24px] font-bold leading-tight tracking-tight">История запросов</h1>
-          <p className="mt-1 text-xs text-zinc-400">Запросы, ответы и пользователи · обновление 30 с</p>
+          <p className="mt-1 text-xs text-zinc-400">Запросы, ответы и пользователи · автообновление</p>
         </header>
         {error ? <div role="alert" className="mb-3 rounded-lg border border-red-900 p-2 text-xs text-red-300 lg:mb-5 lg:p-4 lg:text-sm">Не удалось обновить историю. {activity ? "Показаны ранее загруженные данные." : "История недоступна, а не пуста."} <span className="block break-words">{error}</span></div> : null}
         {activity?.storageWarning ? (
           <div role="status" className="hidden lg:block mb-5 border border-amber-900 bg-[#15110a] p-4 text-sm text-amber-200">
             {activity.storageWarning}
           </div>
-        ) : activity ? <div className="hidden lg:block mb-5 border border-zinc-800 p-3 text-xs text-zinc-400">Хранилище настроено: {activity.storage}. Автообновление каждые 30 секунд. <a href="/api/founder/storage-health" className="underline">Проверить запись и чтение</a>.</div> : null}
+        ) : activity ? <div className="hidden lg:block mb-5 border border-zinc-800 p-3 text-xs text-zinc-400">Хранилище настроено: {activity.storage}. Автообновление каждые 2 минуты, активные ответы — чаще. При сбое — с увеличенной паузой. <a href="/api/founder/storage-health" className="underline">Проверить запись и чтение</a>.</div> : null}
         {activity?.warning || overview?.warning ? <p role="alert" className="mb-3 break-words text-xs text-amber-300 lg:mb-5 lg:text-sm">{activity?.warning || overview?.warning}</p> : null}
         <div className="mb-6 hidden gap-3 lg:grid lg:grid-cols-5">
           {([["Пользователей", users.length], ["Всего запросов", entries.length], ["Ответил", counts.success], ["Ошибка", counts.failed], ["Прервано", counts.interrupted]] as const).map(([label, value]) => (
