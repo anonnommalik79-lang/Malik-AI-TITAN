@@ -1,7 +1,7 @@
 import { exprVariables, parseExpr } from "./expr"
 import { evidenceUrlMatches } from "../ai/source-evidence"
 import { chartSourceEvidence, checkedSourceRefs, evidenceNumbers, type UiEvidenceSource } from "./evidence"
-import { BLOCK_TYPES, UI_LIMITS, UI_VERSION, type Block, type BlockType, type DataOrigin, type Format, type ImageRef, type UiDocument, type Value } from "./protocol"
+import { BLOCK_TYPES, UI_LIMITS, UI_VERSION, type Block, type BlockType, type DataOrigin, type DrawingShape, type Format, type ImageRef, type UiDocument, type Value } from "./protocol"
 
 /**
  * Validation, repair and quality control of a model's composition before the
@@ -108,6 +108,47 @@ function block(raw: unknown, ctx: Ctx, depth: number, where: string): Block | nu
     }
     case "badge": { const text = value(data.text, ctx, at("text"), 40); return text === null ? null : { ...base, type, text } }
     case "divider": return { ...base, type }
+    case "row": {
+      const items = children(data.items, ctx, depth, at("items")).slice(0, 4)
+      return items.length ? { ...base, type, items } : null
+    }
+    case "status": {
+      const items = arr(data.items).slice(0, 30).map(raw => {
+        const item = obj(raw)
+        const state = oneOf(item.state, ["done", "running", "pending", "failed"] as const) || "pending"
+        return { label: str(item.label, 180), detail: str(item.detail, 400), state }
+      }).filter(item => item.label)
+      return items.length ? { ...base, type, items } : null
+    }
+    case "drawing": {
+      const width = Math.max(160, Math.min(1200, finite(data.width) ?? 640))
+      const height = Math.max(120, Math.min(1200, finite(data.height) ?? 360))
+      const num = (v: unknown, max: number, fallback = 0) => Math.max(0, Math.min(max, finite(v) ?? fallback))
+      const paint = (v: unknown, fallback: string) => typeof v === "string" && /^(?:none|#[0-9a-f]{6}|#[0-9a-f]{3})$/iu.test(v) ? v : fallback
+      const shapes: DrawingShape[] = []
+      for (const raw of arr(data.shapes).slice(0, 120)) {
+        const s = obj(raw)
+        const x = num(s.x, width), y = num(s.y, height)
+        const fill = paint(s.fill, "none"), stroke = paint(s.stroke, "#a3a3a3")
+        switch (s.kind) {
+          case "rect": shapes.push({ kind: "rect", x, y, w: num(s.w, width - x), h: num(s.h, height - y), radius: num(s.radius, 40), fill, stroke }); break
+          case "ellipse": shapes.push({ kind: "ellipse", x, y, rx: num(s.rx, Math.min(x, width - x)), ry: num(s.ry, Math.min(y, height - y)), fill, stroke }); break
+          case "line": shapes.push({ kind: "line", x, y, x2: num(s.x2, width), y2: num(s.y2, height), stroke, arrow: s.arrow === true }); break
+          case "polyline": {
+            const points = arr(s.points).slice(0, 80).map(arr).filter(pair => pair.length === 2 && pair.every(v => finite(v) !== null)).map(pair => [num(pair[0], width), num(pair[1], height)])
+            if (points.length >= 2) shapes.push({ kind: "polyline", points, stroke, fill, closed: s.closed === true })
+            break
+          }
+          case "text": {
+            const text = str(s.text, 100)
+            if (text) shapes.push({ kind: "text", x, y, text, size: Math.max(12, num(s.size, 48, 20)), fill: paint(s.fill, "#f5f5f5"), align: oneOf(s.align, ["start", "middle", "end"] as const) || "start" })
+            break
+          }
+        }
+      }
+      const description = str(data.description, 1000)
+      return shapes.length && description ? { ...base, type, width, height, shapes, description, ...(str(data.title, 160) ? { title: str(data.title, 160) } : {}) } : null
+    }
     case "list": {
       const items = arr(data.items).slice(0, 30).map((item) => typeof item === "string" ? str(item, 400) : (() => { const o = obj(item); const title = str(o.title ?? o.label, 160); return title ? { title, ...(str(o.text ?? o.detail, 400) ? { text: str(o.text ?? o.detail, 400) } : {}) } : "" })()).filter(Boolean) as Array<string | { title: string; text?: string }>
       return items.length ? { ...base, type, items, style: oneOf(data.style, ["bullet", "number", "check"] as const, "bullet") } : null
