@@ -80,6 +80,7 @@ import { slideDensity } from "@/lib/presentations/visual-fit"
 import type { VisualIssue } from "@/lib/presentations/visual-audit"
 import "./presentation-studio.css"
 import "./presentation-desktop.css"
+import "./presentation-workspace.css"
 
 /**
  * The presentation studio.

@@ -1,0 +1,99 @@
+/* Presentation workspace: monochrome chrome, full-color deck previews.
+   All creation and editing actions work on the same existing deck model. */
+.ps-root.ps-root .ps-start-scene { background: #000 !important; }
+.ps-root.ps-root .ps-scene-light { display: none !important; }
+.ps-root.ps-root .ps-start-title {
+  white-space: normal !important; color: #fff !important;
+  font-size: clamp(30px, 3.4vw, 61px); line-height: 1.06;
+  letter-spacing: -.045em;
+}
+.ps-root.ps-root .ps-grad {
+  color: #fff !important; -webkit-text-fill-color: #fff !important; background: none !important;
+}
+.ps-root .ps-create-kicker {
+  display: flex; align-items: center; gap: 7px; margin: 0 0 14px;
+  font-size: 10px; font-weight: 700; letter-spacing: .18em; color: #aaa;
+}
+.ps-root.ps-root :is(.ps-prompt,.ps-field,.ps-chip,.ps-features span,.ps-magic) {
+  background: #000 !important; background-image: none !important; border-color: #383838 !important;
+  box-shadow: none !important; color: #eee !important;
+}
+.ps-root.ps-root :is(.ps-magic,.ps-features svg,.ps-section-label svg,.ps-chip-icon) { color: #ddd !important; }
+.ps-root.ps-root .ps-btn.ps-create {
+  background: #fff !important; color: #000 !important; border: 1px solid #fff !important;
+  box-shadow: none !important; font-weight: 750;
+}
+.ps-root.ps-root .ps-btn.ps-create:hover:not(:disabled) { background: #e5e5e5 !important; }
+.ps-root.ps-root .ps-start-sub { color: #aaa !important; }
+.ps-root .ps-create-modes {
+  display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 8px; margin: 0 0 14px;
+}
+:is(#malik-root,body) .ps-root.ps-root .ps-create-modes > button {
+  display: flex !important; flex-direction: column; align-items: flex-start; justify-content: center;
+  gap: 6px; min-width: 0; min-height: 98px !important; height: auto !important;
+  padding: 12px !important; text-align: left; border: 1px solid #333 !important;
+  border-radius: 13px !important; background: #000 !important; color: #fff !important;
+  box-shadow: none !important; cursor: pointer;
+}
+:is(#malik-root,body) .ps-root.ps-root .ps-create-modes > button[aria-pressed="true"] { border-color: #fff !important; }
+.ps-root .ps-create-modes > button b { font-size: 13px; font-weight: 650; line-height: 1.2; }
+.ps-root .ps-create-modes > button small { color: #a3a3a3; font-size: 11px; line-height: 1.35; }
+.ps-root .ps-create-modes > button:disabled { opacity: .5; }
+.ps-root .ps-source-tools { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 6px 0 12px; }
+.ps-root .ps-brief-settings { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 10px; margin: 0 0 12px; }
+.ps-root .ps-brief-settings label { display: flex; min-width: 0; flex-direction: column; gap: 6px; color: #aaa; font-size: 11px; }
+:is(#malik-root,body) .ps-root.ps-root .ps-brief-settings :is(input,select),
+:is(#malik-root,body) .ps-root.ps-root .ps-library-search input {
+  width: 100% !important; height: 38px !important; min-height: 38px !important; max-height: none !important;
+  padding: 0 10px !important; border: 1px solid #383838 !important; border-radius: 8px !important;
+  background: #000 !important; color: #fff !important; box-shadow: none !important; font-size: 13px !important;
+}
+.ps-root .ps-library-search { display: block; max-width: 400px; margin: 0 0 14px; }
+.ps-root .ps-outline-controls { display: flex; flex-wrap: wrap; gap: 2px; justify-content: flex-end; }
+:is(#malik-root,body) .ps-root.ps-root .ps-outline-point textarea {
+  margin-top: 5px !important; font-size: 12px !important; color: #aaa !important; font-weight: 400 !important;
+  border-bottom: 1px solid #282828 !important; border-radius: 0 !important;
+}
+.ps-root .ps-editor[data-editor-view="overview"] { grid-template-columns: minmax(0,1fr); }
+.ps-root .ps-editor[data-editor-view="overview"] > .ps-rail { display: none !important; }
+.ps-root .ps-storyboard { display: grid; grid-template-columns: repeat(auto-fill,minmax(min(100%,280px),1fr)); gap: 16px; align-items: start; padding-bottom: 20px; }
+.ps-root .ps-story-card { min-width: 0; border: 1px solid #333; border-radius: 13px; overflow: hidden; background: #000; }
+.ps-root .ps-story-card[data-current="true"] { border-color: #fff; }
+:is(#malik-root,body) .ps-root.ps-root .ps-story-preview {
+  display: block !important; position: relative; width: 100% !important; height: auto !important; min-height: 0 !important;
+  padding: 0 !important; border: 0 !important; background: transparent !important;
+  border-radius: 0 !important; box-shadow: none !important; overflow: hidden;
+}
+.ps-root .ps-story-pending { display: grid; place-items: center; aspect-ratio: 16/9; color: #aaa; background: #090909; padding: 12px; }
+.ps-root .ps-story-meta { display: flex; align-items: center; gap: 4px; padding: 10px; }
+.ps-root .ps-story-meta > span { min-width: 0; flex: 1; }
+.ps-root .ps-story-meta small,.ps-root .ps-story-meta b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ps-root .ps-story-meta small { font-size: 10px; color: #aaa; margin-bottom: 4px; }
+.ps-root .ps-story-meta b { font-size: 12px; font-weight: 650; color: #fff; }
+:is(#malik-root,body) .ps-root.ps-root .ps-story-add {
+  display: flex !important; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
+  width: 100% !important; min-height: 120px !important; aspect-ratio: 16/9;
+  padding: 12px !important; border: 1px dashed #555 !important; border-radius: 13px !important;
+  color: #ccc !important; background: #000 !important; box-shadow: none !important;
+}
+.ps-root .ps-story-add:disabled { opacity: .45; }
+.ps-root .ps-ai-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; margin: 14px 0 8px; }
+.ps-root .ps-ai-actions > span { display: inline-flex; gap: 5px; align-items: center; font-size: 12px; color: #aaa; margin-right: 4px; }
+.ps-root.ps-root .ps-toolbar .ps-btn[aria-pressed="true"] { border-color: #fff !important; }
+@media(max-width:900px) {
+  .ps-root.ps-root .ps-start { padding: 24px 15px 50px; }
+  .ps-root.ps-root .ps-create-modes { gap: 6px; }
+  :is(#malik-root,body) .ps-root.ps-root .ps-create-modes > button { padding: 9px !important; min-height: 88px !important; gap: 5px; }
+  .ps-root .ps-create-modes > button b { font-size: 12px; }
+  .ps-root .ps-create-modes > button small { font-size: 10px; }
+  .ps-root .ps-brief-settings { grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 7px; }
+  .ps-root .ps-outline-controls { grid-column: 2/-1; justify-content: flex-start; }
+  .ps-root .ps-storyboard { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 9px; }
+  .ps-root .ps-story-meta { flex-wrap: wrap; padding: 7px; }
+  .ps-root .ps-story-meta > span { flex: 1 1 100%; }
+  .ps-root .ps-story-add { font-size: 11px; }
+}
+@media(max-width:350px) {
+  .ps-root .ps-brief-settings { grid-template-columns: 1fr; }
+  .ps-root .ps-storyboard { grid-template-columns: 1fr; }
+}
