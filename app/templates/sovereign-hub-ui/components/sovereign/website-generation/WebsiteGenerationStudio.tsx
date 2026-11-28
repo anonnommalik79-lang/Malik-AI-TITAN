@@ -303,6 +303,8 @@ export function WebsiteGenerationStudio({ onOpenCodex, onOpenCanvas }: WebsiteGe
   const [siteId, setSiteId] = useState<string | null>(null)
   const [editInstruction, setEditInstruction] = useState("")
   const [loading, setLoading] = useState(false)
+  const [generationNotice, setGenerationNotice] = useState("")
+  const operationRef = useRef(false)
   const [error, setError] = useState("")
   const [zoomed, setZoomed] = useState<Premium | null>(null)
   const [device, setDevice] = useState<"desktop" | "mobile">("desktop")
@@ -426,8 +428,10 @@ export function WebsiteGenerationStudio({ onOpenCodex, onOpenCanvas }: WebsiteGe
    * ("сделай тёмную тему", "замени меню") working on the actual page.
    */
   async function openTemplate(template: Premium) {
-    if (opening) return
+    if (opening || operationRef.current) return
+    operationRef.current = true
     setOpening(template.id)
+    setGenerationNotice("")
     setError("")
     try {
       const response = await fetch(premiumUrl(template.id))
@@ -446,15 +450,18 @@ export function WebsiteGenerationStudio({ onOpenCodex, onOpenCanvas }: WebsiteGe
     } catch {
       setError("Не удалось открыть шаблон. Проверьте соединение и попробуйте ещё раз.")
     } finally {
+      operationRef.current = false
       setOpening(null)
     }
   }
 
   async function generate(revise = false) {
     const instruction = revise ? editInstruction.trim() : prompt.trim()
-    if (!instruction || loading || (revise && !html)) return
+    if (!instruction || operationRef.current || (revise && !html)) return
+    operationRef.current = true
     setLoading(true)
     setError("")
+    setGenerationNotice("")
     try {
       const { lean, kept } = revise ? stripRuntime(html) : { lean: "", kept: [] as string[] }
       const response = await clientFetchWithTimeout(ENDPOINT, {
@@ -463,10 +470,12 @@ export function WebsiteGenerationStudio({ onOpenCodex, onOpenCanvas }: WebsiteGe
         body: JSON.stringify({ prompt: instruction, ...(revise ? { previousHtml: lean } : {}) }),
       }, 180000)
       const data = await response.json().catch(() => ({}))
-      if (!response.ok) throw new Error(typeof data?.error === "string" ? data.error : `Ошибка генерации (${response.status})`)
+      if (!response.ok || data?.ok === false) throw new Error(typeof data?.message === "string" ? data.message : typeof data?.error === "string" ? data.error : `Ошибка генерации (${response.status})`)
       const raw = normalizeHtml(typeof data?.html === "string" ? data.html : typeof data?.content === "string" ? data.content : "")
       const output = revise && raw ? restoreRuntime(raw, kept) : raw
-      if (!output) throw new Error("Генератор вернул пустой HTML")
+      if (!/<html[\s>]/i.test(output) || !/<\/html\s*>\s*$/i.test(output) || !/<body[\s>]/i.test(output) || !/<\/body\s*>/i.test(output)) throw new Error("Генератор вернул неполный сайт. Предыдущая версия сохранена.")
+      if (revise && data?.fallback) throw new Error("Модель не применила правку. Предыдущая версия сохранена; попробуйте ещё раз.")
+      if (data?.fallback) setGenerationNotice("Создана локальная версия сайта: AI-планировщик не ответил. Можно отредактировать её или повторить генерацию.")
       setHtml(output)
       if (revise && siteId) {
         const previous = sites.find((item) => item.id === siteId)
@@ -487,20 +496,22 @@ export function WebsiteGenerationStudio({ onOpenCodex, onOpenCanvas }: WebsiteGe
     } catch (generationError) {
       setError(generationError instanceof Error ? generationError.message : "Ошибка генерации")
     } finally {
+      operationRef.current = false
       setLoading(false)
     }
   }
 
   const importHtml = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
-    if (!file) return
+    if (!file || operationRef.current) { event.target.value = ""; return }
     if (file.size > 300_000) {
       setError("HTML-файл больше 300 КБ. Уменьшите его перед импортом.")
       event.target.value = ""
       return
     }
-    const output = await file.text()
-    if (!/<html[\s>]/i.test(output) || !/<body[\s>]/i.test(output)) {
+    const output = await file.text().catch(() => "")
+    if (operationRef.current) { event.target.value = ""; return }
+    if (!/<html[\s>]/i.test(output) || !/<body[\s>]/i.test(output) || !/<\/html\s*>\s*$/i.test(output) || !/<\/body\s*>/i.test(output)) {
       setError("Выберите полноценный HTML-файл сайта")
       event.target.value = ""
       return
@@ -518,7 +529,10 @@ export function WebsiteGenerationStudio({ onOpenCodex, onOpenCanvas }: WebsiteGe
 
   const openInNewTab = () => {
     if (!html) return
-    const url = URL.createObjectURL(new Blob([html], { type: "text/html" }))
+    // Never execute generated/imported HTML directly in the app origin.
+    const escaped = html.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    const wrapper = `<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>Malik AI — предпросмотр</title><style>html,body,iframe{width:100%;height:100%;margin:0;border:0;display:block}</style></head><body><iframe title="Website preview" sandbox="allow-scripts allow-forms allow-modals allow-popups" srcdoc="${escaped}"></iframe></body></html>`
+    const url = URL.createObjectURL(new Blob([wrapper], { type: "text/html" }))
     window.open(url, "_blank", "noopener,noreferrer")
     setTimeout(() => URL.revokeObjectURL(url), 60000)
   }
@@ -536,6 +550,7 @@ export function WebsiteGenerationStudio({ onOpenCodex, onOpenCanvas }: WebsiteGe
   }
 
   const undoRevision = () => {
+    if (operationRef.current) return
     const site = sites.find((item) => item.id === siteId)
     if (!site?.previousVersions?.length) return
     const previousVersions = [...site.previousVersions]
@@ -550,7 +565,7 @@ export function WebsiteGenerationStudio({ onOpenCodex, onOpenCanvas }: WebsiteGe
         <div className="sitesWorkspace sitesBuilder">
           <header className="builderHero">
             <div className="builderTitle">
-              <button className="backButton" onClick={() => setBuilder(false)} aria-label="Назад"><ArrowLeft /></button>
+              <button className="backButton" onClick={() => setBuilder(false)} disabled={loading || Boolean(opening)} aria-label="Назад"><ArrowLeft /></button>
               <div><span>Сайты · Malik AI Website Studio</span><h1>Создать сайт</h1><p>Опишите результат или выберите направление. Malik AI соберёт HTML, CSS и JS и сразу покажет живой предпросмотр.</p></div>
             </div>
           </header>
@@ -558,7 +573,8 @@ export function WebsiteGenerationStudio({ onOpenCodex, onOpenCanvas }: WebsiteGe
           <section className="builderPanel">
             <div className="stepTitle"><b>1</b><div><strong>Описание сайта</strong><small>Цель, аудитория, структура, продукт и настроение.</small></div></div>
             <textarea className="promptBox" value={prompt} onChange={(event) => setPrompt(event.target.value)} placeholder="Опишите сайт, который хотите создать…" />
-            {error && <p className="siteError">{error}</p>}
+            {error && <p className="siteError" role="alert">{error}</p>}
+            {generationNotice && <p className="siteError" role="status">{generationNotice}</p>}
           </section>
 
           {html && <section className="builderPanel">
@@ -574,7 +590,7 @@ export function WebsiteGenerationStudio({ onOpenCodex, onOpenCanvas }: WebsiteGe
               {PREMIUM.slice(0, 6).map((template) => (
                 <div className="quickTile" key={template.id}>
                   <LiveTemplate template={template} />
-                  <button disabled={Boolean(opening)} onClick={() => void openTemplate(template)} aria-label={`Открыть шаблон ${template.title}`}>
+                  <button disabled={loading || Boolean(opening)} onClick={() => void openTemplate(template)} aria-label={`Открыть шаблон ${template.title}`}>
                     <span>{opening === template.id ? "Открываем…" : template.title}</span>
                   </button>
                 </div>
@@ -584,7 +600,7 @@ export function WebsiteGenerationStudio({ onOpenCodex, onOpenCanvas }: WebsiteGe
 
           <div className="builderActions">
             <button className="primaryButton" disabled={loading || !prompt.trim()} onClick={() => void generate(false)}>{loading ? <Loader2 className="spin" /> : <Globe2 />}{loading ? "Генерация…" : html ? "Сгенерировать заново" : "Сгенерировать сайт"}</button>
-            <button className="secondaryButton" onClick={() => fileRef.current?.click()}><Upload /> Импорт HTML</button>
+            <button className="secondaryButton" disabled={loading || Boolean(opening)} onClick={() => fileRef.current?.click()}><Upload /> Импорт HTML</button>
             <button className="secondaryButton" onClick={onOpenCodex}><Code2 /> Код</button>
             {onOpenCanvas && <button className="secondaryButton" disabled={!html} onClick={() => onOpenCanvas(html)}>Canvas</button>}
             <button className="secondaryButton" disabled={!html} onClick={openInNewTab}><ExternalLink /> Открыть</button>
