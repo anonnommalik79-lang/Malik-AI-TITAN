@@ -1,4 +1,4 @@
-import { ChatSseDecoder, providerTextDelta, sseFrameData } from "@/lib/ai/chat-stream-contract"
+import { ChatSseDecoder, providerTextDelta, sseFrameData, ThinkFilter } from "@/lib/ai/chat-stream-contract"
 import { primaryProviderChoice, providerCompletionId } from "@/lib/ai/provider-choice"
 import Anthropic from "@anthropic-ai/sdk"
 import { claudePremiumAllowed, claudePremiumModel, runClaudePremium } from "./claude-premium"
@@ -583,51 +583,7 @@ export async function buildMaxLanes(input: {
 /* ------------------------------------------------------- stream parsing */
 
 /** Removes <think>…</think> and <reasoning>…</reasoning> from a live stream. */
-export class ThinkFilter {
-  private buffer = ""
-  private inside: string | null = null
-
-  push(text: string) {
-    this.buffer += text
-    let out = ""
-    while (this.buffer) {
-      if (this.inside) {
-        const close = `</${this.inside}>`
-        const end = this.buffer.toLowerCase().indexOf(close)
-        if (end === -1) {
-          this.buffer = this.buffer.slice(-(close.length - 1))
-          return out
-        }
-        this.buffer = this.buffer.slice(end + close.length)
-        this.inside = null
-        continue
-      }
-      const open = this.buffer.match(/<(think|reasoning)>/i)
-      if (open && open.index !== undefined) {
-        out += this.buffer.slice(0, open.index)
-        this.inside = open[1].toLowerCase()
-        this.buffer = this.buffer.slice(open.index + open[0].length)
-        continue
-      }
-      const lt = this.buffer.lastIndexOf("<")
-      const tail = lt === -1 ? "" : this.buffer.slice(lt)
-      if (tail && tail.length < 12 && /^<(?:t(?:h(?:i(?:n(?:k)?)?)?)?|r(?:e(?:a(?:s(?:o(?:n(?:i(?:n(?:g)?)?)?)?)?)?)?)?)?$/i.test(tail)) {
-        out += this.buffer.slice(0, lt)
-        this.buffer = tail
-        return out
-      }
-      out += this.buffer
-      this.buffer = ""
-    }
-    return out
-  }
-
-  flush() {
-    const rest = this.inside ? "" : this.buffer
-    this.buffer = ""
-    return rest
-  }
-}
+export { ThinkFilter } from "@/lib/ai/chat-stream-contract"
 
 type StreamEvent = { completionId?: string; textMode?: "delta" | "snapshot"; text: string; activity: boolean; finishReason?: string; usage?: unknown; error?: string; terminal?: boolean }
 

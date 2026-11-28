@@ -1,6 +1,7 @@
+import { ChatSseDecoder, providerTextDelta, sseFrameData, ThinkFilter } from "@/lib/ai/chat-stream-contract"
 import { primaryProviderChoice, providerCompletionId } from "@/lib/ai/provider-choice"
 import { briefChecklist, briefMissingMarker, missingBriefItems, preserveBriefEdges } from "@/lib/ai/brief-quality"
-import { hasOpenFence, openCodeFence, stripIncompleteNote, type AnswerIncomplete } from "@/lib/ai/answer-completion"
+import { assessAnswerCompletion, hasOpenFence, openCodeFence, stripIncompleteNote, type AnswerIncomplete } from "@/lib/ai/answer-completion"
 import { isCodeRequest, isFastChatRequest, wantsFullShape } from "@/lib/ai/request-kind"
 import {
   canUseMalikModel,
@@ -49,6 +50,7 @@ export type ProviderRuntime = {
 }
 
 type ParsedProviderResponse = {
+  interrupted?: boolean
   content: string
   usage: any
   finishReason?: string
@@ -481,51 +483,64 @@ export function codeAnswerNeedsMore(value: string, prompt: string) {
   return false
 }
 
-async function readStream(response: Response, onToken?: (chunk: string) => void): Promise<ParsedProviderResponse> {
-  if (!response.body) return { content: "", usage: undefined }
+async function readStream(response: Response, onToken?: (chunk: string) => void, signal?: AbortSignal): Promise<ParsedProviderResponse> {
+  if (!response.body) return { content: "", usage: undefined, interrupted: true }
   const reader = response.body.getReader()
-  const decoder = new TextDecoder()
-  let buffer = "", content = "", usage: any, finishReason = ""
+  const decoder = new ChatSseDecoder()
+  const filter = new ThinkFilter()
+  let providerText = "", content = "", usage: any, finishReason = "", terminal = false, interrupted = false
   let completionId: string | undefined
-  const consume = (line: string) => {
-    const raw = line.trim().replace(/^data:\s*/, "")
-    if (!raw || raw === "[DONE]" || raw.startsWith(":")) return
-    try {
-      const event = JSON.parse(raw)
-      const choice = primaryProviderChoice(event?.choices) as any
-      const eventId = choice ? providerCompletionId(event) : undefined
-      if (eventId && completionId && eventId !== completionId) return
-      completionId ||= eventId
-      const openAiPiece = contentPart(choice?.delta?.content ?? choice?.message?.content)
-      const googleCandidate = primaryProviderChoice(event?.candidates) as any
-      const googlePiece = Array.isArray(googleCandidate?.content?.parts)
-        ? googleCandidate.content.parts
-            .filter((part: any) => part && part.thought !== true && typeof part.text === "string")
-            .map((part: any) => part.text)
-            .join("")
-        : ""
-      const piece = openAiPiece || googlePiece
-      if (piece) {
-        content += piece
-        onToken?.(piece)
-      }
-      if (choice?.finish_reason) finishReason = String(choice.finish_reason)
-      if (googleCandidate?.finishReason) finishReason = String(googleCandidate.finishReason)
-      if (event?.usage) usage = event.usage
-      if (event?.usageMetadata) usage = event.usageMetadata
-    } catch {}
+  const publish = (piece: string) => { if (piece) { content += piece; onToken?.(piece) } }
+  const consume = (frame: string) => {
+    if (terminal) return
+    const raw = sseFrameData(frame)
+    if (!raw?.trim()) return
+    if (raw.trim() === "[DONE]") { terminal = true; return }
+    const event = JSON.parse(raw)
+    if (event?.error) throw new Error("Provider reported a stream error")
+    const choice = primaryProviderChoice(event?.choices) as any
+    const eventId = choice ? providerCompletionId(event) : undefined
+    if (eventId && completionId && eventId !== completionId) throw new Error("Provider completion identity mismatch")
+    completionId ||= eventId
+    const value = choice?.delta?.content ?? choice?.message?.content
+    const openAiPiece = contentPart(Array.isArray(value)
+      ? value.filter((part: any) => part?.thought !== true && (!part?.type || part.type === "text" || part.type === "output_text"))
+      : value)
+    const googleCandidate = primaryProviderChoice(event?.candidates) as any
+    const googlePiece = Array.isArray(googleCandidate?.content?.parts)
+      ? googleCandidate.content.parts.filter((part: any) => part && part.thought !== true && typeof part.text === "string").map((part: any) => part.text).join("")
+      : ""
+    const piece = openAiPiece || googlePiece
+    if (piece) {
+      const next = providerTextDelta(providerText, piece, choice?.delta?.content == null && choice?.message?.content != null ? "snapshot" : "delta")
+      providerText = next.content
+      publish(filter.push(next.delta))
+    }
+    if (choice?.finish_reason) finishReason = String(choice.finish_reason)
+    if (googleCandidate?.finishReason) finishReason = String(googleCandidate.finishReason)
+    if (event?.usage) usage = event.usage
+    if (event?.usageMetadata) usage = event.usageMetadata
   }
-  while (true) {
-    const { done, value } = await reader.read()
-    if (done) break
-    buffer += decoder.decode(value, { stream: true })
-    const lines = buffer.split(/\r?\n/)
-    buffer = lines.pop() || ""
-    lines.forEach(consume)
+  const cancel = () => { void reader.cancel().catch(() => {}) }
+  signal?.addEventListener("abort", cancel, { once: true })
+  try {
+    signal?.throwIfAborted()
+    while (!terminal) {
+      const { done, value } = await reader.read()
+      signal?.throwIfAborted()
+      for (const frame of decoder.push(value, done)) consume(frame)
+      if (done) break
+    }
+  } catch (error) {
+    if (signal?.aborted || !content.trim()) throw error
+    interrupted = true
+  } finally {
+    signal?.removeEventListener("abort", cancel)
+    await reader.cancel().catch(() => {})
+    reader.releaseLock()
   }
-  buffer += decoder.decode()
-  if (buffer.trim()) consume(buffer)
-  return { content: content.trim(), usage, finishReason }
+  publish(filter.flush())
+  return { content: content.trim(), usage, finishReason, interrupted: interrupted || (!terminal && !finishReason) }
 }
 
 export async function upstreamError(response: Response) {
@@ -680,8 +695,10 @@ async function runFallback(input: {
   maxTokens?: number
   temperature?: number
   onToken?: (chunk: string) => void
+  signal?: AbortSignal
 }): Promise<StrictMalikResult | null> {
   for (const fallbackModelId of fallbackModels(input.failedModelId, input.prompt, input.attachments)) {
+    input.signal?.throwIfAborted()
     let fallbackStreamed = false
     const emitToken = (chunk: string) => {
       if (!chunk) return
@@ -704,6 +721,7 @@ async function runFallback(input: {
         maxTokens: fallbackTokenBudget(fallbackModel, input.maxTokens, input.prompt),
         temperature: input.temperature,
         publicModelLabel: input.originalModelId === "malik-max" ? "MalikLLM MAX" : undefined,
+        signal: input.signal,
         onToken: emitToken,
       }, { allowFallback: false })
       if (!visibleFinalText(result.content)) {
@@ -721,7 +739,7 @@ async function runFallback(input: {
             systemPrompt: input.systemPrompt,
             maxTokens: fallbackTokenBudget(fallbackModel, input.maxTokens, input.prompt),
             temperature: Math.min(typeof input.temperature === "number" ? input.temperature : 0.12, 0.12),
-            onToken: emitToken,
+            signal: input.signal,
           }, { allowFallback: false })
           if (visibleFinalText(continuation.content)) {
             completed = {
@@ -748,7 +766,7 @@ async function runFallback(input: {
         modelFallback: { requestedModelId: input.originalModelId, actualProvider: completed.provider, actualModel: completed.model } }
     } catch (error) {
       console.warn("[MALIK_MODEL_ROUTE] fallback failed", fallbackModelId, error instanceof Error ? error.message : String(error))
-      if (fallbackStreamed) throw error
+      if (fallbackStreamed || input.signal?.aborted) throw error
     }
   }
   return null
@@ -1003,6 +1021,7 @@ export async function runStrictMalikModel(input: {
       try {
         response = await providerFetch(runtime.url, {
           method: "POST",
+          signal: input.signal,
           headers: {
             ...(runtime.protocol === "google-native"
               ? { "x-goog-api-key": runtime.key }
@@ -1025,7 +1044,8 @@ export async function runStrictMalikModel(input: {
       } catch (error) {
         lastError = error
         recordProviderFailure(model)
-        console.warn("[MALIK_MODEL_ROUTE] request failed", model.id, attempt, error instanceof Error ? error.message : String(error))
+        console.warn("[MALIK_MODEL_ROUTE] request failed", model.id, attempt, input.signal?.aborted ? "cancelled" : "network")
+        if (input.signal?.aborted) throw error
         if (attempt < maxAttempts) {
           await sleep(codeMode ? 700 * attempt : 350 * attempt)
           continue
@@ -1057,8 +1077,8 @@ export async function runStrictMalikModel(input: {
 
       let parsed: ParsedProviderResponse
       try {
-        if (runtime.stream || response.headers.get("content-type")?.includes("text/event-stream")) {
-          parsed = await readStream(response, emitToken)
+        if (response.headers.get("content-type")?.includes("text/event-stream") || (runtime.stream && !response.headers.get("content-type")?.includes("json"))) {
+          parsed = await readStream(response, emitToken, input.signal)
         } else {
           parsed = await response.json().then((payload: any) => {
             const choice = primaryProviderChoice(payload?.choices) as any
@@ -1071,7 +1091,8 @@ export async function runStrictMalikModel(input: {
         }
       } catch (error) {
         lastError = error
-        console.warn("[MALIK_MODEL_ROUTE] parse failed", model.id, attempt, error instanceof Error ? error.message : String(error))
+        console.warn("[MALIK_MODEL_ROUTE] parse failed", model.id, attempt, streamedAny ? "after-output" : "before-output")
+        if (input.signal?.aborted || streamedAny) throw error
         if (attempt < maxAttempts) {
           await sleep(codeMode ? 700 * attempt : 350 * attempt)
           continue
@@ -1090,7 +1111,8 @@ export async function runStrictMalikModel(input: {
       if (parsed.content && visibleFinalText(parsed.content)) {
         PROVIDER_COOLDOWN_UNTIL.delete(providerHealthKey(model))
         recordProviderSuccess(model, Date.now() - started)
-        const base: StrictMalikResult = { content: parsed.content, provider: model.provider, model: runtime.model, selectedModelId: model.id, latencyMs: Date.now() - started, usage: parsed.usage }
+        const base: StrictMalikResult = { content: parsed.content, provider: model.provider, model: runtime.model, selectedModelId: model.id, latencyMs: Date.now() - started, usage: parsed.usage, incomplete: assessAnswerCompletion(parsed.content, { interrupted: !!parsed.interrupted, finishReason: parsed.finishReason }) || undefined }
+        if (parsed.interrupted) return base
         const depth = options.continuationDepth || 0
         const truncated = codeMode && (parsed.finishReason === "length" || parsed.finishReason === "MAX_TOKENS" || codeAnswerNeedsMore(parsed.content, input.prompt)
           || missingBriefItems(input.taskPrompt || input.prompt, parsed.content).length > 0
@@ -1115,7 +1137,7 @@ export async function runStrictMalikModel(input: {
                 maxTokens: Math.min(remainingBudget, 6_000),
                 temperature: Math.min(typeof input.temperature === "number" ? input.temperature : 0.15, 0.15),
                 allowCatalog: input.allowCatalog,
-                onToken: emitToken,
+                signal: input.signal,
               }, { allowFallback: true, continuationDepth: depth + 1 })
               if (visibleFinalText(continuation.content)) {
                 const combined = `${parsed.content.trim()}\n${continuation.content.trim()}`.trim()
@@ -1157,7 +1179,7 @@ export async function runStrictMalikModel(input: {
                 temperature: input.temperature,
                 reasoningEffort: input.reasoningEffort,
                 allowCatalog: input.allowCatalog,
-                onToken: emitToken,
+                signal: input.signal,
               }, { allowFallback: true, continuationDepth: longDepth + 1 })
               if (visibleFinalText(continuation.content)) {
                 return {
@@ -1188,9 +1210,11 @@ export async function runStrictMalikModel(input: {
     if (lastError) throw lastError
     throw new MalikModelRouteError("SELECTED_MODEL_UNAVAILABLE", `${model.label} временно недоступна.`, lastStatus || 503, model.id)
   } catch (error) {
+    if (input.signal?.aborted) throw error
     if (options.allowFallback !== false && !streamedAny) {
-      const fallback = await runFallback({ failedModelId: model.id, originalModelId: input.modelId, prompt: input.prompt, systemPrompt: input.systemPrompt, history: input.history, attachments: input.attachments, maxTokens: input.maxTokens, temperature: input.temperature, onToken: input.onToken }).catch(() => null)
+      const fallback = await runFallback({ failedModelId: model.id, originalModelId: input.modelId, prompt: input.prompt, systemPrompt: input.systemPrompt, history: input.history, attachments: input.attachments, maxTokens: input.maxTokens, temperature: input.temperature, signal: input.signal, onToken: input.onToken }).catch(() => null)
       if (fallback) return fallback
+      input.signal?.throwIfAborted()
     }
     if (error instanceof MalikModelRouteError) throw error
     console.error("[MALIK_MODEL_ROUTE] exception", error instanceof Error ? error.message : String(error))
