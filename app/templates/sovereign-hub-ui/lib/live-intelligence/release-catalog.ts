@@ -8,9 +8,9 @@ export function asksLatestRelease(question: string) {
 }
 
 const publishers = [
-  { id: "openai", name: "OpenAI", domain: "openai.com", subject: /\b(?:gpt|openai|chatgpt)\b|чатгпт/iu, model: /^(?:Introducing|Announcing|Releasing) (GPT[-‑ ]\d+(?:\.\d+)*)(?: (Astra|Sol|Terra|Luna|Pro|mini|nano|Turbo)(?: and (Astra|Sol|Terra|Luna|Pro|mini|nano|Turbo))?)?$/iu },
-  { id: "deepmind", name: "Google", domain: "deepmind.google", subject: /\bgemini\b|джемини/iu, model: /^(?:(?:Introducing|Announcing|Releasing) )?(Gemini \d+(?:\.\d+)*)(?: (Pro|Flash|Flash-Lite|Ultra))?(?::.{1,100})?$/iu },
-  { id: "anthropic", name: "Anthropic", domain: "anthropic.com", subject: /\b(?:claude|anthropic)\b|клод/iu, model: /^(?:(?:Introducing|Announcing|Releasing) )?(Claude (?:Opus|Sonnet|Haiku) \d+(?:\.\d+)*)(?::.{1,100})?$/iu },
+  { id: "openai", name: "OpenAI", domain: "openai.com", subject: /\b(?:gpt|openai|chatgpt)\b|(?<!\p{L})(?:чат[ -]?гпт|гпт|джипити|опен[ -]?аи|опен[ -]?ии)(?!\p{L})/iu, model: /^(?:Introducing|Announcing|Releasing) (GPT[-‑ ]\d+(?:\.\d+)*)(?: (Astra|Sol|Terra|Luna|Pro|mini|nano|Turbo)(?: and (Astra|Sol|Terra|Luna|Pro|mini|nano|Turbo))?)?$/iu },
+  { id: "deepmind", name: "Google", domain: "deepmind.google", subject: /\bgemini\b|(?<!\p{L})(?:джемини|джимини|гемини|гимини|жемини)(?!\p{L})/iu, model: /^(?:(?:Introducing|Announcing|Releasing) )?(Gemini \d+(?:\.\d+)*)(?: (Pro|Flash|Flash-Lite|Ultra))?(?::.{1,100})?$/iu },
+  { id: "anthropic", name: "Anthropic", domain: "anthropic.com", subject: /\b(?:claude|anthropic)\b|(?<!\p{L})(?:клод|клоуд|антропик|антропикс)(?!\p{L})/iu, model: /^(?:(?:Introducing|Announcing|Releasing) )?(Claude (?:Opus|Sonnet|Haiku) \d+(?:\.\d+)*)(?::.{1,100})?$/iu },
 ] as const
 
 export type ReleasePublisher = typeof publishers[number]
