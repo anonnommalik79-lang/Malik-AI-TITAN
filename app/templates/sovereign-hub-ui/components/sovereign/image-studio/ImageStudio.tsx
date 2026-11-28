@@ -107,8 +107,10 @@ function uid() {
 
 function wait(ms: number, signal: AbortSignal) {
   return new Promise<void>((resolve) => {
-    const timer = window.setTimeout(resolve, ms)
-    signal.addEventListener("abort", () => { window.clearTimeout(timer); resolve() }, { once: true })
+    if (signal.aborted) { resolve(); return }
+    const finish = () => { window.clearTimeout(timer); signal.removeEventListener("abort", finish); resolve() }
+    const timer = window.setTimeout(finish, ms)
+    signal.addEventListener("abort", finish, { once: true })
   })
 }
 
@@ -440,6 +442,7 @@ export function ImageStudio({
     // Another picture from the chat may be rendering: the server lets one
     // run at a time per account, so wait for it instead of failing.
     for (let attempt = 0; attempt < 40; attempt += 1) {
+      if (signal.aborted) throw new Error("aborted")
       const timeout = new AbortController()
       const timer = window.setTimeout(() => timeout.abort(), REQUEST_TIMEOUT_MS)
       const onAbort = () => timeout.abort()
@@ -458,7 +461,7 @@ export function ImageStudio({
           continue
         }
         if ((response.status === 503 || payload?.retryable) && attempt < 2) {
-          await wait(Number(payload?.retryAfterMs) || 2000, signal)
+          await wait(Math.min(15000, Math.max(1000, Number(payload?.retryAfterMs) || 2000)), signal)
           if (signal.aborted) throw new Error("aborted")
           continue
         }
@@ -483,6 +486,7 @@ export function ImageStudio({
   }
 
   const execute = async (run: Run, amount: number) => {
+    if (abortRef.current) return
     const batch = uid()
     const tiles: Result[] = Array.from({ length: amount }, () => ({
       id: uid(), batch, status: "queued", prompt: run.text, aspect: run.aspect,
@@ -503,6 +507,7 @@ export function ImageStudio({
         try {
           outcome = await requestOne(run, controller.signal)
         } catch {
+          for (const rest of tiles.slice(index)) patch(rest.id, { status: "failed", error: controller.signal.aborted ? "Генерация прервана" : "Не удалось завершить генерацию" })
           return
         }
         if (outcome.ok) {
@@ -524,7 +529,7 @@ export function ImageStudio({
   }
 
   const generate = () => {
-    if (running) return
+    if (running || abortRef.current) return
     const text = prompt.trim()
     if (!text) {
       setError(editing ? "Опишите, что изменить на фото." : "Опишите, что нарисовать, или выберите шаблон.")
