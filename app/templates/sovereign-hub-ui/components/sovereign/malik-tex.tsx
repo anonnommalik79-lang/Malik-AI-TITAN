@@ -91,6 +91,7 @@ const OPERATOR_NAMES = new Set(["times", "cdot", "div", "pm", "mp", "leq", "le",
 type Node =
   | { kind: "text"; value: string; italic?: boolean; upright?: boolean; op?: boolean }
   | { kind: "group"; children: Node[] }
+  | { kind: "boxed" | "tag"; children: Node[] }
   | { kind: "frac"; num: Node[]; den: Node[] }
   | { kind: "sqrt"; body: Node[]; index?: Node[] }
   | { kind: "scripts"; base: Node | null; sup?: Node[]; sub?: Node[]; limits?: boolean }
@@ -245,8 +246,11 @@ class Parser {
       if (delimiter.type === "cmd") return { kind: "text", value: SYMBOLS[delimiter.value] ?? (delimiter.value === "." ? "" : delimiter.value) }
       return { kind: "text", value: delimiter.value === "." ? "" : delimiter.value }
     }
+    if (name === "boxed") return { kind: "boxed", children: this.argument() }
+    if (name === "tag") { this.skipChar("*"); return { kind: "tag", children: this.argument() } }
     if (name === "begin") {
       const environment = this.rawArgument().replace(/\*$/, "")
+      if (environment === "array") this.rawArgument()
       return this.environment(environment)
     }
     if (name === "end") {
@@ -312,6 +316,10 @@ function renderNode(node: Node, key: string): ReactNode {
       return <span key={key} className="mtx-raw">{node.value}</span>
     case "group":
       return <span key={key}>{render(node.children, key)}</span>
+    case "boxed":
+      return <span key={key} className="mtx-boxed">{render(node.children, key)}</span>
+    case "tag":
+      return <span key={key} className="mtx-tag">({render(node.children, key)})</span>
     case "frac":
       return (
         <span key={key} className="mtx-frac" role="math">
@@ -358,7 +366,7 @@ function renderNode(node: Node, key: string): ReactNode {
         <span key={key} className="mtx-matrix">
           {node.open ? <span className="mtx-delim">{node.open}</span> : null}
           <span className="mtx-grid" style={{ gridTemplateColumns: `repeat(${Math.max(1, ...node.rows.map((row) => row.length))}, auto)` }}>
-            {node.rows.flatMap((row, rowIndex) => row.map((cell, cellIndex) => <span key={`${key}-${rowIndex}-${cellIndex}`} className="mtx-cell">{render(cell, `${key}-${rowIndex}-${cellIndex}`)}</span>))}
+            {node.rows.flatMap((row, rowIndex) => Array.from({ length: Math.max(1, ...node.rows.map(r => r.length)) }, (_, cellIndex) => <span key={`${key}-${rowIndex}-${cellIndex}`} className="mtx-cell">{render(row[cellIndex] || [], `${key}-${rowIndex}-${cellIndex}`)}</span>))}
           </span>
           {node.close ? <span className="mtx-delim">{node.close}</span> : null}
         </span>
@@ -376,7 +384,7 @@ export function TexMath({ tex, display = false }: { tex: string; display?: boole
     content = source
   }
   // A span in both cases: display maths can sit inside a paragraph ("… : $$x$$").
-  return <span className={display ? "mtx mtx-display" : "mtx"} role="math" aria-label={source}>{content}</span>
+  return <span className={display ? "mtx mtx-display" : "mtx"} role="math" aria-label={source}>{display ? <span className="mtx-display-inner">{content}</span> : content}</span>
 }
 
 /**

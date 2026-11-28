@@ -77,3 +77,10 @@
 .mtx-delim { font-size: 1.9em; font-weight: 300; line-height: 1; transform: scaleY(1.15); }
 .mtx-grid { display: inline-grid; gap: 0.25em 0.9em; align-items: center; justify-items: center; }
 .mtx-cell { white-space: nowrap; }
+
+/* Center equations only while they fit. Wide equations begin at the actual
+ * scroll origin, so no left-hand term disappears on a narrow phone. */
+.mtx-display { text-align: left; overflow-x: auto; }
+.mtx-display-inner { display: block; width: max-content; max-width: none; margin-inline: auto; }
+.mtx-boxed { display: inline-block; border: 1px solid currentColor; padding: .18em .3em; }
+.mtx-tag { display: inline-block; margin-inline-start: 1em; font-style: normal; }

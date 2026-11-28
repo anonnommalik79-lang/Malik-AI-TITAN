@@ -5,7 +5,7 @@ export function canParseLatex(source: string): boolean {
   for (let i = 0; i < source.length; i++) {
     if (source[i] === "\\") { commands++; i++; if (commands > 128) return false; continue }
     if (source[i] === "{" && ++depth > 24) return false
-    if (source[i] === "}") depth = Math.max(0, depth - 1)
+    if (source[i] === "}" && --depth < 0) return false
   }
-  return true
+  return depth === 0
 }

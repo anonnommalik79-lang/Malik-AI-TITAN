@@ -504,6 +504,18 @@ check("display maths is typeset, not shown as LaTeX", () => {
   assert.doesNotMatch(html.replace(/aria-label="[^"]*"/g, ""), /\\frac/)
 })
 
+check("display formulas never swallow trailing prose or adjacent formulas", () => {
+  const html = render("$x=1$ Первый вывод.\n\n\\[\n\\frac{1}{2}\n\\] Второй вывод.\n\n$y=2$ $z=3$ Последний вывод.")
+  assert.equal((html.match(/class="mtx mtx-display"/g) || []).length, 4)
+  for (const text of ["Первый вывод.", "Второй вывод.", "Последний вывод."]) assert.ok(html.includes(text), text)
+})
+check("boxed numbered equations and alignment retain mathematical content", () => {
+  const html = render("$\\begin{aligned}x&=1\\\\y&=2\\end{aligned}\\quad\\boxed{x+y=3}\\tag{7}$")
+  assert.match(html, /mtx-grid/)
+  assert.match(html, /mtx-boxed/)
+  assert.match(html, /mtx-tag/)
+  assert.doesNotMatch(html.replace(/aria-label="[^"]*"/g, ""), /\\(?:boxed|tag|begin|end)/)
+})
 check("multi-line \\[ … \\] blocks and inline $…$ are typeset", () => {
   const html = render("Площадь круга $S = \\pi r^2$, а сумма:\n\\[\n\\sum_{i=1}^{n} i = \\frac{n(n+1)}{2}\n\\]")
   assert.match(html, /class="mtx"/)

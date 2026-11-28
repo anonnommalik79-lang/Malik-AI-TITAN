@@ -722,9 +722,16 @@ function parseBlocks(source: string): Block[] {
     if (trimmed.startsWith("$$") || trimmed.startsWith("\\[")) {
       const close = trimmed.startsWith("$$") ? "$$" : "\\]"
       const opening = trimmed.slice(2)
-      if (opening.trim().endsWith(close) && opening.trim().length > close.length) {
-        blocks.push({ kind: "math", tex: opening.trim().slice(0, -close.length) })
-        index += 1
+      const sameLineClose = opening.indexOf(close)
+      if (sameLineClose >= 0) {
+        const formula = opening.slice(0, sameLineClose).trim()
+        const remainder = opening.slice(sameLineClose + close.length)
+        if (formula) blocks.push({ kind: "math", tex: formula })
+        else blocks.push({ kind: "p", lines: [trimmed.slice(0, sameLineClose + 4)] })
+        // A closing delimiter can share the line with prose or the next
+        // formula. Do not consume that text as part of the equation.
+        if (remainder.trim()) lines[index] = remainder.trimStart()
+        else index += 1
         continue
       }
       const body = [opening]
@@ -734,9 +741,12 @@ function parseBlocks(source: string): Block[] {
         end += 1
       }
       if (end < lines.length) {
-        body.push(lines[end].slice(0, lines[end].indexOf(close)))
+        const closing = lines[end].indexOf(close)
+        body.push(lines[end].slice(0, closing))
         blocks.push({ kind: "math", tex: body.join("\n").trim() })
-        index = end + 1
+        const remainder = lines[end].slice(closing + close.length)
+        if (remainder.trim()) { lines[end] = remainder.trimStart(); index = end }
+        else index = end + 1
         continue
       }
       // Not closed yet (still streaming): the rest is shown as it is.
