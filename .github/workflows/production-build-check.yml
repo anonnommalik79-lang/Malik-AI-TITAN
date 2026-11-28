@@ -45,48 +45,81 @@ jobs:
         run: npm ci --legacy-peer-deps
 
       - name: Verify short-chat token budgets and exact provider usage
+        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
         run: npm run test:token-telemetry
 
       - name: Verify security hardening
+        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
         run: npm run test:security-hardening
 
       - name: Verify P0 quota locking and operational rate-limits
+        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
         run: npm run test:p0-quotas
 
-      - name: Core release regression suite
-        run: npm run test:release-core
+      - name: Core release regression suite (collect every failure)
+        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs'
+          import { spawnSync } from 'node:child_process'
+          const scripts = JSON.parse(fs.readFileSync('package.json','utf8')).scripts
+          const commands = scripts['test:release-core'].split(' && ')
+          const failures = []
+          for (const command of commands) {
+            const match = /^npm run (test:[a-z0-9-]+)$/.exec(command)
+            if (!match || !scripts[match[1]]) throw new Error('Unknown release test command: ' + command)
+          }
+          for (const command of commands) {
+            const name = command.slice('npm run '.length)
+            const result = spawnSync('npm', ['run',name], {stdio:'inherit', timeout:180000})
+            if (result.status !== 0) failures.push({name,status:result.status,signal:result.signal,error:result.error?.message})
+          }
+          console.log('RELEASE CORE SUMMARY: ' + JSON.stringify({total:commands.length,passed:commands.length-failures.length,failures}))
+          if (failures.length) process.exitCode = 1
+          NODE
 
       - name: Verify attachment UX
+        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
         run: npm run test:attachment-menu
 
       - name: Verify MALIK Truth Engine V2
+        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
         run: npm run test:truth
 
       - name: Verify Malik Accuracy Engine (deterministic fixtures, no deployment)
+        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
         run: npm run test:accuracy && npm run test:accuracy-routing
 
       - name: Verify Markdown rendering
+        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
         run: npm run test:answer-format
 
       - name: Verify checkpointed website projects (fixtures, no deployment)
+        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
         run: npm run test:website-engine
 
       - name: Verify presentation layouts
+        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
         run: npm run test:presentations
 
       - name: Verify long briefs and safe transport recovery
+        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
         run: npm run test:large-prompts && npm run test:web-recovery
 
       - name: Verify restricted-network transport and guest alias safety
+        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
         run: npm run test:network
 
       - name: Voice regression suite (mobile, desktop, Live)
+        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
         run: npm run test:voice
 
       - name: Verify stream integrity, account memory isolation and audit contract
+        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
         run: npm run test:chat-stream-integrity && npm run test:memory-isolation && npm run test:chat-audit-contract
 
       - name: Live intelligence fixtures and router acceptance
+        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
         run: npm run test:live-intelligence
 
       - name: Typecheck
@@ -94,6 +127,7 @@ jobs:
         run: npm run typecheck
 
       - name: Work delivery, repository runtime and public GitHub boundary (fixtures only)
+        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
         run: npm run test:work-delivery && npm run test:work-runtime && npm run test:work-github-snapshot
 
       - name: Production build
@@ -101,15 +135,19 @@ jobs:
         run: npm run clean && npm run build
 
       - name: Verify Malik model registry
+        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
         run: npm run test:models
 
       - name: Verify long-code runtime
+        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
         run: npm run test:long-code
 
       - name: Verify image memory safety
+        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
         run: npm run test:image-memory
 
       - name: Verify image credits and Agnes routing
+        if: ${{ !cancelled() && steps.dependencies.outcome == 'success' }}
         run: npm run test:image-credits
 
 
