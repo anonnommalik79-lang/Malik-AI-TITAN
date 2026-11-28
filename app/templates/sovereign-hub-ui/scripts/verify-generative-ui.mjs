@@ -56,6 +56,24 @@ test("the router picks a form for each kind of task", () => {
   }
 })
 
+test("adaptive layouts for UI previews, work status and checklists", () => {
+  for (const [prompt, layout] of [
+    ["Покажи пример интерфейса мобильного приложения", "mockup"],
+    ["Create a UI mockup", "mockup"],
+    ["Статус работы над проектом", "status"],
+    ["Deployment status", "status"],
+    ["Сделай чек-лист для переезда", "checklist"],
+    ["Create a checklist for studying", "checklist"],
+    ["Когда открылись станции метро?", "plain"],
+    ["Привет", "plain"],
+    ["Покажи пример интерфейса, только текст", "plain"],
+  ]) {
+    assert.equal(routeUiLayout(prompt).layout, layout, prompt)
+  }
+  assert.match(buildGenerativeUiContract("Статус работы"), /Never mark work done/)
+  assert.match(buildGenerativeUiContract("Покажи пример интерфейса"), /illustrative interface preview/)
+})
+
 test("valid compositions pass; unknown blocks, URL photos and bad expressions are dropped", () => {
   const { doc, issues } = validateUi({
     v: 1, title: "T", state: { qty: 2, price: 10 },
