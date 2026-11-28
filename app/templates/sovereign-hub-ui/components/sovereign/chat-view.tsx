@@ -2036,8 +2036,8 @@ function MessageBubble({
                     {/* While streaming, `malik-streaming` gives the growing
                         answer its caret and lets only newly added blocks
                         fade in (chat-live.css). It is dropped when done. */}
-                    <MalikMarkdown text={displayContent} allowImages={false} referencePhotos autoPreview={!streaming && !olderVersion && !notice && !buildDone && isChatArtifactCreationRequest(question)} collapseCode={buildDone} className={cn(writingLive && "malik-streaming", freshTurn && isTextAnswer && "malik-answer-enter")} citations={visibleResearch?.sources}
-                      visualContext={!olderVersion && !message.generatedMedia && !message.imageConfirmation && !message.superflow
+                    <MalikMarkdown text={displayContent} allowImages={false} referencePhotos={!message.textOnly} autoPreview={!message.textOnly && !streaming && !olderVersion && !notice && !buildDone && isChatArtifactCreationRequest(question)} collapseCode={buildDone} className={cn(writingLive && "malik-streaming", freshTurn && isTextAnswer && "malik-answer-enter")} citations={visibleResearch?.sources}
+                      visualContext={!message.textOnly && !olderVersion && !message.generatedMedia && !message.imageConfirmation && !message.superflow
                         && !["failed", "interrupted", "cancelled"].includes(message.execution?.state || "")
                         ? { question, messageId: message.id, previousQuestion, previousAnswer, hasAttachment: questionHasAttachment, isLatest, streaming } : undefined} />
                     {!streaming && !olderVersion && message.generatedCode ? <InlineGeneratedPreview code={message.generatedCode} /> : null}
@@ -2050,7 +2050,7 @@ function MessageBubble({
               : "")}
           {notice ? <p className="malik-answer-notice" data-malik-answer-notice={notice.kind} role="status">{notice.label}</p> : null}
           {/* Grounded UI how-to: interactive arrow navigator only after the answer is complete. */}
-          {isTextAnswer && !streaming && !notice && !olderVersion && Boolean(displayContent) ? (
+          {isTextAnswer && !message.textOnly && !streaming && !notice && !olderVersion && Boolean(displayContent) ? (
             <MalikTapGuide question={question} answer={displayContent} />
           ) : null}
           {/* The verdict on the text above comes before the reading list it was
