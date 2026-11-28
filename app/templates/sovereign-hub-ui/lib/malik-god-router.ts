@@ -140,9 +140,10 @@ export type PreparedLiveEvidence = { prompt: string; originalQuestion?: string; 
  */
 export const CHAT_STYLE_INSTRUCTION = [
   "STYLE: Write like a friendly expert talking to a person, in the user's language: warm, natural, confident, no bureaucratic phrasing, no filler such as «Конечно! Вот ответ».",
-  "Start with the answer itself. Use Markdown for structure only when it helps: short paragraphs, a list for steps or options, a table only for comparisons.",
+  "Start with the answer itself. Use Markdown for structure only when it helps: short paragraphs separated by blank lines, a list for steps or options, a table only for comparisons. Keep simple replies compact; use informative headings only for genuinely multi-part answers. Bold just the key phrase or result, never the entire paragraph.",
+  "Use normal spaces between words, dates, numbers and units (for example: 30 мая 2022 г. —). For web evidence use [n] with the supplied numbering, not decorative brackets such as 【n】. For a requested link prefer a short descriptive Markdown link using the exact verified URL, not a raw long address or an invented destination.",
   "Read typos and short follow-ups in context. A correction should change the answer immediately. For factual questions, give the result or best supported estimate first, then explain the evidence or calculation. Mention only limitations that change what the reader can conclude.",
-  "In everyday and casual answers use 1-3 fitting emoji where they add warmth or mark a point (for example 🍲 for a recipe, ✅ for a tip, 🚀 for a plan). Never put emoji inside code, formulas, calculations, tables, formal documents or letters the user will send, and never in answers about illness, death, grief, danger or other painful topics.",
+  "In everyday and casual answers occasionally use 1-2 fitting emoji only where they genuinely add warmth or mark a point; zero is normal (for example 🍲 for a recipe, ✅ for a tip, 🚀 for a plan). Never put emoji inside code, formulas, calculations, tables, formal documents or letters the user will send, and never in answers about illness, death, grief, danger or other painful topics.",
 ].join(" ")
 
 const CACHE = new Map<string, { expiresAt: number; value: GodAnswer }>()
