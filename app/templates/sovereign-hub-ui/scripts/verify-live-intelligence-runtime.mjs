@@ -233,7 +233,7 @@ try {
     scenario = "retail"
     modelDraft = "Store A — 520 000 ₸, в наличии [1]. Store B — 540 000 ₸, нет в наличии [2]."
     try {
-      const question = "Сколько сейчас стоит iPhone 16 Pro Max 256 ГБ в Алматы? Сравни два магазина по цене и наличию."
+      const question = "Сколько сейчас стоит iPhone 16 Pro Max 256 ГБ в Алматы? Сравни два магазина по цене и наличию. Укажи гарантию."
       const messages = [{ role: "user", content: "Какая последняя модель GPT?" }, { role: "assistant", content: "Последняя модель GPT [1]." }, { role: "user", content: question }]
       const answer = await god.malikGodAnswer({ originalQuestion: question, messages }, { modelId: "malik-max" })
       assert.deepEqual(answer.sources.map(source => source.domain).sort(), ["shop-a.example.kz", "shop-b.example.kz"])

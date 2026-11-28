@@ -16,7 +16,22 @@ export function decodeHtml(input: string) {
     .replace(/&apos;/g, "'")
     .replace(/&lt;/g, "<")
     .replace(/&gt;/g, ">")
-    .replace(/&nbsp;/g, " ");
+    .replace(/&nbsp;/g, " ")
+    .replace(/&#(x[0-9a-f]{1,6}|\d{1,7});/giu, (entity, encoded: string) => {
+      const scalar = encoded[0].toLowerCase() === "x" ? parseInt(encoded.slice(1), 16) : Number(encoded);
+      return scalar >= 32 && scalar <= 0x10ffff && !(scalar >= 0xd800 && scalar <= 0xdfff) ? String.fromCodePoint(scalar) : entity;
+    });
+}
+
+/** Public pages may declare a legacy charset in HTTP or in an early HTML meta tag. */
+export function decodePageHtml(bytes: ArrayBuffer, contentType: string) {
+  const utf8 = new TextDecoder();
+  const charset = /charset\s*=\s*["']?([\w-]+)/iu;
+  const header = charset.exec(contentType)?.[1];
+  const head = utf8.decode(bytes.slice(0, 4096));
+  const meta = head.match(/<meta\b[^>]*charset\s*=\s*["']?([\w-]+)/iu)?.[1];
+  try { return new TextDecoder(header || meta || "utf-8").decode(bytes); }
+  catch { return utf8.decode(bytes); }
 }
 
 export function stripHtml(input: string) {

@@ -15,6 +15,15 @@ import { mapBounded } from "../lib/live-intelligence/concurrency.ts"
 import { publicAddresses, publicIp } from "../lib/malik-research/public-page-fetch.ts"
 import { explainWorldBirthCohort, worldBirthCohorts, worldBirthCohortAnswer, worldBirthCohortEvidence } from "../lib/live-intelligence/birth-cohort-evidence.ts"
 
+import { decodePageHtml, stripHtml } from "../lib/malik-research/utils.ts"
+
+test("the page reader honors Windows-1251 and decodes a numeric tenge symbol", () => {
+  const latin = new TextEncoder().encode("<meta charset=windows-1251><p>")
+  const price = Uint8Array.from([0xd6, 0xe5, 0xed, 0xe0, 0x3a, 0x20])
+  const tail = new TextEncoder().encode("419 900 &#8376;</p>")
+  const bytes = Uint8Array.from([...latin, ...price, ...tail])
+  assert.equal(stripHtml(decodePageHtml(bytes.buffer, "text/html")), "Цена: 419 900 ₸")
+})
 const NOW = new Date("2026-10-11T13:00:00Z"), clock = () => NOW.getTime()
 const fresh = { title: "Introducing GPT-99 (TEST FIXTURE)", url: "https://openai.com/fixture/gpt-99", domain: "spoof.invalid", snippet: "TEST FIXTURE: official release announcement on 2026-10-11; no real product claim.", publishedAt: "2026-10-11T09:00:00Z" }
 const old = { ...fresh, title: "GPT-1 (TEST FIXTURE)", url: "https://untrusted.example/old", publishedAt: "2023-01-01T00:00:00Z" }

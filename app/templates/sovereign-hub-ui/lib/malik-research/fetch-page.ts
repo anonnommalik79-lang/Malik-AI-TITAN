@@ -1,5 +1,5 @@
 import type { FetchedSource, SearchResult } from "./types";
-import { clampText, cleanTitle, fetchWithTimeout, stripHtml } from "./utils";
+import { clampText, cleanTitle, decodePageHtml, fetchWithTimeout, stripHtml } from "./utils";
 import { fetchPublicPage, publicAddresses } from "./public-page-fetch";
 import { readStructuredRetailOffer } from "../live-intelligence/retail-evidence";
 import { pageDates } from "../live-intelligence/page-dates";
@@ -62,7 +62,7 @@ async function fetchDirect(result: SearchResult, signal: AbortSignal, product = 
     return null;
   }
 
-  const html = await res.text();
+  const html = decodePageHtml(await res.arrayBuffer(), contentType);
   const title = extractTitle(html, result.title || target);
   const text = clampText(stripHtml(html), Number(process.env.RESEARCH_MAX_TEXT || 18000));
 

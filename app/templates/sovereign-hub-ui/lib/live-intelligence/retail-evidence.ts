@@ -101,11 +101,14 @@ export function retailAnswer(question: string, sources: readonly MalikWebSource[
     const offer = relevantRetailOffer(source, retail)
     const text = source.snippet || ""
     const inRequestedCity = !retail.location || source.title.toLowerCase().includes(retail.location.toLowerCase())
-    if (readOnly && (!offer || offer.variantConflict || !inRequestedCity)) return []
     const price = String.raw`(?<![\d.,])(?:от\s+)?(?:\d{1,3}(?:[ \u00a0\u202f]\d{3})+|\d+)(?:[.,]\d{1,2})?\s*(?:₸|тенге|тг\.?|KZT|₽|руб\.)(?!\p{L})(?!\s*[/×])`
     const labelled = [...text.matchAll(new RegExp(`(?:цена|price)\\s*[:=]\\s*(${price})`, "giu"))].map(match => match[1])
     const rawValues = labelled.length ? labelled : [...text.matchAll(new RegExp(price, "giu"))].map(match => match[0])
     const values = [...new Set(rawValues.map(value => value.replace(/\s+/gu, " ").trim()))]
+    const labeledCard = Boolean(source.readAt && labelled.length && values.length === 1 &&
+      isRetailLead({ ...source, url: "", snippet: "" }, retail) && !/(?:каталог|цены от|marketplace)/iu.test(source.title))
+    const verifiedPrice = Boolean(inRequestedCity && (offer ? !offer.variantConflict : labeledCard))
+    if (readOnly && !verifiedPrice) return []
     const amount = offer ? new Intl.NumberFormat("ru", { maximumFractionDigits: 2 }).format(offer.price) + " " + (offer.currency === "KZT" ? "₸" : offer.currency)
       : values.length === 1 ? values[0] : "Цена не подтверждена"
     const availability = offer?.availability === "in-stock" ? "В наличии по данным карточки"
@@ -115,10 +118,10 @@ export function retailAnswer(question: string, sources: readonly MalikWebSource[
       : offer?.condition === "refurbished" ? ". Восстановленный" : ""
     const coverage = offer?.variantConflict ? "Объём памяти в характеристиках расходится с названием карточки"
       : offer ? availability + (retail.location ? ". Остаток в конкретной точке не проверен" : "")
-      : values.length === 1 ? "Цена из фрагмента страницы. Наличие не подтверждено" : availability
-    const region = !inRequestedCity ? ". Наличие в " + retail.location + " не проверено" : ""
-    return [{ source, index, offer, amount, coverage: coverage + condition + region }]
-  }).sort((a, b) => Number(Boolean(b.offer && !b.offer.variantConflict)) - Number(Boolean(a.offer && !a.offer.variantConflict)) || Number(Boolean(b.source.readAt)) - Number(Boolean(a.source.readAt)))
+      : values.length === 1 && !labeledCard ? "Цена из фрагмента страницы. Наличие не подтверждено" : availability
+    const region = !inRequestedCity ? ". Привязка к " + retail.location + " не подтверждена" : ""
+    return [{ source, index, verifiedPrice, amount, coverage: coverage + condition + region }]
+  }).sort((a, b) => Number(b.verifiedPrice) - Number(a.verifiedPrice) || Number(Boolean(b.source.readAt)) - Number(Boolean(a.source.readAt)))
   const stores = new Set<string>()
   const selected = listings.filter(row => {
     if (stores.has(row.source.domain)) return false

@@ -1324,6 +1324,7 @@ export async function malikGodAnswer(
     // bounded call may select read-only evidence, never private tools/writes.
     // It shares the selected model and fits inside the existing token quota.
     const plainLookup = Boolean(kazakhstanLeagueMatch(requestPrompt) || retailLookup(requestPrompt)) && !attachments.length && requestPrompt.length <= 240
+      && !/(?:гаранти|доставк|рекоменду|объясни|укажи цвет|приведи пример|оформи в|в формате)/iu.test(requestPrompt)
     const outputAllowance = Number(body?.maxTokens)
     let domainPlanningBudget = 0
     if (!plainLookup && domainPlan.semantic.needed && (!Number.isFinite(outputAllowance) || outputAllowance >= 1400)) {
@@ -1386,8 +1387,7 @@ export async function malikGodAnswer(
     const retailPartial = directLookup && usedWeb ? retailAnswer(focus.searchText, webSources) : undefined
     const retailConfirmed = directLookup && usedWeb ? retailAnswer(focus.searchText, webSources, true) : undefined
     const matchReply = directLookup && usedWeb ? leagueMatchReply(focus.searchText, sources, freshness.localDate, freshness.language) : undefined
-    const retailHasOffer = webSources.some(source => source.readAt && source.retailOffer && !source.retailOffer.variantConflict)
-    const lookupReply = matchReply || retailConfirmed || (plainLookup && retailPartial && (retailHasOffer || !webSources.some(source => source.readAt)) ? retailPartial : undefined)
+    const lookupReply = matchReply || retailConfirmed || (plainLookup ? retailPartial : undefined)
     if (lookupReply) return { content: lookupReply, provider: "live-evidence", model: matchReply ? "official-match-card" : retailConfirmed ? "structured-retail" : "retail-leads", selectedModelId: selection.modelId, usedWeb: true, sources, attempts: [] }
     // A «когда X сделал Y?» question may rest on an event that never happened.
     // The model may still say so without sources; the gate below drops every
