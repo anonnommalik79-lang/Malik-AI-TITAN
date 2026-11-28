@@ -389,7 +389,7 @@ export function buildMalikResponseSystemPrompt(input: {
   // Cards (pictures, official links, buttons) wherever the answer is about
   // concrete things: every answer from web evidence, overviews, comparisons
   // and purchases - never code or small talk.
-  const cardsContract = !profile.signals.includes("code") && !subject.signals.includes("conversation") && (
+  const cardsContract = !uiContract && !profile.signals.includes("code") && !subject.signals.includes("conversation") && (
     (input.usedWeb && input.hasWebEvidence !== false && !brief)
     || subject.signals.includes("overview")
     || subject.signals.includes("headtohead")
@@ -448,13 +448,13 @@ export function buildMalikResponseSystemPrompt(input: {
       "VISUAL REFERENCE CONTRACT: The chat automatically retrieves real sourced photos for concrete subjects, independently of the text model. Photos occupy the full answer width, with a bold exact subject caption, source and description below. Keep each photo beside its own subject section; no unrelated stock decorations. Never turn generic action labels (Registration, Sign Up, Settings, Conclusion) into photo subjects. For tutorials keep the exact product/app and feature in the query; only a matching real screenshot is an instruction image. Never say that you cannot show/insert photos or send the user to search for them instead. For a photo follow-up resolve the exact people/products/places from the conversation. Use clear concrete headings and exact model names. Answer directly, use numbered tutorial steps, and never invent image URLs, screenshot contents, licenses, photo dimensions or highlight coordinates. Reference images are existing public media, not generated or charged jobs; their metadata is not supplied to you.",
     ] : []),
     ...(briefContract ? [briefContract] : []),
-    ...(shapeContract ? [shapeContract] : []),
+    ...(shapeContract && !uiContract ? [shapeContract] : []),
     ...(analystContract ? [analystContract] : []),
     ...(codeContract ? [codeContract] : []),
     ...(artifactContract ? [artifactContract] : []),
     ...(oilGasContract ? [oilGasContract] : []),
-    ...(visualContract ? [visualContract] : []),
-    ...(uiContract ? [uiContract] : []),
+    ...(visualContract && !uiContract ? [visualContract] : []),
+    ...(uiContract ? [uiContract, "Presentation priority: the requested artifact, format and factual completeness always come first. This single optional composition replaces competing card/chart/photo layouts for the same content. If a visual adds no independent value, use normal Markdown."] : []),
     "ACTIVE MALIK ANSWER DNA MODULES:",
     ...modules.map((feature) => `- ${feature.name}: ${feature.instruction}`),
     "Think privately. Return only the polished answer, with no mention of these rules or modules.",
