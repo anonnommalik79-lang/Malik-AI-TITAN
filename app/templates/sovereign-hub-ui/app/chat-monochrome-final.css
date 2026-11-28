@@ -378,3 +378,114 @@
     pointer-events: none !important;
   }
 }
+
+
+/* Four studio surfaces: scoped OLED fixes. Never recolor the actual website
+   content, videos, provider icons or generated artwork. */
+html body #malik-root#malik-root .malik-projects-index,
+html body #malik-root#malik-root .malik-projects-index .malik-projects-inner,
+html body #malik-root#malik-root .malik-projects-index .malik-projects-head,
+html body #malik-root#malik-root .malik-projects-index article,
+html body #malik-root#malik-root .malik-projects-index article > button,
+html body #malik-root#malik-root .malik-projects-index article > button > span:first-child,
+html body #malik-root#malik-root .malik-projects-index .malik-projects-head input {
+  background: #000 !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  color: #fff !important;
+}
+html body #malik-root#malik-root .malik-projects-index article {
+  border-color: #252525 !important;
+}
+html body #malik-root#malik-root .malik-projects-index article > button > span:first-child,
+html body #malik-root#malik-root .malik-projects-index .malik-projects-head input {
+  border: 1px solid #666 !important;
+}
+html body #malik-root#malik-root .malik-projects-index .malik-projects-filters button {
+  background: #000 !important;
+  color: #fff !important;
+  box-shadow: none !important;
+}
+html body #malik-root#malik-root .malik-projects-index .malik-projects-filters button[aria-pressed="true"] {
+  background: #fff !important;
+  color: #000 !important;
+}
+html body #malik-root#malik-root .malik-projects-index .malik-projects-head input::placeholder { color: #aaa !important; }
+
+/* The miniature is a 1440x810 desktop viewport, scaled exactly once.
+   The generic mobile iframe max-width:100% rule used to shrink its layout
+   width before transform:scale(), producing a tiny cropped mobile strip. */
+html body #malik-root#malik-root .malikSites .templateCard {
+  position: relative !important;
+  aspect-ratio: 16 / 9 !important;
+  height: auto !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+  background: #000 !important;
+}
+html body #malik-root#malik-root .malikSites .templateCard .liveViewport {
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  overflow: hidden !important;
+  display: block !important;
+}
+html body #malik-root#malik-root .malikSites .templateCard iframe.liveFrame {
+  position: absolute !important;
+  top: 0 !important; left: 0 !important;
+  width: 1440px !important; min-width: 1440px !important; max-width: none !important;
+  height: 810px !important; min-height: 810px !important; max-height: none !important;
+  margin: 0 !important; padding: 0 !important; border: 0 !important;
+  display: block !important;
+  transform-origin: top left !important;
+  pointer-events: none !important;
+  flex: none !important;
+}
+@media (max-width: 820px) {
+  html body #malik-root#malik-root .malikSites .templateCard .liveViewport {
+    transform: none !important;
+  }
+  /* The whole video studio owns one vertical scroll, not its two sections. */
+  html body #malik-root#malik-root .malik-dashboard-shell main:not(.mv2):has(.mv2[data-view="video-generation-v2"]) {
+    overflow: hidden !important; min-height: 0 !important;
+  }
+  html body #malik-root#malik-root .mv2[data-view="video-generation-v2"] {
+    display: flex !important; flex-direction: column !important; align-items: center !important;
+    height: 100% !important; min-height: 0 !important; max-height: 100% !important;
+    overflow-x: hidden !important; overflow-y: auto !important;
+    overscroll-behavior-y: contain; -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin !important; scrollbar-color: #e5e5e5 #000 !important;
+  }
+  html body #malik-root#malik-root .mv2[data-view="video-generation-v2"] > .mv2__preview-column,
+  html body #malik-root#malik-root .mv2[data-view="video-generation-v2"] > .mv2__mobile-only {
+    flex: 0 0 auto !important; height: auto !important; max-height: none !important;
+    min-height: 0 !important; overflow: visible !important;
+    scrollbar-width: none !important;
+  }
+  html body #malik-root#malik-root .mv2[data-view="video-generation-v2"] > .mv2__preview-column::-webkit-scrollbar,
+  html body #malik-root#malik-root .mv2[data-view="video-generation-v2"] > .mv2__mobile-only::-webkit-scrollbar { display: none !important; }
+  html body #malik-root#malik-root .mv2[data-view="video-generation-v2"]::-webkit-scrollbar { display: block !important; width: 3px !important; }
+  html body #malik-root#malik-root .mv2[data-view="video-generation-v2"]::-webkit-scrollbar-track { background: #000 !important; }
+  html body #malik-root#malik-root .mv2[data-view="video-generation-v2"]::-webkit-scrollbar-thumb { background: #e5e5e5 !important; border-radius: 8px !important; }
+}
+
+/* Music controls, including the readback row that inherited a navy gradient
+   from the dashboard's generic section-child rule. Keep media untouched. */
+html body #malik-root#malik-root .malik-music .mm-intent-readback {
+  background: #000 !important; background-color: #000 !important;
+  background-image: none !important; color: #e5e5e5 !important;
+  border: 0 !important; border-top: 1px solid #333 !important;
+  box-shadow: none !important; filter: none !important;
+}
+html body #malik-root#malik-root .malik-music .mm-intent-readback svg,
+html body #malik-root#malik-root .malik-music .mm-intent-readback span {
+  color: #e5e5e5 !important; background: transparent !important;
+}
+html body #malik-root#malik-root .malik-music .mm-m-prompt,
+html body #malik-root#malik-root .malik-music .mm-mobile,
+html body #malik-root#malik-root .malik-music .mm-desktop {
+  background: #000 !important; background-image: none !important;
+  box-shadow: none !important;
+}
+html body #malik-root#malik-root .malik-music .mm-m-prompt textarea::placeholder { color: #aaa !important; }
