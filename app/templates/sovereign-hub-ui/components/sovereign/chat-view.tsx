@@ -27,6 +27,8 @@ import {
   ChevronRight,
   Code,
   Copy,
+  Download,
+  MoreHorizontal,
   FilePlus2,
   FileSearch,
   FileCode2,
@@ -90,7 +92,7 @@ import { getMalikPlugin } from "./features/plugin-registry"
 import { prepareFolder } from "@/lib/uploads/folder-digest"
 import { PREFILL_EVENT, takePrefillPrompt } from "@/lib/malik-context"
 import { AnswerSheet } from "./answer-sheet/AnswerSheet"
-import { ChatExecution } from "./ChatExecution"
+import { ChatExecution, downloadChatFile } from "./ChatExecution"
 import { MalikLiveActivity } from "./MalikLiveActivity"
 import { chatAnswerNotice, stripIncompleteNote } from "@/lib/ai/answer-completion"
 import { ChatBuildResult, ChatBuildSteps } from "./ChatBuild"
@@ -1723,6 +1725,76 @@ function UserMessageText({ text }: { text: string }) {
   return <><span className="mct-sent-chip" data-preserve-brand-color="true">{name}</span>{command.rest}</>
 }
 
+/** Overflow actions stay outside the clipped chat column and fit mobile screens. */
+function AnswerMoreMenu({ text, onRegenerate, onOpenSheet, index, total, onChange }: {
+  text: string
+  onRegenerate?: () => void
+  onOpenSheet?: () => void
+  index: number
+  total: number
+  onChange: (index: number) => void
+}) {
+  const trigger = useRef<HTMLButtonElement>(null)
+  const panel = useRef<HTMLDivElement>(null)
+  const [position, setPosition] = useState<React.CSSProperties | null>(null)
+  const close = useCallback((restoreFocus = false) => {
+    setPosition(null)
+    if (restoreFocus) trigger.current?.focus()
+  }, [])
+  useEffect(() => {
+    if (!position) return
+    panel.current?.querySelector<HTMLButtonElement>("button:not(:disabled)")?.focus()
+    const outside = (event: PointerEvent) => {
+      if (event.target instanceof Node && !panel.current?.contains(event.target) && !trigger.current?.contains(event.target)) close()
+    }
+    const key = (event: KeyboardEvent) => {
+      if (event.key === "Escape") { event.preventDefault(); close(true) }
+    }
+    const scroll = (event: Event) => {
+      if (!(event.target instanceof Node) || !panel.current?.contains(event.target)) close()
+    }
+    const resize = () => close()
+    document.addEventListener("pointerdown", outside)
+    document.addEventListener("keydown", key)
+    window.addEventListener("scroll", scroll, true)
+    window.addEventListener("resize", resize)
+    return () => {
+      document.removeEventListener("pointerdown", outside)
+      document.removeEventListener("keydown", key)
+      window.removeEventListener("scroll", scroll, true)
+      window.removeEventListener("resize", resize)
+    }
+  }, [position, close])
+  const toggle = () => {
+    if (position) { close(true); return }
+    const rect = trigger.current?.getBoundingClientRect()
+    if (!rect) return
+    const width = Math.min(224, window.innerWidth - 16)
+    const below = window.innerHeight - rect.bottom - 14
+    const above = rect.top - 14
+    const upward = below < 210 && above > below
+    setPosition({
+      width, left: Math.max(8, Math.min(rect.left, window.innerWidth - width - 8)),
+      maxHeight: Math.max(48, upward ? above : below),
+      ...(upward ? { bottom: window.innerHeight - rect.top + 6 } : { top: rect.bottom + 6 }),
+    })
+  }
+  const act = (action: () => void) => { close(true); action() }
+  return <>
+    <button ref={trigger} type="button" className="malik-answer-more-trigger" title="Ещё" aria-label="Другие действия с ответом" aria-expanded={Boolean(position)} onClick={toggle}>
+      <MoreHorizontal className="h-5 w-5" aria-hidden="true" />
+    </button>
+    {position ? createPortal(
+      <div ref={panel} className="malik-answer-more-popover" role="group" aria-label="Другие действия с ответом" style={position}>
+        {onRegenerate ? <button type="button" onClick={() => act(onRegenerate)}><RefreshCw size={16} aria-hidden="true" />Перегенерировать</button> : null}
+        {text ? <button type="button" onClick={() => act(() => downloadChatFile("malik-ai-answer.md", text.trim() + "\n", "text/markdown;charset=utf-8"))}><Download size={16} aria-hidden="true" />Скачать ответ</button> : null}
+        {onOpenSheet ? <button type="button" onClick={() => act(onOpenSheet)}><FileText size={16} aria-hidden="true" />Открыть лист / PDF</button> : null}
+        {total > 1 ? <div className="malik-answer-more-versions"><span>Версии ответа</span><VersionPager index={index} total={total} onChange={next => { close(true); onChange(next) }} /></div> : null}
+      </div>, document.body
+    ) : null}
+  </>
+}
+
 function MessageBubble({
   message,
   workspaceMode = "chat",
@@ -2009,6 +2081,17 @@ function MessageBubble({
                 {copied ? <span className="sr-only" role="status">Скопировано</span> : null}
               </button>
             ) : null}
+            {compactTurn ? <>
+              {hasActionContent ? <>
+              <button type="button" title="Полезно" aria-label="Полезный ответ" aria-pressed={feedback === "up"} onClick={() => onFeedback?.(message.id, "up")} className={cn("malik-feedback-action rounded-md p-1 hover:bg-white/10 hover:text-white", feedback === "up" && "is-active")}><ThumbsUp className="h-4 w-4" /></button>
+              <button type="button" title="Не полезно" aria-label="Неполезный ответ" aria-pressed={feedback === "down"} onClick={() => onFeedback?.(message.id, "down")} className={cn("malik-feedback-action rounded-md p-1 hover:bg-white/10 hover:text-white", feedback === "down" && "is-active")}><ThumbsDown className="h-4 w-4" /></button>
+                <ReadAloudButton id={message.id} text={actionContent} />
+                <button type="button" title="Поделиться" aria-label="Поделиться ответом" onClick={() => onShare?.(actionContent)} className="rounded-md p-1 hover:bg-white/10 hover:text-white"><Share className="h-4 w-4" /></button>
+              </> : null}
+              <AnswerMoreMenu text={actionContent} onRegenerate={onRegenerate ? () => onRegenerate(message.id) : undefined}
+                onOpenSheet={onOpenSheet && hasActionContent && displayContent.trim() ? () => onOpenSheet(message.id, olderVersion ?? undefined) : undefined}
+                index={shownVersion} total={versionTotal} onChange={index => setCursor({ index, revision })} />
+            </> : <>
             <VersionPager index={shownVersion} total={versionTotal} onChange={index => setCursor({ index, revision })} />
             {hasActionContent ? <>
               <ReadAloudButton id={message.id} text={actionContent} />
@@ -2026,6 +2109,7 @@ function MessageBubble({
                 </button>
               ) : null}
             </> : null}
+            </>}
           </div>
         )}
         {/* Compact, inspectable completion statistics, directly below the answer.
@@ -3060,7 +3144,7 @@ export function ChatView({ messages, workspaceMode = "chat", onSendMessage, onIm
         }
         #malik-root .malik-chat-fullwidth .malik-message-row .malik-source-square .malik-source-icon img { width: 13px !important; height: 13px !important; }
         #malik-root .malik-chat-fullwidth [data-malik-compact-answer="1"] .malik-message-actions {
-          gap: 3px !important; margin-top: 6px !important; width: 100% !important;
+          gap: 8px !important; margin-top: 8px !important; width: 100% !important; flex-wrap: nowrap !important;
           justify-content: flex-start !important; align-items: center !important;
         }
         #malik-root .malik-chat-fullwidth [data-malik-compact-answer="1"] .malik-message-actions button {
@@ -3073,6 +3157,30 @@ export function ChatView({ messages, workspaceMode = "chat", onSendMessage, onIm
         #malik-root .malik-chat-fullwidth [data-malik-compact-answer="1"] .malik-message-actions button[aria-pressed="true"] {
           background: #222 !important; color: #fff !important;
         }
+        #malik-root .malik-chat-fullwidth [data-malik-compact-answer="1"] .malik-message-actions button svg {
+          width: 19px !important; height: 19px !important; flex-shrink: 0 !important;
+        }
+        .malik-answer-more-popover {
+          position: fixed; z-index: 2147483000; box-sizing: border-box; overflow: auto;
+          padding: 5px; border: 1px solid #333; border-radius: 12px;
+          background: #181818; color: #eee; box-shadow: 0 8px 30px #0009;
+          font-size: 14px; line-height: 20px;
+        }
+        .malik-answer-more-popover > button {
+          display: flex; align-items: center; gap: 10px; width: 100%; min-height: 40px;
+          text-align: left; padding: 8px 10px; border: 0; border-radius: 7px;
+          background: transparent; color: inherit; cursor: pointer;
+        }
+        .malik-answer-more-popover button:hover, .malik-answer-more-popover button:focus-visible { background: #303030; outline: none; }
+        .malik-answer-more-popover svg { flex: 0 0 auto; }
+        .malik-answer-more-versions {
+          border-top: 1px solid #333; padding: 8px 10px;
+          display: flex; justify-content: space-between; align-items: center; gap: 8px;
+          color: #aaa; font-size: 12px;
+        }
+        .malik-answer-more-versions .malik-versions { display: inline-flex; align-items: center; gap: 5px; }
+        .malik-answer-more-versions button { min-width: 24px; min-height: 26px; border-radius: 5px; }
+        .malik-answer-more-versions button:disabled { opacity: .3; }
         @media (min-width: 1024px) {
           .malik-dashboard-shell main > section {
             flex: 1 1 100% !important;
