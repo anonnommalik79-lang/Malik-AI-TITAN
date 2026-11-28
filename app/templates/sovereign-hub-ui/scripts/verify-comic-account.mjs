@@ -78,3 +78,18 @@ test("both public chat entry points and streaming engine are wired", () => {
     assert.ok(file.includes("account-addressing"), path + " must be wired")
   }
 })
+
+test("greeting preserves delta offsets and identical replays", async () => {
+  const events = [
+    {type:"content",content:"Hello",contentMode:"delta",offset:0,generationId:"g"},
+    {type:"content",content:"Hello",contentMode:"delta",offset:0,generationId:"g"},
+    {type:"content",content:" world",contentMode:"delta",offset:5,generationId:"g"},
+    {type:"done",finalContent:"Hello world",generationId:"g"},
+  ]
+  const response = new Response(events.map(e => "event: "+e.type+"\ndata: "+JSON.stringify(e)+"\n\n").join(""), {headers:{"content-type":"text/event-stream"}})
+  const result = await addressChatResponse(response, account, {messages:messages(1)})
+  const parsed = (await result.text()).trim().split("\n\n").map(f=>JSON.parse(f.split("data: ")[1]))
+  assert.equal(parsed[0].content,parsed[1].content)
+  assert.equal(parsed[2].offset,parsed[0].content.length)
+  assert.equal(parsed[0].content+parsed[2].content,parsed[3].finalContent)
+})

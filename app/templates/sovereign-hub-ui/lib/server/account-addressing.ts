@@ -54,6 +54,7 @@ function addressSse(source: ReadableStream<Uint8Array>, greeting: string): Reada
   const encoder = new TextEncoder()
   let buffer = ""
   let firstContentAddressed = false
+  let addedPrefix = ""
 
   function transformFrame(frame: string) {
     const lines = frame.split("\n")
@@ -64,10 +65,22 @@ function addressSse(source: ReadableStream<Uint8Array>, greeting: string): Reada
       const data = JSON.parse(lines[dataIndex].slice(5).trim())
       if (!data || typeof data !== "object") return frame
       let changed = false
-      if ((event === "content" || data.type === "content") && typeof data.content === "string" && data.content.length && !firstContentAddressed) {
-        data.content = addressAnswer(data.content, greeting)
-        firstContentAddressed = true
-        changed = true
+      if ((event === "content" || data.type === "content" || data.type === "delta") && typeof data.content === "string" && data.content.length) {
+        if (!firstContentAddressed) {
+          const original = data.content
+          data.content = addressAnswer(original, greeting)
+          addedPrefix = data.content.slice(0, data.content.length - original.length)
+          firstContentAddressed = true
+          changed = true
+        } else if (addedPrefix && data.contentMode === "snapshot") {
+          data.content = addedPrefix + data.content
+          changed = true
+        } else if (addedPrefix && typeof data.offset === "number") {
+          // Rebase the wire ledger after inserting the server-side greeting.
+          if (data.offset === 0) data.content = addedPrefix + data.content
+          else data.offset += addedPrefix.length
+          changed = true
+        }
       }
       if (event === "done" || data.type === "done") {
         if (typeof data.finalContent === "string") {
