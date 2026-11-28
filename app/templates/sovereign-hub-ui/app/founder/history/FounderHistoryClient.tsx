@@ -50,12 +50,13 @@ export default function FounderHistoryClient() {
         fetch("/api/founder/overview", { credentials: "same-origin", cache: "no-store", signal: controller.signal }),
         fetch("/api/founder/activity", { credentials: "same-origin", cache: "no-store", signal: controller.signal }),
       ])
-      const users = await a.json() as Overview, logs = await b.json() as Activity
       if (controller.signal.aborted) return
       if ([401, 403].includes(a.status) || [401, 403].includes(b.status)) {
         setOverview(null); setActivity(null)
         throw new Error("Нет доступа")
       }
+      const users = await a.json().catch(() => ({ ok: false })) as Overview, logs = await b.json().catch(() => ({ ok: false })) as Activity
+      if (controller.signal.aborted) return
       if (a.ok && users.ok) setOverview(users)
       if (b.ok && logs.ok) setActivity(logs)
       if (!a.ok || !b.ok || !users.ok || !logs.ok) throw new Error(logs.error || users.error || "Сервер временно недоступен")
@@ -88,7 +89,7 @@ export default function FounderHistoryClient() {
   return (
     <main className="relative z-[80] min-h-[100dvh] bg-black px-3 pb-16 pt-3 text-white sm:px-5 lg:px-10 lg:pt-7">
       <div className="mx-auto max-w-[1500px]">
-        <header className="hidden lg:flex mb-7 flex flex-wrap items-start justify-between gap-4 border-b border-zinc-800 pb-5">
+        <header className="hidden lg:flex mb-7 flex-wrap items-start justify-between gap-4 border-b border-zinc-800 pb-5">
           <div>
             <p className="mb-2 text-[11px] font-semibold tracking-[.2em] text-zinc-500">MALIK AI / PRIVATE FOUNDER DATABASE</p>
             <h1 className="text-2xl font-semibold tracking-tight sm:text-4xl">История запросов</h1>
@@ -138,7 +139,7 @@ export default function FounderHistoryClient() {
               <button type="button" aria-expanded={mobileFilters} onClick={() => setMobileFilters(!mobileFilters)} className="shrink-0 rounded-xl border border-white/60 px-2 text-xs font-semibold">Фильтры</button>
             </div>
             {mobileFilters || selectedEmail ? <select aria-label="Аккаунт" value={selectedEmail} onChange={e => { setSelectedEmail(e.target.value); setMobileLimit(30) }} className="mb-2 w-full min-w-0 rounded-lg border border-white/50 bg-black px-2 py-2 text-base text-white"><option value="">Все аккаунты</option>{users.map(user => <option key={user.id || user.email} value={user.email || user.id}>{user.email || user.name || user.id}</option>)}</select> : null}
-            <div className="mb-3 flex min-w-0 gap-1.5 overflow-x-auto pb-1">{(Object.keys(labels) as Filter[]).map(key => <button key={key} type="button" aria-pressed={filter === key} onClick={() => { setFilter(key); setMobileLimit(30) }} className={`min-h-9 shrink-0 rounded-full border px-2 text-[10px] font-semibold ${filter === key ? "border-white bg-white text-black" : "border-white/35 text-white"}`}>{labels[key]} · {metric(counts[key])}</button>)}</div>
+            <div className="mb-3 flex min-w-0 flex-wrap gap-1.5">{(Object.keys(labels) as Filter[]).map(key => <button key={key} type="button" aria-pressed={filter === key} onClick={() => { setFilter(key); setMobileLimit(30) }} className={`min-h-9 rounded-full border px-2 text-[10px] font-semibold ${filter === key ? "border-white bg-white text-black" : "border-white/35 text-white"}`}>{labels[key]} · {metric(counts[key])}</button>)}</div>
             <div className="space-y-2.5">
               {loading && unavailable ? <p className="p-4 text-sm text-zinc-400">Загружаем историю…</p> : unavailable || (incomplete && !filtered.length) ? <p className="p-4 text-sm text-zinc-400">Полная история временно недоступна. Попробуйте обновить.</p> : !filtered.length ? <p className="p-4 text-sm text-zinc-400">Нет записей по выбранному фильтру.</p> : filtered.slice(0, mobileLimit).map(row => {
                 const status = row.status || "success", open = expanded === row.id, answer = row.assistantText || (status === "pending" ? "Ответ ещё не завершён" : "Ответ не был сохранён")
