@@ -31,6 +31,9 @@ function blockText(block: Block, scope: ExprScope, out: string[]) {
     case "callout": out.push(`> ${block.title ? `**${block.title}** ` : ""}${plain(block.text, scope)}`); return
     case "quote": out.push(`> ${block.text}${block.author ? ` — ${block.author}` : ""}`); return
     case "divider": out.push("---"); return
+    case "row": block.items.forEach(child => blockText(child, scope, out)); return
+    case "status": out.push(block.items.map(item => "- " + ({done:"✓",running:"…",pending:"○",failed:"×"}[item.state]) + " " + item.label + (item.detail ? " — " + item.detail : "")).join("\n")); return
+    case "drawing": out.push([block.title, block.description, ...block.shapes.filter(s => s.kind === "text").map(s => s.kind === "text" ? s.text : "")].filter(Boolean).join("\n")); return
     case "list": out.push(block.items.map((item, index) => `${block.style === "number" ? `${index + 1}.` : block.style === "check" ? "- [ ]" : "-"} ${typeof item === "string" ? item : `**${item.title}**${item.text ? ` — ${item.text}` : ""}`}`).join("\n")); return
     case "image": out.push(`*Фото: ${block.image.caption || block.image.alt || block.image.query}*`); return
     case "gallery": out.push(block.images.map((image) => `*Фото: ${image.caption || image.alt || image.query}*`).join("\n")); return
