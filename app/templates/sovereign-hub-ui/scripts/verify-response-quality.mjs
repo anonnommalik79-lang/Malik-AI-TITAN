@@ -256,7 +256,8 @@ check("a question about a whole subject is an overview, not a two-sentence looku
   }
   const prompt = buildMalikResponseSystemPrompt({ prompt: "скажи про второго президента", currentDate: "2026-10-04" })
   assert.match(prompt, /OVERVIEW CONTRACT/)
-  assert.match(prompt, /malik-photos/)
+  assert.match(prompt, /MALIK GENERATIVE UI/)
+  assert.match(prompt, /Do not force decorative images/)
   assert.match(prompt, /Актуально на 2026-10-04/)
 })
 
@@ -269,7 +270,7 @@ check("a definition, a greeting and «кратко» stay short", () => {
   assert.doesNotMatch(buildMalikResponseSystemPrompt({ prompt: "Что такое рендер?" }), /OVERVIEW CONTRACT|HEAD-TO-HEAD CONTRACT/)
 })
 
-check("named contenders get a real head-to-head with a photo lineup", () => {
+check("named contenders keep a real head-to-head without forcing a duplicate photo lineup", () => {
   for (const prompt of ["сравни жестком уровне чатгпт и клод", "что лучше iphone или samsung", "ChatGPT vs Claude", "в чем разница между react и vue"]) {
     const profile = analyzeResponseRequest(prompt)
     assert.ok(profile.signals.includes("headtohead"), prompt)
@@ -278,7 +279,8 @@ check("named contenders get a real head-to-head with a photo lineup", () => {
   assert.equal(analyzeResponseRequest("сравни жестком уровне чатгпт и клод").complexity, "complex")
   const prompt = buildMalikResponseSystemPrompt({ prompt: "сравни чатгпт и клод", currentDate: "2026-10-04" })
   assert.match(prompt, /HEAD-TO-HEAD CONTRACT/)
-  assert.match(prompt, /"layout":"lineup"/)
+  assert.match(prompt, /MALIK GENERATIVE UI/)
+  assert.doesNotMatch(prompt, /"layout":"lineup"/)
   assert.match(prompt, /Never invent benchmarks/)
   assert.match(prompt, /Comparison Matrix/)
   // Advice between two actions is not a match between contenders.
