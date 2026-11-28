@@ -245,6 +245,19 @@ await check("quota, sign-in and the person's own stop are never papered over", a
   }
 })
 
+await check("wrapped or plain user cancellation never starts a rescue", async () => {
+  for (const error of [new Error("Остановлено пользователем."), "Остановлено пользователем."]) {
+    const { run, log } = deadlineRun()
+    await assert.rejects(withinChatDeadline(Promise.reject(error), tiny, Date.now(), run), value => value === error)
+    assert.deepEqual(log, [])
+  }
+  const controller = new AbortController()
+  const { run, log } = deadlineRun({ signal: controller.signal })
+  controller.abort(new DOMException("Cancelled", "AbortError"))
+  await assert.rejects(withinChatDeadline(never(), tiny, Date.now(), run), { name: "AbortError" })
+  assert.deepEqual(log, [])
+})
+
 await check("an answer in time passes through untouched", async () => {
   const { run, log } = deadlineRun()
   assert.equal(await withinChatDeadline(Promise.resolve("answer"), tiny, Date.now(), run), "answer")
