@@ -28,7 +28,7 @@ import { UI_FENCE } from "@/lib/generative-ui/protocol"
  * model output is parsed into React elements and never injected as HTML.
  */
 
-import { citationName, safeHttps, subjectCitationUrl, trustedLink, type MalikCitation } from "@/lib/ai/citation-names"
+import { citationName, hostOf, safeHttps, subjectCitationUrl, trustedLink, type MalikCitation } from "@/lib/ai/citation-names"
 import { answerOutline, faqToDetails, prosConsLabel, weightedMatrix, type WeightedMatrix } from "@/lib/ai/answer-layouts"
 import { beforeAfterLabel, diffLineKind, diffStats, heatmapTable, heatShade, isUnifiedDiff, parseTextTree, type Heatmap, type TreeNode } from "@/lib/ai/answer-code-views"
 import { parseAnswerQuiz, type AnswerQuiz } from "@/lib/ai/answer-quiz"
@@ -197,6 +197,26 @@ function MarkdownLink({ href, label }: { href: string; label: string }) {
   )
 }
 
+/** Compact bare URLs without inventing evidence or altering the stored answer. */
+function BareAnswerLink({ url }: { url: string }) {
+  const sources = useContext(CitationContext)
+  const safe = safeHttps(url)
+  if (!safe) return <>{url}</>
+  const source = sources?.find((item) => trustedLink(safe, [item]))
+  if (sources?.length && !source) return <>{url}</>
+  const label = source?.title?.trim() || hostOf(safe)
+  return <MarkdownLink href={safe} label={label || url} />
+}
+
+// Repair only recognizable collapsed Russian calendar dates in plain prose.
+// Never guess boundaries in arbitrary words, identifiers, code or formulas.
+function answerProse(text: string) {
+  return text
+    .replace(/(?<![\p{L}\p{N}])([0-3]?\d)[ \u00a0]*(января|февраля|марта|апреля|мая|июня|июля|августа|сентября|октября|ноября|декабря)[ \u00a0]*((?:19|20)\d{2})(?!\d)/giu, "$1 $2 $3")
+    .replace(/((?:19|20)\d{2})г\.(?=\s|[—–,;!?]|$)/gu, "$1 г.")
+    .replace(/(\d{4} г\.)([—–])(?=\s|\p{L})/gu, "$1 $2")
+}
+
 function citationNumbers(token: string) {
   return [...new Set((token.match(/\d{1,2}/g) || []).map(Number).filter((number) => number > 0))]
 }
@@ -276,23 +296,25 @@ function inline(text: string, keyPrefix: string): ReactNode[] {
  */
 function inlineBase(text: string, keyPrefix: string): ReactNode[] {
   const nodes: ReactNode[] = []
-  const pattern = /(`[^`\n]+`)|(\*\*[^*\n]+\*\*)|(__[^_\n]+__)|(\*[^*\n]+\*)|(\[[^\]\n]+\]\(((?:https?:\/\/|\/api\/)[^\s)]+)\))|((?:\s?\[\d{1,2}(?:\s*[,;]\s*\d{1,2})*\])+(?!\())|((?<![\p{L}\p{N}_])_(?![\s_])[^_\n]+?(?<![\s_])_(?![\p{L}\p{N}_]))/gu
+  const pattern = /(`[^`\n]+`)|(\*\*[^*\n]+\*\*)|(__[^_\n]+__)|(\*[^*\n]+\*)|(\[[^\]\n]+\]\(((?:https?:\/\/|\/api\/)[^\s)]+)\))|((?:\s?(?:\[\d{1,2}(?:\s*[,;]\s*\d{1,2})*\]|【\d{1,2}(?:\s*[,;]\s*\d{1,2})*】))+(?!\())|((?<![\p{L}\p{N}_])_(?![\s_])[^_\n]+?(?<![\s_])_(?![\p{L}\p{N}_]))|(https?:\/\/[^\s<>"«»]+[^\s<>"«».,;:!?)}\]])/gu
 
   let last = 0
   let match: RegExpExecArray | null
   let index = 0
 
   while ((match = pattern.exec(text)) !== null) {
-    if (match.index > last) nodes.push(text.slice(last, match.index))
+    if (match.index > last) nodes.push(answerProse(text.slice(last, match.index)))
     const token = match[0]
     const key = `${keyPrefix}-i${index++}`
 
-    if (match[7]) {
+    if (match[9]) {
+      nodes.push(<BareAnswerLink key={key} url={token} />)
+    } else if (match[7]) {
       nodes.push(<CitationChip key={key} numbers={citationNumbers(token)} raw={token} />)
     } else if (token.startsWith("`")) {
       nodes.push(<code key={key} className="malik-md-code">{token.slice(1, -1)}</code>)
     } else if (token.startsWith("**") || token.startsWith("__")) {
-      nodes.push(<strong key={key} className="malik-md-strong">{token.slice(2, -2)}</strong>)
+      nodes.push(<strong key={key} className="malik-md-strong">{answerProse(token.slice(2, -2))}</strong>)
     } else if (token.startsWith("[")) {
       const label = token.slice(1, token.indexOf("]"))
       const href = match[6] || "#"
@@ -308,8 +330,8 @@ function inlineBase(text: string, keyPrefix: string): ReactNode[] {
     last = match.index + token.length
   }
 
-  if (last < text.length) nodes.push(text.slice(last))
-  return nodes.length ? nodes : [text]
+  if (last < text.length) nodes.push(answerProse(text.slice(last)))
+  return nodes.length ? nodes : [answerProse(text)]
 }
 
 type ListItem = { text: string; checked: boolean | null; children: ListBlock[] }
