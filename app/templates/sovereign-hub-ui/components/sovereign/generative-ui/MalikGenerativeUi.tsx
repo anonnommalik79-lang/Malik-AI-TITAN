@@ -168,6 +168,9 @@ function UiBlock({ block }: { block: Block }) {
     case "text": return <UiText text={block.text} tone={block.tone || "body"} />
     case "badge": return <UiBadge text={block.text} />
     case "divider": return <hr className="mgu-divider" />
+    case "row": return <div className="mgu-flex-row"><UiBlocks blocks={block.items} /></div>
+    case "status": return <ul className="mgu-status-list">{block.items.map((item,index) => <li key={index}><span className={"mgu-status-icon is-"+item.state} aria-hidden="true">{item.state === "done" ? <CheckCircle2 /> : item.state === "failed" ? <AlertTriangle /> : item.state === "running" ? "◷" : "○"}</span><div><strong>{item.label}</strong>{item.detail ? <p>{item.detail}</p> : null}<span className="mgu-status-label">{{done:"Готово",running:"В процессе",pending:"Ожидает",failed:"Ошибка"}[item.state]}</span></div></li>)}</ul>
+    case "drawing": return <UiDrawing block={block} />
     case "list": {
       const Tag = block.style === "number" ? "ol" : "ul"
       return <Tag className={`mgu-list is-${block.style || "bullet"}`}>
@@ -218,6 +221,26 @@ function UiBlock({ block }: { block: Block }) {
       <div className="mgu-accordion__body"><UiBlocks blocks={item.items} /></div>
     </details>)}</div>
   }
+}
+
+function UiDrawing({ block }: { block: Extract<Block, { type: "drawing" }> }) {
+  const uid = useId().replace(/[^a-zA-Z0-9_-]/g, "")
+  return <figure className="mgu-drawing">
+    {block.title ? <figcaption><strong>{block.title}</strong></figcaption> : null}
+    <svg viewBox={`0 0 ${block.width} ${block.height}`} role="img" aria-label={block.description} xmlns="http://www.w3.org/2000/svg">
+      <defs><marker id={`arrow-${uid}`} viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="context-stroke" /></marker></defs>
+      {block.shapes.map((s, i) => {
+        switch(s.kind) {
+          case "rect": return <rect key={i} x={s.x} y={s.y} width={s.w} height={s.h} rx={s.radius} fill={s.fill} stroke={s.stroke} strokeWidth={2} />
+          case "ellipse": return <ellipse key={i} cx={s.x} cy={s.y} rx={s.rx} ry={s.ry} fill={s.fill} stroke={s.stroke} strokeWidth={2} />
+          case "line": return <line key={i} x1={s.x} y1={s.y} x2={s.x2} y2={s.y2} stroke={s.stroke} strokeWidth={2} markerEnd={s.arrow ? `url(#arrow-${uid})` : undefined} />
+          case "polyline": { const points = s.points.map(p => p.join(",")).join(" "); return s.closed ? <polygon key={i} points={points} fill={s.fill} stroke={s.stroke} strokeWidth={2} /> : <polyline key={i} points={points} fill="none" stroke={s.stroke} strokeWidth={2} /> }
+          case "text": return <text key={i} x={s.x} y={s.y} fill={s.fill} fontSize={s.size} textAnchor={s.align}>{s.text}</text>
+        }
+      })}
+    </svg>
+    <p className="mgu-note">{block.description}</p>
+  </figure>
 }
 
 function UiHeading({ text, level, eyebrow }: { text: Value; level: 1 | 2 | 3; eyebrow?: string }) {
