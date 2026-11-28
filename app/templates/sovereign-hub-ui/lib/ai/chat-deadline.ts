@@ -42,6 +42,9 @@ function settleBy<T>(promise: Promise<T>, at: number): Promise<{ done: true; val
 /** Quota, sign-in and the person's own «Стоп» are answers in themselves; never paper over them. */
 function rescuableFailure(error: unknown) {
   if ((error as Error)?.name === "AbortError") return false
+  const message = typeof error === "string" ? error : (error as Error)?.message
+  // Background cancellation can be propagated as a plain string or a wrapped Error.
+  if (message === "Остановлено пользователем.") return false
   const status = Number((error as { status?: unknown })?.status)
   return !Number.isFinite(status) || status >= 500
 }
@@ -55,11 +58,15 @@ function rescuableFailure(error: unknown) {
  */
 export async function withinChatDeadline<T>(main: Promise<T>, deadline: ChatAnswerDeadline, startedAt: number, run: {
   wrote: () => boolean
+  /** External cancellation only, never the internal controller used to switch writers. */
+  signal?: AbortSignal
   stop: () => void
   rescue: () => Promise<T>
   partial: (reason: "time" | "interrupted") => T
 }): Promise<T> {
+  const checkCancelled = () => run.signal?.throwIfAborted()
   const recover = (error: unknown) => {
+    checkCancelled()
     if (!rescuableFailure(error)) throw error
     console.warn("[MALIK_CHAT_DEADLINE] run failed", JSON.stringify({ wrote: run.wrote(), error: error instanceof Error ? error.message : String(error) }))
     run.stop()
@@ -68,6 +75,7 @@ export async function withinChatDeadline<T>(main: Promise<T>, deadline: ChatAnsw
   let first: { done: true; value: T } | { done: false }
   try { first = await settleBy(main, startedAt + deadline.rescueAtMs) }
   catch (error) { return recover(error) }
+  checkCancelled()
   if (first.done) return first.value
   if (!run.wrote()) {
     console.warn("[MALIK_CHAT_DEADLINE] no text by the rescue deadline, rescuing", JSON.stringify({ afterMs: Date.now() - startedAt }))
@@ -78,6 +86,7 @@ export async function withinChatDeadline<T>(main: Promise<T>, deadline: ChatAnsw
   let second: { done: true; value: T } | { done: false }
   try { second = await settleBy(main, startedAt + deadline.hardMs) }
   catch (error) { return recover(error) }
+  checkCancelled()
   if (second.done) return second.value
   console.warn("[MALIK_CHAT_DEADLINE] hard deadline, delivering the written text", JSON.stringify({ afterMs: Date.now() - startedAt }))
   run.stop()
