@@ -40,7 +40,7 @@ check("Markdown image rows render as galleries alongside existing code and table
   assert.match(markdown, /<MalikVisualGallery key=\{key\}/)
   assert.match(chat, /allowImages=\{false\}/)
   // Model-written image URLs stay off; verified reference photos are on.
-  assert.match(chat, /allowImages=\{false\} referencePhotos/)
+  assert.match(chat, /allowImages=\{false\} referencePhotos=\{!message.textOnly\}/)
   assert.match(markdown, /<CodeBlock language=\{block\.language\}/)
 })
 check("Chat anchors references inside completed answers and keeps history lazy", () => {
@@ -59,7 +59,7 @@ check("Chat anchors references inside completed answers and keeps history lazy",
 })
 check("Completed UI instructions show accurate, clickable arrow schemes without invented screenshot positions", () => {
   assert.match(chat, /<MalikTapGuide question=\{question\} answer=\{displayContent\}/)
-  assert.match(chat, /isTextAnswer && !streaming && !notice && !olderVersion && Boolean\(displayContent\) \? \(\s*<MalikTapGuide/)
+  assert.match(chat, /isTextAnswer && !message.textOnly && !streaming && !notice && !olderVersion && Boolean\(displayContent\) \? \(\s*<MalikTapGuide/)
   assert.match(tapGuide, /data-malik-highlighted-target/)
   assert.match(tapGuide, /aria-label="Следующий шаг"/)
   assert.match(tapGuide, /onClick=\{\(\) => setActive\(stepIndex\)\}/)

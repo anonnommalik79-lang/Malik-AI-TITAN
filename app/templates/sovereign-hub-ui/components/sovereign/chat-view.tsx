@@ -2036,7 +2036,7 @@ function MessageBubble({
                     {/* While streaming, `malik-streaming` gives the growing
                         answer its caret and lets only newly added blocks
                         fade in (chat-live.css). It is dropped when done. */}
-                    <MalikMarkdown text={displayContent} allowImages={false} referencePhotos={!message.textOnly} autoPreview={!message.textOnly && !streaming && !olderVersion && !notice && !buildDone && isChatArtifactCreationRequest(question)} collapseCode={buildDone} className={cn(writingLive && "malik-streaming", freshTurn && isTextAnswer && "malik-answer-enter")} citations={visibleResearch?.sources}
+                    <MalikMarkdown text={displayContent} allowImages={false} referencePhotos={!message.textOnly} autoPreview={!streaming && !olderVersion && !message.textOnly && !notice && !buildDone && isChatArtifactCreationRequest(question)} collapseCode={buildDone} className={cn(writingLive && "malik-streaming", freshTurn && isTextAnswer && "malik-answer-enter")} citations={visibleResearch?.sources}
                       visualContext={!message.textOnly && !olderVersion && !message.generatedMedia && !message.imageConfirmation && !message.superflow
                         && !["failed", "interrupted", "cancelled"].includes(message.execution?.state || "")
                         ? { question, messageId: message.id, previousQuestion, previousAnswer, hasAttachment: questionHasAttachment, isLatest, streaming } : undefined} />
