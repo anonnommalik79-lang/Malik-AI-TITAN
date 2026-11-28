@@ -5828,21 +5828,34 @@ export function Dashboard({ guestMode = false, initialView = "home", initialWork
       }
       replacement = fresh
     }
+    // Project chats share the same cloud history and deletion tombstones.
+    setDeletedChatIds(prev => [...new Set([...prev, threadId])].slice(-1000))
     setChats((previous) => {
       const kept = previous.filter((chat) => chat.id !== threadId)
       return fresh ? [fresh, ...kept] : kept
     })
-    if (activeChatId === threadId && replacement) {
-      setActiveChatId(replacement.id)
-      setMessages(replacement.messages)
-      setGeneratedCode("")
-      modeActiveChatIdsRef.current[workspaceMode] = replacement.id
+    if (activeChatId === threadId) {
+      activeStreamAbortRef.current?.abort("project-thread-deleted")
+      setActiveChatId(replacement?.id || null)
+      setMessages(replacement?.messages || [])
+      const artifact = [...(replacement?.messages || [])].reverse().find(message => message.role === "assistant" && message.generatedCode)
+      setGeneratedCode(artifact?.generatedCode || "")
+      setStreamingText("")
+      setIsGeneratingTerminal(false)
+      setMobilePreviewOpen(false)
+      const nextModel = replacement?.selectedModelId && canUseMalikModel(replacement.selectedModelId, currentPlan) ? replacement.selectedModelId : DEFAULT_MALIK_MODEL_ID
+      setSelectedModelId(nextModel)
+      saveMalikModelSelection(nextModel)
+      modeActiveChatIdsRef.current[workspaceMode] = replacement?.id || null
     }
-  }, [activeChatId, chats, workspaceMode])
+  }, [activeChatId, chats, workspaceMode, currentPlan])
 
   const handleDeleteProject = useCallback((projectId: string) => {
+    const deleted = [projectId, ...chatsRef.current.filter(chat => chat.projectId === projectId).map(chat => chat.id)]
+    setDeletedChatIds(prev => [...new Set([...prev, ...deleted])].slice(-1000))
     setChats((previous) => previous.filter((chat) => chat.id !== projectId && chat.projectId !== projectId))
-    if (activeProjectWorkspaceId === projectId) {
+    if (activeProjectWorkspaceId === projectId || (activeChatId && deleted.includes(activeChatId))) {
+      activeStreamAbortRef.current?.abort("project-deleted")
       setActiveProjectWorkspaceId(null)
       setActiveChatId(null)
       setMessages([])
@@ -5851,7 +5864,7 @@ export function Dashboard({ guestMode = false, initialView = "home", initialWork
       setIsGeneratingTerminal(false)
       modeActiveChatIdsRef.current[workspaceMode] = null
     }
-  }, [activeProjectWorkspaceId, workspaceMode])
+  }, [activeProjectWorkspaceId, activeChatId, workspaceMode])
 
   const handleWorkspaceModeChange = useCallback((nextMode: WorkspaceMode) => {
     safeOpenView("home", "topbar")
