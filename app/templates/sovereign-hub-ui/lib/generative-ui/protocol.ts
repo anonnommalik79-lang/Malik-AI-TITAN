@@ -64,11 +64,21 @@ export type ControlBlock = Base & {
   min?: number; max?: number; step?: number; unit?: string; options?: Array<{ label: string; value: string | number }>
 }
 
+export type DrawingShape =
+  | { kind: "rect"; x: number; y: number; w: number; h: number; radius: number; fill: string; stroke: string }
+  | { kind: "ellipse"; x: number; y: number; rx: number; ry: number; fill: string; stroke: string }
+  | { kind: "line"; x: number; y: number; x2: number; y2: number; stroke: string; arrow: boolean }
+  | { kind: "polyline"; points: number[][]; stroke: string; fill: string; closed: boolean }
+  | { kind: "text"; x: number; y: number; text: string; size: number; fill: string; align: "start" | "middle" | "end" }
+export type DrawingBlock = Base & { type: "drawing"; title?: string; description: string; width: number; height: number; shapes: DrawingShape[] }
+export type StatusBlock = Base & { type: "status"; items: Array<{ label: string; detail?: string; state: "done" | "running" | "pending" | "failed" }> }
+
 export type Block =
   | HeadingBlock | TextBlock | ListBlock | QuoteBlock | CalloutBlock | DividerBlock | BadgeBlock
   | ImageBlock | GalleryBlock | MetricBlock | ProgressBlock | CodeBlock | FileBlock | CitationBlock
-  | TableBlock | ChartBlock | TimelineBlock | FlowBlock | TreeBlock | ControlBlock
+  | TableBlock | ChartBlock | TimelineBlock | FlowBlock | TreeBlock | ControlBlock | DrawingBlock | StatusBlock
   | (Base & { type: "card"; title?: Value; eyebrow?: string; body?: Value; image?: ImageRef; badge?: string; footer?: string; variant?: "plain" | "outline" | "hero" | "emphasis" | "numbered"; number?: string; href?: string; items?: Block[] })
+  | (Base & { type: "row"; items: Block[] })
   | (Base & { type: "grid"; columns?: 1 | 2 | 3 | 4; items: Block[] })
   | (Base & { type: "stack"; items: Block[]; gap?: "tight" | "normal" | "loose" })
   | (Base & { type: "section"; title?: string; eyebrow?: string; number?: string; items: Block[] })
@@ -76,7 +86,7 @@ export type Block =
   | (Base & { type: "accordion"; items: Array<{ title: string; items: Block[]; open?: boolean }> })
 
 export type BlockType = Block["type"]
-export type ContainerBlock = Extract<Block, { type: "card" | "grid" | "stack" | "section" | "tabs" | "accordion" }>
+export type ContainerBlock = Extract<Block, { type: "card" | "row" | "grid" | "stack" | "section" | "tabs" | "accordion" }>
 
 export type UiDocument = {
   v: typeof UI_VERSION
@@ -88,7 +98,7 @@ export type UiDocument = {
 
 export const BLOCK_TYPES: readonly BlockType[] = [
   "heading", "text", "list", "quote", "callout", "divider", "badge", "image", "gallery", "metric", "progress", "code", "file", "citation",
-  "table", "chart", "timeline", "flow", "tree", "control", "card", "grid", "stack", "section", "tabs", "accordion",
+  "table", "chart", "timeline", "flow", "tree", "control", "drawing", "status", "card", "row", "grid", "stack", "section", "tabs", "accordion",
 ]
 
 /** Limits that keep one answer light enough to render on a phone. */
