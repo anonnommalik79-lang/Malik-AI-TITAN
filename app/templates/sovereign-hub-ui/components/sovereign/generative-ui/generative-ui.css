@@ -292,3 +292,34 @@
   .mgu-table th, .mgu-table td { padding: 9px 11px; }
   .mgu-search input { width: 90px; }
 }
+
+
+/* Calm, readable compositions inside chat; avoid heavy nested panel paint. */
+#malik-root .malik-md .mgu {
+  --mgu-card: #080808;
+  --mgu-card-2: #111;
+  --mgu-line: #292929;
+  color: #f5f5f5;
+  font-weight: 400;
+  letter-spacing: normal;
+  word-spacing: normal;
+  gap: 12px;
+}
+#malik-root .malik-md .mgu :is(.mgu-text,.mgu-card__text,.mgu-list) {
+  font-weight: 400;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+#malik-root .malik-md .mgu .mgu-card.is-outline { background: transparent !important; box-shadow:none !important; }
+#malik-root .malik-md .mgu .mgu-card__items > .mgu-card { border-radius: 10px; }
+#malik-root .malik-md .mgu .mgu-card__title { font-size: 16px; font-weight: 650; }
+#malik-root .malik-md .mgu .mgu-heading h2 { font-size: 20px; font-weight: 650; }
+#malik-root .malik-md .mgu .mgu-callout { background: transparent !important; box-shadow: none !important; }
+#malik-root .malik-md .mgu .mgu-badge { height:auto; min-height:22px; white-space:normal; overflow-wrap:anywhere; }
+@media (max-width:560px) {
+  #malik-root .malik-md .mgu { font-size:15px; gap:10px; }
+  #malik-root .malik-md .mgu .mgu-card__body { padding:12px; }
+  #malik-root .malik-md .mgu .mgu-card.is-hero .mgu-card__title { font-size:19px; }
+  #malik-root .malik-md .mgu :is(button,input,select) { max-width:100%; }
+  #malik-root .malik-md .mgu :is(.mgu-tabs,.mgu-card__top) { min-width:0; flex-wrap:wrap; }
+}
