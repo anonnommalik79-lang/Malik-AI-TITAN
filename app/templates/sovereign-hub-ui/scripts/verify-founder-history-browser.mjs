@@ -88,7 +88,7 @@ try {
     if (!mobile) await page.getByRole("button").filter({ hasText: "Pending request" }).click()
     const completeText = `Pending completed ${width}`
     await store.appendFounderMessage({ id: "pending-1", userId: users[0].email, source: "chat", userText: "Pending request", assistantText: completeText, status: "success" })
-    await page.clock.runFor(30_100)
+    await page.clock.runFor(120_100)
     await page.getByText(completeText, { exact: true }).filter({ visible: true }).waitFor()
     if (!mobile) await page.getByRole("button").filter({ hasText: "Alpha request" }).click()
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false)
