@@ -74,6 +74,25 @@ test("adaptive layouts for UI previews, work status and checklists", () => {
   assert.match(buildGenerativeUiContract("Покажи пример интерфейса"), /illustrative interface preview/)
 })
 
+test("original vector drawings and flexible compositions are validated", () => {
+  assert.equal(routeUiLayout("Нарисуй треугольник").layout,"drawing")
+  assert.equal(routeUiLayout("Покажи интерактивный пример").layout,"custom")
+  const { doc } = validateUi({v:1,blocks:[
+    {type:"drawing",description:"A simple triangle",width:320,height:200,shapes:[
+      {kind:"polyline",points:[[20,180],[160,20],[300,180]],closed:true,stroke:"#ffffff",fill:"none"},
+      {kind:"rect",x:0,y:0,w:40,h:40,fill:"url(https://evil.invalid/a)",stroke:"#fff"},
+      {kind:"script",code:"alert(1)"}
+    ]},
+    {type:"row",items:[{type:"text",text:"A"},{type:"text",text:"B"}]},
+    {type:"status",items:[{label:"Test",state:"invalid"}]}
+  ]})
+  assert.ok(doc)
+  assert.equal(doc.blocks[0].shapes.length,2)
+  assert.equal(doc.blocks[0].shapes[1].fill,"none")
+  assert.equal(doc.blocks[2].items[0].state,"pending")
+  assert.match(uiToText(doc),/A simple triangle/)
+})
+
 test("valid compositions pass; unknown blocks, URL photos and bad expressions are dropped", () => {
   const { doc, issues } = validateUi({
     v: 1, title: "T", state: { qty: 2, price: 10 },
