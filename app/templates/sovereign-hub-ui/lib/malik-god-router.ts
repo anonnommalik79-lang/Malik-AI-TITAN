@@ -28,7 +28,7 @@ import { chatWebsiteInstruction } from "@/lib/server/chat-website-design"
 import { fetchEiaSpotEvidence } from "@/lib/server/petroleum-eia"
 import { asksCompanyMoney, classifyFreshness, freshnessMode, isModelLeaderboardRequest, NO_WEB, publicSearchText, requireEvidence, type FreshnessMode, type FreshnessIntent } from "@/lib/ai/freshness-intent"
 import { latinBrandName, withLatinBrand } from "@/lib/ai/colloquial"
-import { assessSources, currentEvidenceAvailable, currentNewsSources, finalizeFreshAnswer, freshnessCheckLine, freshnessEvidenceInstruction, isSocialEvidenceSource, safeEvidenceUrl, sourceDisagreements, unavailableFreshAnswer, verifiedOccurrenceAnswer } from "@/lib/live-intelligence/evidence"
+import { assessSources, currentEvidenceAvailable, currentNewsSources, finalizeFreshAnswer, freshnessCheckLine, freshnessEvidenceInstruction, isSocialEvidenceSource, partialFreshAnswer, safeEvidenceUrl, sourceDisagreements, unavailableFreshAnswer, verifiedOccurrenceAnswer } from "@/lib/live-intelligence/evidence"
 import { lastOccurrenceRequest, occurrenceSubjectPattern } from "@/lib/ai/last-occurrence"
 import { searchTimeFilters } from "@/lib/live-intelligence/search-time-filters"
 import { searchNewsFeed } from "@/lib/live-intelligence/news-search"
@@ -36,6 +36,8 @@ import { runLiveSearch, type LiveSearchProvider } from "@/lib/live-intelligence/
 import { publisherRelease, releasePublisher, verifiedPublisherRelease } from "@/lib/live-intelligence/release-catalog"
 import { worldBirthCohortEvidence, worldBirthCohortAnswer, explainWorldBirthCohort } from "@/lib/live-intelligence/birth-cohort-evidence"
 import { mapBounded } from "@/lib/live-intelligence/concurrency"
+import { fetchNationalBankQuote, nationalBankQuote, verifiedNationalBankReply } from "@/lib/live-intelligence/official-exchange-rate"
+import { isRetailLead, retailLookup, retailPageEvidence } from "@/lib/live-intelligence/retail-evidence"
 import { indexedSources } from "@/lib/live-intelligence/index-reader"
 import { parseKnowledgeFeed, KNOWLEDGE_FEEDS, type KnowledgeFeed } from "@/lib/live-intelligence/feed-updater"
 import { shouldUseWeb } from "@/lib/ai/web-search-policy"
@@ -101,6 +103,7 @@ function auditGroundedAnswer(content: string, sources: SourceItem[], prompt: str
     const computedLines = accuracy?.claims.filter(claim => claim.evidence === "deterministic" || (claim.origin === "user-data" && claim.evidence === "user"))
       .map(claim => lines.find(line => line === claim.text)).filter((line): line is string => Boolean(line))
       .filter(line => /^[\d\s.,()+\-−×*·÷/%^=≈]+$/u.test(line)
+        || /^[-−+]?\d[\d\s.,]*\s*(?:₸|тенге|KZT|USD|EUR|₽|руб\.?|[$€])[.!]?$/iu.test(line)
         || /^(?:Ответ|Результат|Итого|Платящие пользователи|Выручка|Месячная выручка|Платёж за период|Сумма после капитализации|Answer|Result|Total|Paying users|Revenue|Monthly revenue|Payment per period)\s*[:=]\s*[$€₸]?\s*[\d\s.,/]+\s*(?:USD|EUR|KZT|₸|тенге|руб\.?|[$€])?\s*[.!]?$/iu.test(line))
     // With no page read there is nothing to judge against, so the answer says
     // so rather than saying nothing — an unchecked figure that looks checked is
@@ -601,12 +604,26 @@ function buildQueries(prompt: string, intent: FreshnessIntent) {
   const q = normalizeWebSearchQuery(prompt)
   // Use the public, redacted copy to build provider queries.
   const occurrence = intent.lastOccurrence && lastOccurrenceRequest(prompt)
+  if (occurrence?.opening) {
+    const query = [occurrence.location, occurrence.subject].filter(Boolean).join(" ")
+    return [`${query} открылись открытие дата`, `${query} последние открытые станции ввод в эксплуатацию`, q]
+  }
   if (occurrence) {
     const subject = occurrence.subject
     const report = intent.language === "kk" ? "қашан өтті қорытындысы" : intent.language === "en" ? "held dates recap" : "прошёл даты итоги"
     const alternate = intent.language === "kk" ? "итоги прошёл даты" : "official held dates recap"
     return [...new Set([`${subject} ${intent.localDate.slice(0, 4)} ${report}`, `${subject} ${intent.localDate.slice(0, 4)} ${alternate}`, `${subject} ${report}`])]
       .slice(0, Math.max(1, Math.min(3, Number(process.env.MALIK_GOD_MAX_SEARCH_QUERIES || 3))))
+  }
+  const retail = retailLookup(prompt)
+  if (retail) {
+    const product = [retail.subject, retail.location].filter(Boolean).join(" ")
+    return [`${product} купить цена наличие магазины`, `${product} цена интернет-магазин`, q]
+  }
+  if (intent.news && intent.window) {
+    const short = q.replace(/(?:[.!?]\s*|\s+)(?:для каждого|укажи|дай ссылк|приведи ссылк|include|give|cite).*/iu, "")
+    const place = /(?:в|по|in)\s+(.+?)\s+(?:за\s+последн|за\s+минувш|сегодня|вчера|in\s+the\s+(?:last|past))/iu.exec(short)?.[1]
+    return place ? [`${place} ${intent.language === "en" ? "news" : "новости"}`, short, q] : [short, q]
   }
   if (intent.reason === "demographic-statistic") {
     const cohort = birthCohortDataQuery(q, intent.localDate.slice(0, 4))
@@ -714,14 +731,19 @@ function identityTokensForNamedSubject(namedSubject: string, prompt: string) {
 
 function rankSourcesForPrompt(prompt: string, sources: SourceItem[], intent: FreshnessIntent) {
   if (intent.lastOccurrence) {
-    const name = occurrenceSubjectPattern(intent.lastOccurrence.subject)
+    const name = occurrenceSubjectPattern(intent.lastOccurrence.subject, intent.lastOccurrence.opening)
     const matches = (text: string) => name.test(text.replace(/ё/giu, "е"))
     return sources.filter(source => matches(`${source.title} ${source.snippet || ""} ${source.url}`))
       .sort((a, b) => Number(matches(b.title)) - Number(matches(a.title)))
   }
+  const retail = retailLookup(prompt)
+  if (retail) sources = sources.filter(source => isRetailLead(source, retail))
   const cohortTokens = intent.reason === "demographic-statistic" && birthCohortDataQuery(normalizeWebSearchQuery(prompt), intent.localDate.slice(0, 4))
     ? ["population", "age", "cohort"] : []
-  const tokens = Array.from(new Set([...searchTokens(normalizeWebSearchQuery(prompt)), ...knownNameAliases(prompt), ...cohortTokens]))
+  const newsTopics = intent.news ? searchTokens(buildQueries(publicSearchText(prompt), intent)[0] || "")
+    .filter(token => !/новост|^news$/iu.test(token))
+    .map(token => /^[а-яё]{6,}[аеиуы]$/iu.test(token) ? token.slice(0, -1) : token) : []
+  const tokens = Array.from(new Set([...searchTokens(normalizeWebSearchQuery(prompt)), ...knownNameAliases(prompt), ...cohortTokens, ...newsTopics]))
   const eventIdentity = searchTokens(eventSearchTitle(prompt))
   const namedSubject = extractNamedSubject(prompt)
   const subjectTokens = Array.from(new Set([...searchTokens(namedSubject), ...(namedSubject ? knownNameAliases(prompt) : [])]))
@@ -768,16 +790,29 @@ async function gatherSources(question: string, emit?: ResearchEmitter, activity?
   const budget = AbortSignal.any([AbortSignal.timeout(22_000), ...(signal ? [signal] : [])])
   const intent = classifyFreshness(prompt, new Date(started), timeZone)
   const queries = buildQueries(publicSearchText(prompt), intent)
+  const retail = retailLookup(prompt)
+  if (intent.needsSearch && nationalBankQuote(prompt).length) {
+    const call = activity?.start("Официальный курс валют", "read", "web.read", { domain: "nationalbank.kz" })
+    const bankSources = await fetchNationalBankQuote(prompt, intent, budget)
+    signal?.throwIfAborted()
+    activity?.finish(call, compactSearchReceipt(bankSources, { provider: "nationalbank-official-quote" }), bankSources.length ? "completed" : "failed")
+    if (bankSources.length) {
+      const assessed = assessSources(prompt, bankSources, intent)
+      for (const source of assessed) emit?.({ kind: "source", text: "Проверен курс Нацбанка Казахстана", source, url: source.url, domain: source.domain })
+      emit?.({ kind: "done", text: "Официальный курс проверен" })
+      return assessed
+    }
+  }
   const publisher = !intent.window && !intent.historical && releasePublisher(prompt)
   const releaseFeed = publisher && KNOWLEDGE_FEEDS.find(feed => feed.id === publisher.id && feed.kind === "rss")
   const providers: LiveSearchProvider[] = [
     ...(releaseFeed ? [{ name: `publisher-releases:${releaseFeed.id}`, timeoutMs: 4600, run: (_query: string, limit: number, searchSignal: AbortSignal) => searchPublisherReleases(releaseFeed, prompt, limit, searchSignal) }] : []),
     ...(!intent.lastOccurrence && /next\.?js|react/iu.test(prompt) && needsCurrentEvidence(prompt) ? [{ name: "github-releases", timeoutMs: 5500, run: searchOfficialReleases }] : []),
+    ...(intent.news ? [{ name: "google-news", run: (query: string, limit: number, searchSignal: AbortSignal) => searchGoogleNews(query, limit, searchSignal, intent) }] : []),
     ...(env("SERPER_API_KEY") ? [{ name: "serper", run: (query: string, limit: number, searchSignal: AbortSignal) => searchSerper(query, limit, searchSignal, intent) }] : []),
     ...(env("BRAVE_SEARCH_API_KEY") ? [{ name: "brave", run: (query: string, limit: number, searchSignal: AbortSignal) => searchBrave(query, limit, searchSignal, intent) }] : []),
     ...(env("TAVILY_API_KEY") ? [{ name: "tavily", run: (query: string, limit: number, searchSignal: AbortSignal) => searchTavily(query, limit, searchSignal, intent) }] : []),
-    ...(intent.news ? [{ name: "google-news", run: (query: string, limit: number, searchSignal: AbortSignal) => searchGoogleNews(query, limit, searchSignal, intent) }] : []),
-    ...(!intent.lastOccurrence && /(?:ИИ|AI|LLM|ЖИ|модел|model|GPT|OpenAI|Anthropic|Claude|Google|Gemini|DeepMind|Grok|xAI)/iu.test(prompt) ? KNOWLEDGE_FEEDS.filter((feed) => /google|gemini|deepmind/iu.test(prompt) ? feed.id === "deepmind" : /anthropic|claude/iu.test(prompt) ? feed.id === "anthropic" : /grok|xai/iu.test(prompt) ? feed.id === "xai" : ["openai", "deepmind", "anthropic"].includes(feed.id)).map((feed) => ({ name: `official-feed:${feed.id}`, timeoutMs: 5500, run: (query: string, limit: number, searchSignal: AbortSignal) => searchOfficialFeed(feed, query, limit, searchSignal) })) : []),
+    ...(!intent.lastOccurrence && !retail && !intent.news && /(?<!\p{L})(?:(?:ИИ|AI|LLM|ЖИ)(?!\p{L})|модел\p{L}*|models?|GPT|OpenAI|Anthropic|Claude|Google|Gemini|DeepMind|Grok|xAI)/iu.test(prompt) ? KNOWLEDGE_FEEDS.filter((feed) => /google|gemini|deepmind/iu.test(prompt) ? feed.id === "deepmind" : /anthropic|claude/iu.test(prompt) ? feed.id === "anthropic" : /grok|xai/iu.test(prompt) ? feed.id === "xai" : ["openai", "deepmind", "anthropic"].includes(feed.id)).map((feed) => ({ name: `official-feed:${feed.id}`, timeoutMs: 5500, run: (query: string, limit: number, searchSignal: AbortSignal) => searchOfficialFeed(feed, query, limit, searchSignal) })) : []),
     { name: "bing-rss", run: searchBingRss },
     ...(!intent.news ? [{ name: "google-news", run: (query: string, limit: number, searchSignal: AbortSignal) => searchGoogleNews(query, limit, searchSignal, intent) }] : []),
     ...(env("JINA_SEARCH_DISABLED") === "true" ? [] : [{ name: "jina", run: searchJina }]),
@@ -788,7 +823,8 @@ async function gatherSources(question: string, emit?: ResearchEmitter, activity?
     prompt, queries: needsCurrentEvidence(prompt) ? [...requestedQueries].sort((a, b) => Number(b.includes("site:")) - Number(a.includes("site:"))) : requestedQueries,
     providers: candidates, mode: depth, signal: budget, intent,
     rank: (sources) => rankSourcesForPrompt(prompt, sources, intent),
-    ...(publisher ? { isUsefulLead: (sources: SourceItem[]) => sources.some(source => source.authority === "primary" && (source.domain === publisher.domain || source.domain.endsWith("." + publisher.domain))) } : {}),
+    ...(publisher ? { isUsefulLead: (sources: SourceItem[]) => sources.some(source => source.authority === "primary" && (source.domain === publisher.domain || source.domain.endsWith("." + publisher.domain))) }
+      : retail ? { isUsefulLead: (sources: SourceItem[]) => new Set(sources.map(source => source.domain)).size >= 2 } : {}),
     onQuery: (query) => emit?.({ kind: "search", text: `Ищу актуальную информацию · ${query}` }),
   })
   // Publish before starting I/O: the UI must observe a genuinely running search.
@@ -798,7 +834,7 @@ async function gatherSources(question: string, emit?: ResearchEmitter, activity?
   try {
     ;[live, indexed] = await Promise.all([
     search(providers, mode),
-    intent.needsSearch ? indexedSources(prompt).catch(() => ({ sources: [] as SourceItem[], health: { status: "unavailable" } })) : Promise.resolve({ sources: [] as SourceItem[], health: { status: "not-requested" } }),
+    intent.needsSearch && !retail && !intent.news ? indexedSources(prompt).catch(() => ({ sources: [] as SourceItem[], health: { status: "unavailable" } })) : Promise.resolve({ sources: [] as SourceItem[], health: { status: "not-requested" } }),
     ])
     signal?.throwIfAborted()
   } catch (error) {
@@ -812,10 +848,9 @@ async function gatherSources(question: string, emit?: ResearchEmitter, activity?
   // out of consideration.
   const ranked = rankSourcesForPrompt(prompt, uniqueSources(all, Math.max(maxSearchResults * 8, 96)), intent)
   if (cohortSource) ranked.unshift(cohortSource)
-  const unique = diverseSources(
-    intent.news || intent.lastOccurrence ? currentNewsSources(prompt, assessSources(prompt, ranked, intent), intent) : ranked,
-    maxSearchResults,
-  )
+  const eligible = intent.news || intent.lastOccurrence ? currentNewsSources(prompt, assessSources(prompt, ranked, intent), intent) : ranked
+  const unique = diverseSources(eligible, maxSearchResults)
+  if (intent.news) unique.push(...eligible.filter(source => !unique.includes(source)).slice(0, maxSearchResults - unique.length))
   activity?.finish(searchCall, compactSearchReceipt(unique, {
     calls: live.calls, cacheHits: live.cacheHits, fallbackSuccesses: live.fallbackSuccesses,
     providers: live.attempts, index: indexed.health,
@@ -834,7 +869,7 @@ async function gatherSources(question: string, emit?: ResearchEmitter, activity?
   }
 
   const maxSources = Math.max(1, Math.min(8, Number(process.env.MALIK_GOD_MAX_SOURCES || 8)))
-  const pageLimit = mode === "fast" ? (intent.lastOccurrence ? 4 : 2) : mode === "deep" ? 4 : 6
+  const pageLimit = mode === "fast" ? (intent.lastOccurrence || intent.news ? 4 : retail ? 3 : 2) : mode === "deep" ? 4 : 6
   const triedPages = new Set<string>()
   let readPages = 0
   const readSource = async (source: SourceItem) => {
@@ -860,7 +895,7 @@ async function gatherSources(question: string, emit?: ResearchEmitter, activity?
     activity?.finish(call, page ? { title: page.title, characters: page.text.length, excerpt: page.text.slice(0, 1200) } : { title: source.title, snippet: source.snippet, limitation: "Полная страница недоступна; доступен только поисковый фрагмент" }, page ? "completed" : "failed", page ? undefined : "Не удалось прочитать полную страницу")
     if (!page) return source
     readPages++
-    const pageEvidence = { ...source, occurrence: undefined, title: page.title || source.title, snippet: page.text.slice(0, intent.lastOccurrence ? 18_000 : attributionKind(prompt) ? 5200 : 2200), publishedAt: page.publishedAt || source.publishedAt, updatedAt: page.updatedAt, checkedAt: new Date().toISOString(), readAt: page.readAt || new Date().toISOString(), ...(page.image ? { image: page.image } : {}) }
+    const pageEvidence = { ...source, occurrence: undefined, title: page.title || source.title, snippet: retail ? retailPageEvidence(page.text, page.title || source.title) : page.text.slice(0, intent.lastOccurrence ? 18_000 : attributionKind(prompt) ? 5200 : 2200), publishedAt: page.publishedAt || source.publishedAt, updatedAt: page.updatedAt, checkedAt: new Date().toISOString(), readAt: page.readAt || new Date().toISOString(), ...(page.image ? { image: page.image } : {}) }
     const opened = intent.lastOccurrence ? assessSources(prompt, [pageEvidence], intent)[0] : pageEvidence
     if (!opened) return source
     emit?.({ kind: "source", text: `Получен текст страницы · ${opened.domain}`, source: opened, url: opened.url, domain: opened.domain, title: opened.title, provider: opened.provider })
@@ -886,7 +921,7 @@ async function gatherSources(question: string, emit?: ResearchEmitter, activity?
     const localRecap = safeSubject && /(?:казахстан|астан[аеыу]|алмат[ыа]|қазақстан|kazakhstan|astana|almaty|\.kz\b)/iu.test(context)
       ? `"${safeSubject.replace(/^(?:ai|ии)\s*&\s*/iu, "").replace(/"/gu, "")}" ${editionYear} итоги прошел site:gov.kz`
       : ""
-    const followUpQuery = localRecap || queries[1] || queries[0]
+    const followUpQuery = intent.lastOccurrence.opening ? `${queries[0]}${localRecap ? " site:gov.kz" : ""}` : localRecap || queries[1] || queries[0]
     const unusedProvider = providers.find(provider => !live.attempts.some(attempt => attempt.provider === provider.name))
     // A differently scoped query through the working provider can recover an original report behind reposts.
     const alternativesToTry = localRecap ? [providers[0], unusedProvider].filter((provider): provider is LiveSearchProvider => Boolean(provider))
@@ -928,7 +963,7 @@ export function sourceContext(sources: SourceItem[], prompt = "") {
       const names = mentionedCurrentModels(prompt, `${s.title} ${s.snippet || ""}`)
       const scope = currentModelSubjects(prompt).length ? names.length ? `\nExact requested versions mentioned: ${names.join(", ")} (mention alone does not establish release/availability)` : "\nBackground source only: no exact requested version mentioned. Do not use this to establish non-existence or the latest version." : ""
       const occurrence = s.occurrence && s.readAt ? `\nConfirmed occurrence: ${s.occurrence.start} to ${s.occurrence.end}. Page excerpt: ${s.occurrence.excerpt}` : ""
-      return `[${i + 1}] ${s.title}\nURL: ${s.url}\nDomain: ${s.domain}\nEvidence checked: ${s.checkedAt || "unknown"}\nPage read: ${s.readAt || "not read; search snippet only"}\nAuthority: ${s.authority || "unknown"}\nFreshness: ${s.freshness || "unknown"}${s.publishedAt ? "\nPublished: " + s.publishedAt : "\nPublication date: not supplied"}${occurrence}${scope}${s.image ? "\nPage picture: available (use \"image\": " + (i + 1) + " on its card ONLY if it depicts this exact subject; a generic page image is not evidence of a model version)" : ""}\nSnippet: ${s.snippet || ""}`
+      return `[${i + 1}] ${s.title}\nURL: ${s.url}\nDomain: ${s.domain}\nEvidence checked: ${s.checkedAt || "unknown"}\nPage read: ${s.readAt || "not read; search snippet only"}\nAuthority: ${s.authority || "unknown"}\nFreshness: ${s.freshness || "unknown"}${s.publishedAt ? "\nPublished (reporting time, not event time): " + s.publishedAt : "\nPublication date: not supplied"}${occurrence}${scope}${s.image ? "\nPage picture: available (use \"image\": " + (i + 1) + " on its card ONLY if it depicts this exact subject; a generic page image is not evidence of a model version)" : ""}\nSnippet: ${s.snippet || ""}`
     })
     .join("\n\n")].filter(Boolean).join("\n\n")
 }
@@ -1304,12 +1339,16 @@ export async function malikGodAnswer(
     if ((usedWeb || mandatory) && freshness.needsSearch && freshness.category !== "STATIC" && !currentEvidenceAvailable(webSources, freshness)) {
       return { content: unavailableFreshAnswer(freshness, format), provider: "live-evidence-gate", model: "no-current-evidence", selectedModelId: selection.modelId, usedWeb: webSources.length > 0, sources: webSources, attempts: [] }
     }
+    const rateReply = !format && !attachments.length && !connected.context && verifiedNationalBankReply(focus.searchText, sources, freshness)
+    if (rateReply) return { content: rateReply, provider: "live-evidence", model: "verified-official-rate", selectedModelId: selection.modelId, usedWeb: true, sources, attempts: [] }
     const occurrenceReply = verifiedOccurrenceAnswer(freshness, webSources, format, sources)
     if (occurrenceReply) return { content: occurrenceReply, provider: "live-evidence", model: "verified-occurrence", selectedModelId: selection.modelId, usedWeb: true, sources, attempts: [] }
     const releaseReply = !freshness.window && !attachments.length && !connected.context && verifiedPublisherRelease(focus.searchText, webSources, freshness.language, format)
     if (releaseReply) return { content: releaseReply, provider: "live-evidence", model: "verified-publisher-release", selectedModelId: selection.modelId, usedWeb: true, sources, attempts: [] }
     const usedEvidence = usedWeb || Boolean(connected.context) || science.sources.length > 0 || Boolean(eiaEvidence.context)
     const strictPrompt = [
+      retailLookup(focus.searchText) ? "Retail question. Compare only the exact version and memory requested. Each store's listing needs its own citation. Give the confirmed stores and price when the full comparison is unavailable. Mark city-specific availability as unknown unless the source says it. Distinguish marketplace price ranges and operator listings from a seller's offer." : "",
+      freshness.news ? "For a list of recent events give the reports you can substantiate, even if fewer than requested. A publication timestamp can be given as the time of reporting, never as the time of the event. If the event time is unknown say so in that item and cite the article." : "",
       `Question:\n${prompt}`,
       usedWeb ? webSources.length ? `Web sources:\n${sourceContext(webSources, focus.searchText)}` : "LIVE WEB CHECK: This attempt returned no usable evidence. Give the stable facts that answer part of the question or explain how to obtain the result. State the specific missing input when necessary. Never invent current facts, source links or tool results." : "",
       connected.context,
@@ -1388,6 +1427,8 @@ export async function malikGodAnswer(
       && freshness.needsSearch && ["CURRENT", "LIVE"].includes(freshness.category) && webSources.length && outputBudget >= 450
       ? Math.min(350, Math.floor(outputBudget / 3)) : 0
     const modelCall = activity?.start("Подготовка ответа моделью", "model", selection.modelId, { sources: sources.length, attachments: attachments.length, compactSimpleChat, leanEvidenceChat, outputTokenLimit: outputBudget })
+    const sourceFallback = !attachments.length && !connected.context
+      ? partialFreshAnswer(freshness, webSources, focus.searchText, format) : undefined
     const firstResult = await runStrictMalikModel({
       modelId: selection.modelId,
       prompt: strictPrompt,
@@ -1413,7 +1454,13 @@ export async function malikGodAnswer(
       // Do not stream unverified person/date claims before the evidence gate.
       onToken: (format || attribution || freshness.needsSearch || truthNeedsLiveEvidence(focus.searchText)) ? undefined : accuracyTokenGate(focus.searchText, emitToken),
       signal,
-    }).catch((error) => { activity?.finish(modelCall, undefined, "failed", error instanceof Error ? error.message : String(error)); throw error })
+    }).catch((error) => {
+      activity?.finish(modelCall, undefined, "failed", error instanceof Error ? error.message : String(error))
+      signal?.throwIfAborted()
+      if (!sourceFallback) throw error
+      return null
+    })
+    if (!firstResult) return { content: sourceFallback!, provider: "live-evidence", model: "partial-source-answer", selectedModelId: selection.modelId, usedWeb: true, sources, attempts: [] }
     const verificationCall = activity?.start("Проверка вычислений и согласованности", "code", "malik.accuracy")
     const validateDraft = (draft: string) => {
       const verified = finalizeAccuracy(cleanText(draft), focus.searchText, sources)
@@ -1448,6 +1495,7 @@ export async function malikGodAnswer(
         activity?.finish(step, undefined, "failed", "Повторная проверка ответа не завершилась")
       }
     }
+    if (checkedContent === unavailableFreshAnswer(freshness, format)) checkedContent = sourceFallback || checkedContent
     const attributionAudit = gateAttributionAnswer({ question: focus.searchText, answer: checkedContent, sources: webSources, searchEnabled: usedWeb })
     const content = attributionAudit.content
     if (attributionAudit.withheld) console.info("[MALIK_ATTRIBUTION_GATE]", attributionAudit.reason || "unsupported")

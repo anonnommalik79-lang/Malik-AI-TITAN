@@ -7,7 +7,7 @@ export type FollowUpSendOptions = { research?: boolean }
 
 type FollowUpLocale = "ru" | "kk" | "en"
 function followUpLocale(question: string): FollowUpLocale {
-  if (/[әіңғүұқөһі]/iu.test(question) || /(?:файлды|салыстыр|жауап|есепті|қара|баптау|қалай)/iu.test(question)) return "kk"
+  if (/[әіңғүұқөһі]/iu.test(question) || /(?<!\p{L})(?:файлды|салыстыр|жауап|есепті|қара|баптау|қалай)(?!\p{L})/iu.test(question)) return "kk"
   if (/[а-яё]/iu.test(question)) return "ru"
   return "en"
 }
@@ -57,7 +57,7 @@ export function buildContextualFollowUps(question: string, answer: string, conte
   const items = copy[locale]
   const isCode = /(?:```|\b(?:code|coding|python|javascript|typescript)\b|код|программирован|программист|функци)/iu.test(question + "\n" + answer.slice(0, 300))
     || /(?:напиши|создай|write|build|жаз)\s+(?:a\s+)?(?:программ|program|бағдарлама)/iu.test(question)
-  const isMath = /(?:[=+×÷∑√]|математ|алгебр|уравнен|расч[её]т|есеп|теңдеу|\b(?:equation|calculate|integral)\b)/iu.test(question)
+  const isMath = /(?:[=+×÷∑√]|математ|алгебр|уравнен|расч[её]т|посчитай|вычисли|есеп|теңдеу|\b(?:equation|calculate|integral)\b)/iu.test(question)
   const isProcedure = /(?:как|настрой|установ|пошаг|қалай|орнат|баптау|\b(?:how to|steps|setup|install)\b)/iu.test(question)
   const special = context.hasAttachment ? items.attachment : isCode ? items.code : isMath ? items.math : isProcedure ? items.steps : items.table
   // Avoid fact-checking labels for programming or calculations: use their dedicated verification action.

@@ -68,7 +68,7 @@ function currencyOf(raw: string): string | undefined {
   if (/USD|\$/iu.test(raw)) return "USD"
   if (/EUR|€/iu.test(raw)) return "EUR"
   if (/KZT|₸|тенге/iu.test(raw)) return "KZT"
-  if (/RUB|руб/iu.test(raw)) return "RUB"
+  if (/RUB|₽|руб/iu.test(raw)) return "RUB"
   return undefined
 }
 function inputRevenueCurrency(question: string): string | undefined {
@@ -136,6 +136,11 @@ function singleProfileTable(answer: string): { expected: Financial; currency?: s
 export function deterministicGivens(question: string): Array<{ label: string; formula: string; value: string }> {
   const out: Array<{ label: string; formula: string; value: string }> = []
   const expression = question.trim().replace(/^(?:реши|посчитай|вычисли|рассчитай|сколько\s+будет|calculate|compute|what\s+is|есепте)\s*:?\s*/iu, "").replace(/[?!.]\s*$/, "")
+  const percent = new RegExp(String.raw`^(${N})\s*%\s*(?:от|of)\s*(${N})(?:\s*(?:₸|тенге|KZT|USD|EUR|₽|руб\.?|[$€]))?(?:[.!?]\s*(?:дай\s+)?(?:только\s+(?:итог|ответ|результат)|(?:answer|result)\s+only)[.!?a-z\s]*)?$`, "iu").exec(expression)
+  if (percent) {
+    const percentage = evaluateExact(percent[1]), base = evaluateExact(percent[2])
+    if (percentage && base) out.push({ label: "Ответ", formula: `${percent[1]}% × ${percent[2]}`, value: exactText(div(mul(percentage, base), q(BigInt(100)))) })
+  }
   if (expression.length <= 512 && /^[\d\s.,()+\-−×*·÷/%^]+$/u.test(expression) && /[+\-−×*·÷/%^]/u.test(expression)) {
     const value = evaluateExact(expression)
     if (value) out.push({ label: "Ответ", formula: expression, value: exactText(value) })
@@ -216,9 +221,9 @@ export function checkAccuracy(answer: string, question: string, sources: readonl
       const direct = receipts.find(item => item.label === "Ответ")
       if (direct) {
         const result = evaluateExact(direct.value)
-        const claim = new RegExp(String.raw`^(\s*(?:(?:Ответ|Результат|Итого|Answer|Result)\s*[:=]\s*)?)(${N})(\s*[.!]?\s*)$`, "iu").exec(line)
+        const claim = new RegExp(String.raw`^(\s*(?:(?:Ответ|Результат|Итого|Answer|Result)\s*[:=]\s*)?)(${N})(\s*(?:₸|тенге|KZT|USD|EUR|₽|руб\.?|[$€])?\s*[.!]?\s*)$`, "iu").exec(line)
         const reported = claim ? evaluateExact(claim[2]) : null
-        if (claim && result && reported) {
+        if (claim && result && reported && (!currencyOf(claim[3]) || currencyOf(claim[3]) === currencyOf(question))) {
           checked++; deterministic = true
           if (!equal(reported, result)) {
             addIssue({ code: "arithmetic", line: i + 1, detail: `${direct.formula} → ${direct.value}`, resolution: "corrected" })

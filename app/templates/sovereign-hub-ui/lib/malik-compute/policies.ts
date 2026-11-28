@@ -1,8 +1,8 @@
 import { shouldUseWeb } from "@/lib/ai/web-search-policy"
 import type { ComputeOperation } from "./types"
 
-export async function chatComputeOperation(request: Request): Promise<ComputeOperation> {
-  const body = await request.clone().json().catch(() => ({}))
+export async function chatComputeOperation(request: Request, readBody: (request: Request) => Promise<any> = async input => input.clone().json()): Promise<ComputeOperation> {
+  const body = (await readBody(request).catch(() => null)) || {}
   const messages = Array.isArray(body.messages) ? body.messages : []
   const prompt = String(body.originalQuestion || body.prompt || body.message || body.question || body.input || body.text || body.content || messages.filter((item: { role?: string }) => item.role === "user").at(-1)?.content || "")
   return shouldUseWeb(prompt, body) ? "research" : "chat"

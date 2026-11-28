@@ -1,4 +1,4 @@
-import { occurrenceSubjectPattern } from "../ai/last-occurrence"
+import { occurrenceSubjectPattern, type LastOccurrence } from "../ai/last-occurrence"
 
 export type OccurrenceEvidence = { start: string; end: string; excerpt: string }
 
@@ -15,6 +15,7 @@ const year = "(?:19|20)\\d{2}"
 const dateWord = `${day}(?:st|nd|rd|th)?`
 const range = "(?:-|–|—|по|to|through|until)"
 const datePatterns = [
+  new RegExp(`(?<![\\d.])(?<numericDay>${day})[./](?<numericMonth>0?[1-9]|1[0-2])[./](?<numericYear>${year})(?![\\d.])`, "giu"),
   new RegExp(`(?<![\\d-])(?<startIso>${year}-\\d{2}-\\d{2})(?:\\s*${range}\\s*(?<endIso>${year}-\\d{2}-\\d{2}))?(?![\\d-])`, "giu"),
   new RegExp(`(?<![\\d-])(?:(?<beforeYear>${year})\\s+(?:жыл(?:ғы|дың)?\\s+)?)?(?:(?<startDay>${dateWord})(?:\\s+(?<startMonth>${months})\\.?)?\\s*${range}\\s*)?(?<endDay>${dateWord})\\s+(?<endMonth>${months})(?:\\.?[,]?\\s+(?<afterYear>${year}))?(?![\\p{L}\\d])`, "giu"),
   new RegExp(`(?<![\\p{L}\\d])(?<startMonth>${months})\\.?\\s+(?<startDay>${dateWord})(?:\\s*${range}\\s*(?:(?<endMonth>${months})\\.?\\s+)?(?<endDay>${dateWord}))?(?:,?\\s+(?<afterYear>${year}))?(?![\\p{L}\\d-])`, "giu"),
@@ -47,7 +48,12 @@ type DateMatch = Omit<OccurrenceEvidence, "excerpt"> & { index: number; length: 
 function readDates(text: string, fallbackYear?: string, statedEdition?: string): DateMatch[] {
   const matches: DateMatch[] = []
   for (const pattern of datePatterns) for (const match of text.matchAll(pattern)) {
-    const { startIso, endIso, startDay, endDay, startMonth, endMonth, beforeYear, afterYear } = match.groups || {}
+    const { startIso, endIso, startDay, endDay, startMonth, endMonth, beforeYear, afterYear, numericDay, numericMonth, numericYear } = match.groups || {}
+    if (numericYear && numericMonth && numericDay) {
+      const date = `${numericYear}-${numericMonth.padStart(2, "0")}-${numericDay.padStart(2, "0")}`
+      if ((!statedEdition || numericYear === statedEdition) && validDay(date)) matches.push({ start: date, end: date, index: match.index, length: match[0].length })
+      continue
+    }
     const dateYear = Number(afterYear || beforeYear || fallbackYear)
     if (!startIso && !dateYear) continue
     // A date in a different year than the explicitly named edition needs interpretation.
@@ -118,4 +124,34 @@ export function findOccurrence(subject: string, title: string, body: string, asO
     }
   }
   return latest
+}
+
+/** A report that says "today opened" may use its own dated dateline.
+ * Planned openings and test launches never establish public operation.
+ */
+export function findOpening(request: LastOccurrence, title: string, body: string, asOf: string, publicationDay?: string): OccurrenceEvidence | undefined {
+  const clean = normalized(body.slice(0, 18_000))
+  const subject = occurrenceSubjectPattern(request.subject, true)
+  const dateHeader = explicitCalendarDates(clean.slice(0, 550))[0]
+  const action = /(?<!\p{L})(?:откр(?:ыли|ылась|ылись|ыт[аоы])|запустили|ввели\s+в\s+эксплуатацию|введен[аоы]?\s+в\s+эксплуатацию|opened|entered\s+service)(?!\p{L})/iu
+  const excluded = /(?:техническ\p{L}*\s+(?:запуск|пуск)|тестов\p{L}*|пробн\p{L}*|не\s+(?:откр|запуст|введ)|did\s+not|вновь\s+откры|reopened)/iu
+  const sentences = clean.split(/(?<=[.!?])\s+(?=[\p{Lu}\d])|[\r\n]+/gu)
+  const candidates: OccurrenceEvidence[] = []
+  for (const sentence of sentences) {
+    if (!action.test(sentence) || excluded.test(sentence) || plannedOrNegated.test(sentence)) continue
+    const match = subject.exec(sentence)
+    if (!match) continue
+    const start = Math.max(0, match.index - 160)
+    const excerpt = sentence.slice(start, match.index + match[0].length + 170).trim()
+    if (!action.test(excerpt)) continue
+    const dates = explicitCalendarDates(excerpt)
+    if (/\b(?:today)\b|(?<!\p{L})сегодня(?!\p{L})/iu.test(excerpt)) {
+      const day = publicationDay || dateHeader
+      if (day && validDay(day)) dates.push(day)
+    }
+    for (const date of dates) if (date <= asOf) candidates.push({ start: date, end: date, excerpt })
+  }
+  // Ensure the requested location is supported by the source, including its title.
+  if (request.location && !`${title} ${clean}`.toLocaleLowerCase().includes(request.location.toLocaleLowerCase())) return
+  return candidates.sort((a, b) => b.end.localeCompare(a.end))[0]
 }

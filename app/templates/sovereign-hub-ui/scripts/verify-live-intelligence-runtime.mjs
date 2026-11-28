@@ -26,7 +26,7 @@ const readUrls = [], queries = []
 const stubs = {
   "@/lib/server/malik-model-router": { runStrictMalikModel: async (input) => {
     inferences.push(input)
-    if (!/1547|2020 году|без интернета/.test(input.taskPrompt)) assert.equal(input.onToken, undefined, "current answers must not expose unchecked drafts")
+    if (!/1547|17,5%|2020 году|без интернета/.test(input.taskPrompt)) assert.equal(input.onToken, undefined, "current answers must not expose unchecked drafts")
     const quote = scenario === "quote-repair" ? input.systemPrompt.includes("verification gate rejected") ? "Цена Atlas — 319 990 ₸ [1]." : "Цена Atlas — 449 990 ₸ [1]." : ""
     return { content: quote || modelDraft || (/1547/.test(input.taskPrompt) ? "1547 × 829 = 1 282 463" : "Подтверждённый ответ по тестовым данным [1]."), provider: "fixture", model: "fixture", selectedModelId: input.modelId, latencyMs: 0 }
   } },
@@ -60,6 +60,28 @@ try {
   console.info = () => {}
   globalThis.fetch = async (url, init) => {
     calls.push(String(url))
+    if (scenario === "official-rate" && String(url).includes("nationalbank.kz")) {
+      const date = new URL(String(url)).searchParams.get("fdate")
+      return date ? new Response(`<rates><date>${date}</date><item><title>USD</title><description>512.34</description><quant>1</quant></item></rates>`) : new Response("", { status: 503 })
+    }
+    if (scenario === "opening" && String(url).includes("serper.dev")) {
+      return Response.json({ organic: [
+        { title: "В Алматы открылись станции метро", link: "https://example.kz/metro-open", snippet: "30 мая 2022 года в Алматы открылись две станции метро «Сарыарка» и «Бауыржан Момышулы»." },
+        { title: "Когда откроются станции метро в Алматы", link: "https://example.kz/metro-planned", snippet: "31 декабря 2026 года планируется открыть станции метро." },
+      ] })
+    }
+    if (scenario === "retail" && String(url).includes("serper.dev")) {
+      return Response.json({ organic: [
+        { title: "iPhone 16 Pro Max 256GB в Алматы — Store A", link: "https://shop-a.example.kz/16-pro-max", snippet: "iPhone 16 Pro Max 256GB, Алматы, 520 000 ₸. В наличии." },
+        { title: "iPhone 16 Pro Max 256 GB в Алматы — Store B", link: "https://shop-b.example.kz/16-pro-max", snippet: "iPhone 16 Pro Max 256 GB, Алматы, 540 000 ₸. Нет в наличии." },
+        { title: "Новости OpenAI", link: "https://openai.com/fixture/other", snippet: "Актуальные цены. Сравни модели." },
+      ] })
+    }
+    if (scenario === "news-digest" && String(url).includes("news.google.com")) {
+      const date = new Date(Date.now() - 15 * 60_000).toUTCString()
+      return new Response(`<rss><channel>${["Спортсмены Казахстана получили награды", "В Казахстане открылась выставка", "В Казахстане объявили об итогах фестиваля"].map((title, index) =>
+        `<item><title>${title}</title><link>https://news.google.com/rss/articles/fixture-${index}</link><pubDate>${date}</pubDate><description>${title}</description></item>`).join("")}</channel></rss>`)
+    }
     if (scenario === "quote-repair" && String(url).includes("serper.dev")) {
       return Response.json({ organic: [{ title: "Телефон Atlas — цена в магазине", link: "https://shop.example.org/atlas", snippet: "Телефон Atlas продаётся по цене 319 990 ₸." }] })
     }
@@ -163,6 +185,55 @@ try {
     assert.equal(answer.sources[0].freshness, "recent")
     assert.equal(answer.sources.find(source => source.domain === "untrusted.example")?.freshness, "old")
     assert.match(inferences.at(-1).prompt, /Freshness: old/)
+  })
+  await check("MAX verifies the exact date and official USD/KZT quote directly", async () => {
+    scenario = "official-rate"
+    const before = inferences.length
+    const answer = await run("Какой официальный курс доллара к тенге действует сегодня? Дай ссылку на Нацбанк и укажи дату действия курса.", "balanced", "malik-max")
+    assert.equal(answer.model, "verified-official-rate")
+    assert.match(answer.content, /512,34 ₸/)
+    assert.match(answer.sources[0].url, /nationalbank\.kz/u)
+    assert.ok(inferences.length - before <= 1, "only the optional domain planner may run")
+  })
+  await check("MAX recovers the completed opening and names from the read article", async () => {
+    scenario = "opening"
+    modelDraft = "Две станции открылись 28 мая 2022 года [1]."
+    try {
+      const answer = await run("Когда в Алматы последний раз открыли новые станции метро? Какие станции открылись в тот день?", "balanced", "malik-max")
+      assert.match(answer.content, /30 мая 2022/u)
+      assert.match(answer.content, /Сарыарка.*Момышулы/u)
+      assert.doesNotMatch(answer.content, /28 мая 2022|31 декабря 2026/u)
+    } finally { modelDraft = undefined }
+  })
+  await check("retail stays on the exact model even after a model-release conversation", async () => {
+    scenario = "retail"
+    modelDraft = "Store A — 520 000 ₸, в наличии [1]. Store B — 540 000 ₸, нет в наличии [2]."
+    try {
+      const question = "Сколько сейчас стоит iPhone 16 Pro Max 256 ГБ в Алматы? Сравни два магазина по цене и наличию."
+      const messages = [{ role: "user", content: "Какая последняя модель GPT?" }, { role: "assistant", content: "Последняя модель GPT [1]." }, { role: "user", content: question }]
+      const answer = await god.malikGodAnswer({ originalQuestion: question, messages }, { modelId: "malik-max" })
+      assert.deepEqual(answer.sources.map(source => source.domain).sort(), ["shop-a.example.kz", "shop-b.example.kz"])
+      assert.match(answer.content, /520 000.*540 000/u)
+    } finally { modelDraft = undefined }
+  })
+  await check("news digest retains several recent reports from one feed, even when synthesis fails", async () => {
+    scenario = "news-digest"
+    modelDraft = "Неподтверждённый ответ без ссылок."
+    try {
+      const answer = await run("Назови три события в Казахстане за последние 24 часа. Для каждого укажи, когда оно произошло, и дай ссылку.", "balanced", "malik-max")
+      assert.equal(answer.sources.length, 3)
+      assert.match(answer.content, /время публикации/u)
+      assert.equal(answer.content.match(/^-/gm)?.length, 3)
+    } finally { modelDraft = undefined }
+  })
+  await check("a rounded-looking result with a currency is independently verified without a fact panel", async () => {
+    scenario = "success"
+    modelDraft = "43 000 ₸"
+    try {
+      const answer = await run("Посчитай 17,5% от 248 000 ₸. Дай только итог.h", "balanced", "malik-max")
+      assert.match(answer.content, /43 ?400 ₸/u)
+      assert.equal(answer.factAudit, null)
+    } finally { modelDraft = undefined }
   })
   scenario = "all-fail"
   await check("I: total failure produces one honest answer before inference", async () => { const before = inferences.length; const answer = await run("Какие новые ИИ-модели официально вышли сегодня в Казахстане?", "ultra"); assert.equal(inferences.length, before); assert.equal(answer.provider, "live-evidence-gate"); assert.match(answer.content, /Не удалось подтвердить/); assert.equal(answer.usedWeb, false); assert.equal(answer.sources.length, 0) })

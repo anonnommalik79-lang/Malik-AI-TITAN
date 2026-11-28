@@ -1,6 +1,6 @@
 import type { MalikWebSource } from "../ai/web-research-types"
-import { classifyFreshness, isNewsRequest, type FreshnessIntent } from "../ai/freshness-intent"
-import { explicitCalendarDates, findOccurrence } from "./occurrence-evidence"
+import { classifyFreshness, localDateAt, isNewsRequest, type FreshnessIntent } from "../ai/freshness-intent"
+import { explicitCalendarDates, findOccurrence, findOpening } from "./occurrence-evidence"
 import { publisherRelease, releasePublisher } from "./release-catalog"
 import { currentModelSubjects, mentionedCurrentModels } from "../ai/current-evidence"
 import { auditAnswerFacts } from "../ai/fact-audit"
@@ -80,11 +80,13 @@ export function assessSources(prompt: string, sources: readonly MalikWebSource[]
     const eventAt = evidenceDate(input.eventAt, now)
     const checkedAt = evidenceDate(input.checkedAt, now) || intent.checkedAt
     const domain = new URL(url).hostname.replace(/^www\./u, "")
-    const authority = intent.lastOccurrence && /\.(?:gov|gov\.[a-z]{2})$/iu.test(domain) ? "primary" : sourceAuthority(prompt, url)
+    const authority = input.provider === "nationalbank-official-quote" && domain === "nationalbank.kz" ? "primary" : intent.lastOccurrence && /\.(?:gov|gov\.[a-z]{2})$/iu.test(domain) ? "primary" : sourceAuthority(prompt, url)
     const title = sanitizeEvidenceText(input.title, 180)
     const details = intent.lastOccurrence ? sanitizeEvidenceText(input.snippet || "", 18_000) : ""
-    const occurrence = intent.lastOccurrence && findOccurrence(intent.lastOccurrence.subject, title,
-      details + (input.occurrence ? `\n${sanitizeEvidenceText(input.occurrence.excerpt, 350)}` : ""), intent.localDate) || undefined
+    const occurrenceText = details + (input.occurrence ? `\n${sanitizeEvidenceText(input.occurrence.excerpt, 350)}` : "")
+    const occurrence = intent.lastOccurrence?.opening
+      ? findOpening(intent.lastOccurrence, title, occurrenceText, intent.localDate, publishedAt && localDateAt(new Date(publishedAt), intent.timeZone))
+      : intent.lastOccurrence && findOccurrence(intent.lastOccurrence.subject, title, occurrenceText, intent.localDate) || undefined
     const dated = Date.parse(eventAt || publishedAt || "")
     const inWindow = !intent.window || Number.isFinite(dated) && dated >= Date.parse(intent.window.from) && dated <= Date.parse(intent.window.to)
     const freshness = intent.historical ? "historical" : intent.window ? inWindow ? "recent" : "outside-window" : Number.isFinite(dated) ? now - dated <= 30 * 86_400_000 ? "recent" : "old" : "undated"
@@ -181,7 +183,8 @@ function unavailableFreshText(intent: FreshnessIntent): string {
   }
   if (intent.language === "kk") return `Сұралған кезеңдегі өзекті деректерді қолжетімді дереккөздерден растай алмадым. Нақты жаңалықтарды, нұсқаларды немесе күндерді ойдан қоспаймын. Тексеру күні: ${intent.localDate} (${intent.timeZone}).`
   if (intent.language === "en") return `I could not confirm current information for the requested period from the available sources. I will not invent news, versions or dates. Evidence check: ${intent.localDate} (${intent.timeZone}).`
-  return `Не удалось подтвердить актуальные сведения за запрошенный период по доступным источникам. Я не буду придумывать новости, версии или даты. Проверка: ${intent.localDate} (${intent.timeZone}).`
+  if (intent.news) return "Не удалось подтвердить события за указанный период по доступным публикациям."
+  return "Не удалось подтвердить актуальные сведения по доступным источникам."
 }
 
 export function unavailableFreshAnswer(intent: FreshnessIntent, format?: "json"): string {
@@ -213,6 +216,40 @@ export function verifiedOccurrenceAnswer(intent: FreshnessIntent, sources: reado
   if (intent.language === "kk") return `Дереккөздер растаған соңғы күн — **${date}** [${citation}].`
   if (intent.language === "en") return `The latest occurrence I could confirm was **${date}** [${citation}].`
   return `По найденным источникам событие в последний подтверждённый раз прошло **${date}** [${citation}].`
+}
+
+/** Present actual records if synthesis fails, preserving the limits of each record. */
+export function partialFreshAnswer(intent: FreshnessIntent, sources: readonly MalikWebSource[], question: string, format?: "json"): string | undefined {
+  if (format || !intent.needsSearch || intent.category === "STATIC") return
+  const cite = (source: MalikWebSource) => sources.indexOf(source) + 1
+  const usable = sources.filter(source => isCurrentEvidenceSource(source, intent) && !isSocialEvidenceSource(source))
+  if (intent.lastOccurrence?.opening) {
+    const opening = usable.filter(source => source.readAt && source.occurrence)
+      .sort((a, b) => b.occurrence!.end.localeCompare(a.occurrence!.end))[0]
+    if (!opening?.occurrence) return
+    const date = new Intl.DateTimeFormat(intent.language, { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" })
+      .format(new Date(opening.occurrence.end + "T00:00:00Z"))
+    const lead = intent.language === "en" ? "Latest confirmed opening" : "Последнее подтверждённое открытие"
+    return `**${date}** — ${lead.toLowerCase()} [${cite(opening)}].\n\n> ${opening.occurrence.excerpt.replace(/\s+/gu, " ")}`
+  }
+  if (intent.news && intent.window && /(?:назови|перечисли|подбери|дайджест|сводк|list|roundup|summarize)/iu.test(question)) {
+    const seen = new Set<string>()
+    const reports = usable.filter(source => {
+      if ((!source.readAt && source.provider !== "google-news") || !source.publishedAt || source.title.length < 15) return false
+      const key = source.title.toLowerCase().replace(/[^\p{L}\p{N} ]/gu, "").split(" ").slice(0, 6).join(" ")
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+    if (!reports.length) return
+    const requested = /(?:назови|перечисли|list)\s+(\d{1,2})/iu.exec(question)?.[1]
+    const count = requested ? Math.max(1, Math.min(Number(requested), 10)) : /(?:три|three)/iu.test(question) ? 3 : 5
+    const time = new Intl.DateTimeFormat(intent.language, { dateStyle: "medium", timeStyle: "short", timeZone: intent.timeZone })
+    const lead = intent.language === "en" ? "Reports published in the requested period. The times are publication times."
+      : intent.language === "kk" ? "Сұралған кезеңде жарияланған хабарлар. Жарияланым уақыты көрсетілген."
+      : "Публикации за указанный период. В списке указано время публикации."
+    return lead + "\n\n" + reports.slice(0, count).map(source => `- ${source.title} · ${time.format(new Date(source.publishedAt!))} [${cite(source)}]`).join("\n")
+  }
 }
 
 function jsonStrings(value: unknown): string {
@@ -272,7 +309,7 @@ function supportsCalendarDates(text: string, question: string, cited: readonly M
   const stated = new Set(explicitCalendarDates(question))
   for (const source of cited) {
     const datedRelease = publisherRelease(source, question) || source.currentCatalog && source.releaseVersion
-    for (const day of explicitCalendarDates([source.title, source.snippet, source.eventAt, datedRelease ? source.publishedAt : ""].filter(Boolean).join("\n"))) stated.add(day)
+    for (const day of explicitCalendarDates([source.title, source.snippet, source.eventAt, source.occurrence?.start, source.occurrence?.end, datedRelease ? source.publishedAt : ""].filter(Boolean).join("\n"))) stated.add(day)
   }
   return dates.every(day => stated.has(day))
 }

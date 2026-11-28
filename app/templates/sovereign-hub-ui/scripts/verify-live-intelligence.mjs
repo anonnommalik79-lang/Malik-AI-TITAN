@@ -8,6 +8,8 @@ import { assessSources, currentEvidenceAvailable, evidenceDate, safeEvidenceUrl,
 import { EvidenceSearchCache, ProviderCircuits, runLiveSearch } from "../lib/live-intelligence/search-engine.ts"
 import { parseKnowledgeFeed, updateKnowledgeIndex, KNOWLEDGE_FEEDS } from "../lib/live-intelligence/feed-updater.ts"
 import { emptyKnowledgeIndex, validateKnowledgeIndex, modelsFromItems, retrieveKnowledge, knowledgeHealth } from "../lib/live-intelligence/knowledge-index.ts"
+import { readChatBody } from "../lib/server/request-safety.ts"
+import { readNationalBankQuotes } from "../lib/live-intelligence/official-exchange-rate.ts"
 import { pageDates } from "../lib/live-intelligence/page-dates.ts"
 import { mapBounded } from "../lib/live-intelligence/concurrency.ts"
 import { publicAddresses, publicIp } from "../lib/malik-research/public-page-fetch.ts"
@@ -19,6 +21,20 @@ const old = { ...fresh, title: "GPT-1 (TEST FIXTURE)", url: "https://untrusted.e
 const prompt = "Какие новые ИИ-модели вышли за последние семь дней?"
 let checks = 0
 async function check(name, fn) { await test(name, fn); checks++ }
+await check("bounded chat request parsing shares the same result even with a consumed request body", async () => {
+  const request = new Request("https://example.org/api/stream", { method: "POST", body: JSON.stringify({ originalQuestion: "Новости за 24 часа" }) })
+  const first = readChatBody(request)
+  const second = readChatBody(request)
+  assert.equal(first, second)
+  assert.deepEqual(await first, { originalQuestion: "Новости за 24 часа" })
+  assert.equal(request.bodyUsed, true)
+  assert.equal(await readChatBody(request), await second)
+})
+await check("the official exchange rate parser rejects a rate table for a different date", () => {
+  const feed = "<rates><date>28.11.2026</date><item><title>USD</title><description>512.34</description><quant>1</quant></item></rates>"
+  assert.deepEqual(readNationalBankQuotes(feed, "2026-11-28", ["USD"]), [{ code: "USD", units: 1, value: 512.34 }])
+  assert.deepEqual(readNationalBankQuotes(feed, "2026-11-29", ["USD"]), [])
+})
 const staticPrompts = [
   "Реши 1547 × 829 без интернет-поиска", "Посчитай 17*42", "Вычисли 2 + 2", "Solve x + 2 = 7", "Calculate 1547 * 829", "Compute 5 squared", "Есепте 12 × 17",
   "Переведи слово hello", "Translate: latest news", "Переведи: президент", "Аудар hello", "Докажи теорему Пифагора", "Prove that primes are infinite",

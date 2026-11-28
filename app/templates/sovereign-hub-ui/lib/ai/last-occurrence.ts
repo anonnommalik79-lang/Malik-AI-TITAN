@@ -1,6 +1,6 @@
 import { normalizeWebSearchQuery } from "./web-search-query"
 
-export type LastOccurrence = { subject: string; dateOnly: boolean }
+export type LastOccurrence = { subject: string; dateOnly: boolean; opening?: boolean; location?: string }
 
 const russianPast = "(?:был[аои]?|прош[её]л|прошл[аио]|проходил[аои]?|состоял(?:ся|[аио]сь)|проводил(?:ся|[аио]сь))"
 const russianLast = "(?:в\\s+)?последн(?:ий|и|ии|ый)\\s+раз"
@@ -34,6 +34,12 @@ export function lastOccurrenceRequest(prompt: string): LastOccurrence | undefine
   const split = question.search(anotherTask)
   const lookup = (split < 0 ? question : question.slice(0, split)).replace(/[?.!]+$/u, "").trim()
   if (explicitPeriod.test(lookup) || futureQuestion.test(lookup)) return
+  const opened = /^когда(?:\s+в\s+([\p{L}-]+(?:\s+[\p{Lu}][\p{L}-]+)?))?\s+(?:в\s+)?последний\s+раз\s+(?:открыли|открылась|открылись|открыли\s+для\s+посетителей|ввели\s+в\s+эксплуатацию)\s+(.+)$/iu.exec(lookup)
+  const openedEnglish = /^when\s+(?:did|were|was)\s+(.+?)\s+(?:last\s+open(?:ed)?|last\s+enter\s+service)(?:\s+in\s+(.+?))?$/iu.exec(lookup)
+  const openedSubject = (opened?.[2] || openedEnglish?.[1])?.replace(/^(?:нов\p{L}*|new|the)\s+/iu, "").trim()
+  if (openedSubject && openedSubject.length <= 120 && !noSubject.test(openedSubject)) {
+    return { subject: openedSubject, location: opened?.[1] || openedEnglish?.[2], dateOnly: split < 0 && prompt.length <= 260, opening: true }
+  }
   for (const shape of questionShapes) {
     const subject = shape.exec(lookup)?.[1]?.replace(/^[«“"\s]+|[»”"\s]+$/gu, "").trim()
     if (subject && subject.length <= 120 && /\p{L}{2}/u.test(subject) && !noSubject.test(subject) && !releaseSubject.test(subject)) return { subject, dateOnly: split < 0 && prompt.length <= 260 }
@@ -43,9 +49,9 @@ export function lastOccurrenceRequest(prompt: string): LastOccurrence | undefine
 const descriptors = /^(?:форум(?:а)?|конференци[яию]|фестивал[ья]|саммит(?:а)?|выставк[аиу]|мероприяти[ея]|forum|conference|festival|summit|exhibition|event|the|форумы|фестивалі|конференциясы)\s+/iu
 
 /** Preserve the order and boundaries of the name. Ignore punctuation such as a brand's ampersand. */
-export function occurrenceSubjectPattern(subject: string): RegExp {
+export function occurrenceSubjectPattern(subject: string, opening = false): RegExp {
   const name = subject.replace(descriptors, "").replace(/ё/giu, "е")
   const words = name.match(/[\p{L}\p{N}]+/gu) || []
   const term = words.length > 1 && /^(?:ai|ии|ж[иі])$/iu.test(words[0] || "") ? words.slice(1) : words
-  return new RegExp(`(?<![\\p{L}\\p{N}])(?:${term.join("[^\\p{L}\\p{N}]+") || "(?!)"})(?![\\p{L}\\p{N}])`, "iu")
+  return new RegExp(`(?<![\\p{L}\\p{N}])(?:${term.map(word => opening && /^станци/iu.test(word) ? "станци\\p{L}*" : word).join(opening ? "(?:[^\\p{L}\\p{N}]+(?:нов\\p{L}*[^\\p{L}\\p{N}]+)?)" : "[^\\p{L}\\p{N}]+") || "(?!)"})(?![\\p{L}\\p{N}])`, "iu")
 }

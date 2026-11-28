@@ -97,6 +97,19 @@ export async function readJsonBodyLimited<T = Record<string, unknown>>(
   }
 }
 
+export const MAX_CHAT_BODY_BYTES = 30 * 1024 * 1024
+const chatBodies = new WeakMap<Request, Promise<Record<string, unknown>>>()
+
+/** All chat wrappers and the handler share one bounded read of the upload. */
+export function readChatBody<T = Record<string, unknown>>(request: Request): Promise<T> {
+  let body = chatBodies.get(request)
+  if (!body) {
+    body = readJsonBodyLimited(request, MAX_CHAT_BODY_BYTES)
+    chatBodies.set(request, body)
+  }
+  return body as Promise<T>
+}
+
 function isPrivateHostname(hostname: string) {
   const host = hostname.toLowerCase().replace(/^\[|\]$/g, "")
   if (!host || host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local")) return true

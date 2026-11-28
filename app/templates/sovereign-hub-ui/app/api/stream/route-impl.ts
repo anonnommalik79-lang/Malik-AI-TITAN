@@ -44,7 +44,7 @@ import { withVerifiedComicChatContext } from "@/lib/server/account-addressing"
 import { reserveWorkQuota, refundWorkQuota, WorkQuotaError, type WorkQuotaReceipt } from "@/lib/server/work-quota"
 import { malikIdentityAnswer, withVerifiedOwnerChatContext } from "@/lib/server/malik-owner-context"
 import { putProjectArtifact } from "@/lib/server/project-artifact-store"
-import { isFeatureDisabled, readJsonBodyLimited, RequestSafetyError } from "@/lib/server/request-safety"
+import { isFeatureDisabled, MAX_CHAT_BODY_BYTES, readChatBody, RequestSafetyError } from "@/lib/server/request-safety"
 import { estimateMultimodalTokens, hasMalikAttachments, routeMalikAttachments } from "@/lib/server/multimodal-router"
 import {
   DAILY_MULTIMODAL_TOKEN_LIMIT,
@@ -96,7 +96,6 @@ import { chatComputeOperation } from "@/lib/malik-compute/policies"
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
-const MAX_CHAT_BODY_BYTES = 30 * 1024 * 1024
 const MAX_TEXT_CONTEXT_CHARS = Math.max(260_000, Math.min(2_000_000, Number(process.env.MALIK_MAX_TEXT_CONTEXT_CHARS || 800_000)))
 const MALIK_CODER_MODEL_ID = "malik-coder-32b" as const
 const MALIK_ADMIN_COMMAND = "/malik"
@@ -1518,7 +1517,7 @@ function liveSseResponse(
   })
 }
 
-export const POST = withCompute((request: Request) => handlePOST(request), chatComputeOperation)
+export const POST = withCompute((request: Request) => handlePOST(request), request => chatComputeOperation(request, readChatBody))
 
 export async function handleFlashJsonChat(request: Request) {
   return handlePOST(request, true)
@@ -1536,7 +1535,7 @@ async function handlePOST(request: Request, json = false) {
 
   let body: any
   try {
-    body = await readJsonBodyLimited<any>(request, MAX_CHAT_BODY_BYTES)
+    body = await readChatBody<any>(request)
   } catch (error) {
     if (error instanceof RequestSafetyError) {
       return Response.json({ ok: false, error: error.code, message: error.message }, {

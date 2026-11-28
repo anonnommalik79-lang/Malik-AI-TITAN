@@ -49,10 +49,10 @@ function codeFor(payload: any, status: number) {
  * successful, failed, or interrupted. Never trusts body-supplied user identity.
  * Errors in telemetry cannot prevent the user's original request from running.
  */
-export function withFounderRequestAudit(handler: Endpoint, source: FounderMessageSource = "chat"): Endpoint {
+export function withFounderRequestAudit(handler: Endpoint, source: FounderMessageSource = "chat", readBody: (request: Request) => Promise<unknown> = async request => request.clone().json()): Endpoint {
   return async (request) => {
     const [body, entitlement] = await Promise.all([
-      request.clone().json().catch(() => null),
+      readBody(request).catch(() => null),
       resolveRequestEntitlement(request).catch(() => null),
     ])
     const prompt = promptFrom(body, source)

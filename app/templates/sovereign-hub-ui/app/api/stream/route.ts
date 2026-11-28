@@ -1,6 +1,7 @@
 import { resolveRequestEntitlement } from "@/lib/server/request-entitlement"
 import { addressChatResponse } from "@/lib/server/account-addressing"
 import { withFounderRequestAudit } from "@/lib/server/founder-request-audit"
+import { readChatBody } from "@/lib/server/request-safety"
 import { layoutFixedChatBody } from "@/lib/ai/keyboard-layout"
 import { GET as originalGET, POST as originalPOST } from "./route-impl"
 
@@ -215,8 +216,7 @@ function withLayoutFixed(request: Request, body: any): { request: Request; body:
   }
 }
 
-async function addressedChatPOST(request: Request) {
-  const requestBody = await request.clone().json().catch(() => ({}))
+async function addressedChatPOST(request: Request, requestBody?: unknown) {
   const response = await originalPOST(request)
   if (response.headers.get("x-malik-router") === "malik-flash") return response
   return addressChatResponse(response, await resolveRequestEntitlement(request), requestBody)
@@ -225,7 +225,7 @@ async function addressedChatPOST(request: Request) {
 async function handlePOST(incoming: Request) {
   let body: any
   try {
-    body = await incoming.clone().json()
+    body = await readChatBody(incoming)
   } catch {
     return addressedChatPOST(incoming)
   }
@@ -234,7 +234,7 @@ async function handlePOST(incoming: Request) {
   body = fixed.body
 
   if (extractPrompt(body).trim().toLowerCase() !== MALIK_ADMIN_COMMAND) {
-    return addressedChatPOST(request)
+    return addressedChatPOST(request, body)
   }
 
   try {
@@ -253,7 +253,7 @@ async function handlePOST(incoming: Request) {
   }
 }
 
-export const POST = withFounderRequestAudit(handlePOST, "chat")
+export const POST = withFounderRequestAudit(handlePOST, "chat", readChatBody)
 
 export async function GET() {
   return originalGET()

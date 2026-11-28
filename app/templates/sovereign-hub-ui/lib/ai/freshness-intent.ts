@@ -58,6 +58,9 @@ const TECH = /(?:технолог|продукт|компани|technology|techn
 
 /** Event/news discovery differs from asking which documented state is current. */
 export function isNewsRequest(prompt: string): boolean {
+  if (/(?:событи|произош|\bevents?\b|\bhappened\b|оқиға)/iu.test(prompt)
+    && /(?:за\s+последн|за\s+минувш|за\s+сутки|сегодня|вчера|(?:last|past)\s+\d+\s+(?:hours|days)|бүгін|соңғы\s+\d+\s+(?:сағат|күн))/iu.test(prompt)
+    && !/(?:по\s+этому\s+событию|about\s+this\s+event)/iu.test(prompt)) return true
   return /(?:новост|дайджест|сводк|\bnews\b|жаңалық|что(?:\s+(?:сейчас|сегодня))?\s+(?:нового|новенького)|what(?:['’]s| is)\s+new|latest\s+(?:updates|announcements))/iu.test(prompt)
 }
 
@@ -113,7 +116,7 @@ export function classifyFreshness(prompt: string, now = new Date(), requestedZon
     const window = needsSearch && !historical ? temporalWindow(text, now, timeZone) : undefined
     // "Latest model today" asks what is current as of today, not what was released today.
     const asOf = window?.label === "today" && !isNewsRequest(text) && !/(?:произошл|выш|выпуст|released|announced|launch|опублик|событ|не\s+болды|шығарыл)/iu.test(text)
-      && (reason === "demographic-statistic" || /(?:модел|models?|верс|version|price|pricing|цен|погод|weather|президент|president|министр|minister|бағам|нұсқа)/iu.test(text))
+      && (reason === "demographic-statistic" || /(?:модел|models?|верс|version|price|pricing|цен|курс|exchange\s+rate|погод|weather|президент|president|министр|minister|бағам|нұсқа)/iu.test(text))
     return { ...base, category, needsSearch, reason, news: needsSearch && !historical && isNewsRequest(text), ttlMs: category === "LIVE" || needsSearch && isNewsRequest(text) ? 60_000 : category === "STATIC" ? 1_200_000 : 300_000, ...(window && !asOf ? { window } : {}) }
   }
   if (!text) return result("STATIC", false, "empty")
