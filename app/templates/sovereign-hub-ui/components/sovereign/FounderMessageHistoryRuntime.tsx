@@ -227,7 +227,7 @@ export function FounderMessageHistoryRuntime() {
         </div>
       </header>
 
-      <div className="malik-founder-messages-body">
+      <div className={`malik-founder-messages-body${selected ? " has-selected-user" : ""}`}>
         <aside className="malik-founder-messages-users">
           <label>
             <Search />
@@ -235,6 +235,8 @@ export function FounderMessageHistoryRuntime() {
             {query ? <button type="button" onClick={() => setQuery("")}><X /></button> : null}
           </label>
           <div className="malik-founder-messages-userlist">
+            {loadingUsers && !users.length ? <div className="malik-founder-messages-empty">Загружаю пользователей…</div> : null}
+            {!selected && error ? <div role="alert" className="malik-founder-messages-mobile-error">{error}</div> : null}
             {visibleUsers.map((user) => (
               <button
                 type="button"
@@ -250,13 +252,21 @@ export function FounderMessageHistoryRuntime() {
                 {user.activeToday ? <i title="Активен сегодня" /> : null}
               </button>
             ))}
-            {!visibleUsers.length ? <div className="malik-founder-messages-empty">Пользователи не найдены.</div> : null}
+            {!loadingUsers && !visibleUsers.length && !error ? <div className="malik-founder-messages-empty">Пользователи не найдены.</div> : null}
           </div>
         </aside>
 
         <main className="malik-founder-messages-main">
           {selected ? (
             <>
+              <button type="button" className="malik-founder-messages-back" onClick={() => {
+                messageRequest.current?.abort()
+                messageRequest.current = null
+                setSelected(null)
+                setEntries([])
+                setLoadingMessages(false)
+                setError("")
+              }}>← Все пользователи</button>
               <div className="malik-founder-messages-person">
                 <div>
                   <strong>{selected.name || "Пользователь"}</strong>
@@ -327,6 +337,39 @@ export function FounderMessageHistoryRuntime() {
         .malik-founder-messages-zero,.malik-founder-messages-loading{min-height:0;flex:1;display:grid;place-items:center;align-content:center;gap:9px;padding:30px;text-align:center;color:#6b6b72}.malik-founder-messages-zero svg,.malik-founder-messages-loading svg{width:24px;height:24px;color:#77777e}.malik-founder-messages-zero strong{color:#d2d2d5;font-size:12px}.malik-founder-messages-zero p{max-width:520px;margin:0;color:#696970;font-size:10.5px;line-height:1.6}.malik-founder-messages-loading{display:flex;font-size:11px}.malik-founder-messages-error{display:flex;align-items:center;gap:9px;margin:12px 22px 0;border:1px solid rgba(190,160,90,.18);border-radius:10px;background:#11100d;padding:9px 11px;color:#a99b79;font-size:9.5px}.malik-founder-messages-error svg{width:14px;height:14px}.malik-founder-messages-foot{display:flex;align-items:center;gap:8px;padding:10px 22px;border-top:1px solid rgba(255,255,255,.06);color:#5d5d64;font-size:9px}.malik-founder-messages-foot svg{width:13px;height:13px;color:#73737a}.malik-founder-messages-empty{padding:24px;color:#666;font-size:10px;text-align:center}
         @keyframes malik-founder-message-spin{to{transform:rotate(360deg)}}
         @media(max-width:768px){.malik-founder-messages-layer{left:0!important}.malik-founder-messages-header{min-height:74px;padding:13px 14px}.malik-founder-messages-header h2{font-size:20px}.malik-founder-messages-header p{display:none}.malik-founder-messages-body{grid-template-columns:130px minmax(0,1fr)}.malik-founder-messages-users>label{margin:8px}.malik-founder-messages-users input{padding-left:30px;font-size:9px}.malik-founder-messages-userlist>button{grid-template-columns:28px minmax(0,1fr);gap:6px;padding:5px}.malik-founder-messages-avatar{width:27px;height:27px}.malik-founder-messages-usercopy strong{font-size:9px}.malik-founder-messages-usercopy small{font-size:7.5px}.malik-founder-messages-userlist>button>i{display:none}.malik-founder-messages-person{padding:10px 12px}.malik-founder-messages-feed{padding:10px}.malik-founder-message-line{grid-template-columns:1fr;gap:5px;padding:10px}.malik-founder-message-line p{font-size:10.5px}.malik-founder-message-meta small{display:none}}
+        .malik-founder-messages-back,.malik-founder-messages-mobile-error { display:none; }
+        @media(max-width:768px) {
+          .malik-founder-messages-layer { inset:0 !important; width:100% !important; height:100dvh !important; z-index:96; background:#050505; }
+          .malik-founder-messages-header { flex-shrink:0; padding-top:calc(12px + env(safe-area-inset-top)); gap:8px; }
+          .malik-founder-messages-actions button { min-width:44px; min-height:44px; }
+          .malik-founder-messages-body { display:flex; flex-direction:column; flex:1; min-height:0; min-width:0; overflow:hidden; }
+          .malik-founder-messages-body:not(.has-selected-user) .malik-founder-messages-main,
+          .malik-founder-messages-body.has-selected-user .malik-founder-messages-users { display:none; }
+          .malik-founder-messages-users,.malik-founder-messages-main { width:100%; flex:1; min-height:0; min-width:0; border:0; }
+          .malik-founder-messages-users>label { margin:12px; }
+          .malik-founder-messages-users input { font-size:16px; min-height:48px; padding-left:34px; }
+          .malik-founder-messages-userlist { padding:0 12px calc(16px + env(safe-area-inset-bottom)); overflow:auto; touch-action:pan-y; }
+          .malik-founder-messages-userlist>button { grid-template-columns:40px minmax(0,1fr) 8px; min-height:76px; gap:12px; padding:12px 10px; border-bottom:1px solid #202020; border-radius:10px; }
+          .malik-founder-messages-avatar { width:40px; height:40px; font-size:15px; }
+          .malik-founder-messages-usercopy strong { font-size:15px; white-space:normal; overflow-wrap:anywhere; }
+          .malik-founder-messages-usercopy small { font-size:13px; color:#bcbcbc; white-space:normal; overflow-wrap:anywhere; }
+          .malik-founder-messages-userlist>button>i { display:block; }
+          .malik-founder-messages-back { display:block; flex-shrink:0; min-height:44px; padding:8px 14px; border:0; border-bottom:1px solid #252525; background:#101010; color:#eee; font-size:14px; text-align:left; }
+          .malik-founder-messages-mobile-error { display:block; padding:14px; color:#ffb5a6; font-size:14px; overflow-wrap:anywhere; }
+          .malik-founder-messages-person { flex-shrink:0; gap:10px; }
+          .malik-founder-messages-person strong { font-size:16px; white-space:normal; overflow-wrap:anywhere; }
+          .malik-founder-messages-person span { color:#bbb; font-size:13px; white-space:normal; overflow-wrap:anywhere; }
+          .malik-founder-messages-feed { padding:12px; touch-action:pan-y; -webkit-overflow-scrolling:touch; }
+          .malik-founder-message-turn { margin:0 0 12px; }
+          .malik-founder-message-line { padding:14px; gap:7px; }
+          .malik-founder-message-line b { font-size:12px; }
+          .malik-founder-message-line p { font-size:15px; line-height:1.6; }
+          .malik-founder-message-line.is-assistant p { color:#ccc; }
+          .malik-founder-message-meta { flex-wrap:wrap; gap:6px; padding:8px 12px; font-size:11px; }
+          .malik-founder-message-meta>span { font-size:10px; }
+          .malik-founder-messages-foot { flex-shrink:0; padding:10px 12px calc(10px + env(safe-area-inset-bottom)); font-size:11px; color:#999; }
+          .malik-founder-messages-empty { font-size:14px; }
+        }
       `}</style>
     </section>,
     document.body,
