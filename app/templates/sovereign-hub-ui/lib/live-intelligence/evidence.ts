@@ -1,6 +1,6 @@
 import type { MalikWebSource } from "../ai/web-research-types"
 import { classifyFreshness, localDateAt, isNewsRequest, type FreshnessIntent } from "../ai/freshness-intent"
-import { explicitCalendarDates, findOccurrence, findOpening } from "./occurrence-evidence"
+import { explicitCalendarDates, findOccurrence, findOpening, isCompletedOpeningTitle } from "./occurrence-evidence"
 import { publisherRelease, releasePublisher } from "./release-catalog"
 import { currentModelSubjects, mentionedCurrentModels } from "../ai/current-evidence"
 import { auditAnswerFacts } from "../ai/fact-audit"
@@ -98,10 +98,11 @@ export function assessSources(prompt: string, sources: readonly MalikWebSource[]
     if (intent.lastOccurrence) {
       const byRead = Number(Boolean(b.readAt && b.occurrence)) - Number(Boolean(a.readAt && a.occurrence))
       const mentionsEdition = (source: MalikWebSource) => Number(Boolean(editionYear?.test(source.title)))
-      const byEditionLead = a.readAt && b.readAt ? 0 : mentionsEdition(b) - mentionsEdition(a)
+      const byOpeningLead = intent.lastOccurrence.opening ? Number(isCompletedOpeningTitle(b.title)) - Number(isCompletedOpeningTitle(a.title)) : 0
+      const byEditionLead = a.readAt && b.readAt || intent.lastOccurrence.opening ? 0 : mentionsEdition(b) - mentionsEdition(a)
       const byEvent = (b.occurrence?.end || "").localeCompare(a.occurrence?.end || "")
         || (a.occurrence?.start || "").localeCompare(b.occurrence?.start || "")
-      return byRead || byEditionLead || byEvent || Number(b.authority === "primary") - Number(a.authority === "primary")
+      return byRead || (intent.lastOccurrence.opening ? byEvent || byOpeningLead : byEditionLead || byEvent) || Number(b.authority === "primary") - Number(a.authority === "primary")
         || Number(isSocialEvidenceSource(a)) - Number(isSocialEvidenceSource(b))
     }
     if ((isNewsRequest(prompt) || intent.window) && !intent.historical) {

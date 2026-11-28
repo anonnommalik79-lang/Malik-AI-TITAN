@@ -51,6 +51,7 @@ function computeClaimLedger(input: { answer: string; prompt: string; sources?: r
     let status: ClaimStatus="UNVERIFIED"
     let evidence: ClaimEvidence[]=[{method:"none"}]
     const calculationOnly=/^(?:(?:ответ|результат|result|answer|итого|total)\s*:\s*)?[\d\s.,()+\-−×*·÷/%^=≈]+$/iu.test(text)
+      || /^(?:(?:ответ|результат|result|answer|итого|total)\s*[:=]\s*)?[-−+]?\d[\d\s.,]*\s*(?:₸|тенге|KZT|USD|EUR|₽|руб\.?|[$€])[.!]?$/iu.test(text)
       || /^(?:платящие пользователи|выручка|месячная выручка|платёж за период|сумма после капитализации|paying users|revenue|monthly revenue|payment per period)\s*[:=]\s*[$€₸]?[\d\s.,/]+\s*(?:USD|EUR|KZT|₸|тенге|руб\.?|[$€])?[.!]?$/iu.test(text)
     if(checked?.evidence==="deterministic" && calculationOnly) {origin="calculation";status="VERIFIED";evidence=[{method:"deterministic",excerpt:checked.text.slice(0,240)}]}
     else if(origin==="user-data" && checked?.evidence==="user") {status="SUPPORTED";evidence=[{method:"user-input",excerpt:"Из исходных данных пользователя; их истинность не проверялась"}]}
@@ -79,6 +80,13 @@ function computeClaimLedger(input: { answer: string; prompt: string; sources?: r
  * claims success; it means this layer supplied no verification evidence. */
 export function buildClaimLedger(input: Parameters<typeof computeClaimLedger>[0]): ClaimLedger | null {
   try { return computeClaimLedger(input) } catch { return null }
+}
+
+/** Short verified results need only the number in the ordinary chat. */
+export function omitStandaloneCalculationLedger(ledger: ClaimLedger | null, answer: string): ClaimLedger | null {
+  const claim = ledger?.claims.length === 1 ? ledger.claims[0] : undefined
+  if (claim?.origin === "calculation" && claim.status === "VERIFIED" && normalize(answer) === normalize(claim.text)) return null
+  return ledger
 }
 
 export function normalizeClaimLedger(raw: unknown): ClaimLedger | null {

@@ -37,6 +37,7 @@ import { publisherRelease, releasePublisher, verifiedPublisherRelease } from "@/
 import { worldBirthCohortEvidence, worldBirthCohortAnswer, explainWorldBirthCohort } from "@/lib/live-intelligence/birth-cohort-evidence"
 import { mapBounded } from "@/lib/live-intelligence/concurrency"
 import { fetchNationalBankQuote, nationalBankQuote, verifiedNationalBankReply } from "@/lib/live-intelligence/official-exchange-rate"
+import { isCompletedOpeningTitle } from "@/lib/live-intelligence/occurrence-evidence"
 import { isRetailLead, retailLookup, retailPageEvidence } from "@/lib/live-intelligence/retail-evidence"
 import { indexedSources } from "@/lib/live-intelligence/index-reader"
 import { parseKnowledgeFeed, KNOWLEDGE_FEEDS, type KnowledgeFeed } from "@/lib/live-intelligence/feed-updater"
@@ -605,8 +606,10 @@ function buildQueries(prompt: string, intent: FreshnessIntent) {
   // Use the public, redacted copy to build provider queries.
   const occurrence = intent.lastOccurrence && lastOccurrenceRequest(prompt)
   if (occurrence?.opening) {
-    const query = [occurrence.location, occurrence.subject].filter(Boolean).join(" ")
-    return [`${query} открылись открытие дата`, `${query} последние открытые станции ввод в эксплуатацию`, q]
+    const query = [occurrence.location, `"${occurrence.subject.replace(/"/gu, "")}"`].filter(Boolean).join(" ")
+    return intent.language === "en"
+      ? [`${query} "opened" opening date`, `${query} began operations opening`, q]
+      : [`${query} "открылись" дата открытия`, `${query} "открыли" для пассажиров дата`, q]
   }
   if (occurrence) {
     const subject = occurrence.subject
@@ -921,10 +924,17 @@ async function gatherSources(question: string, emit?: ResearchEmitter, activity?
     const localRecap = safeSubject && /(?:казахстан|астан[аеыу]|алмат[ыа]|қазақстан|kazakhstan|astana|almaty|\.kz\b)/iu.test(context)
       ? `"${safeSubject.replace(/^(?:ai|ии)\s*&\s*/iu, "").replace(/"/gu, "")}" ${editionYear} итоги прошел site:gov.kz`
       : ""
-    const followUpQuery = intent.lastOccurrence.opening ? `${queries[0]}${localRecap ? " site:gov.kz" : ""}` : localRecap || queries[1] || queries[0]
+    const confirmedOpening = sources.some(source => source.readAt && source.occurrence && !isSocialEvidenceSource(source))
+    const openingHeadline = intent.lastOccurrence.opening && !confirmedOpening
+      ? unique.find(source => !isSocialEvidenceSource(source) && isCompletedOpeningTitle(source.title))?.title
+          .split(/\s+[-–—|]\s+|\s*\|/u)[0].replace(/["«»]/gu, "").trim().slice(0, 120)
+      : undefined
+    const followUpQuery = openingHeadline ? `"${openingHeadline}"`
+      : intent.lastOccurrence.opening ? confirmedOpening ? `${queries[0]} ${editionYear}` : queries[1] || queries[0]
+        : localRecap || queries[1] || queries[0]
     const unusedProvider = providers.find(provider => !live.attempts.some(attempt => attempt.provider === provider.name))
     // A differently scoped query through the working provider can recover an original report behind reposts.
-    const alternativesToTry = localRecap ? [providers[0], unusedProvider].filter((provider): provider is LiveSearchProvider => Boolean(provider))
+    const alternativesToTry = localRecap || intent.lastOccurrence.opening ? [providers[0], unusedProvider].filter((provider): provider is LiveSearchProvider => Boolean(provider))
       : [unusedProvider || (queries[1] ? providers[0] : undefined)].filter((provider): provider is LiveSearchProvider => Boolean(provider))
     if (alternativesToTry.length) {
       const recoveryCall = activity?.start("Ищу доступное подтверждение события", "search", "web.search", { provider: alternativesToTry[0].name })

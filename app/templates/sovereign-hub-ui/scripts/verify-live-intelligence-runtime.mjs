@@ -35,7 +35,7 @@ const stubs = {
   "@/lib/live-intelligence/index-reader": { indexedSources: async () => ({ sources: [], health: { status: "unavailable" } }) },
   "@/lib/malik-research/fetch-page": { fetchPageText: async (source) => {
     readUrls.push(source.url)
-    if (scenario === "unread-event" || source.url === blockedEventPage) return null
+    if (scenario === "unread-event" || source.url === blockedEventPage || source.url.includes("/archived-metro-open")) return null
     const text = source.url === bridgeUrl ? "Обзор программы. ".repeat(240) + `AI & Digital Bridge ${bridgeYear} прошёл 1–3 октября в Астане.` : source.snippet
     return { ...source, text, readAt: new Date().toISOString() }
   } },
@@ -66,7 +66,9 @@ try {
     }
     if (scenario === "opening" && String(url).includes("serper.dev")) {
       return Response.json({ organic: [
-        { title: "В Алматы открылись станции метро", link: "https://example.kz/metro-open", snippet: "30 мая 2022 года в Алматы открылись две станции метро «Сарыарка» и «Бауыржан Момышулы»." },
+        ...(JSON.parse(init.body).q.includes('"В Алматы открылись станции метро"')
+          ? [{ title: "В Алматы открылись станции метро — городской пресс-центр", link: "https://city.example.kz/metro-open", snippet: "В Алматы открылись станции метро 30.05.2022 Транспорт. Сегодня торжественно открылись две станции метро «Сарыарка» и «Бауыржан Момышулы»." }]
+          : [{ title: "В Алматы открылись станции метро", link: "https://example.kz/archived-metro-open", snippet: "В Алматы сегодня открылись две станции метро «Сарыарка» и «Бауыржан Момышулы»." }]),
         { title: "Когда откроются станции метро в Алматы", link: "https://example.kz/metro-planned", snippet: "31 декабря 2026 года планируется открыть станции метро." },
       ] })
     }
@@ -202,6 +204,7 @@ try {
       const answer = await run("Когда в Алматы последний раз открыли новые станции метро? Какие станции открылись в тот день?", "balanced", "malik-max")
       assert.match(answer.content, /30 мая 2022/u)
       assert.match(answer.content, /Сарыарка.*Момышулы/u)
+      assert.ok(readUrls.includes("https://city.example.kz/metro-open"))
       assert.doesNotMatch(answer.content, /28 мая 2022|31 декабря 2026/u)
     } finally { modelDraft = undefined }
   })

@@ -2,9 +2,19 @@ import test from "node:test"
 import assert from "node:assert/strict"
 import {workTestLoader} from "./work-test-loader.mjs"
 const load=workTestLoader({})
-const {buildClaimLedger,normalizeClaimLedger,labelledMetricDisagreements}=load("lib/ai/claim-ledger.ts")
+const {buildClaimLedger,normalizeClaimLedger,labelledMetricDisagreements,omitStandaloneCalculationLedger}=load("lib/ai/claim-ledger.ts")
 const {normalizeFactAudit}=load("lib/ai/fact-audit.ts")
 
+{
+  const prompt = "Посчитай 17,5% от 248 000 ₸. Дай только итог.h"
+  const answer = "43 400 ₸"
+  const ledger = buildClaimLedger({ answer, prompt })
+  assert.equal(ledger.claims[0].status, "VERIFIED")
+  assert.equal(omitStandaloneCalculationLedger(ledger, answer), null)
+  const incorrect = buildClaimLedger({ answer: "43 000 ₸", prompt })
+  assert.equal(omitStandaloneCalculationLedger(incorrect, "43 000 ₸"), incorrect)
+  assert.equal(omitStandaloneCalculationLedger(ledger, answer + "\nДетали расчёта"), ledger)
+}
 test("recognized arithmetic is deterministic VERIFIED without web citations",()=>{
   const ledger=buildClaimLedger({answer:"17 * 23 = 391",prompt:"Реши 17 * 23"})
   assert.equal(ledger.claims[0].status,"VERIFIED")

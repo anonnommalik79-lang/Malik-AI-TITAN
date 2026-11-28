@@ -20,7 +20,7 @@ import { currentEvidenceAvailable, finalizeFreshAnswer, freshnessEvidenceInstruc
 import { isContinueRequest, resumableAnswer, resumeText, sameAnswerText, withIncompleteNote, type AnswerIncomplete } from "@/lib/ai/answer-completion"
 import { finalizeAccuracy } from "@/lib/ai/accuracy/engine"
 import { accuracyTokenGate, isComputationalQuestion } from "@/lib/ai/accuracy/stream"
-import { buildClaimLedger } from "@/lib/ai/claim-ledger"
+import { buildClaimLedger, omitStandaloneCalculationLedger } from "@/lib/ai/claim-ledger"
 import type { MalikFactAudit } from "@/lib/ai/fact-audit"
 import { after } from "next/server"
 import { parsePluginCommand } from "@/lib/server/plugin-runtime"
@@ -1446,7 +1446,7 @@ function liveSseResponse(
         const expertDisagreements = reviewSteps.reduce((sum, step) => {
           try { return sum + (Number(JSON.parse(step.output || "{}").numericalDisagreements) || 0) } catch { return sum }
         }, 0)
-        const ledger = flash || answer.provider === FLASH_GOOGLE_SEARCH_PROVIDER || "projectArtifact" in answer || skipsClaimAudit(coderPrompt(body),content) ? null : buildClaimLedger({answer:content,prompt:coderPrompt(body),sources:answer.sources,expertDisagreements})
+        const ledger = flash || answer.provider === FLASH_GOOGLE_SEARCH_PROVIDER || "projectArtifact" in answer || skipsClaimAudit(coderPrompt(body),content) ? null : omitStandaloneCalculationLedger(buildClaimLedger({answer:content,prompt:coderPrompt(body),sources:answer.sources,expertDisagreements}), content)
         const previousAudit = ("factAudit" in answer ? answer.factAudit : null) as MalikFactAudit | null
         const factAudit = ledger ? { ...(previousAudit || {checked:0,supported:0,missing:0,brokenCitations:0,claims:[],status:"unchecked" as const,summary:"Проверены только распознанные явные утверждения"}),ledger } : previousAudit
         send("done", {

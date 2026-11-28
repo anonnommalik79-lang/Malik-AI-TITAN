@@ -30,7 +30,7 @@ const kazakhDateRange = /^\s*аралығында(?:\s+[\p{L}\p{N}'’.-]{1,32})
 const reference = /^(?:он|она|оно|они|форум|конференция|мероприятие|фестиваль|саммит|it|the (?:forum|conference|event|festival|summit|tournament|championship)|ол|форум|іс-шара)\s*$/iu
 
 function normalized(text: string) {
-  return text.normalize("NFKC").replace(/ё/giu, "е").replace(/&(?:n|m)dash;|&#(?:8211|8212);/giu, "–").replace(/&amp;/giu, "&").replace(/[^\S\r\n]+/gu, " ")
+  return text.normalize("NFKC").replace(/ё/giu, "е").replace(/&(?:n|m)dash;|&#(?:8211|8212);/giu, "–").replace(/&amp;/giu, "&").replace(/&laquo;/giu, "«").replace(/&raquo;/giu, "»").replace(/[^\S\r\n]+/gu, " ")
 }
 
 function validDay(value: string) {
@@ -126,32 +126,44 @@ export function findOccurrence(subject: string, title: string, body: string, asO
   return latest
 }
 
+const openingAction = /(?<!\p{L})(?:откр(?:ыли|ылась|ылись|ыт[аоы])|запустили|ввели\s+в\s+эксплуатацию|введен[аоы]?\s+в\s+эксплуатацию|opened|entered\s+service)(?!\p{L})/iu
+const openingExcluded = /(?:техническ\p{L}*\s+(?:запуск|пуск)|тестов\p{L}*|пробн\p{L}*|не\s+(?:откр|запуст|введ)|did\s+not|вновь\s+откры|reopened)/iu
+
+export function isCompletedOpeningTitle(title: string) {
+  return openingAction.test(title) && !openingExcluded.test(title) && !plannedOrNegated.test(title)
+}
+
 /** A report that says "today opened" may use its own dated dateline.
  * Planned openings and test launches never establish public operation.
  */
 export function findOpening(request: LastOccurrence, title: string, body: string, asOf: string, publicationDay?: string): OccurrenceEvidence | undefined {
   const clean = normalized(body.slice(0, 18_000))
   const subject = occurrenceSubjectPattern(request.subject, true)
-  const dateHeader = explicitCalendarDates(clean.slice(0, 550))[0]
-  const action = /(?<!\p{L})(?:откр(?:ыли|ылась|ылись|ыт[аоы])|запустили|ввели\s+в\s+эксплуатацию|введен[аоы]?\s+в\s+эксплуатацию|opened|entered\s+service)(?!\p{L})/iu
-  const excluded = /(?:техническ\p{L}*\s+(?:запуск|пуск)|тестов\p{L}*|пробн\p{L}*|не\s+(?:откр|запуст|введ)|did\s+not|вновь\s+откры|reopened)/iu
+  const heading = normalized(title).split(/\s+[-–—|]\s+|\s*\|/u)[0].trim()
+  const headingIndex = heading.length >= 15 ? clean.toLowerCase().indexOf(heading.toLowerCase()) : -1
+  const dateline = headingIndex < 0 ? "" : clean.slice(headingIndex + heading.length).replace(/^[\s:–—-]+/u, "")
+  const dateHeader = readDates(dateline.slice(0, 45)).find(date => date.index === 0)?.start
   const sentences = clean.split(/(?<=[.!?])\s+(?=[\p{Lu}\d])|[\r\n]+/gu)
   const candidates: OccurrenceEvidence[] = []
   for (const sentence of sentences) {
-    if (!action.test(sentence) || excluded.test(sentence) || plannedOrNegated.test(sentence)) continue
+    if (!isCompletedOpeningTitle(sentence)) continue
     const match = subject.exec(sentence)
     if (!match) continue
     const start = Math.max(0, match.index - 160)
     const excerpt = sentence.slice(start, match.index + match[0].length + 170).trim()
-    if (!action.test(excerpt)) continue
-    const dates = explicitCalendarDates(excerpt)
+    if (!openingAction.test(excerpt)) continue
+    const statement = openingAction.exec(excerpt)
+    const dates = readDates(excerpt).filter(date => {
+      const fromAction = Math.abs(date.index - (statement?.index || 0))
+      return fromAction <= 65 && !/(?:график|до\s+$|планир|годовщин|anniversary|deadline)/iu.test(excerpt.slice(Math.max(0, date.index - 22), date.index))
+    }).flatMap(date => [date.start, date.end])
     if (/\b(?:today)\b|(?<!\p{L})сегодня(?!\p{L})/iu.test(excerpt)) {
-      const day = publicationDay || dateHeader
+      const day = dateHeader || publicationDay
       if (day && validDay(day)) dates.push(day)
     }
     for (const date of dates) if (date <= asOf) candidates.push({ start: date, end: date, excerpt })
   }
   // Ensure the requested location is supported by the source, including its title.
   if (request.location && !`${title} ${clean}`.toLocaleLowerCase().includes(request.location.toLocaleLowerCase())) return
-  return candidates.sort((a, b) => b.end.localeCompare(a.end))[0]
+  return candidates.sort((a, b) => b.end.localeCompare(a.end) || b.excerpt.length - a.excerpt.length)[0]
 }
