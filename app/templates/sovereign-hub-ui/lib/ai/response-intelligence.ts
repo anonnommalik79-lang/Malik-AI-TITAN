@@ -395,6 +395,20 @@ export function buildMalikResponseSystemPrompt(input: {
     || subject.signals.includes("headtohead")
     || asksPurchaseAdvice(subjectPrompt)
   ) ? MALIK_ANSWER_CARDS_CONTRACT : ""
+  // Semantic requirements must survive a change of visual renderer. Keep
+  // the detailed legacy presentation only when no composed UI is selected.
+  const semanticShapeContract = subject.signals.includes("headtohead") ? [
+    "HEAD-TO-HEAD CONTRACT (content, independent of visual format):",
+    "- Identify the named options, give the direct verdict and decisive criterion. Compare them on the same relevant criteria and distinguish strengths, weaknesses, costs and task-specific trade-offs where applicable.",
+    "- Never invent benchmarks, scores, prices, release dates or winners. State the evidence date for changing facts and cite supported claims.",
+    "- Make a Comparison Matrix if the user benefits from comparable rows; it may be ordinary prose or a single table in the chosen composition, never a duplicate. End with a recommendation tied to the actual use case. Respect explicit length and format requirements.",
+  ].join("\n") : subject.signals.includes("overview") ? [
+    "OVERVIEW CONTRACT (content, independent of visual format):",
+    "- Identify the exact subject first, resolve role and ordinal questions from conversation context, and flag a material ambiguity instead of silently guessing.",
+    "- Explain the most relevant background, key facts and significance in a logical order; use specific supported details rather than generic praise. Adapt scope to the user’s requested depth and format.",
+    `- For changing facts, use the evidence date or «Актуально на ${today}» only when supported by actual current evidence. Cite supported claims and disclose missing information.`,
+    "- Do not force decorative images, repeated fact grids or a second summary.",
+  ].join("\n") : ""
   const shapeContract = subject.signals.includes("headtohead")
     ? [
         "HEAD-TO-HEAD CONTRACT (the user compares named options; answer like the best analyst would, not with a paragraph):",
@@ -448,7 +462,7 @@ export function buildMalikResponseSystemPrompt(input: {
       "VISUAL REFERENCE CONTRACT: The chat automatically retrieves real sourced photos for concrete subjects, independently of the text model. Photos occupy the full answer width, with a bold exact subject caption, source and description below. Keep each photo beside its own subject section; no unrelated stock decorations. Never turn generic action labels (Registration, Sign Up, Settings, Conclusion) into photo subjects. For tutorials keep the exact product/app and feature in the query; only a matching real screenshot is an instruction image. Never say that you cannot show/insert photos or send the user to search for them instead. For a photo follow-up resolve the exact people/products/places from the conversation. Use clear concrete headings and exact model names. Answer directly, use numbered tutorial steps, and never invent image URLs, screenshot contents, licenses, photo dimensions or highlight coordinates. Reference images are existing public media, not generated or charged jobs; their metadata is not supplied to you.",
     ] : []),
     ...(briefContract ? [briefContract] : []),
-    ...(shapeContract && !uiContract ? [shapeContract] : []),
+    ...((uiContract ? semanticShapeContract : shapeContract) ? [uiContract ? semanticShapeContract : shapeContract] : []),
     ...(analystContract ? [analystContract] : []),
     ...(codeContract ? [codeContract] : []),
     ...(artifactContract ? [artifactContract] : []),
