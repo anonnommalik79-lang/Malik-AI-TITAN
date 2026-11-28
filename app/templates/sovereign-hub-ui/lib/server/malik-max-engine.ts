@@ -1,3 +1,4 @@
+import { ChatSseDecoder, providerTextDelta, sseFrameData } from "@/lib/ai/chat-stream-contract"
 import { primaryProviderChoice, providerCompletionId } from "@/lib/ai/provider-choice"
 import Anthropic from "@anthropic-ai/sdk"
 import { claudePremiumAllowed, claudePremiumModel, runClaudePremium } from "./claude-premium"
@@ -628,7 +629,7 @@ export class ThinkFilter {
   }
 }
 
-type StreamEvent = { completionId?: string; text: string; activity: boolean; finishReason?: string; usage?: unknown; error?: string; terminal?: boolean }
+type StreamEvent = { completionId?: string; textMode?: "delta" | "snapshot"; text: string; activity: boolean; finishReason?: string; usage?: unknown; error?: string; terminal?: boolean }
 
 /** One parsed line of a provider's stream, in any of the three protocols. */
 export function parseStreamLine(protocol: Protocol, line: string): StreamEvent | null {
@@ -656,11 +657,13 @@ export function parseStreamLine(protocol: Protocol, line: string): StreamEvent |
   }
   if (event?.error) return { text: "", activity: false, error: String(event.error?.message || event.error) }
   const choice = primaryProviderChoice(event?.choices) as any
-  const text = contentPart(choice?.delta?.content ?? choice?.message?.content ?? choice?.text)
+  const value = choice?.delta?.content ?? choice?.message?.content ?? choice?.text
+  const text = contentPart(Array.isArray(value) ? value.filter(part => !part || typeof part !== "object" || !("type" in part) || part.type === "text" || part.type === "output_text") : value)
   const reasoning = Boolean(choice?.delta?.reasoning_content || choice?.delta?.reasoning || choice?.delta?.reasoning_details)
   return {
     text,
     completionId: choice ? providerCompletionId(event) : undefined,
+    textMode: choice?.delta?.content == null && choice?.message?.content != null ? "snapshot" : "delta",
     activity: Boolean(text) || reasoning || Boolean(choice),
     finishReason: choice?.finish_reason ? String(choice.finish_reason) : undefined,
     usage: event?.usage,
@@ -1223,12 +1226,9 @@ export function raceLanes(options: RaceOptions): Promise<RaceResult> {
         return
       }
 
-      const receive = (text: string, activity: boolean) => {
-        if (attempt.done) return
-        if (activity && !text && !attempt.buffer) attempt.thinking = true
-        if (!text) return
-        const visible = filter.push(text)
-        if (!visible) return
+      let providerText = ""
+      const appendVisible = (visible: string) => {
+        if (attempt.done || !visible) return
         if (visible.trim()) attempt.lastVisibleAt = Date.now()
         if (winner === attempt) {
           attempt.full += visible
@@ -1239,11 +1239,19 @@ export function raceLanes(options: RaceOptions): Promise<RaceResult> {
         attempt.buffer += visible
         if (attempt.buffer.replace(/\s+/g, "").length >= options.minFlush) crown(attempt)
       }
+      const receive = (text: string, activity: boolean, mode: "delta" | "snapshot" = "delta") => {
+        if (attempt.done) return
+        if (activity && !text && !attempt.buffer) attempt.thinking = true
+        if (!text) return
+        const normalized = providerTextDelta(providerText, text, mode)
+        providerText = normalized.content
+        if (normalized.delta) appendVisible(filter.push(normalized.delta))
+      }
 
       const end = (interrupted: boolean) => {
         if (attempt.done) return
         const tail = filter.flush()
-        if (tail) receive(tail, true)
+        if (tail) appendVisible(tail)
         // A provider may close with one stray character. For deep/complex work,
         // do not crown that as a successful answer: let another lane try.
         const enoughText = options.minFlush < 24 || options.allowShortFinal === true && !interrupted
@@ -1275,7 +1283,9 @@ export function raceLanes(options: RaceOptions): Promise<RaceResult> {
         }
         const reader = response.body.getReader()
         attempt.reader = reader
-        const decoder = new TextDecoder()
+        const decoder = new TextDecoder("utf-8", { fatal: true })
+        const sse = new ChatSseDecoder()
+        const isSse = type.includes("event-stream")
         let pending = ""
         let completionId: string | undefined
         const consume = (line: string) => {
@@ -1286,27 +1296,29 @@ export function raceLanes(options: RaceOptions): Promise<RaceResult> {
           completionId ||= event.completionId
           if (event.finishReason) attempt.finishReason = event.finishReason
           if (event.usage) attempt.usage = event.usage
-          receive(event.text, event.activity)
+          receive(event.text, event.activity, event.textMode)
           return event.terminal === true
         }
         while (!attempt.done) {
           const { value, done } = await reader.read()
-          if (attempt.done || done) break
-          pending += decoder.decode(value, { stream: true })
-          const lines = pending.split(/\r?\n/)
-          pending = lines.pop() || ""
+          if (attempt.done) return
+          let lines: string[]
+          if (isSse) {
+            lines = sse.push(value, done).map(frame => sseFrameData(frame)).filter((data): data is string => data !== null)
+          } else {
+            pending += decoder.decode(value, { stream: !done })
+            lines = pending.split(/\r?\n/)
+            pending = lines.pop() || ""
+            if (done && pending.trim()) lines.push(pending)
+          }
           const terminal = lines.some(consume)
           if (attempt.done) return
-          if (terminal) {
-            end(false)
+          if (terminal || done) {
+            end(!terminal && !attempt.finishReason)
             void reader.cancel().catch(() => undefined)
             return
           }
         }
-        if (attempt.done) return
-        pending += decoder.decode()
-        if (pending.trim()) consume(pending)
-        end(false)
       } catch (error) {
         if (attempt.done) return
         if (winner === attempt) {
