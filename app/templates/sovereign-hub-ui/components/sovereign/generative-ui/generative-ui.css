@@ -323,3 +323,18 @@
   #malik-root .malik-md .mgu :is(button,input,select) { max-width:100%; }
   #malik-root .malik-md .mgu :is(.mgu-tabs,.mgu-card__top) { min-width:0; flex-wrap:wrap; }
 }
+
+
+.mgu-flex-row { display:flex; align-items:flex-start; gap:10px; flex-wrap:wrap; min-width:0; }
+.mgu-flex-row > * { flex:1 1 120px; min-width:0; }
+.mgu-status-list { display:grid; gap:12px; list-style:none; padding:0; margin:0; }
+.mgu-status-list li { display:flex; align-items:flex-start; gap:10px; }
+.mgu-status-icon { flex:0 0 20px; width:20px; font-size:18px; line-height:1.3; color:var(--mgu-ink-3); }
+.mgu-status-icon svg { width:18px; height:18px; }
+.mgu-status-icon.is-done { color:var(--mgu-good); }
+.mgu-status-icon.is-running { color:var(--mgu-warn); }
+.mgu-status-icon.is-failed { color:var(--mgu-bad); }
+.mgu-status-list p,.mgu-status-label { font-size:13px; color:var(--mgu-ink-3); overflow-wrap:anywhere; }
+.mgu-drawing { margin:0; min-width:0; max-width:100%; display:grid; gap:8px; }
+.mgu-drawing svg { display:block; width:100%; height:auto; border:1px solid var(--mgu-line); border-radius:14px; background:#080808; }
+.mgu-drawing text { font-family:inherit; }
