@@ -372,6 +372,15 @@ export function buildMalikResponseSystemPrompt(input: {
   // composition (scoreboard, diagram, report, timeline, chart, calculator)
   // or stays plain text - greetings, code, maths and text tasks stay plain.
   const uiContract = brief ? "" : buildGenerativeUiContract(subjectPrompt, subject.signals)
+  // The legacy core includes mandatory photo/diagram fences. Leaving it active
+  // alongside the new composition contract creates contradictory instructions.
+  // Retain the event evidence rule and all non-visual answer rules.
+  const corePrompt = uiContract
+    ? MALIK_RESPONSE_CORE_PROMPT.replace(MALIK_ANSWER_VISUAL_CONTRACT, [
+        "VISUAL INTEGRITY: use the selected composition only if it materially helps. No duplicate legacy visual blocks. Respect the requested format and photo restrictions. Never fabricate images, quantitative evidence, affiliations or completed work. A reference photo does not verify the surrounding claim. Do not claim to have seen an independently retrieved image. Keep complete text usable without visuals.",
+        ...MALIK_ANSWER_VISUAL_CONTRACT.split("\n").filter(line => line.startsWith("EVENT FACT-CHECK:")),
+      ].join("\n"))
+    : MALIK_RESPONSE_CORE_PROMPT
   const webContract = input.usedWeb && input.hasWebEvidence !== false
     ? "Verified web excerpts are supplied below. Answer the user's request using the actual evidence; do not send them to perform the search themselves. For a requested list, return the confirmed names and label it partial unless the source establishes completeness. Cite supported factual claims inline as [n]. Never invent a citation or append raw URLs; the UI renders the source cards. Missing details in these excerpts do not prove that no public information exists. If excerpts conflict or do not confirm a detail, say so."
     : input.usedWeb
@@ -451,7 +460,7 @@ export function buildMalikResponseSystemPrompt(input: {
     `Current date: ${today}.`,
     `Response language: ${profile.language}. Response complexity: ${profile.complexity}. Target length: ${profile.targetLength}.`,
     "MALIK RESPONSE CORE:",
-    `- ${MALIK_RESPONSE_CORE_PROMPT}`,
+    `- ${corePrompt}`,
     ...(input.focusInstruction ? [input.focusInstruction] : []),
     ...(cardsContract ? [cardsContract] : []),
     webContract,
