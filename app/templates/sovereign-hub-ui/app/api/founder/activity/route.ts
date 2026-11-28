@@ -88,14 +88,14 @@ async function fetchAllAccounts(): Promise<WorkOSUser[]> {
  * depending on which route originally wrote it. Merge every spelling so older
  * requests never disappear merely because identification changed later.
  */
-async function readAllSpellings(user: WorkOSUser): Promise<FounderMessageEntry[]> {
+async function readAllSpellings(user: WorkOSUser, onPartial: () => void): Promise<FounderMessageEntry[]> {
   const keys = [...new Set([
     String(user.email || "").trim().toLowerCase(),
     user.id ? `workos:${user.id}`.toLowerCase() : "",
     String(user.id || "").trim().toLowerCase(),
   ].filter(Boolean))]
 
-  const lists = await Promise.all(keys.map((key) => readFounderMessageLog(key)))
+  const lists = await Promise.all(keys.map((key) => readFounderMessageLog(key, onPartial)))
   const seen = new Set<string>()
   return lists.flat().filter((entry) => {
     const key = `${entry.id}:${entry.createdAt}:${entry.source}`
@@ -116,15 +116,18 @@ export async function GET(request: Request) {
   let warning = ""
   try {
     accounts = await fetchAllAccounts()
-  } catch (error) {
-    warning = error instanceof Error ? error.message : "WorkOS users unavailable"
+  } catch {
+    console.error("[FOUNDER AUDIT] Account directory unavailable")
+    return Response.json({ ok: false, error: "HISTORY_DIRECTORY_READ_FAILED", message: "Список аккаунтов временно недоступен." }, { status: 503, headers: { "Cache-Control": "private, no-store" } })
   }
 
   const rows: ActivityRow[] = []
-  try { for (let index = 0; index < accounts.length; index += WAVE) {
+  let partial = false
+  const markPartial = () => { partial = true }
+  for (let index = 0; index < accounts.length; index += WAVE) {
     const wave = accounts.slice(index, index + WAVE)
-    const results = await Promise.all(wave.map(async (account) => {
-      const entries = await readAllSpellings(account)
+    const results = await Promise.allSettled(wave.map(async (account) => {
+      const entries = await readAllSpellings(account, markPartial)
       const name = account.name || [account.first_name, account.last_name].filter(Boolean).join(" ") || "Пользователь"
       return entries.map((entry) => ({
         ...entry,
@@ -133,10 +136,16 @@ export async function GET(request: Request) {
         userName: name,
       }))
     }))
-    for (const list of results) rows.push(...list)
-  } } catch {
+    for (const result of results) {
+      if (result.status === "fulfilled") rows.push(...result.value)
+      else { partial = true; console.error("[FOUNDER AUDIT] Account timeline read failed") }
+    }
+  }
+  if (partial && rows.length === 0) {
     return Response.json({ ok: false, error: "HISTORY_STORAGE_READ_FAILED", message: "Хранилище журнала временно недоступно; история не считается пустой." }, { status: 503, headers: { "Cache-Control": "private, no-store" } })
   }
+
+  if (partial) warning = "Часть хранилищ недоступна. Показаны только успешно прочитанные записи; итоговые числа неполные."
 
   const filtered = search
     ? rows.filter((row) => `${row.userName} ${row.userEmail} ${row.userText} ${row.assistantText}`.toLowerCase().includes(search))
@@ -153,6 +162,7 @@ export async function GET(request: Request) {
 
   return Response.json({
     ok: true,
+    partial,
     items,
     total: rows.length,
     today: rows.filter((row) => isAlmatyDay(dateMs(row.createdAt), 0, now)).length,
