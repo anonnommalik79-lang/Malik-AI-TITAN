@@ -1,3 +1,4 @@
+import { primaryProviderChoice, providerCompletionId } from "@/lib/ai/provider-choice"
 import Anthropic from "@anthropic-ai/sdk"
 import { claudePremiumAllowed, claudePremiumModel, runClaudePremium } from "./claude-premium"
 import { missingBriefItems, briefMissingMarker, briefNeedsDeep } from "@/lib/ai/brief-quality"
@@ -627,7 +628,7 @@ export class ThinkFilter {
   }
 }
 
-type StreamEvent = { text: string; activity: boolean; finishReason?: string; usage?: unknown; error?: string; terminal?: boolean }
+type StreamEvent = { completionId?: string; text: string; activity: boolean; finishReason?: string; usage?: unknown; error?: string; terminal?: boolean }
 
 /** One parsed line of a provider's stream, in any of the three protocols. */
 export function parseStreamLine(protocol: Protocol, line: string): StreamEvent | null {
@@ -647,18 +648,19 @@ export function parseStreamLine(protocol: Protocol, line: string): StreamEvent |
     return { text: "", activity: true }
   }
   if (protocol === "google") {
-    const candidate = event?.candidates?.[0]
+    const candidate = primaryProviderChoice(event?.candidates) as any
     const parts = Array.isArray(candidate?.content?.parts) ? candidate.content.parts : []
     const text = parts.filter((part: any) => part && part.thought !== true && typeof part.text === "string").map((part: any) => part.text).join("")
     if (event?.error) return { text: "", activity: false, error: String(event.error?.message || "google error") }
     return { text, activity: true, finishReason: candidate?.finishReason ? String(candidate.finishReason) : undefined, usage: event?.usageMetadata }
   }
   if (event?.error) return { text: "", activity: false, error: String(event.error?.message || event.error) }
-  const choice = event?.choices?.[0]
+  const choice = primaryProviderChoice(event?.choices) as any
   const text = contentPart(choice?.delta?.content ?? choice?.message?.content ?? choice?.text)
   const reasoning = Boolean(choice?.delta?.reasoning_content || choice?.delta?.reasoning || choice?.delta?.reasoning_details)
   return {
     text,
+    completionId: choice ? providerCompletionId(event) : undefined,
     activity: Boolean(text) || reasoning || Boolean(choice),
     finishReason: choice?.finish_reason ? String(choice.finish_reason) : undefined,
     usage: event?.usage,
@@ -1260,7 +1262,8 @@ export function raceLanes(options: RaceOptions): Promise<RaceResult> {
       try {
         if (!type.includes("event-stream") && response.body && lane.protocol === "openai" && type.includes("json")) {
           const payload = await response.json()
-          attempt.finishReason = payload?.choices?.[0]?.finish_reason ? String(payload.choices[0].finish_reason) : undefined
+          const primary = primaryProviderChoice(payload?.choices) as any
+          attempt.finishReason = primary?.finish_reason ? String(primary.finish_reason) : undefined
           attempt.usage = payload?.usage
           receive(contentFrom(payload), true)
           end(false)
@@ -1274,10 +1277,13 @@ export function raceLanes(options: RaceOptions): Promise<RaceResult> {
         attempt.reader = reader
         const decoder = new TextDecoder()
         let pending = ""
+        let completionId: string | undefined
         const consume = (line: string) => {
           const event = parseStreamLine(lane.protocol, line)
           if (!event) return false
           if (event.error) throw new Error(event.error)
+          if (event.completionId && completionId && event.completionId !== completionId) return false
+          completionId ||= event.completionId
           if (event.finishReason) attempt.finishReason = event.finishReason
           if (event.usage) attempt.usage = event.usage
           receive(event.text, event.activity)

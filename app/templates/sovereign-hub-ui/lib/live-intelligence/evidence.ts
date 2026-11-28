@@ -3,6 +3,7 @@ import { classifyFreshness, localDateAt, isNewsRequest, type FreshnessIntent } f
 import { explicitCalendarDates, findOccurrence, findOpening, isCompletedOpeningTitle } from "./occurrence-evidence"
 import { publisherRelease, releasePublisher } from "./release-catalog"
 import { currentModelSubjects, mentionedCurrentModels } from "../ai/current-evidence"
+import { scheduleTimes, upcomingDates } from "./upcoming-events"
 import { auditAnswerFacts } from "../ai/fact-audit"
 
 const AI_DOMAINS = ["openai.com", "anthropic.com", "claude.com", "deepmind.google", "ai.google.dev", "blog.google", "ai.meta.com", "llama.com", "deepseek.com", "qwen.ai", "qwenlm.github.io", "mistral.ai", "x.ai"]
@@ -125,6 +126,7 @@ export function currentEvidenceAvailable(sources: readonly MalikWebSource[], int
 
 function isCurrentEvidenceSource(source: MalikWebSource, intent: FreshnessIntent): boolean {
     if (!source.snippet?.trim()) return false
+    if (intent.upcoming) return upcomingDates(source, intent.localDate).length > 0
     if (intent.lastOccurrence) return Boolean(source.readAt && source.occurrence && source.occurrence.end <= intent.localDate)
     if (source.provider === "verified-index" && Date.parse(intent.checkedAt) - Date.parse(source.checkedAt || "") > intent.ttlMs && !source.readAt) return false
     if (intent.window) return source.freshness === "recent" || source.freshness === "old" && intent.historical
@@ -168,7 +170,7 @@ export function sourceDisagreements(sources: readonly MalikWebSource[]): string 
 }
 
 export function freshnessEvidenceInstruction(intent: FreshnessIntent): string {
-  const scope = intent.lastOccurrence ? "Use the newest confirmed occurrence in a page actually read. Cite that page for the occurrence date. An older completion report can answer this question; an announcement, a future edition, or the publication date cannot."
+  const scope = intent.upcoming ? `Only a scheduled occurrence on or after ${intent.localDate} can answer this request. Use the event date and local time stated by the source. Publication dates and archived occurrences cannot stand in for the next event.` : intent.lastOccurrence ? "Use the newest confirmed occurrence in a page actually read. Cite that page for the occurrence date. An older completion report can answer this question; an announcement, a future edition, or the publication date cannot."
     : intent.window ? `Requested window ${intent.window.from} to ${intent.window.to}; undated/outside-window pages are background, not proof of an event in this window.` : ""
   const statistics = intent.reason === "demographic-statistic" ? "For a demographic estimate, cite the reference period and name the source's measure. When the user asks how many people are alive now and gives a past year, read that year as the year of birth unless the wording says otherwise. A year's births and that cohort's surviving population are different measures. Only estimate survivors from dated, compatible inputs. If inputs are missing, report the supported part and name the missing data. Rank cohorts only when the evidence compares the same reference date and geography." : ""
   return `LIVE INTELLIGENCE: server check ${intent.checkedAt}; local date ${intent.localDate} (${intent.timeZone}); intent ${intent.category}. ${scope}
@@ -354,7 +356,7 @@ export function finalizeFreshAnswer(answer: string, intent: FreshnessIntent, sou
   }
   // Array indexes and example URLs inside code are not factual citations.
   const citationBody = factualText.replace(/`[^`\n]+`/gu, " ")
-  const news = intent.news === true || Boolean(intent.window && !intent.historical)
+  const news = intent.upcoming === true || intent.news === true || Boolean(intent.window && !intent.historical)
   const webUrls = new Set(sources.map(source => safeEvidenceUrl(source.url)))
   // Connected/private project citations have their own provenance. They must
   // not be mistaken for public news items just because an answer uses both.
@@ -377,7 +379,13 @@ export function finalizeFreshAnswer(answer: string, intent: FreshnessIntent, sou
   const release = stableRelease(options.question || "", sources, intent)
   const matchesCatalog = !release || versions(claimText).has(release.version)
   const question = options.question || ""
-  if (!hasCurrentCitation || !matchesCatalog || !supportsSoftwareVersions(claimText, question, [...cited], intent)
+  const futureEvidence = !intent.upcoming || (() => {
+    const answerDates = explicitCalendarDates(claimText.replace(freshnessCheckLine(intent), ""))
+    if (!answerDates.length || answerDates.some(date => date < intent.localDate)) return false
+    const supportedTimes = new Set([...cited].flatMap(source => scheduleTimes(source.snippet || "")))
+    return scheduleTimes(claimText).every(time => supportedTimes.has(time))
+  })()
+  if (!hasCurrentCitation || !futureEvidence || !matchesCatalog || !supportsSoftwareVersions(claimText, question, [...cited], intent)
     || !supportsProviderModels(claimText, question, [...cited], intent)
     || !supportsCalendarDates(claimText, question, [...cited], intent)
     || !supportsQuoteFigures(claimText, question, [...cited], intent)) {

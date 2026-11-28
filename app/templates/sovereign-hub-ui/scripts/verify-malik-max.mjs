@@ -437,6 +437,27 @@ await check("streams are parsed line by line for all three protocols", () => {
   assert.equal(engine.parseStreamLine("anthropic", `data: ${JSON.stringify({ type: "message_delta", delta: { stop_reason: "max_tokens" } })}`).finishReason, "max_tokens")
 })
 
+await check("indexed alternatives and foreign completion chunks never reach the winning stream", async () => {
+  const frame = (id, index, content) => "data: " + JSON.stringify({ id, object: "chat.completion.chunk", choices: [{ index, delta: { content } }] })
+  const chunks = [
+    frame("alternate-first", 1, "Чужое начало. "),
+    frame("primary", 0, "Лёд плавает, "),
+    frame("alternate", 1, "Другой ответ. "),
+    frame("different-completion", 0, "Сброс ответа. "),
+    frame("primary", 0, "потому что он легче воды того же объёма."),
+    "data: [DONE]",
+  ]
+  let visible = ""
+  const result = await engine.raceLanes({
+    lanes: [lane("interleaved-openai")], call, onToken: chunk => { visible += chunk },
+    minFlush: 3, fetcher: async () => new Response(sse(chunks), { headers: { "content-type": "text/event-stream" } }),
+    ...raceTiming,
+  })
+  assert.equal(visible, "Лёд плавает, потому что он легче воды того же объёма.")
+  assert.equal(result.content, visible)
+  assert.equal(engine.parseStreamLine("google", 'data: {"candidates":[{"index":1,"content":{"parts":[{"text":"alternative"}]}}]}').text, "")
+})
+
 await check("the think filter keeps ordinary '<' in code", () => {
   const filter = new engine.ThinkFilter()
   const out = filter.push("if (a <") + filter.push(" b) return <table>") + filter.flush()

@@ -65,6 +65,11 @@ try {
   console.info = () => {}
   globalThis.fetch = async (url, init) => {
     calls.push(String(url))
+    if (scenario === "local-eclipse" && String(url).startsWith("https://www.timeanddate.com/eclipse/in/kazakstan/almaty")) {
+      return new Response(String(url).includes("?iso=")
+        ? '<tr><th>Local Type:</th><td>Total Lunar Eclipse, in Almaty</td></tr><tr><th>Maximum:</th><td>31 Dec 2095, 21:52</td></tr>'
+        : '<a href="?iso=20200110">Total Lunar Eclipse</a><a href="?iso=20951231">Total Lunar Eclipse</a>')
+    }
     if (scenario === "official-rate" && String(url).includes("nationalbank.kz")) {
       const date = new URL(String(url)).searchParams.get("fdate")
       return date ? new Response(`<rates><date>${date}</date><item><title>USD</title><description>512.34</description><quant>1</quant></item></rates>`) : new Response("", { status: 503 })
@@ -256,6 +261,13 @@ try {
     assert.match(answer.content, /Кайрат 1:1 Алтай/u)
     assert.match(answer.content, /kffleague\.kz\/ru\/matches\/1120/u)
     assert.equal(inferences.length, before)
+  })
+  await check("the local eclipse calendar answers the actual MAX software path with a supported local maximum", async () => {
+    scenario = "local-eclipse"
+    const answer = await run("Когда из Алматы будет видно ближайшее полное лунное затмение? Дай дату, местное время максимума и ссылку на источник.", "balanced", "malik-max")
+    assert.equal(answer.model, "local-eclipse-calendar")
+    assert.match(answer.content, /31 декабря 2095 года.*21:52/u)
+    assert.equal(answer.sources.length, 2)
   })
   await check("news digest retains several recent reports from one feed, even when synthesis fails", async () => {
     scenario = "news-digest"

@@ -1,3 +1,4 @@
+import { sentenceFormat } from "../ai/sentence-format"
 import { UI_FENCE } from "./protocol"
 
 /**
@@ -70,7 +71,7 @@ export function routeUiLayout(prompt: string, signals: readonly string[] = []): 
   if (!text) return plain("empty")
   if (GREETING.test(text) && words <= 6) return plain("greeting")
   if (SMALL_TALK.test(text) || signals.includes("conversation") && words <= 8) return plain("small talk")
-  if (PLAIN_ONLY.test(text)) return plain("user asked for plain text")
+  if (sentenceFormat(text) || PLAIN_ONLY.test(text)) return plain("user asked for plain text")
   const compares = has(text, COMPARE) || signals.includes("headtohead")
   const route = (layout: Exclude<UiLayout, "plain">, reason: string, extra = ""): UiRoute => ({ layout, reason, recipe: RECIPES[layout] + extra })
   if (has(text, DIAGRAM) && !has(text, CODE_ASK)) {
@@ -99,7 +100,7 @@ export function routeUiLayout(prompt: string, signals: readonly string[] = []): 
 /** True when the answer should keep the visual and photo contracts: a composed layout, or a request to see something. */
 export function wantsVisualAnswer(prompt: string, signals: readonly string[] = []): boolean {
   const text = String(prompt || "")
-  return routeUiLayout(text, signals).layout !== "plain" || VISUAL_ASK.test(text)
+  return !sentenceFormat(text) && (routeUiLayout(text, signals).layout !== "plain" || VISUAL_ASK.test(text))
 }
 
 /** The protocol in a compact form the model can follow. Added to the system prompt only when the router chose a visual layout. */

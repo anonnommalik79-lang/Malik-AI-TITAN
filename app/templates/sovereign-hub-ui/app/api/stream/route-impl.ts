@@ -1,3 +1,4 @@
+import { validateSentenceProse } from "@/lib/ai/sentence-format"
 import { enterPremiumAccess } from "@/lib/server/claude-premium"
 import { asPlainText, malikGodAnswer, malikRescueAnswer, gatherSourcesForPrompt, sourceContext, type PreparedLiveEvidence } from "@/lib/malik-god-router"
 import { chatAnswerDeadline, withinChatDeadline } from "@/lib/ai/chat-deadline"
@@ -587,10 +588,11 @@ async function runSelectedAnswer(
     if (result) return result
   }
   const fileFormat=intent.target==="document"?intent.requirements.format:undefined
-  const validateText=intent.target==="text"&&(format==="json"||!freshness.needsSearch&&(intent.action==="repair"||needsActionClaimValidation(originalPrompt)))&&!hasMalikAttachments(body?.attachments)&&!routePetroleum(originalPrompt,body?.selectedSkillId).domain&&!parsePluginCommand(originalPrompt)
+  const conciseProse = intent.target === "text" && !format ? intent.requirements.sentences : undefined
+  const validateText=intent.target==="text"&&(format==="json"||Boolean(conciseProse)||!freshness.needsSearch&&(intent.action==="repair"||needsActionClaimValidation(originalPrompt)))&&!hasMalikAttachments(body?.attachments)&&!routePetroleum(originalPrompt,body?.selectedSkillId).domain&&!parsePluginCommand(originalPrompt)
   const requestedCap=Number(body?.maxTokens)
-  const plannedCap=validateText?analyzeMalikBrainV1({prompt:originalPrompt,historyLength:Array.isArray(body?.history)?body.history.length:0,requestedDepth:body?.responseDepth||body?.metadata?.responseDepth}).outputTokenTarget:fileFormat?12000:4000
-  const validationCap=Math.min(maxOutputTokens||Number.POSITIVE_INFINITY,Number.isFinite(requestedCap)&&requestedCap>0?Math.max(1,Math.floor(requestedCap)):plannedCap)
+  const plannedCap=conciseProse?768:validateText?analyzeMalikBrainV1({prompt:originalPrompt,historyLength:Array.isArray(body?.history)?body.history.length:0,requestedDepth:body?.responseDepth||body?.metadata?.responseDepth}).outputTokenTarget:fileFormat?12000:4000
+  const validationCap=Math.min(conciseProse ? plannedCap : Number.POSITIVE_INFINITY,maxOutputTokens||Number.POSITIVE_INFINITY,Number.isFinite(requestedCap)&&requestedCap>0?Math.max(1,Math.floor(requestedCap)):plannedCap)
   // Reserve at most half of the existing output allowance for one repair.
   // A repair is not permitted to double a finite account allowance.
   const generationCap=validateText||fileFormat?Math.max(1,Math.floor(validationCap/2)):maxOutputTokens
@@ -828,7 +830,7 @@ async function runSelectedAnswer(
   if (format === "json" && "incomplete" in answer && answer.incomplete) {
     return { ...answer, content: JSON.stringify({ status: "unverified", reason: "incomplete-answer" }), incomplete: undefined }
   }
-  if(validateText&&!ranToolLane&&!/petroleum|site-forge|game-studio|analyst|plugin|unavailable|safety|evidence-gate/.test(answer.provider)&&!("incomplete" in answer&&answer.incomplete)){
+  if(validateText&&!ranToolLane&&!/petroleum|site-forge|game-studio|analyst|plugin|unavailable|safety|evidence-gate/.test(answer.provider)&&(!("incomplete" in answer&&answer.incomplete)||conciseProse)){
     const first=validateConversationAnswer(intent,answer.content,source?.content||intent.source?.content)
     answer={...answer,content:first.content}
     if(first.issue){
@@ -849,7 +851,7 @@ async function runSelectedAnswer(
         }catch{signal?.throwIfAborted()}
       }
       activity?.finish(step,{attempts,valid:!last.issue},last.issue?"failed":"completed",last.issue?"OUTPUT_VALIDATION_FAILED":undefined)
-      answer={...answer,content:last.issue?conversationValidationFailure(intent,last.issue):last.content}
+      answer={...answer,content:last.issue?conversationValidationFailure(intent,last.issue):last.content,...(conciseProse&&!last.issue?{incomplete:undefined}:{})}
     }
   }
   if(!fileFormat||"incomplete" in answer&&answer.incomplete||/safety|unavailable|evidence-gate/.test(answer.provider))return answer
@@ -1326,6 +1328,8 @@ function liveSseResponse(
       }
       // Sources the full run found, so a rescue answers from them instead of searching again.
       let foundSources: MalikWebSource[] = []
+      const responseIntent = resolveConversationIntent({ prompt: coderPrompt(body), messages: conversationHistorySource(body), attachments: body?.attachments })
+      const requestedSentences = responseIntent.target === "text" && responseIntent.requirements.presentation !== "json" ? responseIntent.requirements.sentences : undefined
       const mainRun = new AbortController()
       const signal = AbortSignal.any([generation.signal, mainRun.signal, ...(requestSignal ? [requestSignal] : [])])
       const settledAnswer = flash
@@ -1380,7 +1384,7 @@ function liveSseResponse(
               allowCatalog: Boolean(selection && hasMalikProAccess(selection.entitlement.plan)),
             }, foundSources, {
               wallMs: deadline.rescueMs,
-              onToken: writeAnswer("rescue"),
+              onToken: requestedSentences ? undefined : writeAnswer("rescue"),
               activity,
               signal: AbortSignal.any([generation.signal, AbortSignal.timeout(deadline.rescueMs + 10_000)]),
             })
@@ -1408,7 +1412,11 @@ function liveSseResponse(
         observeComputeResult(answer)
         const incomplete = "incomplete" in answer ? answer.incomplete ?? null : null
         // An answer the engine could not finish says so in its last line.
-        const content = flash ? answer.content : withIncompleteNote(asPlainText(answer), incomplete)
+        const rawContent = flash ? answer.content : withIncompleteNote(asPlainText(answer), incomplete)
+        const shaped = requestedSentences && writer === "rescue" ? validateSentenceProse(asPlainText(answer), requestedSentences) : undefined
+        const content = shaped
+          ? shaped.valid ? shaped.content : conversationValidationFailure(responseIntent, "sentence-format")
+          : rawContent
         // The authoritative final text, sent only when it differs from what
         // streamed: a streamed answer would otherwise keep a server-side
         // rewrite (a «⚠️» warning, the incomplete note) off the screen and
@@ -1460,7 +1468,7 @@ function liveSseResponse(
           webSourceCount: answer.sources.length,
           skillRun: "skillRun" in answer ? answer.skillRun : undefined,
           ...("skillRun" in answer && ["failed", "cancelled"].includes(answer.skillRun.status) ? { ok: false, error: answer.skillRun.error || "SKILL_RUN_FAILED" } : {}),
-          textOnly: body?.chatRecovery === true,
+          textOnly: body?.chatRecovery === true || Boolean(requestedSentences),
           // The answer's own figures, checked against the pages it was written
           // from. This rides on `done` rather than an event of its own so the
           // durable-turn tee and every existing reader carry it unchanged.

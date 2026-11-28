@@ -159,7 +159,7 @@ check("reports figures and broken citations in one sentence", () => {
   const result = audit("Доля 42% [1], объём 8,3 млрд [5].", [source("доля 42%")])
   assert.equal(result.missing, 1)
   assert.equal(result.brokenCitations, 1)
-  assert.match(result.summary, /1 из 2 фактов подтверждено источниками · 1 не найдено · 1 ссылка ведёт на несуществующий источник/)
+  assert.match(result.summary, /В источниках найдено 1 из 2 проверенных значений · 1 не найдено · 1 ссылка ведёт на несуществующий источник/)
 })
 
 check("does not let a citation index count as a source hit", () => {
@@ -215,18 +215,18 @@ check("caps the reported list but keeps the counts honest", () => {
 check("summarises a clean answer without alarming the reader", () => {
   const result = audit("Доля 42% и 2024 год.", [source("доля 42% в 2024 году")])
   assert.equal(result.status, "clean")
-  assert.match(result.summary, /^Все 2 факта подтверждены источниками$/)
+  assert.match(result.summary, /^В источниках найдено 2 из 2 проверенных значений$/)
 })
 
 check("summarises a flagged answer with the count that needs checking", () => {
   const result = audit("Доля 42%, объём 8,3 млрд.", [source("доля 42%")])
-  assert.match(result.summary, /1 из 2 фактов подтверждено источниками · 1 не найдено/)
+  assert.match(result.summary, /В источниках найдено 1 из 2 проверенных значений · 1 не найдено/)
 })
 
-check("declines the Russian word for fact correctly", () => {
-  assert.match(audit("Доля 42%.", [source("доля 41%")]).summary, /0 из 1 факта/)
-  assert.match(audit("A 1100, B 1200, C 1300, D 1400, E 1500.", [source("нет")]).summary, /из 5 фактов/)
-  assert.match(audit("A 1100, B 1200, C 1300, D 1400, E 1500, F 1600, G 1700, H 1800, I 1900 год, J 2000 год, K 1150.", [source("нет")]).summary, /из 11 фактов/)
+check("reports checked values without describing them as verified facts", () => {
+  assert.match(audit("Доля 42%.", [source("доля 41%")]).summary, /0 из 1 проверенных значений/)
+  assert.match(audit("A 1100, B 1200, C 1300, D 1400, E 1500.", [source("нет")]).summary, /из 5 проверенных значений/)
+  assert.match(audit("A 1100, B 1200, C 1300, D 1400, E 1500, F 1600, G 1700, H 1800, I 1900 год, J 2000 год, K 1150.", [source("нет")]).summary, /из 11 проверенных значений/)
 })
 
 check("never returns more shape than the stream can carry", () => {
@@ -354,7 +354,7 @@ check("drops malformed claim rows rather than half-drawing them", () => {
     supported: 1,
     missing: 1,
     brokenCitations: 0,
-    summary: "1 из 2 фактов подтверждено источниками · 1 не найдено",
+    summary: "В источниках найдено 1 из 2 проверенных значений · 1 не найдено",
     claims: [
       { id: "ok", value: "42%", verdict: "supported", sourceIndexes: [1, "x", -3] },
       { id: "", value: "нет id", verdict: "supported" },

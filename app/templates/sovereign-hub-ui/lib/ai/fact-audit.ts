@@ -332,11 +332,6 @@ function factWord(count: number) {
 }
 
 /** «из 1 факта», «из 2 фактов» — the genitive «из» governs, not the number. */
-function factWordAfterOutOf(count: number) {
-  const mod100 = Math.abs(count) % 100
-  return mod100 !== 11 && mod100 % 10 === 1 ? "факта" : "фактов"
-}
-
 export function auditAnswerFacts(input: {
   answer: string
   sources: MalikFactAuditSource[]
@@ -630,11 +625,7 @@ function buildSummary(checked: number, supported: number, missing: number, broke
 
   if (!checked) return citationNote.charAt(0).toUpperCase() + citationNote.slice(1)
 
-  const figures = missing
-    ? `${supported} из ${checked} ${factWordAfterOutOf(checked)} подтверждено источниками · ${missing} не найдено`
-    : checked === 1
-      ? "Факт в ответе подтверждён источниками"
-      : `Все ${checked} ${factWord(checked)} подтверждены источниками`
+  const figures = `В источниках найдено ${supported} из ${checked} проверенных значений${missing ? ` · ${missing} не найдено` : ""}`
 
   return citationNote ? `${figures} · ${citationNote}` : figures
 }

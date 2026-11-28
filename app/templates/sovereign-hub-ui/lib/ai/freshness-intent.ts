@@ -1,5 +1,6 @@
 import { normalizeColloquial } from "./colloquial"
 import { lastOccurrenceRequest, type LastOccurrence } from "./last-occurrence"
+import { asksUpcomingEvent } from "../live-intelligence/upcoming-events"
 import { asksLatestMatch } from "../live-intelligence/match-evidence"
 import { asksLatestRelease } from "../live-intelligence/release-catalog"
 
@@ -20,6 +21,7 @@ export type FreshnessIntent = {
   /** A dated event digest, distinct from the current state of documentation. */
   news?: boolean
   lastOccurrence?: LastOccurrence
+  upcoming?: boolean
 }
 
 export const NO_WEB = /(?:не\s+(?:ищи|гугли|загугливай)|без\s+(?:(?:веб|интернет)[- ]поиска|поиска|интернета|гугла)|do\s+not\s+(?:search|browse)|don['’]t\s+(?:search|browse)|without\s+(?:web|search|internet|browsing)|интернетсіз|іздеме|іздеудің\s+қажеті\s+жоқ)/iu
@@ -124,6 +126,7 @@ export function classifyFreshness(prompt: string, now = new Date(), requestedZon
   if (NO_WEB.test(text)) return result("UNCERTAIN", false, "user-opt-out")
   const lastOccurrence = lastOccurrenceRequest(text)
   if (lastOccurrence) return { ...base, category: "CURRENT", needsSearch: true, reason: "last-completed-occurrence", ttlMs: 300_000, lastOccurrence }
+  if (asksUpcomingEvent(text)) return { ...base, category: "CURRENT", needsSearch: true, reason: "upcoming-event", ttlMs: 300_000, upcoming: true }
   if (ASK_WEB.test(text)) return result(historical ? "STATIC" : LIVE_WORDS.test(text) ? "LIVE" : "UNCERTAIN", true, "explicit-search")
   if (/^(?:переведи|перевод|translate\b|аудар)/iu.test(text)) return result("STATIC", false, "translation")
   if (CREATIVE.test(text) && !/(?:новост|источник|research|sources|news|жаңалық)/iu.test(text)) return result("STATIC", false, "creative")

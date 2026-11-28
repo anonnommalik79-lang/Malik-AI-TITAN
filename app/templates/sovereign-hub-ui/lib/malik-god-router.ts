@@ -38,6 +38,7 @@ import { worldBirthCohortEvidence, worldBirthCohortAnswer, explainWorldBirthCoho
 import { mapBounded } from "@/lib/live-intelligence/concurrency"
 import { fetchNationalBankQuote, nationalBankQuote, verifiedNationalBankReply } from "@/lib/live-intelligence/official-exchange-rate"
 import { isCompletedOpeningTitle } from "@/lib/live-intelligence/occurrence-evidence"
+import { eclipseCity, eclipseReply, fetchLocalEclipse } from "@/lib/live-intelligence/upcoming-events"
 import { kazakhstanLeagueMatch, leagueMatchReply, officialLeagueResult } from "@/lib/live-intelligence/match-evidence"
 import { isRetailLead, relevantRetailOffer, retailAnswer, retailLookup, retailPageEvidence } from "@/lib/live-intelligence/retail-evidence"
 import { indexedSources } from "@/lib/live-intelligence/index-reader"
@@ -621,6 +622,10 @@ function buildQueries(prompt: string, intent: FreshnessIntent) {
   }
   const team = kazakhstanLeagueMatch(prompt)
   if (team) return [`site:kffleague.kz/ru/matches "${team}" КПЛ ${year}`, `"${team}" КПЛ ${year} последний матч результат счёт`, q]
+  if (intent.upcoming) {
+    const subject = q.split(/[?!]/u)[0]
+    return [`${subject} расписание дата ${year}`, `${subject} upcoming schedule ${Number(year) + 1}`, q]
+  }
   const retail = retailLookup(prompt)
   if (retail) {
     const product = [retail.subject, retail.location].filter(Boolean).join(" ")
@@ -804,6 +809,22 @@ async function gatherSources(question: string, emit?: ResearchEmitter, activity?
   const queries = buildQueries(publicSearchText(prompt), intent)
   const retail = retailLookup(prompt)
   const team = kazakhstanLeagueMatch(prompt)
+  if (intent.upcoming && eclipseCity(prompt)) {
+    const call = activity?.start("Сверяю местный календарь затмений", "read", "web.read", { domain: "timeanddate.com" })
+    // Reserve time for the regular search when the calendar is inaccessible.
+    const calendarSignal = AbortSignal.any([budget, AbortSignal.timeout(8_500)])
+    const eclipse = await fetchLocalEclipse(prompt, intent, calendarSignal).catch(error => {
+      signal?.throwIfAborted()
+      if (calendarSignal.aborted) return []
+      throw error
+    })
+    activity?.finish(call, compactSearchReceipt(eclipse, { provider: "local-eclipse-calendar" }), eclipse.length ? "completed" : "failed")
+    if (eclipse.length) {
+      const verified = assessSources(prompt, eclipse, intent)
+      for (const source of verified) emit?.({ kind: "source", text: "Проверен местный календарь затмений", source, url: source.url, domain: source.domain })
+      return verified
+    }
+  }
   if (intent.needsSearch && nationalBankQuote(prompt).length) {
     const call = activity?.start("Официальный курс валют", "read", "web.read", { domain: "nationalbank.kz" })
     const bankSources = await fetchNationalBankQuote(prompt, intent, budget)
@@ -1387,8 +1408,9 @@ export async function malikGodAnswer(
     const retailPartial = directLookup && usedWeb ? retailAnswer(focus.searchText, webSources) : undefined
     const retailConfirmed = directLookup && usedWeb ? retailAnswer(focus.searchText, webSources, true) : undefined
     const matchReply = directLookup && usedWeb ? leagueMatchReply(focus.searchText, sources, freshness.localDate, freshness.language) : undefined
-    const lookupReply = matchReply || retailConfirmed || (plainLookup ? retailPartial : undefined)
-    if (lookupReply) return { content: lookupReply, provider: "live-evidence", model: matchReply ? "official-match-card" : retailConfirmed ? "structured-retail" : "retail-leads", selectedModelId: selection.modelId, usedWeb: true, sources, attempts: [] }
+    const localEclipseReply = directLookup && usedWeb ? eclipseReply(focus.searchText, sources, freshness) : undefined
+    const lookupReply = localEclipseReply || matchReply || retailConfirmed || (plainLookup ? retailPartial : undefined)
+    if (lookupReply) return { content: lookupReply, provider: "live-evidence", model: localEclipseReply ? "local-eclipse-calendar" : matchReply ? "official-match-card" : retailConfirmed ? "structured-retail" : "retail-leads", selectedModelId: selection.modelId, usedWeb: true, sources, attempts: [] }
     // A «когда X сделал Y?» question may rest on an event that never happened.
     // The model may still say so without sources; the gate below drops every
     // sentence with a date the evidence does not contain.

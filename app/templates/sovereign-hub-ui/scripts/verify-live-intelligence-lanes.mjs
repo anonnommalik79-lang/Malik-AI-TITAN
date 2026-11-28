@@ -8,7 +8,7 @@ const load = workTestLoader(), freshness = load("lib/ai/freshness-intent.ts"), e
 const accuracy = load("lib/ai/accuracy/engine.ts"), gates = load("lib/ai/accuracy/stream.ts"), brain = load("lib/ai/brain-v1.ts")
 const source = { title: "Next.js v99.1.0 TEST FIXTURE", url: "https://github.com/vercel/next.js/releases/tag/fixture-v99", domain: "github.com", snippet: "Stable software release TEST FIXTURE", publishedAt: new Date(Date.now() - 3600000).toISOString(), freshness: "recent", authority: "primary", checkedAt: new Date().toISOString() }
 let queries = [], modelInputs = [], fileInputs = [], godInputs = [], fail = false, fileKind = "answer", draft = "Current stable release [1].", checks = 0
-let incomplete, continuations = 0, continuedDraft = ""
+let incomplete, continuations = 0, continuedDraft = "", godDraft = "God answer fixture"
 const deps = {
   ...load("lib/ai/conversation-history.ts"),
   ...load("lib/ai/conversation-focus.ts"),
@@ -55,7 +55,7 @@ const deps = {
   routeMalikAttachments: async input => { fileInputs.push(input); return { kind: fileKind, content: draft, prompt: "PRIVATE FILE CONTENT secret-project data", files: 1, estimatedTokens: 1, provider: "fixture", usage: {} } },
   buildChatArtifactSkillPrompt: () => "", resolveWorkspaceMode: () => "chat", workModeInstruction: () => "",
   prepareMalikAgentRuntime: async () => null,
-  malikGodAnswer: async (...args) => { godInputs.push(args); return { content: "God answer fixture", accuracy: { fixture: true }, sources: args[7]?.sources || [], provider: "fixture", model: "fixture", attempts: [], incomplete } },
+  malikGodAnswer: async (...args) => { godInputs.push(args); return { content: godDraft, accuracy: { fixture: true }, sources: args[7]?.sources || [], provider: "fixture", model: "fixture", attempts: [], incomplete } },
   runMalikCoderOrchestrator: async input => { modelInputs.push(input); return { content: draft, provider: "fixture", usage: { stages: [] } } },
   continueUnfinished: async () => { continuations++; return { content: continuedDraft } },
 }
@@ -107,5 +107,15 @@ await check("a numeric continuation is checked before the final content is retur
   const answer = await run({ prompt: "Calculate 2 + 2" }, text)
   assert.equal(continuations, 1)
   assert.equal(answer.content, "Answer: 4")
+})
+await check("MAX sends only the requested sentences and suppresses unrequested visuals", async () => {
+  const tokens = []
+  const prose = "При замерзании молекулы воды образуют кристаллическую решётку. Лёд становится менее плотным, чем вода. Поэтому он плавает."
+  godDraft = prose + "\n\n```mermaid\nflowchart TD\n  A --> B\n```"
+  const answer = await run({ prompt: "Почему лёд плавает? Объясни в трёх предложениях." }, { ...text, modelId: "malik-max" }, undefined, undefined, chunk => tokens.push(chunk))
+  assert.equal(godInputs.length, 1)
+  assert.equal(queries.length, 0)
+  assert.equal(tokens.length, 0)
+  assert.equal(answer.content, prose)
 })
 console.log(`${checks}/${checks} stream lane checks passed; external boundaries are fixtures`)

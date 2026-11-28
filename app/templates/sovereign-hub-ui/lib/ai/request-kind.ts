@@ -1,3 +1,4 @@
+import { sentenceFormat } from "./sentence-format"
 import { analyzeResponseRequest } from "@/lib/ai/response-intelligence"
 import { isSoftwareCreationRequest } from "./artifact-intent"
 
@@ -62,6 +63,7 @@ export function isFastChatRequest(prompt: string, attachments?: readonly unknown
 
 /** A short question that still deserves a full, structured answer. */
 export function wantsFullShape(prompt: string): boolean {
+  if (sentenceFormat(prompt)) return false
   const profile = analyzeResponseRequest(prompt)
   return profile.complexity === "complex" || profile.signals.some((signal) => signal === "overview" || signal === "headtohead" || signal === "planning")
 }

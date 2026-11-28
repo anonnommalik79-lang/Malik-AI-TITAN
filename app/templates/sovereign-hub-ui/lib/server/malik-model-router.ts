@@ -1,3 +1,4 @@
+import { primaryProviderChoice, providerCompletionId } from "@/lib/ai/provider-choice"
 import { briefChecklist, briefMissingMarker, missingBriefItems, preserveBriefEdges } from "@/lib/ai/brief-quality"
 import { hasOpenFence, openCodeFence, stripIncompleteNote, type AnswerIncomplete } from "@/lib/ai/answer-completion"
 import { isCodeRequest, isFastChatRequest, wantsFullShape } from "@/lib/ai/request-kind"
@@ -446,7 +447,8 @@ export function contentPart(value: unknown) {
 }
 
 export function contentFrom(payload: any) {
-  const primary = contentPart(payload?.choices?.[0]?.message?.content)
+  const choice = primaryProviderChoice(payload?.choices) as any
+  const primary = contentPart(choice?.message?.content)
   if (primary.trim()) return primary.trim()
   for (const candidate of [payload?.result?.response, payload?.result?.text, payload?.response, payload?.output_text]) {
     const value = contentPart(candidate).trim()
@@ -484,14 +486,18 @@ async function readStream(response: Response, onToken?: (chunk: string) => void)
   const reader = response.body.getReader()
   const decoder = new TextDecoder()
   let buffer = "", content = "", usage: any, finishReason = ""
+  let completionId: string | undefined
   const consume = (line: string) => {
     const raw = line.trim().replace(/^data:\s*/, "")
     if (!raw || raw === "[DONE]" || raw.startsWith(":")) return
     try {
       const event = JSON.parse(raw)
-      const choice = event?.choices?.[0]
+      const choice = primaryProviderChoice(event?.choices) as any
+      const eventId = choice ? providerCompletionId(event) : undefined
+      if (eventId && completionId && eventId !== completionId) return
+      completionId ||= eventId
       const openAiPiece = contentPart(choice?.delta?.content ?? choice?.message?.content)
-      const googleCandidate = event?.candidates?.[0]
+      const googleCandidate = primaryProviderChoice(event?.candidates) as any
       const googlePiece = Array.isArray(googleCandidate?.content?.parts)
         ? googleCandidate.content.parts
             .filter((part: any) => part && part.thought !== true && typeof part.text === "string")
@@ -1054,11 +1060,14 @@ export async function runStrictMalikModel(input: {
         if (runtime.stream || response.headers.get("content-type")?.includes("text/event-stream")) {
           parsed = await readStream(response, emitToken)
         } else {
-          parsed = await response.json().then((payload: any) => ({
-            content: contentFrom(payload),
-            usage: payload?.usage,
-            finishReason: payload?.choices?.[0]?.finish_reason ? String(payload.choices[0].finish_reason) : undefined,
-          })).catch(() => ({ content: "", usage: undefined, finishReason: undefined }))
+          parsed = await response.json().then((payload: any) => {
+            const choice = primaryProviderChoice(payload?.choices) as any
+            return {
+              content: contentFrom(payload),
+              usage: payload?.usage,
+              finishReason: choice?.finish_reason ? String(choice.finish_reason) : undefined,
+            }
+          }).catch(() => ({ content: "", usage: undefined, finishReason: undefined }))
         }
       } catch (error) {
         lastError = error

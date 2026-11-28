@@ -24,6 +24,46 @@ test("the page reader honors Windows-1251 and decodes a numeric tenge symbol", (
   const bytes = Uint8Array.from([...latin, ...price, ...tail])
   assert.equal(stripHtml(decodePageHtml(bytes.buffer, "text/html")), "Цена: 419 900 ₸")
 })
+import { sentenceFormat, validateSentenceProse } from "../lib/ai/sentence-format.ts"
+import { validateConversationAnswer } from "../lib/ai/conversation-validation.ts"
+import { resolveConversationIntent } from "../lib/ai/conversation-intent.ts"
+import { routeUiLayout } from "../lib/generative-ui/router.ts"
+import { localLunarMaximum, totalLunarDates } from "../lib/live-intelligence/upcoming-events.ts"
+
+test("three requested sentences override automatic visuals and enforce a complete paragraph", () => {
+  const prompt = "Почему лёд плавает в воде, хотя сделан из неё же? Объясни простыми словами в трёх предложениях."
+  const expected = { count: 3, maximum: false }
+  assert.deepEqual(sentenceFormat(prompt), expected)
+  assert.equal(routeUiLayout(prompt).layout, "plain")
+  const prose = "При замерзании вода занимает больше места. Лёд становится менее плотным, чем вода. Поэтому вода удерживает лёд на поверхности."
+  const accepted = validateConversationAnswer(resolveConversationIntent({ prompt }), prose + "\n\n```malik-ui\n{\"blocks\":[]}\n```")
+  assert.deepEqual(accepted, { content: prose })
+  assert.equal(validateSentenceProse(prose + " И ещё кое-что.", expected).valid, false)
+  assert.equal(validateSentenceProse("Это незавершённое", expected).valid, false)
+  assert.equal(sentenceFormat("Дай три предложения и схему процесса."), undefined)
+})
+test("a past event cannot be an upcoming answer and the exact time must appear in the source", () => {
+  const prompt = "Когда из Алматы будет видно ближайшее полное лунное затмение? Дай дату, местное время максимума и ссылку на источник."
+  const intent = classifyFreshness(prompt, new Date("2026-11-28T13:54:00Z"), "Asia/Almaty")
+  const old = { url: "https://example.org/archive", domain:"example.org", title: "Total lunar eclipse March 3, 2026", snippet: "2026-03-03; 17:43." }
+  const upcoming = { url:"https://example.org/calendar",domain:"example.org",title:"Total Lunar Eclipse, 31 Dec 2028",snippet:"2028-12-31, local maximum 21:52." }
+  const sources = assessSources(prompt, [old, upcoming], intent)
+  const byUrl = url => sources.findIndex(source => source.url === url) + 1
+  assert.equal(intent.upcoming, true)
+  assert.equal(currentEvidenceAvailable(assessSources(prompt, [old], intent), intent), false)
+  const checked = answer => finalizeFreshAnswer(answer,intent,sources,sources,{question:prompt})
+  assert.match(checked(`3 марта 2026 года, максимум в 17:43 [${byUrl(old.url)}].`),/Не удалось подтвердить/u)
+  assert.match(checked(`31 декабря 2028 года, максимум в 00:00 [${byUrl(upcoming.url)}].`),/Не удалось подтвердить/u)
+  assert.match(checked(`31 декабря 2028 года, максимум в 21:52 [${byUrl(upcoming.url)}].`),/21:52/u)
+  assert.equal(classifyFreshness("Придумай название для ближайшего концерта").upcoming, undefined)
+})
+test("only future local totality and the date's local maximum survive extraction", () => {
+  const calendar = '<a href="?iso=20260303">Total Lunar Eclipse</a><a href="?iso=20270220">Penumbral Lunar Eclipse</a><a href="?iso=20281231">Total Lunar Eclipse</a>'
+  assert.deepEqual(totalLunarDates(calendar,"2026-11-28"),["2028-12-31"])
+  const rows = '<tr><th>Local Type: </th><td>Total Lunar Eclipse, in Almaty</td></tr><tr><th>Maximum: </th><td>Sun, 31 Dec 2028 at 9:52 pm</td></tr>'
+  assert.equal(localLunarMaximum(rows, "2028-12-31", "Almaty"), "21:52")
+  assert.equal(localLunarMaximum(rows, "2028-12-31", "Astana"), undefined)
+})
 const NOW = new Date("2026-10-11T13:00:00Z"), clock = () => NOW.getTime()
 const fresh = { title: "Introducing GPT-99 (TEST FIXTURE)", url: "https://openai.com/fixture/gpt-99", domain: "spoof.invalid", snippet: "TEST FIXTURE: official release announcement on 2026-10-11; no real product claim.", publishedAt: "2026-10-11T09:00:00Z" }
 const old = { ...fresh, title: "GPT-1 (TEST FIXTURE)", url: "https://untrusted.example/old", publishedAt: "2023-01-01T00:00:00Z" }
