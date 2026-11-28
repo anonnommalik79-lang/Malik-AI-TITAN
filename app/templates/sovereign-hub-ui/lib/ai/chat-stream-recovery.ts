@@ -1,7 +1,7 @@
 import { briefNeedsDeep } from "./brief-quality"
 import { chatAnswerDeadline } from "./chat-deadline"
 import { answerRevises } from "./answer-completion"
-import { chatCompletionError, isChatStoppedByUser, MAX_CHAT_SSE_FRAME_CHARS, mergeChatStreamText, parseChatSseFrame } from "./chat-stream-contract"
+import { chatCompletionError, isChatStoppedByUser, ChatSseDecoder, ChatTextBuffer, parseChatSseFrame } from "./chat-stream-contract"
 import { resolveConversationIntent } from "./conversation-intent"
 import { usesMalikFlashBrowser } from "./malik-models"
 import { flashGoogleIntent } from "./malik-flash-intent"
@@ -179,8 +179,8 @@ export async function fetchRecoverableChat(input: RequestInfo | URL, init: Reque
       try {
         if (body.chatRecovery) status("Продолжаю ответ…", { textOnly: true })
         for (let attempt = 0; attempt < 2; attempt++) {
-          let buffer = ""
-          const decoder = new TextDecoder()
+          const decoder = new ChatSseDecoder()
+          const textBuffer = new ChatTextBuffer()
           const began = Date.now()
           let lastByteAt = began
           let terminal = false
@@ -198,23 +198,20 @@ export async function fetchRecoverableChat(input: RequestInfo | URL, init: Reque
               return
             }
             if (type === "content" || type === "delta") {
-              const chunk = String(payload.content ?? payload.text ?? "")
-              // Some providers send a growing snapshot, others send deltas.
-              // Keep the real prefix for background-turn recovery, never duplicate it.
-              content = mergeChatStreamText(content, chunk, payload.contentMode)
+              if (!textBuffer.apply(payload)) return
+              content = textBuffer.content
             }
             if (type === "done") {
-              if (typeof payload.content === "string") {
-                content = mergeChatStreamText(content, payload.content, "snapshot")
-                emit(frame("content", { type: "content", content, contentMode: "snapshot" }))
-              }
-              // The server's final wording replaces what streamed (the reader applies it too).
-              if (typeof payload.finalContent === "string" && payload.finalContent.trim()) content = payload.finalContent
-              if (!content.trim()) {
-                finalError = "Модель завершила запрос без текста ответа. Нажмите «Перегенерировать», чтобы повторить."
+              try {
+                content = textBuffer.complete(payload)
+              } catch (error) {
+                finalError = error instanceof Error ? error.message : CHAT_FAILURE_TEXT.cut
                 serverError = true
                 terminal = true
                 return
+              }
+              if (typeof payload.content === "string" && !payload.finalContent) {
+                emit(frame("content", { type: "content", content, contentMode: "snapshot" }))
               }
               completed = true
               terminal = true
@@ -245,12 +242,8 @@ export async function fetchRecoverableChat(input: RequestInfo | URL, init: Reque
               const { value, done } = read
               // Heartbeats, statuses and steps all prove the server is working.
               if (value?.length) lastByteAt = Date.now()
-              buffer += decoder.decode(value || new Uint8Array(), { stream: !done })
-              const blocks = buffer.split(/\r?\n\r?\n/)
-              buffer = blocks.pop() || ""
-              for (const block of blocks) { consume(block); if (terminal) break }
-              if (buffer.length > MAX_CHAT_SSE_FRAME_CHARS) throw new Error("Chat stream frame exceeds the safe size limit")
-              if (done) { if (!terminal && buffer.trim()) consume(buffer); break }
+              for (const block of decoder.push(value, done)) { consume(block); if (terminal) break }
+              if (done) break
             }
             // A stream that ends without `done` or `error` was cut on the way.
             if (!terminal && !cancelled) finalError = CHAT_FAILURE_TEXT.cut

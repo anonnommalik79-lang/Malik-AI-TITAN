@@ -19,7 +19,7 @@ import { MALIK_OWNER_EMAIL, isVerifiedOwner } from "@/lib/auth/admin-policy"
 import { readWebSearchEnabled } from "@/lib/ai/web-search-preference"
 import { chatHttpErrorMessage, chatVisibleErrorMessage } from "@/lib/ai/errors"
 import { fetchRecoverableChat } from "@/lib/ai/chat-stream-recovery"
-import { CHAT_STOPPED_BY_USER, chatCompletionError, isChatStoppedByUser, mergeChatStreamText } from "@/lib/ai/chat-stream-contract"
+import { CHAT_STOPPED_BY_USER, chatCompletionError, isChatStoppedByUser, ChatSseDecoder, ChatTextBuffer, parseChatSseFrame } from "@/lib/ai/chat-stream-contract"
 import { readResponseMetrics, type MalikResponseMetrics } from "@/lib/ai/token-telemetry"
 import { mergeStreamingAssistantCheckpoints, restoreInterruptedAssistant } from "@/lib/ai/stream-checkpoint"
 import { fixWrongKeyboardLayout } from "@/lib/ai/keyboard-layout"
@@ -6288,12 +6288,6 @@ const buildLocalChatAnswer = (prompt: string, mode: ResponseMode): string => {
   return "Понял. Backend вернул слишком короткий ответ, но я не буду показывать пустое “Готово”. Напиши чуть подробнее, и я дам нормальный развёрнутый ответ."
 }
 
-const normalizeStreamChunk = (parsed: any): string | null => {
-  if (!parsed) return null
-  if (typeof parsed === "string") return parsed
-  return parsed.content ?? parsed.text ?? parsed.message ?? parsed.response ?? parsed.delta ?? null
-}
-
 const handleSendMessageRef = useRef<((content: string, attachments?: ChatAttachment[], options?: ChatSendOptions) => Promise<void>) | null>(null)
 const handleSendMessage = useCallback(async (content: string, attachments: ChatAttachment[] = [], options?: ChatSendOptions) => {
   const turnWorkspaceMode = options?.workspaceMode ?? workspaceMode
@@ -7266,7 +7260,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
     void streamReader?.cancel(CHAT_STOPPED_BY_USER).catch(() => {})
   }
   const throwIfStopped = () => {
-    if (stoppedByPerson || streamController.signal.aborted) throw new DOMException("Stopped by the person", "AbortError")
+    if (stoppedByPerson || streamController.signal.aborted || activeStreamAbortRef.current !== streamController) throw new DOMException("Stopped by the person", "AbortError")
   }
   activeStreamStopRef.current = stopThisTurn
   setStreamAbortable(true)
@@ -7427,7 +7421,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
     let lastLiveFlushAt = 0
     const flushLive = () => {
       liveFrame = 0
-      if (liveClosed) return
+      if (liveClosed || activeStreamAbortRef.current !== streamController || streamController.signal.aborted) return
       // Same light cleaning as the final answer: it only trims, or hides text
       // that is mojibake/garbage. Partial Markdown and open code fences stay
       // as they are; MalikMarkdown renders them while they complete.
@@ -7463,19 +7457,16 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
     if (responseType.includes("text/event-stream") && response.body) {
       const reader = response.body.getReader()
       streamReader = reader
-      const decoder = new TextDecoder()
-      let buffer = ""
+      const decoder = new ChatSseDecoder()
+      const textBuffer = new ChatTextBuffer()
 
       const consumeEvent = (block: string) => {
-        if (stoppedByPerson) return
-        const eventName = block.match(/^event:\s*(.+)$/m)?.[1]?.trim() || "message"
-        const rawData = block.split(/\r?\n/)
-          .filter((line) => line.startsWith("data:"))
-          .map((line) => line.slice(5).trimStart())
-          .join("\n")
-        if (!rawData) return
-        let payload: any
-        try { payload = JSON.parse(rawData) } catch { return }
+        if (sawDone) return
+        throwIfStopped()
+        const parsed = parseChatSseFrame(block)
+        if (!parsed) return
+        const eventName = parsed.type
+        const payload: any = parsed.payload
 
         if (eventName === "activity" || payload?.type === "activity") {
           const trace = finalExecution && finalExecution.id === payload.traceId ? finalExecution : {
@@ -7502,28 +7493,23 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
           }
           return
         }
-        if (eventName === "content" || payload?.type === "content") {
-          const chunk = normalizeStreamChunk(payload)
-          if (!chunk) return
-          const nextText = String(chunk)
-          if (!thoughtState.firstTextAt && nextText.trim()) thoughtState.firstTextAt = Date.now()
-          // Providers differ: some send a cumulative payload, others deltas.
-          fullText = mergeChatStreamText(fullText, nextText, payload?.contentMode)
+        if (eventName === "content" || eventName === "delta") {
+          if (!textBuffer.apply(payload)) return
+          fullText = textBuffer.content
+          if (!thoughtState.firstTextAt && fullText.trim()) thoughtState.firstTextAt = Date.now()
           scheduleLive()
           return
         }
         if (eventName === "done" || payload?.type === "done") {
           const completionError = chatCompletionError(payload)
           if (completionError) throw new Error(completionError)
+          fullText = textBuffer.complete(payload)
           sawDone = true
           applyFlashAttachments(payload?.flashAttachments)
           turnMetrics = readResponseMetrics(payload)
           // The server's final text wins over what streamed: it may carry a
           // «⚠️» check or the «Ответ не завершён» line the stream never had.
-          if (typeof payload?.finalContent === "string" && payload.finalContent.trim()) {
-            fullText = payload.finalContent
-            scheduleLive()
-          }
+          scheduleLive()
           textOnlyAnswer = payload?.textOnly === true
           if ((payload?.mediaAction?.kind === "image" || payload?.mediaAction?.kind === "video") && typeof payload.mediaAction.prompt === "string" && payload.mediaAction.prompt.trim()) {
             turnHandoff.media = { kind: payload.mediaAction.kind, prompt: payload.mediaAction.prompt }
@@ -7561,17 +7547,22 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
         }
       }
 
-      while (true) {
-        const { value, done } = await reader.read()
-        if (done) break
-        buffer += decoder.decode(value, { stream: true })
-        const blocks = buffer.split(/\r?\n\r?\n/)
-        buffer = blocks.pop() || ""
-        blocks.forEach(consumeEvent)
+      try {
+        while (!sawDone) {
+          const { value, done } = await reader.read()
+          throwIfStopped()
+          for (const block of decoder.push(value, done)) {
+            consumeEvent(block)
+            if (sawDone) break
+          }
+          if (done) break
+        }
+      } finally {
+        void reader.cancel().catch(() => {})
+        reader.releaseLock()
+        streamReader = undefined
       }
       throwIfStopped()
-      buffer += decoder.decode()
-      if (buffer.trim()) consumeEvent(buffer)
       stopLive()
       fullText = cleanDashboardAIText(fullText)
     } else {
@@ -7658,7 +7649,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
     // the cancelled body then carries the Stop reason through every layer.
     if (streamController.signal.aborted || stoppedByPerson || isChatStoppedByUser(error)) {
       if (finalExecution) applyExecution(settleExecution(finalExecution, "cancelled"))
-      const partial = isProjReq ? cleanDashboardAIText(fullText) : liveShownText
+      const partial = cleanDashboardAIText(fullText || liveShownText)
       finalizeAssistant(
         partial ? `${partial}\n\n_Остановлено пользователем._` : "_Остановлено пользователем._",
         undefined,
@@ -7699,7 +7690,7 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
 
     // Keep the useful partial answer without injecting raw backend errors
     // inside its Markdown. A truthful incomplete marker remains visible.
-    const receivedBeforeDrop = cleanDashboardAIText(liveShownText || fullText)
+    const receivedBeforeDrop = cleanDashboardAIText(fullText || liveShownText)
     const failedText = receivedBeforeDrop
       ? `${receivedBeforeDrop}\n\n_Ответ может быть неполным. Нажмите «Перегенерировать», чтобы повторить._`
       : errorMessage
@@ -7717,11 +7708,13 @@ const handleSendMessage = useCallback(async (content: string, attachments: ChatA
       : undefined
     finalizeAssistant(failedText, undefined, interruptedResearch, true)
   } finally {
-    if (activeStreamAbortRef.current === streamController) activeStreamAbortRef.current = null
     if (activeStreamStopRef.current === stopThisTurn) activeStreamStopRef.current = null
-    setStreamAbortable(false)
-    setIsLoading(false)
-    setStreamingText("")
+    if (activeStreamAbortRef.current === streamController) {
+      activeStreamAbortRef.current = null
+      setStreamAbortable(false)
+      setIsLoading(false)
+      setStreamingText("")
+    }
   }
 }, [activeChatId, messages, username, isLoading, isAdmin, activeAiMode, currentPlan, selectedModelId, canAccessAdmin, guestMode, workOSUser?.email, safeOpenView, workspaceMode, openProOffer])
 handleSendMessageRef.current = handleSendMessage

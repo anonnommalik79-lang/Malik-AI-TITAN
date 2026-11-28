@@ -3,7 +3,7 @@ import { resolveRequestEntitlement } from "@/lib/server/request-entitlement"
 import { z } from "zod"
 import { POST as streamPOST } from "../route"
 import { normalizeExecutionTrace, upsertExecutionStep, type ExecutionTrace } from "@/lib/ai/chat-execution"
-import { chatCompletionError, MAX_CHAT_RESULT_CHARS, MAX_CHAT_SSE_FRAME_CHARS, mergeChatStreamText, parseChatSseFrame } from "@/lib/ai/chat-stream-contract"
+import { chatCompletionError, MAX_CHAT_RESULT_CHARS, ChatSseDecoder, ChatTextBuffer, parseChatSseFrame } from "@/lib/ai/chat-stream-contract"
 import {
   completeBackgroundChatTurn,
   checkpointBackgroundChatTurn,
@@ -25,24 +25,22 @@ function cloneResponse(response: Response, body: BodyInit | null) {
   })
 }
 
-function parseSseFrame(frame: string, state: { content: string; error: string; done: boolean; provider: string; model: string; execution?: ExecutionTrace; responseMetadata?: Record<string, unknown> }) {
+function parseSseFrame(frame: string, textBuffer: ChatTextBuffer, state: { content: string; error: string; done: boolean; provider: string; model: string; execution?: ExecutionTrace; responseMetadata?: Record<string, unknown> }) {
   const event = parseChatSseFrame(frame)
-  if (!event) return
+  if (!event || state.done || state.error) return
   const { type, payload } = event
   if (type === "activity" && typeof payload.traceId === "string") {
     state.execution = upsertExecutionStep(state.execution || { version: 1, id: payload.traceId, startedAt: Number(payload.startedAt) || Date.now(), state: "running", steps: [] }, payload.step)
   }
   if (payload.execution) state.execution = normalizeExecutionTrace(payload.execution) || state.execution
   if ((type === "content" || type === "delta") && typeof (payload.content ?? payload.text) === "string") {
-    state.content = mergeChatStreamText(state.content, String(payload.content ?? payload.text), payload.contentMode)
+    textBuffer.apply(payload)
+    state.content = textBuffer.content
   }
   if (type === "error") state.error = String(payload.message || payload.error || "Background chat failed")
   if (type === "done") {
     state.error ||= chatCompletionError(payload)
-    if (typeof payload.content === "string") state.content = mergeChatStreamText(state.content, payload.content, "snapshot")
-    // The server's authoritative final text (a truth warning, an incomplete
-    // note) replaces what streamed, so a reload shows the same answer.
-    if (typeof payload.finalContent === "string" && payload.finalContent.trim() && payload.finalContent.length <= MAX_CHAT_RESULT_CHARS) state.content = payload.finalContent
+    if (!state.error) state.content = textBuffer.complete(payload)
     state.done = true
     state.provider = String(payload.provider || state.provider || "")
     state.model = String(payload.model || payload.selectedModelId || state.model || "")
@@ -85,30 +83,22 @@ async function persistStreamResult(turnId: string, response: Response, stop?: Ab
     }
 
     reader = response.body.getReader()
-    const decoder = new TextDecoder()
-    let buffer = ""
+    const decoder = new ChatSseDecoder()
+    const textBuffer = new ChatTextBuffer()
     let checkpointAt = Date.now()
 
     while (true) {
       const { value, done } = await reader.read()
-      buffer += decoder.decode(value || new Uint8Array(), { stream: !done })
-      let boundary = buffer.search(/\r?\n\r?\n/)
-      while (boundary >= 0) {
-        const match = buffer.match(/\r?\n\r?\n/)
-        const separatorLength = match?.[0]?.length || 2
-        const frame = buffer.slice(0, boundary)
-        buffer = buffer.slice(boundary + separatorLength)
-        parseSseFrame(frame, state)
-        boundary = buffer.search(/\r?\n\r?\n/)
+      for (const frame of decoder.push(value, done)) {
+        parseSseFrame(frame, textBuffer, state)
+        if (state.done || state.error) break
       }
-      if (buffer.length > MAX_CHAT_SSE_FRAME_CHARS) throw new Error("Background stream frame exceeds the safe size limit")
       if (!state.done && Date.now() - checkpointAt >= 15_000) {
         checkpointAt = Date.now()
         await checkpointBackgroundChatTurn(turnId, { content: state.content, execution: state.execution })
       }
-      if (done) break
+      if (done || state.done || state.error) break
     }
-    if (buffer.trim()) parseSseFrame(buffer, state)
 
     if (stop?.aborted && !state.done) {
       await failBackgroundChatTurn(turnId, "Остановлено пользователем.", state.execution, state.content)

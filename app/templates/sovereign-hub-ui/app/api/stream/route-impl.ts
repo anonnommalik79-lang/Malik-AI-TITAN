@@ -1278,9 +1278,15 @@ function liveSseResponse(
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
       let closed = false
+      const generationId = crypto.randomUUID()
+      let wireOffset = 0
       const send = (event: string, data: Record<string, unknown>) => {
         if (closed || cancelled) return
-        try { controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify({ ...data, at: Date.now() })}\n\n`)) }
+        try {
+          const offset = event === "content" && data.contentMode === "delta" && typeof data.content === "string" ? wireOffset : undefined
+          controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify({ ...data, generationId, ...(offset === undefined ? {} : { offset }), at: Date.now() })}\n\n`))
+          if (offset !== undefined) wireOffset += (data.content as string).length
+        }
         catch { cancelled = true; generation.abort(); stopHeartbeat() }
       }
       const close = () => {
