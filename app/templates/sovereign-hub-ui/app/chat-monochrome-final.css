@@ -566,3 +566,32 @@ html body #malik-root#malik-root .mv2[data-view="video-generation-v2"] :is(.mv2m
   overflow-wrap: anywhere;
   vertical-align: baseline;
 }
+
+
+/* Image-only chat: remove legacy panel paint and use the actual image ratio. */
+#malik-root .malik-message-row-assistant:has(.malik-photo-motion) :is(.malik-message-stack,.malik-message-card-assistant,.malik-photo-motion,.malik-photo-final__heading,.malik-photo-final__title-row,.malik-photo-final__steps,.malik-photo-final__step,.malik-photo-final__timer) {
+  background: transparent !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  border: 0 !important;
+  filter: none !important;
+}
+#malik-root .malik-photo-motion :is(.malik-photo-final__heading,.malik-photo-final__title-row,.malik-photo-final__steps)::before,
+#malik-root .malik-photo-motion :is(.malik-photo-final__heading,.malik-photo-final__title-row,.malik-photo-final__steps)::after { content:none !important; display:none !important; }
+#malik-root .malik-photo-motion { width:100% !important; max-width:480px !important; min-width:0 !important; margin:8px 0 0 !important; gap:10px !important; }
+#malik-root .malik-photo-motion .malik-photo-final__heading { justify-items:start !important; text-align:left !important; gap:4px !important; }
+#malik-root .malik-photo-motion .malik-photo-final__title-row { justify-content:flex-start !important; min-height:24px !important; }
+#malik-root .malik-photo-motion .malik-photo-final__title { font-size:15px !important; font-weight:500 !important; }
+#malik-root .malik-photo-motion .malik-photo-final__brand-mark { width:22px !important; height:22px !important; flex-basis:22px !important; box-shadow:none !important; }
+#malik-root .malik-photo-motion .malik-photo-final__heading.is-ready { display:none !important; }
+#malik-root .malik-photo-motion .malik-photo-final__step:not(.is-active) { display:none !important; }
+#malik-root .malik-photo-motion .malik-photo-final__steps { width:100% !important; }
+#malik-root .malik-photo-motion .malik-photo-final__timer { color:#aaa !important; }
+#malik-root .malik-photo-motion .malik-photo-final__status { display:none !important; }
+#malik-root .malik-photo-motion .malik-photo-final__frame { border-radius:16px !important; max-width:100% !important; }
+#malik-root .malik-photo-motion .malik-photo-final__frame.is-finished { aspect-ratio:auto !important; height:auto !important; min-height:0 !important; }
+#malik-root .malik-photo-motion .malik-photo-final__frame.is-finished .malik-photo-final__result { position:relative !important; inset:auto !important; width:100% !important; height:auto !important; max-height:none !important; object-fit:contain !important; border-radius:16px !important; }
+#malik-root .malik-message-row:has(.malik-photo-motion) .malik-message-actions { display:none !important; }
+#malik-root .malik-photo-motion .malik-image-tools { display:none !important; }
+#malik-root .malik-photo-motion .malik-art-stage[data-malik-openable="1"] { cursor:zoom-in; }
+#malik-root .malik-photo-motion .malik-art-stage[data-malik-openable="1"]::after { content:none !important; display:none !important; }
