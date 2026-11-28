@@ -360,6 +360,11 @@ export function FounderConsoleRuntime() {
         </div>
       </header>
 
+      <nav className="malik-founder-mobile-nav" aria-label="Разделы Founder DB">
+        <button type="button" onClick={(event) => event.currentTarget.closest(".malik-founder-layer")?.querySelector(".malik-founder-scroll")?.scrollTo({ top: 0 })}>Обзор</button>
+        <button type="button" onClick={(event) => event.currentTarget.closest(".malik-founder-layer")?.querySelector(".malik-founder-panel--accounts")?.scrollIntoView({ block: "start" })}>Пользователи</button>
+        <button type="button" onClick={(event) => event.currentTarget.closest(".malik-founder-layer")?.querySelector<HTMLElement>("[data-founder-message-history]")?.click()}>Переписки</button>
+      </nav>
       <div className="malik-founder-scroll">
         <div className="malik-founder-primary-grid">
           {primaryMetrics.map((card, index) => (
@@ -434,7 +439,7 @@ export function FounderConsoleRuntime() {
             </div>
           </section>
 
-          <section className="malik-founder-panel">
+          <section className="malik-founder-panel malik-founder-panel--accounts">
             <div className="malik-founder-panel__head malik-founder-panel__head--users">
               <div><strong>Все пользователи</strong><span>{number(payload?.recentUsers?.length)} аккаунтов WorkOS</span></div>
               <Users />
@@ -690,6 +695,29 @@ export function FounderConsoleRuntime() {
         @media (max-width:1100px) { .malik-founder-primary-grid,.malik-founder-secondary-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } .malik-founder-columns { grid-template-columns:1fr; } .malik-founder-safety-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
         @media (max-width:768px) { .malik-founder-layer { left:0 !important; z-index:90; } .malik-founder-header { min-height:74px; padding:12px 14px; } .malik-founder-header h1 { font-size:21px; } .malik-founder-header p { max-width:58vw; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; } .malik-founder-scroll { padding:14px 12px calc(28px + env(safe-area-inset-bottom)); } .malik-founder-primary-grid,.malik-founder-secondary-grid { grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; } .malik-founder-card { min-height:103px; padding:13px; } .malik-founder-card > strong { font-size:23px; } .malik-founder-safety-grid { grid-template-columns:1fr 1fr; } .malik-founder-safety-item { padding:11px 10px; } .malik-founder-users { max-height:50dvh; } .malik-founder-requests-list { max-height:60dvh; } .malik-founder-request__meta { flex-direction:column; align-items:flex-end; gap:3px; } .malik-founder-request__body { padding-left:0; } }
         @media (max-width:430px) { .malik-founder-primary-grid,.malik-founder-secondary-grid { grid-template-columns:1fr 1fr; } .malik-founder-card__head { font-size:10px; } .malik-founder-card > strong { font-size:21px; } .malik-founder-card > small { font-size:9px; } .malik-founder-safety-grid { grid-template-columns:1fr; } .malik-founder-section-title { align-items:center; } .malik-founder-section-title time { display:none; } .malik-founder-table__row { grid-template-columns:minmax(0,1fr) 58px 72px; gap:7px; font-size:9.5px; } .malik-founder-user-row time { display:none; } .malik-founder-error { align-items:flex-start; } }
+        .malik-founder-mobile-nav { display:none; }
+        @media (max-width:768px) {
+          .malik-founder-layer { top:0 !important; bottom:0 !important; width:100% !important; height:100dvh !important; background:#050505 !important; }
+          .malik-founder-header { flex-shrink:0; padding-top:calc(12px + env(safe-area-inset-top)); gap:8px; }
+          .malik-founder-header__actions { gap:4px; }
+          .malik-founder-header__actions button { width:40px; height:44px; }
+          .malik-founder-mobile-nav { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:6px; flex-shrink:0; padding:8px 12px; border-bottom:1px solid #252525; background:#080808; }
+          .malik-founder-mobile-nav button { min-height:44px; border:1px solid #333; border-radius:10px; background:#141414; color:#eee; font-size:13px; font-weight:550; }
+          .malik-founder-scroll { min-width:0; overflow-x:hidden; touch-action:pan-y; -webkit-overflow-scrolling:touch; }
+          .malik-founder-panel--accounts { scroll-margin-top:8px; }
+          .malik-founder-panel--accounts .malik-founder-panel__head strong { font-size:16px; }
+          .malik-founder-panel--accounts .malik-founder-panel__head span { font-size:12px; color:#aaa; white-space:normal; }
+          .malik-founder-user-search input { font-size:16px !important; min-height:44px; }
+          .malik-founder-users { max-height:none; overflow:visible; }
+          .malik-founder-user-row { min-height:74px; grid-template-columns:36px minmax(0,1fr); gap:6px 10px; padding:10px 0; }
+          .malik-founder-user-copy strong { font-size:14px; white-space:normal; overflow-wrap:anywhere; }
+          .malik-founder-user-copy small { font-size:13px; color:#bcbcbc; white-space:normal; overflow-wrap:anywhere; }
+          .malik-founder-user-row time { display:block; grid-column:2; font-size:11px; color:#999; white-space:normal; }
+          .malik-founder-requests-list { max-height:none; overflow:visible; }
+          .malik-founder-request__head { grid-template-columns:28px minmax(0,1fr); gap:8px; padding:12px 0; }
+          .malik-founder-request__meta { grid-column:2; flex-direction:row; flex-wrap:wrap; justify-content:flex-start; align-items:center; }
+          .malik-founder-request__who,.malik-founder-request__text { white-space:normal !important; overflow-wrap:anywhere; }
+        }
       `}</style>
     </section>,
     document.body,
