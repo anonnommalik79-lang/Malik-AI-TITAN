@@ -4,6 +4,7 @@ import { runLiveSearch } from "../live-intelligence/search-engine";
 import { classifyFreshness, type FreshnessIntent } from "../ai/freshness-intent";
 import { searchTimeFilters } from "../live-intelligence/search-time-filters";
 import { searchNewsFeed } from "../live-intelligence/news-search";
+import { exaSearchEnabled, parallelSearchEnabled, searchExa, searchParallel, tavilySearchKey } from "./free-web";
 
 function uniqueResults(results: SearchResult[], limit: number) {
   const seen = new Set<string>();
@@ -119,7 +120,7 @@ async function tavilyFetch(query: string, limit: number, key: string, useBearer:
 }
 
 async function searchTavily(query: string, limit: number, signal?: AbortSignal, intent = classifyFreshness(query)): Promise<SearchResult[]> {
-  const key = process.env.TAVILY_API_KEY?.trim();
+  const key = tavilySearchKey();
   if (!key) return [];
 
   let res = await tavilyFetch(query, limit, key, false, signal, intent);
@@ -330,8 +331,10 @@ function availableProviders(intent: FreshnessIntent) {
   return [
     ...(process.env.SERPER_API_KEY?.trim() ? [{ name: "serper", run: searchSerper }] : []),
     ...(process.env.BRAVE_SEARCH_API_KEY?.trim() ? [{ name: "brave", run: searchBrave }] : []),
-    ...(process.env.TAVILY_API_KEY?.trim() ? [{ name: "tavily", run: searchTavily }] : []),
+    ...(tavilySearchKey() ? [{ name: "tavily", run: searchTavily }] : []),
     ...(intent.news ? [{ name: "google-news", run: searchNewsFeed }] : []),
+    ...(exaSearchEnabled() ? [{ name: "exa", run: searchExa }] : []),
+    ...(parallelSearchEnabled() ? [{ name: "parallel", timeoutMs: 5600, run: searchParallel }] : []),
     ...(process.env.SEARXNG_URL?.trim() ? [{ name: "searxng", run: searchSearxng }] : []),
     ...(process.env.JINA_SEARCH_DISABLED === "true" ? [] : [{ name: "jina", run: searchJina }]),
     { name: "duckduckgo", run: searchDuckDuckGo },

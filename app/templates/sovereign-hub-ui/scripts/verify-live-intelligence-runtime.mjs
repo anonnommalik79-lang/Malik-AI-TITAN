@@ -23,6 +23,8 @@ const nexusSummary = `Nexus Film Festival took place on January 1, ${currentEven
 const auroraArchiveUrl = "https://example.com/aurora-archive"
 const auroraCurrentUrl = "https://example.org/aurora-latest"
 const readUrls = [], queries = []
+const parallelUrl = "https://city.example.kz/nurkent-planetarium"
+const parallelText = "Архив города об открытии планетария в Нуркенте. Городской планетарий открыт 16 мая 2019 года. ".repeat(12)
 const stubs = {
   "@/lib/server/malik-model-router": { runStrictMalikModel: async (input) => {
     inferences.push(input)
@@ -44,6 +46,13 @@ const stubs = {
     const text = source.url === bridgeUrl ? "Обзор программы. ".repeat(240) + `AI & Digital Bridge ${bridgeYear} прошёл 1–3 октября в Астане.` : source.snippet
     return { ...source, text, readAt: new Date().toISOString() }
   } },
+  "./public-page-fetch": {
+    publicAddresses: async () => [],
+    fetchPublicPage: async (_url, signal) => new Promise((resolve, reject) => {
+      const timer = setTimeout(() => resolve(new Response("", { status: 503 })), 1000)
+      signal.addEventListener("abort", () => { clearTimeout(timer); reject(signal.reason) }, { once: true })
+    }),
+  },
   "@/lib/work/math/model-plan": { planWorkMath: async () => null, mathPlanningInstruction: "", plannedMathInstruction: () => "", plannedMathReceiptText: () => "" },
 }
 function load(file) {
@@ -62,9 +71,35 @@ function load(file) {
 async function check(name, fn) { await fn(); checks++; console.log("PASS " + name) }
 try {
   for (const key of ["SERPER_API_KEY", "TAVILY_API_KEY", "BRAVE_SEARCH_API_KEY"]) process.env[key] = "fixture-only"
+  process.env.PARALLEL_MCP_DISABLED = "true"
+  delete process.env.EXA_FREE_API_KEY
+  delete process.env.TAVILY_FREE_API_KEY
   console.info = () => {}
   globalThis.fetch = async (url, init) => {
     calls.push(String(url))
+    if (scenario === "free-web") {
+      const host = new URL(String(url)).hostname
+      if (host === "mcp.parallel.ai") {
+        assert.equal(new Headers(init.headers).has("authorization"), false)
+        const rpc = JSON.parse(init.body)
+        const result = { title: "Отчёт об открытии планетария в Нуркенте", url: parallelUrl, excerpts: [parallelText] }
+        assert.equal(rpc.method, "tools/call")
+        if (rpc.params.name === "web_search") assert.ok(rpc.params.arguments.search_queries[0])
+        else assert.deepEqual(rpc.params.arguments.urls, [parallelUrl])
+        const envelope = { jsonrpc: "2.0", id: rpc.id, result: { structuredContent: { results: [result] } } }
+        return new Response("event: message\r\ndata: " + JSON.stringify(envelope) + "\r\n\r\n", { headers: { "content-type": "text/event-stream" } })
+      }
+      if (host === "api.exa.ai") {
+        assert.equal(new Headers(init.headers).get("x-api-key"), "fixture-only")
+        assert.equal(JSON.parse(init.body).type, "lite")
+        return Response.json({ results: [{ title: "Нуркентский планетарий", url: parallelUrl, highlights: [parallelText] }] })
+      }
+      if (host === "api.tavily.com" && String(url).endsWith("/extract")) {
+        assert.equal(new Headers(init.headers).get("authorization"), "Bearer fixture-only")
+        return Response.json({ results: [{ url: parallelUrl, raw_content: parallelText }] })
+      }
+      return new Response("", { status: 429 })
+    }
     if (scenario === "local-eclipse" && String(url).startsWith("https://www.timeanddate.com/eclipse/in/kazakstan/almaty")) {
       return new Response(String(url).includes("?iso=")
         ? '<tr><th>Local Type:</th><td>Total Lunar Eclipse, in Almaty</td></tr><tr><th>Maximum:</th><td>31 Dec 2095, 21:52</td></tr>'
@@ -366,6 +401,38 @@ try {
     assert.equal(answer.sources[0].url, auroraCurrentUrl)
     assert.equal(answer.sources[0].occurrence.end, `${currentEventYear}-01-01`)
     assert.match(answer.content, new RegExp(`January 1, ${currentEventYear}.*\\[1\\]`, "u"))
+  })
+  scenario = "free-web"
+  await check("MAX research falls back to the free Parallel provider without an API key", async () => {
+    delete process.env.PARALLEL_MCP_DISABLED
+    const before = calls.length
+    const sources = await god.gatherSourcesForPrompt("Найди источники об открытии планетария в Нуркенте", undefined, { mode: "deep" })
+    assert.ok(sources.some(source => source.url === parallelUrl && source.provider === "parallel"), JSON.stringify({ calls: calls.slice(before), sources }))
+  })
+  await check("a timed-out public website keeps time for the live Parallel reader", async () => {
+    const { fetchPageText } = load("lib/malik-research/fetch-page.ts")
+    const source = { title: "Нуркентский планетарий", url: parallelUrl, domain: "city.example.kz" }
+    const result = await fetchPageText(source, { timeoutMs: 500 })
+    assert.equal(result.provider, "parallel-reader")
+    assert.equal(result.url, parallelUrl)
+    assert.match(result.text, /2019/)
+  })
+  await check("the Exa and Tavily adapters activate only with dedicated free-tier keys", async () => {
+    const free = load("lib/malik-research/free-web.ts")
+    const signal = AbortSignal.timeout(3000)
+    const source = { title: "Нуркентский планетарий", url: parallelUrl, domain: "city.example.kz" }
+    const before = calls.length
+    assert.deepEqual(await free.searchExa("Нуркентский планетарий", 4, signal), [])
+    assert.equal(await free.readTavilyPage(source, parallelUrl, signal), null)
+    assert.equal(calls.length, before)
+    process.env.EXA_FREE_API_KEY = "fixture-only"
+    process.env.TAVILY_FREE_API_KEY = "fixture-only"
+    const results = await free.searchExa("Нуркентский планетарий", 4, signal)
+    assert.equal(results[0].provider, "exa")
+    assert.equal(results[0].url, parallelUrl)
+    const page = await free.readTavilyPage(source, parallelUrl, signal)
+    assert.equal(page.provider, "tavily-reader")
+    assert.match(page.text, /2019/)
   })
   console.log(`${checks}/${checks} runtime acceptance checks passed (fixture transports, not live model accuracy)`)
 } finally { globalThis.fetch = savedFetch; console.info = savedInfo; process.env = savedEnv }

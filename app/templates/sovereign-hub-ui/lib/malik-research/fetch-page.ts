@@ -4,6 +4,7 @@ import { fetchPublicPage, publicAddresses } from "./public-page-fetch";
 import { readStructuredRetailOffer } from "../live-intelligence/retail-evidence";
 import { pageDates } from "../live-intelligence/page-dates";
 import { assertPublicHttpUrl } from "@/lib/server/request-safety";
+import { parallelSearchEnabled, readParallelPage, readTavilyPage } from "./free-web";
 
 function extractTitle(html: string, fallback: string) {
   const m =
@@ -133,22 +134,48 @@ async function fetchViaJina(result: SearchResult, signal?: AbortSignal): Promise
 }
 
 export async function fetchPageText(result: SearchResult, options: { signal?: AbortSignal; timeoutMs?: number; product?: boolean } = {}): Promise<FetchedSource | null> {
-  const signal = AbortSignal.any([AbortSignal.timeout(options.timeoutMs || 9000), ...(options.signal ? [options.signal] : [])]);
+  const timeoutMs = options.timeoutMs || 9000;
+  const signal = AbortSignal.any([AbortSignal.timeout(timeoutMs), ...(options.signal ? [options.signal] : [])]);
+  let target: string;
   try {
     // Validate before either the direct reader or the third-party reader sees it.
-    const target = safeSourceUrl(result);
+    target = safeSourceUrl(result);
     await publicAddresses(new URL(target).hostname, undefined, signal);
   } catch {
     return null;
   }
 
   try {
-    const directSignal = options.product ? AbortSignal.any([signal, AbortSignal.timeout(4200)]) : signal;
-    const direct = await fetchDirect(result, directSignal, options.product);
+    const directBudget = Math.max(1, Math.min(4200, Math.floor(timeoutMs * 0.4)));
+    const direct = await fetchDirect(result, AbortSignal.any([signal, AbortSignal.timeout(directBudget)]), options.product);
     if (direct) return direct;
   } catch {
-    // fallback to reader
+    // Retain time for the alternate readers.
   }
+  if (signal.aborted) return null;
 
-  return signal.aborted ? null : fetchViaJina(result, signal);
+  const fallback = new AbortController();
+  const fallbackSignal = AbortSignal.any([signal, fallback.signal]);
+  const readers = canSendToExternalReader(target) ? [
+    ...(parallelSearchEnabled() ? [readParallelPage(result, target, fallbackSignal)] : []),
+    readTavilyPage(result, target, fallbackSignal),
+    fetchViaJina(result, fallbackSignal),
+  ] : [];
+  try {
+    return await Promise.any(readers.map(async (reader) => {
+      const page = await reader;
+      fallbackSignal.throwIfAborted();
+      if (!page) throw new Error("Reader returned no page text");
+      return page;
+    }));
+  } catch {
+    return null;
+  } finally {
+    fallback.abort();
+  }
+}
+
+function canSendToExternalReader(target: string) {
+  const url = new URL(target);
+  return ![...url.searchParams.keys()].some(key => /token|secret|session|password|signature|auth|api[-_]?key/iu.test(key));
 }

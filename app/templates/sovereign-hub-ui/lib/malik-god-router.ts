@@ -23,6 +23,7 @@ import { truthNeedsLiveEvidence, officialTruthQuery, truthSystemInstruction, fin
 import { accuracyInstruction, finalizeAccuracy, type AccuracyReport } from "@/lib/ai/accuracy/engine"
 import { accuracyTokenGate } from "@/lib/ai/accuracy/stream"
 import { fetchPageText } from "@/lib/malik-research/fetch-page"
+import { exaSearchEnabled, parallelSearchEnabled, searchExa, searchParallel, tavilySearchKey } from "@/lib/malik-research/free-web"
 import { runStrictMalikModel } from "@/lib/server/malik-model-router"
 import { chatWebsiteInstruction } from "@/lib/server/chat-website-design"
 import { fetchEiaSpotEvidence } from "@/lib/server/petroleum-eia"
@@ -297,7 +298,7 @@ async function searchSerper(query: string, limit: number, signal?: AbortSignal, 
 }
 
 async function searchTavily(query: string, limit: number, signal?: AbortSignal, intent = classifyFreshness(query)): Promise<SourceItem[]> {
-  const key = env("TAVILY_API_KEY")
+  const key = tavilySearchKey()
   if (!key) return []
 
   async function request(useBearer: boolean) {
@@ -845,8 +846,10 @@ async function gatherSources(question: string, emit?: ResearchEmitter, activity?
     ...(intent.news ? [{ name: "google-news", run: (query: string, limit: number, searchSignal: AbortSignal) => searchGoogleNews(query, limit, searchSignal, intent) }] : []),
     ...(env("SERPER_API_KEY") ? [{ name: "serper", run: (query: string, limit: number, searchSignal: AbortSignal) => searchSerper(query, limit, searchSignal, intent) }] : []),
     ...(env("BRAVE_SEARCH_API_KEY") ? [{ name: "brave", run: (query: string, limit: number, searchSignal: AbortSignal) => searchBrave(query, limit, searchSignal, intent) }] : []),
-    ...(env("TAVILY_API_KEY") ? [{ name: "tavily", run: (query: string, limit: number, searchSignal: AbortSignal) => searchTavily(query, limit, searchSignal, intent) }] : []),
+    ...(tavilySearchKey() ? [{ name: "tavily", run: (query: string, limit: number, searchSignal: AbortSignal) => searchTavily(query, limit, searchSignal, intent) }] : []),
     ...(!intent.lastOccurrence && !retail && !intent.news && /(?<!\p{L})(?:(?:ИИ|AI|LLM|ЖИ)(?!\p{L})|модел\p{L}*|models?|GPT|OpenAI|Anthropic|Claude|Google|Gemini|DeepMind|Grok|xAI)/iu.test(prompt) ? KNOWLEDGE_FEEDS.filter((feed) => /google|gemini|deepmind/iu.test(prompt) ? feed.id === "deepmind" : /anthropic|claude/iu.test(prompt) ? feed.id === "anthropic" : /grok|xai/iu.test(prompt) ? feed.id === "xai" : ["openai", "deepmind", "anthropic"].includes(feed.id)).map((feed) => ({ name: `official-feed:${feed.id}`, timeoutMs: 5500, run: (query: string, limit: number, searchSignal: AbortSignal) => searchOfficialFeed(feed, query, limit, searchSignal) })) : []),
+    ...(exaSearchEnabled() ? [{ name: "exa", run: searchExa }] : []),
+    ...(parallelSearchEnabled() ? [{ name: "parallel", timeoutMs: 5600, run: searchParallel }] : []),
     { name: "bing-rss", run: searchBingRss },
     ...(!intent.news ? [{ name: "google-news", run: (query: string, limit: number, searchSignal: AbortSignal) => searchGoogleNews(query, limit, searchSignal, intent) }] : []),
     ...(env("JINA_SEARCH_DISABLED") === "true" ? [] : [{ name: "jina", run: searchJina }]),
@@ -933,7 +936,7 @@ async function gatherSources(question: string, emit?: ResearchEmitter, activity?
       activity?.finish(call, undefined, signal?.aborted ? "cancelled" : "failed", signal?.aborted ? "Чтение остановлено пользователем" : "Не удалось прочитать страницу")
       throw error
     }
-    activity?.finish(call, page ? { title: page.title, characters: page.text.length, excerpt: page.text.slice(0, 1200) } : { title: source.title, snippet: source.snippet, limitation: "Полная страница недоступна; доступен только поисковый фрагмент" }, page ? "completed" : "failed", page ? undefined : "Не удалось прочитать полную страницу")
+    activity?.finish(call, page ? { title: page.title, reader: page.provider, characters: page.text.length, excerpt: page.text.slice(0, 1200) } : { title: source.title, snippet: source.snippet, limitation: "Полная страница недоступна; доступен только поисковый фрагмент" }, page ? "completed" : "failed", page ? undefined : "Не удалось прочитать полную страницу")
     if (!page) return source
     readPages++
     const pageEvidence = { ...source, occurrence: undefined, title: page.title || source.title, snippet: retail ? retailPageEvidence(page.text, page.title || source.title) : page.text.slice(0, intent.lastOccurrence ? 18_000 : attributionKind(prompt) ? 5200 : 2200), publishedAt: page.publishedAt || source.publishedAt, updatedAt: page.updatedAt, ...(page.retailOffer ? { retailOffer: page.retailOffer } : {}), checkedAt: new Date().toISOString(), readAt: page.readAt || new Date().toISOString(), ...(page.image ? { image: page.image } : {}) }
