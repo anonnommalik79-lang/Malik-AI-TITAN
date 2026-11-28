@@ -524,3 +524,45 @@ html body #malik-root#malik-root .mv2[data-view="video-generation-v2"] :is(.mv2_
 }
 html body #malik-root#malik-root .mv2[data-view="video-generation-v2"] :is(.mv2m__model-picker button.is-active,.mv2__model.is-active) { border-color: #fff !important; }
 html body #malik-root#malik-root .mv2[data-view="video-generation-v2"] :is(.mv2m__brand svg,.mv2__mobile-badges span,.mv2m__model-tier) { color: #fff !important; }
+
+
+/* Shared assistant typography: legible prose on OLED black; code, tables and
+   interactive answer widgets retain their own specialised presentation. */
+#malik-root .malik-message-card-assistant .malik-md {
+  font-size: 16px !important;
+  font-weight: 400 !important;
+  letter-spacing: normal !important;
+  word-spacing: normal !important;
+  line-height: 1.65 !important;
+}
+#malik-root .malik-message-card-assistant .malik-md :is(.malik-md-p, .malik-md-ul > li, .malik-md-ol > li, .malik-md-quote) {
+  font-weight: 400 !important;
+  letter-spacing: normal !important;
+  word-spacing: normal !important;
+  line-height: 1.65 !important;
+  overflow-wrap: anywhere;
+}
+#malik-root .malik-message-card-assistant .malik-md .malik-md-p {
+  margin: 0 0 .85em;
+}
+#malik-root .malik-message-card-assistant .malik-md .malik-md-strong {
+  font-weight: 650 !important;
+}
+#malik-root .malik-message-card-assistant .malik-md .malik-md-h {
+  font-weight: 650 !important;
+  letter-spacing: normal !important;
+}
+#malik-root .malik-message-card-assistant .malik-md .malik-md-link {
+  color: inherit !important;
+  font-weight: 500;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  overflow-wrap: anywhere;
+}
+#malik-root .malik-message-card-assistant .malik-md .malik-md-cite {
+  font-size: .76em;
+  font-weight: 500;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  vertical-align: baseline;
+}
