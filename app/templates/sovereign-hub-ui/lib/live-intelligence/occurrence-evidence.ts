@@ -59,6 +59,10 @@ function readDates(text: string, fallbackYear?: string, statedEdition?: string):
   return matches.sort((a, b) => a.index - b.index || b.length - a.length)
 }
 
+export function explicitCalendarDates(text: string): string[] {
+  return [...new Set(readDates(normalized(text)).flatMap(date => [date.start, date.end]))]
+}
+
 /** Tie a date in a completed-event statement to the requested occurrence. Publication dates are never used here. */
 export function findOccurrence(subject: string, title: string, body: string, asOf: string): OccurrenceEvidence | undefined {
   const name = occurrenceSubjectPattern(subject)

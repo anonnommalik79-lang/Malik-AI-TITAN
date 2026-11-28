@@ -200,5 +200,28 @@ check("the official latest release replaces an older version even when its numbe
   assert.doesNotMatch(corrected, /18\.3\.1/u)
 })
 
+check("a stale third-party model article cannot establish the latest family or date", () => {
+  const question = "Когда вышел последняя модель Gpt"
+  const intent = classifyFreshness(question, asOf)
+  const sources = assessSources(question, [{ title: "GPT-5.6", url: "https://en.wikipedia.org/wiki/GPT-5", domain: "en.wikipedia.org", snippet: "GPT-5.6 was released on June 26, 2026." }], intent)
+  assert.match(finalizeFreshAnswer("Последняя модель — GPT-5.6, вышла 26 июня 2026 [1].", intent, sources, sources, { question }), /Не удалось подтвердить/u)
+})
+
+check("an unrelated full date is rejected for a non-software current question", () => {
+  const question = "Когда выйдет последнее обновление стандарта?"
+  const intent = classifyFreshness(question, asOf)
+  const sources = assessSources(question, [{ title: "Standards body", url: "https://standards.example.org/updates", domain: "standards.example.org", snippet: "The new edition goes into effect on November 19, 2026.", publishedAt: "2026-11-18" }], intent)
+  assert.match(finalizeFreshAnswer("Обновление вступило в силу 18 ноября 2026 года [1].", intent, sources, sources, { question }), /Не удалось подтвердить/u)
+  assert.match(finalizeFreshAnswer("Обновление вступило в силу 19 ноября 2026 года [1].", intent, sources, sources, { question }), /19 ноября/u)
+})
+
+check("a cited store page cannot validate an invented price", () => {
+  const question = "Сколько стоит телефон в этом магазине?"
+  const intent = classifyFreshness(question, asOf)
+  const sources = assessSources(question, [{ title: "Телефон X", url: "https://shop.example.org/item", domain: "shop.example.org", snippet: "Цена телефона X — 319 990 ₸." }], intent)
+  assert.match(finalizeFreshAnswer("Цена — 449 990 ₸ [1].", intent, sources, sources, { question }), /Не удалось подтвердить/u)
+  assert.match(finalizeFreshAnswer("Цена — 319 990 ₸ [1].", intent, sources, sources, { question }), /319 990/u)
+})
+
 console.log(`${passed}/${total} chat reliability fixtures, ${base || "working tree"}`)
 process.exitCode = passed === total ? 0 : 1

@@ -31,7 +31,7 @@ const PRODUCT_SITES = [
   { match: /iphone|ipad|apple|айфон/iu, domains: ["apple.com"] },
   { match: /samsung|самсунг/iu, domains: ["samsung.com"] },
   { match: /windows|microsoft|виндовс/iu, domains: ["microsoft.com"] },
-  { match: /chatgpt|openai|чатгпт/iu, domains: ["openai.com"] },
+  { match: /\b(?:gpt|chatgpt|openai)\b|чатгпт/iu, domains: ["openai.com"] },
   { match: /gemini|google|gmail|гугл/iu, domains: ["deepmind.google", "google.com", "ai.google.dev"] },
   { match: /claude|anthropic|клод/iu, domains: ["anthropic.com", "claude.com"] },
 ]

@@ -1,5 +1,6 @@
 import { normalizeColloquial } from "./colloquial"
 import { lastOccurrenceRequest, type LastOccurrence } from "./last-occurrence"
+import { asksLatestRelease } from "../live-intelligence/release-catalog"
 
 export type FreshnessCategory = "STATIC" | "CURRENT" | "MIXED" | "LIVE" | "UNCERTAIN"
 export type FreshnessMode = "fast" | "deep" | "max"
@@ -126,7 +127,7 @@ export function classifyFreshness(prompt: string, now = new Date(), requestedZon
   if (historical) return result("STATIC", false, "historical")
   if (BUILD.test(text) && !BUILD_NEEDS_WEB.test(text)) return result("STATIC", false, "build-task")
   if ((TIME_WORDS.test(text) || LIVE_WORDS.test(text)) && DEMOGRAPHIC_SUBJECT.test(text) && DEMOGRAPHIC_QUANTITY.test(text) && !isNewsRequest(text)) return result("CURRENT", true, "demographic-statistic")
-  const changing = isNewsRequest(text) || isModelLeaderboardRequest(text) || VOLATILE.test(text) || MONEY_NOW.test(text) || AI.test(text) && (COMPARISON.test(text) || TIME_WORDS.test(text) || /(?:модел|models?|GPT[ -]?\d|Claude[ -]?\d|Gemini[ -]?\d|Grok[ -]?\d)/iu.test(text))
+  const changing = asksLatestRelease(text) || isNewsRequest(text) || isModelLeaderboardRequest(text) || VOLATILE.test(text) || MONEY_NOW.test(text) || AI.test(text) && (COMPARISON.test(text) || TIME_WORDS.test(text) || /(?:модел|models?|GPT[ -]?\d|Claude[ -]?\d|Gemini[ -]?\d|Grok[ -]?\d)/iu.test(text))
     || TECH.test(text) && /(?:(?<!\p{L})нов[а-я]*|latest|current|recent|new|жаңа|соңғы)/iu.test(text)
     || EVENT.test(text) && /(?:форум|конференц|мероприяти|выставк|conference|summit|forum|event|expo)/iu.test(text)
   const factualTime = (TIME_WORDS.test(text) || LIVE_WORDS.test(text)) && /(?:кто|како|каки|что.{0,20}(?:произошло|нового)|когда|what|which|who|when|қандай|не\s+болды)/iu.test(text)

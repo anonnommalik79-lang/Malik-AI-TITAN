@@ -21,7 +21,7 @@ export const KNOWLEDGE_FEEDS: KnowledgeFeed[] = [
 ]
 
 const xmlText = (value: string) => sanitizeEvidenceText(value.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/gu, "$1").replace(/<[^>]*>/gu, " ").replace(/&amp;/gu, "&").replace(/&quot;/gu, '"').replace(/&lt;/gu, "<").replace(/&gt;/gu, ">"))
-export function parseKnowledgeFeed(feed: KnowledgeFeed, raw: string, checkedAt: string): KnowledgeItem[] {
+export function parseKnowledgeFeed(feed: KnowledgeFeed, raw: string, checkedAt: string, limit = 25): KnowledgeItem[] {
   const now = Date.parse(checkedAt)
   const make = (title: string, link: string, snippet: string, published: unknown, dateKind: KnowledgeItem["dateKind"] = "publication"): KnowledgeItem | null => {
     const url = safeEvidenceUrl(link), publishedAt = dateKind === "publication" ? evidenceDate(published, now) : undefined
@@ -36,7 +36,7 @@ export function parseKnowledgeFeed(feed: KnowledgeFeed, raw: string, checkedAt: 
       const link = xmlText(tag("link")) || block.match(/<link[^>]+href=["']([^"']+)["']/iu)?.[1] || ""
       const item = make(xmlText(tag("title")), link, xmlText(tag("description") || tag("summary") || tag("content:encoded")), xmlText(tag("pubDate") || tag("published")))
       if (item) out.push(item)
-      if (out.length >= 25) break
+      if (out.length >= limit) break
     }
   } else if (feed.kind === "html") {
     const base = new URL(feed.url)

@@ -24,7 +24,12 @@ const auroraArchiveUrl = "https://example.com/aurora-archive"
 const auroraCurrentUrl = "https://example.org/aurora-latest"
 const readUrls = [], queries = []
 const stubs = {
-  "@/lib/server/malik-model-router": { runStrictMalikModel: async (input) => { inferences.push(input); if (!/1547|2020 году|без интернета/.test(input.taskPrompt)) assert.equal(input.onToken, undefined, "current answers must not expose unchecked drafts"); return { content: modelDraft || (/1547/.test(input.taskPrompt) ? "1547 × 829 = 1 282 463" : "Подтверждённый ответ по тестовым данным [1]."), provider: "fixture", model: "fixture", selectedModelId: input.modelId, latencyMs: 0 } } },
+  "@/lib/server/malik-model-router": { runStrictMalikModel: async (input) => {
+    inferences.push(input)
+    if (!/1547|2020 году|без интернета/.test(input.taskPrompt)) assert.equal(input.onToken, undefined, "current answers must not expose unchecked drafts")
+    const quote = scenario === "quote-repair" ? input.systemPrompt.includes("verification gate rejected") ? "Цена Atlas — 319 990 ₸ [1]." : "Цена Atlas — 449 990 ₸ [1]." : ""
+    return { content: quote || modelDraft || (/1547/.test(input.taskPrompt) ? "1547 × 829 = 1 282 463" : "Подтверждённый ответ по тестовым данным [1]."), provider: "fixture", model: "fixture", selectedModelId: input.modelId, latencyMs: 0 }
+  } },
   "@/lib/server/context-fusion": { requestedFusionConnectors: () => [], collectMalikConnectedContext: async () => ({ requested: false, sources: [], context: "" }) },
   "@/lib/server/science-context": { collectMalikScienceContext: async () => ({ sources: [], context: "", providers: [] }) },
   "@/lib/live-intelligence/index-reader": { indexedSources: async () => ({ sources: [], health: { status: "unavailable" } }) },
@@ -55,6 +60,19 @@ try {
   console.info = () => {}
   globalThis.fetch = async (url, init) => {
     calls.push(String(url))
+    if (scenario === "quote-repair" && String(url).includes("serper.dev")) {
+      return Response.json({ organic: [{ title: "Телефон Atlas — цена в магазине", link: "https://shop.example.org/atlas", snippet: "Телефон Atlas продаётся по цене 319 990 ₸." }] })
+    }
+    if (scenario === "publisher-catalog") {
+      if (String(url).endsWith("openai.com/news/rss.xml")) {
+        const recent = new Date(Date.now() - 4 * 86_400_000).toUTCString()
+        const old = new Date(Date.now() - 160 * 86_400_000).toUTCString()
+        const item = (title, slug, date) => `<item><title>${title}</title><link>https://openai.com/index/${slug}</link><pubDate>${date}</pubDate></item>`
+        const noise = Array.from({ length: 27 }, (_, index) => item("Study mentioning GPT-99", "study-" + index, recent)).join("")
+        return new Response(`<rss><channel>${noise}${item("Introducing GPT-99.2 Astra and Sol", "introducing-gpt-99-2", recent)}${item("Introducing GPT-98", "introducing-gpt-98", old)}</channel></rss>`)
+      }
+      return Response.json({ organic: [{ title: "GPT 98", link: "https://en.wikipedia.org/wiki/GPT", snippet: "GPT-98 was the latest version." }] })
+    }
     if (scenario === "all-fail") return new Response("", { status: 503 })
     if (scenario === "retry-event") {
       if (String(url).includes("serper.dev")) return Response.json({ organic: [{ title: "Nexus Film Festival recap", link: blockedEventPage, snippet: nexusSummary }] })
@@ -83,6 +101,28 @@ try {
   }
   const god = load("lib/malik-god-router.ts")
   const run = (prompt, depth = "balanced", modelId = "malik-fast-120b") => god.malikGodAnswer({ originalQuestion: prompt, responseDepth: depth }, { modelId }, undefined, (token) => tokens.push(token))
+  await check("the production router checks an official release catalog first and skips its unrelated headlines", async () => {
+    scenario = "publisher-catalog"
+    try {
+      const before = inferences.length, start = calls.length
+      const answer = await run("Когда вышел последняя модель Gpt", "balanced", "malik-max")
+      assert.equal(answer.model, "verified-publisher-release")
+      assert.match(answer.content, /GPT-99\.2 Astra и Sol.*\[1\]/u)
+      assert.equal(answer.sources[0].url, "https://openai.com/index/introducing-gpt-99-2")
+      assert.equal(inferences.length, before)
+      assert.equal(calls[start], "https://openai.com/news/rss.xml")
+    } finally { scenario = "success" }
+  })
+  await check("a simple factual draft with an invented price is repaired once before streaming", async () => {
+    scenario = "quote-repair"
+    try {
+      const before = inferences.length
+      const answer = await run("Сколько стоит телефон Atlas?")
+      assert.match(answer.content, /319 990/u)
+      assert.doesNotMatch(answer.content, /449 990/u)
+      assert.equal(inferences.length - before, 2)
+    } finally { scenario = "success" }
+  })
   for (const [name, prompt] of [
     ["A", "Какие новые ИИ-модели официально вышли за последние семь дней? Укажи даты и первоисточники"],
     ["B", "Какая самая новая официально представленная модель Google DeepMind на сегодняшний день?"],

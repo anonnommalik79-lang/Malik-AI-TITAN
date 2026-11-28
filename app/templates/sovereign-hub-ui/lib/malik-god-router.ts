@@ -33,6 +33,7 @@ import { lastOccurrenceRequest, occurrenceSubjectPattern } from "@/lib/ai/last-o
 import { searchTimeFilters } from "@/lib/live-intelligence/search-time-filters"
 import { searchNewsFeed } from "@/lib/live-intelligence/news-search"
 import { runLiveSearch, type LiveSearchProvider } from "@/lib/live-intelligence/search-engine"
+import { publisherRelease, releasePublisher, verifiedPublisherRelease } from "@/lib/live-intelligence/release-catalog"
 import { worldBirthCohortEvidence, worldBirthCohortAnswer, explainWorldBirthCohort } from "@/lib/live-intelligence/birth-cohort-evidence"
 import { mapBounded } from "@/lib/live-intelligence/concurrency"
 import { indexedSources } from "@/lib/live-intelligence/index-reader"
@@ -383,6 +384,16 @@ async function searchOfficialFeed(feed: KnowledgeFeed, _query: string, limit: nu
   const response = await fetchWithTimeout(feed.url, { redirect: "error" }, 5500, signal)
   if (!response.ok) return []
   return parseKnowledgeFeed(feed, await response.text(), new Date().toISOString()).slice(0, Math.max(limit, 12))
+}
+
+async function searchPublisherReleases(feed: KnowledgeFeed, question: string, limit: number, signal: AbortSignal): Promise<SourceItem[]> {
+  const response = await fetchResearchResponse(feed.url, { redirect: "error", signal, cache: "no-store" }, 4500, 2 * 1024 * 1024)
+  if (!response.ok) return []
+  return parseKnowledgeFeed(feed, await response.text(), new Date().toISOString(), 100)
+    .map(source => ({ ...source, provider: `publisher-releases:${feed.id}` }))
+    .filter(source => publisherRelease(source, question))
+    .sort((a, b) => (b.publishedAt || "").localeCompare(a.publishedAt || ""))
+    .slice(0, limit)
 }
 
 async function searchBingRss(query: string, limit: number, signal?: AbortSignal): Promise<SourceItem[]> {
@@ -757,7 +768,10 @@ async function gatherSources(question: string, emit?: ResearchEmitter, activity?
   const budget = AbortSignal.any([AbortSignal.timeout(22_000), ...(signal ? [signal] : [])])
   const intent = classifyFreshness(prompt, new Date(started), timeZone)
   const queries = buildQueries(publicSearchText(prompt), intent)
+  const publisher = !intent.window && !intent.historical && releasePublisher(prompt)
+  const releaseFeed = publisher && KNOWLEDGE_FEEDS.find(feed => feed.id === publisher.id && feed.kind === "rss")
   const providers: LiveSearchProvider[] = [
+    ...(releaseFeed ? [{ name: `publisher-releases:${releaseFeed.id}`, timeoutMs: 4600, run: (_query: string, limit: number, searchSignal: AbortSignal) => searchPublisherReleases(releaseFeed, prompt, limit, searchSignal) }] : []),
     ...(!intent.lastOccurrence && /next\.?js|react/iu.test(prompt) && needsCurrentEvidence(prompt) ? [{ name: "github-releases", timeoutMs: 5500, run: searchOfficialReleases }] : []),
     ...(env("SERPER_API_KEY") ? [{ name: "serper", run: (query: string, limit: number, searchSignal: AbortSignal) => searchSerper(query, limit, searchSignal, intent) }] : []),
     ...(env("BRAVE_SEARCH_API_KEY") ? [{ name: "brave", run: (query: string, limit: number, searchSignal: AbortSignal) => searchBrave(query, limit, searchSignal, intent) }] : []),
@@ -774,6 +788,7 @@ async function gatherSources(question: string, emit?: ResearchEmitter, activity?
     prompt, queries: needsCurrentEvidence(prompt) ? [...requestedQueries].sort((a, b) => Number(b.includes("site:")) - Number(a.includes("site:"))) : requestedQueries,
     providers: candidates, mode: depth, signal: budget, intent,
     rank: (sources) => rankSourcesForPrompt(prompt, sources, intent),
+    ...(publisher ? { isUsefulLead: (sources: SourceItem[]) => sources.some(source => source.authority === "primary" && (source.domain === publisher.domain || source.domain.endsWith("." + publisher.domain))) } : {}),
     onQuery: (query) => emit?.({ kind: "search", text: `Ищу актуальную информацию · ${query}` }),
   })
   // Publish before starting I/O: the UI must observe a genuinely running search.
@@ -857,7 +872,9 @@ async function gatherSources(question: string, emit?: ResearchEmitter, activity?
     return rows.flatMap(item => item.status === "fulfilled" ? [item.value] : [])
   }
 
-  const sources = await read(unique.filter(source => source !== cohortSource), Math.min(maxSources, pageLimit))
+  const receipts = unique.filter(source => publisherRelease(source, prompt))
+  const sources = await read(unique.filter(source => source !== cohortSource && !receipts.includes(source)), Math.min(maxSources, Math.max(0, pageLimit - receipts.length)))
+  sources.unshift(...receipts)
   if (cohortSource) sources.unshift(cohortSource)
   // A readable archive or a failed page is insufficient to stop looking for
   // this year's edition. Keep past evidence in case the event hasn't returned.
@@ -1282,6 +1299,8 @@ export async function malikGodAnswer(
     }
     const occurrenceReply = verifiedOccurrenceAnswer(freshness, webSources, format, sources)
     if (occurrenceReply) return { content: occurrenceReply, provider: "live-evidence", model: "verified-occurrence", selectedModelId: selection.modelId, usedWeb: true, sources, attempts: [] }
+    const releaseReply = !freshness.window && !attachments.length && !connected.context && verifiedPublisherRelease(focus.searchText, webSources, freshness.language, format)
+    if (releaseReply) return { content: releaseReply, provider: "live-evidence", model: "verified-publisher-release", selectedModelId: selection.modelId, usedWeb: true, sources, attempts: [] }
     const usedEvidence = usedWeb || Boolean(connected.context) || science.sources.length > 0 || Boolean(eiaEvidence.context)
     const strictPrompt = [
       `Question:\n${prompt}`,
@@ -1358,8 +1377,11 @@ export async function malikGodAnswer(
     const routineInstructions = [compactChatInstructions, userContextBlocks(body), conversationIntentInstruction(universalIntent), conversationFocusInstruction(requestPrompt, focus)]
     const requestedBudget = Math.max(1, answerBudget(body, prompt, Math.max(brain.outputTokenTarget, powerOutputTokens)) - domainPlanningBudget)
     const outputBudget = compactSimpleChat && math ? Math.min(768, requestedBudget) : requestedBudget
+    const repairBudget = leanEvidenceChat && !format && !attribution && !domainPlan.evidence.safetySensitive && !truthNeedsLiveEvidence(focus.searchText)
+      && freshness.needsSearch && ["CURRENT", "LIVE"].includes(freshness.category) && webSources.length && outputBudget >= 450
+      ? Math.min(350, Math.floor(outputBudget / 3)) : 0
     const modelCall = activity?.start("Подготовка ответа моделью", "model", selection.modelId, { sources: sources.length, attachments: attachments.length, compactSimpleChat, leanEvidenceChat, outputTokenLimit: outputBudget })
-    const result = await runStrictMalikModel({
+    const firstResult = await runStrictMalikModel({
       modelId: selection.modelId,
       prompt: strictPrompt,
       // Speed and code lanes follow what is really being asked: «а третий?»
@@ -1376,7 +1398,7 @@ export async function malikGodAnswer(
       ].join("\n\n") : "", computedEvidenceInstruction(body?.metadata), systemPrompt(usedEvidence, prompt, brainInstruction, attachments, body?.metadata, Boolean(connected.context), sources.length > 0, focus), mathEngineInstruction(math), plannedMathInstruction(plannedMath), accuracyInstruction(focus.searchText), workModeInstruction(prompt, resolveWorkspaceMode(body?.workspaceMode)), attributionSystemInstruction(focus.searchText), premiseInstruction(focus.searchText), userContextBlocks(body), universalContract].filter(Boolean).join("\n\n"),
       history,
       attachments,
-      maxTokens: outputBudget,
+      maxTokens: outputBudget - repairBudget,
       temperature: typeof body?.temperature === "number" ? body.temperature : brain.temperature,
       reasoningEffort: compactSimpleChat || leanEvidenceChat || brain.depth === "instant" ? "low" : brain.depth === "balanced" ? "medium" : "high",
       allowCatalog: selection.allowCatalog === true,
@@ -1386,12 +1408,43 @@ export async function malikGodAnswer(
       signal,
     }).catch((error) => { activity?.finish(modelCall, undefined, "failed", error instanceof Error ? error.message : String(error)); throw error })
     const verificationCall = activity?.start("Проверка вычислений и согласованности", "code", "malik.accuracy")
-    const verified = finalizeAccuracy(cleanText(result.content), focus.searchText, sources)
-    const checkedContent = finalizeFreshAnswer(finalizeTruthAnswer(verified.content, focus.searchText, sources, true), freshness, webSources, sources, { question: focus.searchText, format })
+    const validateDraft = (draft: string) => {
+      const verified = finalizeAccuracy(cleanText(draft), focus.searchText, sources)
+      const checkedContent = finalizeFreshAnswer(finalizeTruthAnswer(verified.content, focus.searchText, sources, true), freshness, webSources, sources, { question: focus.searchText, format })
+      return { verified, checkedContent }
+    }
+    let result = firstResult
+    let { verified, checkedContent } = validateDraft(result.content)
+    let additionalModelCalls = 0
+    let usage = result.usage
+    if (repairBudget && !result.incomplete && checkedContent === unavailableFreshAnswer(freshness, format)) {
+      additionalModelCalls++
+      const step = activity?.start("Сверяю ответ с источниками", "model", selection.modelId)
+      try {
+        const repairSignal = AbortSignal.any([AbortSignal.timeout(6500), ...(signal ? [signal] : [])])
+        const revised = await runStrictMalikModel({
+          modelId: selection.modelId, prompt: strictPrompt, taskPrompt: focus.shapeText, history,
+          systemPrompt: [...routineInstructions, leanEvidenceInstructions,
+            "The verification gate rejected the previous draft. Write a shorter answer using only details explicitly supported by the supplied sources. Cite the supporting source immediately after the specific detail. If only part of the question is supported, state that part and identify what evidence is missing.",
+          ].filter(Boolean).join("\n\n"),
+          maxTokens: repairBudget, temperature: 0.1, reasoningEffort: "low", allowCatalog: selection.allowCatalog === true, signal: repairSignal,
+        })
+        usage = { primary: firstResult.usage, continuation: revised.usage }
+        const checkedRevision = validateDraft(revised.content)
+        if (!revised.incomplete && checkedRevision.checkedContent !== unavailableFreshAnswer(freshness, format)) {
+          result = revised
+          ;({ verified, checkedContent } = checkedRevision)
+        }
+        activity?.finish(step, { accepted: result === revised })
+      } catch {
+        signal?.throwIfAborted()
+        activity?.finish(step, undefined, "failed", "Повторная проверка ответа не завершилась")
+      }
+    }
     const attributionAudit = gateAttributionAnswer({ question: focus.searchText, answer: checkedContent, sources: webSources, searchEnabled: usedWeb })
     const content = attributionAudit.content
     if (attributionAudit.withheld) console.info("[MALIK_ATTRIBUTION_GATE]", attributionAudit.reason || "unsupported")
-    activity?.finish(verificationCall, { checked: verified.report.checked, corrected: verified.report.issues.length, verificationMs: verified.report.verificationMs, additionalModelCalls: 0 })
+    activity?.finish(verificationCall, { checked: verified.report.checked, corrected: verified.report.issues.length, verificationMs: verified.report.verificationMs, additionalModelCalls })
     activity?.finish(modelCall, { characters: content.length, model: result.selectedModelId, sources: sources.length })
     return {
       content,
@@ -1404,7 +1457,7 @@ export async function malikGodAnswer(
       accuracy: verified.report,
       factAudit: auditGroundedAnswer(answerCardsToText(content, { sources, userText: requestPrompt }), sources, prompt, verified.report, freshness.needsSearch ? freshnessCheckLine(freshness) : undefined),
       ...(result.incomplete ? { incomplete: result.incomplete } : {}),
-      usage: result.usage,
+      usage,
       attempts: [{
         provider: result.provider,
         model: result.model,

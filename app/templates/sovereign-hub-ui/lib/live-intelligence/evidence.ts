@@ -1,6 +1,9 @@
 import type { MalikWebSource } from "../ai/web-research-types"
 import { classifyFreshness, isNewsRequest, type FreshnessIntent } from "../ai/freshness-intent"
-import { findOccurrence } from "./occurrence-evidence"
+import { explicitCalendarDates, findOccurrence } from "./occurrence-evidence"
+import { publisherRelease, releasePublisher } from "./release-catalog"
+import { currentModelSubjects, mentionedCurrentModels } from "../ai/current-evidence"
+import { auditAnswerFacts } from "../ai/fact-audit"
 
 const AI_DOMAINS = ["openai.com", "anthropic.com", "claude.com", "deepmind.google", "ai.google.dev", "blog.google", "ai.meta.com", "llama.com", "deepseek.com", "qwen.ai", "qwenlm.github.io", "mistral.ai", "x.ai"]
 const SCIENCE_DOMAINS = ["arxiv.org", "nature.com", "science.org", "nasa.gov", "esa.int"]
@@ -80,8 +83,9 @@ export function assessSources(prompt: string, sources: readonly MalikWebSource[]
     const dated = Date.parse(eventAt || publishedAt || "")
     const inWindow = !intent.window || Number.isFinite(dated) && dated >= Date.parse(intent.window.from) && dated <= Date.parse(intent.window.to)
     const freshness = intent.historical ? "historical" : intent.window ? inWindow ? "recent" : "outside-window" : Number.isFinite(dated) ? now - dated <= 30 * 86_400_000 ? "recent" : "old" : "undated"
-    const currentCatalog = input.provider === "github-releases" && authority === "primary" && input.currentCatalog === true
-    const releaseVersion = currentCatalog && /^\d{1,3}\.\d{1,3}(?:\.\d{1,3})?$/u.test(input.releaseVersion || "") ? input.releaseVersion : undefined
+    const stableCatalog = input.provider === "github-releases" && authority === "primary" && input.currentCatalog === true
+    const currentCatalog = stableCatalog || Boolean(publisherRelease({ ...input, title, url, publishedAt }, prompt))
+    const releaseVersion = stableCatalog && /^\d{1,3}\.\d{1,3}(?:\.\d{1,3})?$/u.test(input.releaseVersion || "") ? input.releaseVersion : undefined
     return [{ ...input, url, domain, title, snippet: sanitizeEvidenceText(input.snippet || ""), publishedAt, eventAt, checkedAt, authority, freshness, currentCatalog, releaseVersion, occurrence } as MalikWebSource]
   }).sort((a, b) => {
     if (intent.lastOccurrence) {
@@ -254,6 +258,38 @@ function supportsSoftwareVersions(text: string, question: string, cited: readonl
   return [...claims].every(version => supported.has(version))
 }
 
+/** A source must support the stated date. An article's publication time alone does not date the event. */
+function supportsCalendarDates(text: string, question: string, cited: readonly MalikWebSource[], intent: FreshnessIntent) {
+  const receipt = freshnessCheckLine(intent)
+  const dates = explicitCalendarDates(text.replace(receipt, ""))
+  if (!dates.length) return true
+  const stated = new Set(explicitCalendarDates(question))
+  for (const source of cited) {
+    const datedRelease = publisherRelease(source, question) || source.currentCatalog && source.releaseVersion
+    for (const day of explicitCalendarDates([source.title, source.snippet, source.eventAt, datedRelease ? source.publishedAt : ""].filter(Boolean).join("\n"))) stated.add(day)
+  }
+  return dates.every(day => stated.has(day))
+}
+
+function supportsProviderModels(text: string, question: string, cited: readonly MalikWebSource[], intent: FreshnessIntent) {
+  const modelNames = currentModelSubjects(text)
+  if (!modelNames.length) return true
+  const publisher = releasePublisher(question)
+  // For "latest", an old third-party report can describe a past release. It cannot establish the publisher's current lineup.
+  const relevant = publisher ? cited.filter(source => isCurrentEvidenceSource(source, intent) && source.authority === "primary" && isDomain(source.domain, publisher.domain)) : cited
+  const exact = relevant.map(source => `${source.title}\n${source.snippet || ""}`).join("\n")
+  return mentionedCurrentModels(text, exact).length === modelNames.length
+}
+
+/** Short price and FX lookups can be checked without speculating about calculations in longer analyses. */
+function supportsQuoteFigures(text: string, question: string, cited: readonly MalikWebSource[], intent: FreshnessIntent) {
+  if (question.length > 155 || intent.category === "MIXED" || /(?:сравн|посчитай|вычисли|конверт|convert|calculate|compare|прогноз|forecast)/iu.test(question)
+    || !/(?:сколько\s+стоит|какая\s+цен|какой\s+курс|курс\s+(?:доллар|евро)|\b(?:exchange rate|current price|what is the price)\b|бағасы\s+қанша)/iu.test(question)) return true
+  const current = cited.filter(source => isCurrentEvidenceSource(source, intent))
+  const report = auditAnswerFacts({ answer: text.replace(freshnessCheckLine(intent), ""), sources: current, prompt: question })
+  return !report?.claims.some(claim => claim.verdict === "missing" && /[$€£₸¥%]|\d[.,]\d|\d\s*(?:тыс|млн|млрд|тенге|доллар|евро|руб|KZT|USD|EUR)/iu.test(claim.value))
+}
+
 export function finalizeFreshAnswer(answer: string, intent: FreshnessIntent, sources: readonly MalikWebSource[], citationSources: readonly MalikWebSource[] = sources, options: FreshAnswerOptions = {}): string {
   if (!intent.needsSearch || intent.category === "STATIC") return answer
   const unavailable = () => unavailableFreshAnswer(intent, options.format)
@@ -296,7 +332,11 @@ export function finalizeFreshAnswer(answer: string, intent: FreshnessIntent, sou
   const hasCurrentCitation = [...cited].some(source => webUrls.has(safeEvidenceUrl(source.url)) && isCurrentEvidenceSource(source, intent))
   const release = stableRelease(options.question || "", sources, intent)
   const matchesCatalog = !release || versions(claimText).has(release.version)
-  if (!hasCurrentCitation || !matchesCatalog || !supportsSoftwareVersions(claimText, options.question || "", [...cited], intent)) {
+  const question = options.question || ""
+  if (!hasCurrentCitation || !matchesCatalog || !supportsSoftwareVersions(claimText, question, [...cited], intent)
+    || !supportsProviderModels(claimText, question, [...cited], intent)
+    || !supportsCalendarDates(claimText, question, [...cited], intent)
+    || !supportsQuoteFigures(claimText, question, [...cited], intent)) {
     if (!release || options.format === "json") return unavailable()
     const citation = citationSources.findIndex(source => safeEvidenceUrl(source.url) === safeEvidenceUrl(release.source.url)) + 1
     if (!citation) return unavailable()

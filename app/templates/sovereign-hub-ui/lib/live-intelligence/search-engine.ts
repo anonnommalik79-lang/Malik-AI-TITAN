@@ -55,6 +55,7 @@ export async function runLiveSearch(input: {
   prompt: string; queries: string[]; providers: LiveSearchProvider[]; mode?: FreshnessMode; signal?: AbortSignal
   intent?: FreshnessIntent
   rank?: (sources: MalikWebSource[]) => MalikWebSource[]
+  isUsefulLead?: (sources: MalikWebSource[]) => boolean
   now?: () => number; cache?: EvidenceSearchCache; circuits?: ProviderCircuits
   onQuery?: (query: string) => void
 }): Promise<LiveSearchResult> {
@@ -77,7 +78,7 @@ export async function runLiveSearch(input: {
     const seeksThisYear = intent.lastOccurrence && query.split(/\s+/u).includes(year)
     const hasSearchLead = (sources: MalikWebSource[]) => intent.lastOccurrence
       ? sources.some(source => source.occurrence && (!seeksThisYear || source.occurrence.end.startsWith(year)))
-      : currentEvidenceAvailable(sources, intent)
+      : currentEvidenceAvailable(sources, intent) && (!input.isUsefulLead || input.isUsefulLead(sources))
     result.queries++; input.onQuery?.(query)
     // Bucket/window prevents yesterday's cache from crossing local midnight.
     const key = JSON.stringify([query, input.mode || "fast", intent.category, intent.localDate, intent.window?.label, intent.lastOccurrence?.subject, input.providers.map((p) => p.name)])
