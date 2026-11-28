@@ -298,7 +298,7 @@ export function MusicGenerationStudio({ username, plan, onOpenBilling }: { usern
   const queueNextVariant = () => {
     if (pendingVariantsRef.current <= 0) return
     pendingVariantsRef.current -= 1
-    variantTimerRef.current = window.setTimeout(() => submitRef.current?.(variantBriefRef.current || undefined), 400)
+    variantTimerRef.current = window.setTimeout(() => { variantTimerRef.current = undefined; submitRef.current?.(variantBriefRef.current || undefined) }, 400)
   }
 
   const genre = GENRES.find((item) => item.id === genreId) || GENRES[0]
@@ -504,6 +504,25 @@ export function MusicGenerationStudio({ username, plan, onOpenBilling }: { usern
       if (timer) window.clearTimeout(timer)
     }
   }, [activeRequestId])
+
+  // Metadata events may never arrive on a stalled or expired media URL.
+  // Do not hold the editor in an endless "checking" state, or resubmit the job.
+  useEffect(() => {
+    const validating = validationRef.current
+    if (!validating || validating.url !== trackUrl) return
+    const timer = window.setTimeout(() => {
+      if (validationRef.current?.id !== validating.id) return
+      validationRef.current = null
+      setHistory(rows => rows.map(item => item.requestId === validating.id
+        ? { ...item, status: "failed", error: "Аудиофайл не загрузился вовремя. Номер задания сохранён." }
+        : item))
+      setGenerating(false)
+      setLastSubmitFailed(true)
+      pendingVariantsRef.current = 0
+      setNotice("Не удалось проверить аудиофайл за отведённое время. Задание сохранено в истории.")
+    }, 45_000)
+    return () => window.clearTimeout(timer)
+  }, [trackUrl])
 
   const chooseGenre = (next: Genre) => {
     setGenreId(next.id)
@@ -861,6 +880,7 @@ export function MusicGenerationStudio({ username, plan, onOpenBilling }: { usern
 
   const startGeneration = () => {
     if (generating || submittingRef.current || activeRequestId || validationRef.current) return
+    if (variantTimerRef.current) { window.clearTimeout(variantTimerRef.current); variantTimerRef.current = undefined }
     if (!proAccess) { onOpenBilling(); return }
     const allowed = musicUnlimited
       ? variants
