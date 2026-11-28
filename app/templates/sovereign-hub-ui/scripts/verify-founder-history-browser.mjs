@@ -64,23 +64,33 @@ let browser
 let passed = 0
 try {
   browser = await playwright.chromium.launch({ headless: true, ...(process.env.MALIK_QA_CHROMIUM_EXECUTABLE ? { executablePath: process.env.MALIK_QA_CHROMIUM_EXECUTABLE } : {}) })
-  for (const [width, height] of [[1440, 1000], [390, 844]]) {
+  for (const [width, height] of [[1440, 1000], [320, 720], [390, 844], [430, 932]]) {
     const page = await browser.newPage({ viewport: { width, height } }), errors = []
     page.on("pageerror", error => errors.push(error.message))
     await page.clock.install()
     await page.goto(`http://127.0.0.1:${server.address().port}`)
     await page.getByRole("heading", { name: "История запросов", exact: true }).waitFor()
-    await page.locator("aside").getByRole("button").filter({ hasText: "alpha@example.test" }).click()
-    await page.getByRole("button").filter({ hasText: "Alpha request" }).click()
-    await page.getByText("Alpha verified answer password=[REDACTED]", { exact: true }).waitFor()
+    const mobile = width < 1024
+    const feed = page.getByRole("region", { name: "Мобильная история" })
+    if (mobile) {
+      await feed.getByText("Alpha verified answer password=[REDACTED]", { exact: true }).waitFor()
+      const position = await feed.locator("article").first().boundingBox()
+      assert.ok(position && position.y < height, "First request must be visible in the initial mobile viewport")
+      await feed.getByRole("button", { name: "Пользователи", exact: true }).click()
+      await feed.getByRole("button").filter({ hasText: "alpha@example.test" }).click()
+    } else {
+      await page.locator("aside").getByRole("button").filter({ hasText: "alpha@example.test" }).click()
+      await page.getByRole("button").filter({ hasText: "Alpha request" }).click()
+    }
+    await page.getByText("Alpha verified answer password=[REDACTED]", { exact: true }).filter({ visible: true }).waitFor()
     assert.doesNotMatch(await page.locator("body").innerText(), /Discarded draft|hidden123|Beta request/)
     assert.match(await page.locator("body").innerText(), /временном диске/)
-    await page.getByRole("button").filter({ hasText: "Pending request" }).click()
+    if (!mobile) await page.getByRole("button").filter({ hasText: "Pending request" }).click()
     const completeText = `Pending completed ${width}`
     await store.appendFounderMessage({ id: "pending-1", userId: users[0].email, source: "chat", userText: "Pending request", assistantText: completeText, status: "success" })
     await page.clock.runFor(30_100)
-    await page.getByText(completeText, { exact: true }).waitFor()
-    await page.getByRole("button").filter({ hasText: "Alpha request" }).click()
+    await page.getByText(completeText, { exact: true }).filter({ visible: true }).waitFor()
+    if (!mobile) await page.getByRole("button").filter({ hasText: "Alpha request" }).click()
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1), false)
     if (process.env.MALIK_QA_OUTPUT) { fs.mkdirSync(process.env.MALIK_QA_OUTPUT, { recursive: true }); await page.screenshot({ path: path.join(process.env.MALIK_QA_OUTPUT, `founder-history-${width}.png`), fullPage: true }) }
     await page.goto(`http://127.0.0.1:${server.address().port}/legacy`)
@@ -105,4 +115,4 @@ try {
   if (!path.resolve(temporary).startsWith(path.resolve(os.tmpdir()) + path.sep)) throw new Error("Unsafe fixture cleanup")
   fs.rmSync(temporary, { recursive: true, force: true })
 }
-console.log(`${passed}/2 browser flows PASS; fixture auth/directory/model, not live WorkOS or production deployment`)
+console.log(`${passed}/4 browser flows PASS; fixture auth/directory/model, not live WorkOS or production deployment`)
