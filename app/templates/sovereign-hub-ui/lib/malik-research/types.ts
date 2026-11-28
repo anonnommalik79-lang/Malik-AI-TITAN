@@ -1,3 +1,5 @@
+import type { RetailOffer } from "../live-intelligence/retail-evidence";
+
 export type SearchResult = {
   title: string;
   url: string;
@@ -24,6 +26,7 @@ export type FetchedSource = {
   provider?: string;
   /** The page's own preview picture (og:image / twitter:image), https only. */
   image?: string;
+  retailOffer?: RetailOffer;
 };
 
 export type ResearchFinal = {

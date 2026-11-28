@@ -1,6 +1,7 @@
 import type { FetchedSource, SearchResult } from "./types";
 import { clampText, cleanTitle, fetchWithTimeout, stripHtml } from "./utils";
 import { fetchPublicPage, publicAddresses } from "./public-page-fetch";
+import { readStructuredRetailOffer } from "../live-intelligence/retail-evidence";
 import { pageDates } from "../live-intelligence/page-dates";
 import { assertPublicHttpUrl } from "@/lib/server/request-safety";
 
@@ -46,9 +47,9 @@ function safeSourceUrl(result: SearchResult) {
   return assertPublicHttpUrl(String(result.url || "")).toString();
 }
 
-async function fetchDirect(result: SearchResult, signal?: AbortSignal): Promise<FetchedSource | null> {
+async function fetchDirect(result: SearchResult, signal: AbortSignal, product = false): Promise<FetchedSource | null> {
   const target = safeSourceUrl(result);
-  const res = await fetchPublicPage(target, signal || AbortSignal.timeout(6000));
+  const res = await fetchPublicPage(target, signal);
   if (!res.ok) return null;
 
   const contentType = res.headers.get("content-type") || "";
@@ -65,7 +66,8 @@ async function fetchDirect(result: SearchResult, signal?: AbortSignal): Promise<
   const title = extractTitle(html, result.title || target);
   const text = clampText(stripHtml(html), Number(process.env.RESEARCH_MAX_TEXT || 18000));
 
-  if (!text || text.length < 280) return null;
+  const retailOffer = product ? readStructuredRetailOffer(html, target) : undefined;
+  if ((!text || text.length < 280) && !retailOffer) return null;
 
   const image = extractPageImage(html, target);
   return {
@@ -80,6 +82,7 @@ async function fetchDirect(result: SearchResult, signal?: AbortSignal): Promise<
     readAt: new Date().toISOString(),
     provider: result.provider,
     ...(image ? { image } : {}),
+    ...(retailOffer ? { retailOffer } : {}),
   };
 }
 
@@ -95,7 +98,7 @@ async function fetchViaJina(result: SearchResult, signal?: AbortSignal): Promise
   if (process.env.JINA_READER_DISABLED === "true") return null;
 
   const target = safeSourceUrl(result);
-  const readerUrl = "https://r.jina.ai/http://" + target.replace(/^https?:\/\//, "");
+  const readerUrl = "https://r.jina.ai/" + target;
 
   try {
     const res = await fetchWithTimeout(
@@ -129,7 +132,7 @@ async function fetchViaJina(result: SearchResult, signal?: AbortSignal): Promise
   }
 }
 
-export async function fetchPageText(result: SearchResult, options: { signal?: AbortSignal; timeoutMs?: number } = {}): Promise<FetchedSource | null> {
+export async function fetchPageText(result: SearchResult, options: { signal?: AbortSignal; timeoutMs?: number; product?: boolean } = {}): Promise<FetchedSource | null> {
   const signal = AbortSignal.any([AbortSignal.timeout(options.timeoutMs || 9000), ...(options.signal ? [options.signal] : [])]);
   try {
     // Validate before either the direct reader or the third-party reader sees it.
@@ -140,7 +143,8 @@ export async function fetchPageText(result: SearchResult, options: { signal?: Ab
   }
 
   try {
-    const direct = await fetchDirect(result, signal);
+    const directSignal = options.product ? AbortSignal.any([signal, AbortSignal.timeout(4200)]) : signal;
+    const direct = await fetchDirect(result, directSignal, options.product);
     if (direct) return direct;
   } catch {
     // fallback to reader

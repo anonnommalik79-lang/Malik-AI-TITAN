@@ -35,7 +35,12 @@ const stubs = {
   "@/lib/live-intelligence/index-reader": { indexedSources: async () => ({ sources: [], health: { status: "unavailable" } }) },
   "@/lib/malik-research/fetch-page": { fetchPageText: async (source) => {
     readUrls.push(source.url)
-    if (scenario === "unread-event" || source.url === blockedEventPage || source.url.includes("/archived-metro-open")) return null
+    if (scenario === "unread-event" || source.url === blockedEventPage || source.url.includes("/archived-metro-open") || source.url.includes("unread-retail.example")) return null
+    if (scenario === "retail-recovery" && source.domain.startsWith("shop-")) {
+      const price = source.domain.includes("shop-a") ? 599990 : 688900
+      return { ...source, text: "Product details", readAt: new Date().toISOString(),
+        retailOffer: { name: "iPhone 16 Pro Max 256GB White", price, currency: "KZT", availability: "in-stock" } }
+    }
     const text = source.url === bridgeUrl ? "Обзор программы. ".repeat(240) + `AI & Digital Bridge ${bridgeYear} прошёл 1–3 октября в Астане.` : source.snippet
     return { ...source, text, readAt: new Date().toISOString() }
   } },
@@ -71,6 +76,22 @@ try {
           : [{ title: "В Алматы открылись станции метро", link: "https://example.kz/archived-metro-open", snippet: "В Алматы сегодня открылись две станции метро «Сарыарка» и «Бауыржан Момышулы»." }]),
         { title: "Когда откроются станции метро в Алматы", link: "https://example.kz/metro-planned", snippet: "31 декабря 2026 года планируется открыть станции метро." },
       ] })
+    }
+    if (scenario === "football" && String(url).includes("serper.dev")) {
+      const query = JSON.parse(init.body).q
+      assert.ok(query.includes("КПЛ"))
+      const year = new Date().getUTCFullYear()
+      return Response.json({ organic: [
+        { title: `Кайрат 1:4 Тобыл — КПЛ, 1 января ${year} г.`, link: "https://kffleague.kz/ru/matches/1088" },
+        { title: `Кайрат 1:1 Алтай — КПЛ, 2 января ${year} г.`, link: "https://kffleague.kz/ru/matches/1120" },
+        { title: `Кайрат 2:1 Алтай — КПЛ, 3 января ${year} г.`, link: "https://kffleague.kz/ru/matches/1109?tournament=cup" },
+        { title: `Кайрат 2:0 Алтай — КПЛ, 1 января ${year+1} г.`, link: "https://kffleague.kz/ru/matches/3240" },
+      ] })
+    }
+    if (scenario === "retail-recovery" && String(url).includes("serper.dev")) {
+      const query = JSON.parse(init.body).q
+      const rows = query.includes("-site:unread-retail.example") ? ["shop-a.example.kz", "shop-b.example.kz"] : ["unread-retail.example", "second.unread-retail.example"]
+      return Response.json({ organic: rows.map(domain => ({ title: "iPhone 16 Pro Max 256GB в Алматы", link: "https://"+domain+"/16-max", snippet: "iPhone 16 Pro Max 256GB." })) })
     }
     if (scenario === "retail" && String(url).includes("serper.dev")) {
       return Response.json({ organic: [
@@ -218,6 +239,23 @@ try {
       assert.deepEqual(answer.sources.map(source => source.domain).sort(), ["shop-a.example.kz", "shop-b.example.kz"])
       assert.match(answer.content, /520 000.*540 000/u)
     } finally { modelDraft = undefined }
+  })
+  await check("blocked merchant pages trigger a different search and verified seller offers reach chat without a model draft", async () => {
+    scenario = "retail-recovery"
+    const answer = await run("Сколько стоит iPhone 16 Pro Max 256 ГБ в Алматы? Сравни два магазина по цене и наличию.", "balanced", "malik-max")
+    assert.equal(answer.model, "structured-retail")
+    assert.match(answer.content, /599[\s\u00a0]990/u)
+    assert.match(answer.content, /688[\s\u00a0]900/u)
+    assert.match(answer.content, /Остаток в конкретной точке не проверен/u)
+  })
+  await check("MAX finds the latest completed league match on the official domain without copying a cup or future score", async () => {
+    scenario = "football"
+    const before = inferences.length
+    const answer = await run("Как закончился последний матч “Кайрата” в чемпионате Казахстана? Дай дату, соперника, счёт и ссылку на протокол", "balanced", "malik-max")
+    assert.equal(answer.model, "official-match-card")
+    assert.match(answer.content, /Кайрат 1:1 Алтай/u)
+    assert.match(answer.content, /kffleague\.kz\/ru\/matches\/1120/u)
+    assert.equal(inferences.length, before)
   })
   await check("news digest retains several recent reports from one feed, even when synthesis fails", async () => {
     scenario = "news-digest"

@@ -55,6 +55,7 @@ export async function runLiveSearch(input: {
   prompt: string; queries: string[]; providers: LiveSearchProvider[]; mode?: FreshnessMode; signal?: AbortSignal
   intent?: FreshnessIntent
   rank?: (sources: MalikWebSource[]) => MalikWebSource[]
+  collectAcrossQueries?: boolean
   isUsefulLead?: (sources: MalikWebSource[]) => boolean
   now?: () => number; cache?: EvidenceSearchCache; circuits?: ProviderCircuits
   onQuery?: (query: string) => void
@@ -85,7 +86,7 @@ export async function runLiveSearch(input: {
     const hit = memo.get(key, clock())
     if (hit && (!intent.needsSearch || hasSearchLead(take(hit)))) {
       result.cacheHits++; result.sources.push(...hit)
-      if (fastRetry) break
+      if (fastRetry && !input.collectAcrossQueries) break
       continue
     }
     let attempted = 0, successes = 0
@@ -129,7 +130,7 @@ export async function runLiveSearch(input: {
     }
     if (confirmed.length) memo.set(key, take(confirmed), clock(), intent.ttlMs)
     result.sources.push(...confirmed)
-    if (fastRetry && confirmed.length) break
+    if (fastRetry && confirmed.length && !input.collectAcrossQueries) break
   }
   if (input.signal?.aborted) input.signal.throwIfAborted()
   result.sources = currentNewsSources(input.prompt, take(result.sources), intent).slice(0, limits.results)
