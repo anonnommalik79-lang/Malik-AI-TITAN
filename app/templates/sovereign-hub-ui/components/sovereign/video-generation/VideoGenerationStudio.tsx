@@ -398,6 +398,7 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
   // Each check loop belongs to one run; leaving the studio or starting another
   // video ends the old loop without touching the new one.
   const runRef = useRef(0)
+  const submittingRef = useRef(false)
   const [selectedModelId, setSelectedModelId] = useState<(typeof MOBILE_MODELS)[number]["id"]>("novai")
   const [videoAccess, setVideoAccess] = useState({ pro: false, owner: false })
   const [modelAvailability, setModelAvailability] = useState<Partial<Record<VideoProviderId, boolean>>>({})
@@ -714,7 +715,7 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
 
   const generate = async () => {
     const cleanPrompt = prompt.trim()
-    if (!cleanPrompt || busy) return
+    if (!cleanPrompt || busy || submittingRef.current || stalledJob) return
     if (!videoAccess.pro && (selectedModel.id !== "novai" || mode !== "text")) {
       setPhase("failed")
       setError("Для этой видеомодели или режима требуется Malik PRO.")
@@ -790,11 +791,13 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
       return { response, data }
     }
 
+    submittingRef.current = true
     setPhase("queued")
     const run = ++runRef.current
     try {
       let provider = selectedModel.provider as VideoProviderId
       let sourcePath = extendTaskId ? sourcePreview : mode === "text" ? "" : await uploadSource(provider)
+      if (run !== runRef.current) return
       let { response, data } = await submit(provider, sourcePath)
 
       const providerMessage = String(data?.error || data?.publicError || data?.message || "")
@@ -806,10 +809,12 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
         !response.ok &&
         /credit|quota|limit|payment|balance|unavailable|temporar|429|402|503/i.test(providerMessage + " " + response.status)
 
+      if (run !== runRef.current) return
       if (canFallbackToRunway) {
         setModelNotice("Magic Hour сейчас недоступен — автоматически переключаю эту генерацию на Runway.")
         provider = "runway"
         sourcePath = await uploadSource("runway")
+        if (run !== runRef.current) return
         ;({ response, data } = await submit(provider, sourcePath))
       }
 
@@ -817,19 +822,22 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
 
       const taskId = String(data?.taskId || "")
       if (!taskId) throw new Error("Видеомодель не вернула номер задачи. Попробуйте ещё раз.")
-      if (run !== runRef.current) return
-      await followTask({
+      const job: ActiveVideoJob = {
         taskId,
         statusUrl: String(data?.statusUrl || `/api/media/video/status?taskId=${encodeURIComponent(taskId)}`),
         prompt: cleanPrompt,
-        model: selectedModel.name,
+        model: provider === "runway" && selectedModel.provider !== "runway" ? "Runway" : selectedModel.name,
         startedAt: Date.now(),
-      }, projectImage)
+      }
+      // Persist the accepted provider job even if the user has left the studio.
+      writeStored(storageKey(ACTIVE_JOB_KEY, operator), job)
+      if (run !== runRef.current) return
+      await followTask(job, projectImage)
     } catch (err) {
       if (run !== runRef.current) return
       setPhase("failed")
       setError(err instanceof Error ? err.message : "Генерация видео недоступна")
-    }
+    } finally { submittingRef.current = false }
   }
 
   const rememberVideo = (entry: SavedVideo) => {
@@ -912,13 +920,17 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
           setStalledJob(job)
           throw cause
         }
-        networkMisses = 0
         const statusData = await statusResponse.json().catch(() => ({}))
         if (!statusResponse.ok) {
-          if (statusResponse.status >= 500 && i < 240) continue
-          writeStored(activeKey, null)
-          throw new Error(String(statusData?.error || `Не удалось проверить видео (HTTP ${statusResponse.status}).`))
+          if (statusResponse.status >= 500 || statusResponse.status === 429 || statusResponse.status === 408) {
+            if (++networkMisses < 6) continue
+          }
+          // An HTTP failure is not evidence that the provider job failed.
+          // Keep its receipt for a manual status retry rather than discarding a paid job.
+          setStalledJob(job)
+          throw new Error(String(statusData?.error || `Не удалось проверить видео (HTTP ${statusResponse.status}). Задача сохранена.`))
         }
+        networkMisses = 0
         if (statusData?.status === "failed") {
           writeStored(activeKey, null)
           const reason = String(statusData?.error || "Видеомодель не смогла завершить рендер.")
@@ -926,8 +938,8 @@ export function VideoGenerationStudio({ username, onViewChange }: VideoGeneratio
         }
         const readyUrl = String(statusData?.videoUrl || statusData?.url || "")
         if (readyUrl) {
-          writeStored(activeKey, null)
           await finishVideo(job, readyUrl, run, sourceImage)
+          if (run === runRef.current) writeStored(activeKey, null)
           return
         }
       }
