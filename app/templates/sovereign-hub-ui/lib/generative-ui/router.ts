@@ -13,7 +13,7 @@ import { UI_FENCE } from "./protocol"
  */
 
 export type UiLayout =
-  | "plain" | "comparison" | "architecture" | "diagram" | "report" | "timeline" | "data" | "calculator" | "overview" | "plan" | "dashboard" | "explainer" | "mockup" | "status" | "checklist"
+  | "plain" | "comparison" | "architecture" | "diagram" | "report" | "timeline" | "data" | "calculator" | "overview" | "plan" | "dashboard" | "explainer" | "mockup" | "status" | "checklist" | "drawing" | "custom"
 
 export type UiRoute = { layout: UiLayout; reason: string; recipe: string }
 
@@ -53,7 +53,12 @@ const MOCKUP = /(?:макет\p{L}*\s+(?:интерфейс|экран|стра�
 const STATUS = /(?:статус\s+(?:работ|задач|проект|депло|сборк|исправлен)|отч[её]т\s+о\s+(?:выполнен|прогресс)|что\s+(?:уже\s+)?(?:сделано|исправлено|выполнено)\s+и\s+что\s+(?:остал|не\s+готов)|deployment\s+status|progress\s+report|what\s+is\s+done\s+and\s+what\s+remains)/iu
 const CHECKLIST = /(?:чек[- ]?лист\p{L}*|checklist|контрольн\p{L}*\s+список|тексеру\s+тізімі)/iu
 
+const DRAWING = /(?:нарисуй\s+(?:схематично|схему|черт[её]ж|геометрическ|треугольник|круг|прямоугольник|графическ|план\s+комнат)|(?:сделай|покажи|создай)\s+(?:черт[её]ж|инфографик|схематич|векторн\p{L}*\s+(?:рисунок|схем))|(?:draw|sketch)\s+(?:a\s+)?(?:triangle|circle|rectangle|floor\s*plan|vector|schematic)|infographic)/iu
+const CUSTOM = /(?:интерактивн\p{L}*|interactive|визуальн\p{L}*\s+(?:ответ|пример|объяснен)|visual\s+(?:answer|example|explanation)|покажи\s+наглядно|наглядно\s+покажи)/iu
+
 const RECIPES: Record<Exclude<UiLayout, "plain">, string> = {
+  drawing: "Create an original vector drawing with the drawing primitive, using coordinates, labels and simple geometry. Include a short accessible description. Use a conceptual diagram rather than invented measured dimensions; never use it to bypass safety or fabricate a photo. If the user needs a photorealistic image, use image generation instead.",
+  custom: "Invent the composition for this task rather than selecting a template. Combine rows, cards, text, charts, diagrams, drawing, tabs and bound controls only where each carries useful information. For unknown or ambiguous facts, leave them unknown. A preview is labelled as illustrative; local controls may change local values only.",
   mockup: "An explicitly labelled illustrative interface preview, not a live product screenshot: compose one outline card with a small heading, tabs or segmented controls only if they really switch visible content, compact rows or a table, and short supporting text. Use fictional examples clearly identified as such. Never invent customer accounts, private data, working navigation or backend operations. If asked for an actual implemented app or code, provide that deliverable instead.",
   status: "A concise work-status answer: use plain text for a single state. For several independently known states use compact callouts or a timeline with distinct completed, in-progress, pending or failed labels, optionally a source citation. Never mark work done, deployed or tested without actual evidence; never show an invented percentage. Separate remaining work and verification limitations.",
   checklist: "A useful checklist: use ordinary Markdown task boxes for a simple checklist or a compact interactive list of controls bound to independent boolean state variables when the user asks to track completion. Initially unchecked unless the user explicitly supplied completion. Include only concrete steps, not decorative cards.",
@@ -81,6 +86,7 @@ export function routeUiLayout(prompt: string, signals: readonly string[] = []): 
   if (sentenceFormat(text) || PLAIN_ONLY.test(text)) return plain("user asked for plain text")
   const compares = has(text, COMPARE) || signals.includes("headtohead")
   const route = (layout: Exclude<UiLayout, "plain">, reason: string, extra = ""): UiRoute => ({ layout, reason, recipe: RECIPES[layout] + extra })
+  if (has(text, DRAWING) && !has(text, CODE_ASK) && !has(text, TEXT_TASK)) return route("drawing", "an original vector illustration")
   if (has(text, DIAGRAM) && !has(text, CODE_ASK)) {
     if (has(text, MIND_MAP)) return route("diagram", "a mind map", " Mind map: the first node is the central topic; 3–6 branch nodes link from it; each branch has 1–3 leaf nodes; direction «right»; edges need no labels.")
     if (has(text, DECISION)) return route("diagram", "a decision tree", " Decision tree: each decision node is a question; every edge leaving it is labelled with the answer («да», «нет», a condition); leaf nodes are outcomes; direction «down»; finish with a callout that names which path fits which case.")
@@ -103,6 +109,7 @@ export function routeUiLayout(prompt: string, signals: readonly string[] = []): 
   if (has(text, PLAN) || signals.includes("planning")) return route("plan", "steps toward a goal")
   if (has(text, OVERVIEW) || signals.includes("overview")) return words <= 3 && !signals.includes("overview") ? plain("short lookup") : route("overview", "a subject overview")
   if (has(text, EXPLAIN) && words >= 4 || has(text, MECHANISM) && words >= 3) return route("explainer", "a mechanism to explain")
+  if (has(text, CUSTOM)) return route("custom", "an open-ended visual or interactive composition")
   if (signals.includes("complex") && words >= 12) return route("explainer", "a complex request")
   return plain(words <= 10 ? "short question" : "prose answers it best")
 }
@@ -130,10 +137,12 @@ export function buildGenerativeUiContract(prompt: string, signals: readonly stri
     "  timeline{items:[{date,title,text,status:done|active|next}]} · flow{nodes:[{id,label,detail}],edges:[{from,to,label}],direction:down|right} · tree{root:{label,detail,children:[…]}}",
     "  code{code,language,filename} · file{name,note} · citation{ref:<source number>}",
     "  card{title,eyebrow,body,image,badge,footer,number,variant:plain|outline|hero|emphasis|numbered,items} · grid{columns:1-4,items} · stack{items} · section{title,eyebrow,number,items} · tabs{tabs:[{label,items}]} · accordion{items:[{title,items}]}",
+    "  row{items:[blocks]} · status{items:[{label,detail,state:done|running|pending|failed}]} — actual statuses require evidence.",
+    "  drawing{title,description,width,height,shapes:[…]} — original vector graphics, no raw SVG. Shape kinds: rect{x,y,w,h,radius,fill,stroke}, ellipse{x,y,rx,ry,fill,stroke}, line{x,y,x2,y2,stroke,arrow}, polyline{points:[[x,y],…],stroke,fill,closed}, text{x,y,text,size,fill,align:start|middle|end}. Use numeric coordinates within the canvas and literal #hex or none paints only. Up to 120 shapes. Include an accessible description. Label conceptual drawings and previews; keep labels readable on phones.",
     "  control{kind:slider|number|select|toggle|segmented,bind:<state variable>,label,min,max,step,unit,options:[{label,value}]}",
     "- Computed values: any text/metric/table/chart value may be {\"expr\":\"price * qty * (1 - discount/100)\"} over state variables; operators + - * / % ^, comparisons, && || !, ?:, functions min max abs sqrt pow round(x,digits) floor ceil log exp clamp. Any block may have \"when\":\"<expression>\" to show only when true.",
     "- Truth rules: every chart and data table states origin. For a sourced chart give sourceRefs pointing to evidence excerpts containing the values. For a calculated chart use expressions on its visible inputs. Label scenario numbers illustrative and explain the assumptions. If real values are missing, say so instead of charting estimates. Cite sources with citation{ref:n} or [n] in text. Never invent benchmarks, prices, statistics, quotes, links or photos.",
-    "- Design: compose from these primitives freely — the recipe below is a starting point, not a template. Prefer 1 strong composition over many small ones; 1–20 meaningful blocks normally; short labels; numbers right-aligned; at most 4 columns; no decoration that carries no information. Do not wrap ordinary prose or a conclusion in a card. Use neutral surfaces, restrained headings, and icons only for meaning. Text the user must read stays readable without the visual. Every control must update its bound state or genuinely switch content. Never claim a mockup is a live UI or simulate a completed external action.",
+    "- Design: invent a new composition from these primitives for the current subject, never merely copy the example. Combine visual geometry, flowing rows, stateful controls and text in new ways. The layout recommendation is not a restriction; compose from these primitives freely — the recipe below is a starting point, not a template. Prefer 1 strong composition over many small ones; 1–20 meaningful blocks normally; short labels; numbers right-aligned; at most 4 columns; no decoration that carries no information. Do not wrap ordinary prose or a conclusion in a card. Use neutral surfaces, restrained headings, and icons only for meaning. Text the user must read stays readable without the visual. Every control must update its bound state or genuinely switch content. Never claim a mockup is a live UI or simulate a completed external action.",
     "- One composition replaces malik-cards, malik-photos and malik-visual blocks for the same content; never show the same content twice.",
     `- Recipe: ${route.recipe}`,
     "- Example: ```malik-ui\n{\"v\":1,\"title\":\"MALIK vs GPT\",\"blocks\":[{\"type\":\"grid\",\"columns\":2,\"items\":[{\"type\":\"card\",\"variant\":\"hero\",\"title\":\"MALIK AI\",\"body\":\"…\",\"image\":{\"query\":\"MALIK AI logo\"}},{\"type\":\"card\",\"title\":\"GPT-5\",\"body\":\"…\"}]},{\"type\":\"table\",\"origin\":\"sources\",\"columns\":[{\"key\":\"c\",\"label\":\"Критерий\"},{\"key\":\"a\",\"label\":\"MALIK\"},{\"key\":\"b\",\"label\":\"GPT-5\"}],\"rows\":[{\"c\":\"Контекст\",\"a\":\"…\",\"b\":\"…\"}]}]}\n```",
