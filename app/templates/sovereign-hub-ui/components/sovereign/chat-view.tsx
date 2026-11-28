@@ -1308,11 +1308,11 @@ function SourceDeck({ research }: { research: MalikMessageResearch }) {
 
   return (
     <section className="malik-source-inline" aria-label="Источники ответа">
-      <button type="button" onClick={() => setDrawerOpen(true)} className="malik-source-pill malik-source-square" aria-label={`Открыть ${sources.length} источников`} aria-haspopup="dialog" aria-expanded={drawerOpen}>
-        <span className="malik-source-pill__icons">
+      <button type="button" onClick={() => setDrawerOpen(true)} className="malik-source-pill malik-source-compact" aria-label={`Открыть ${sources.length} источников`} aria-haspopup="dialog" aria-expanded={drawerOpen}>
+        <span className="malik-source-pill__icons" data-preserve-brand-color="true">
           {uniqueIconSources.map((source) => <SourceIcon key={source.url} source={source} />)}
         </span>
-        <span>Sources</span>
+        <span className="malik-source-compact__label">Sources</span>
       </button>
       {drawerOpen ? <SourceDrawer research={research} onClose={() => setDrawerOpen(false)} /> : null}
     </section>
@@ -3127,22 +3127,39 @@ export function ChatView({ messages, workspaceMode = "chat", onSendMessage, onIm
           margin: 10px 0 0 !important; padding: 0 !important; border: 0 !important;
           background: transparent !important; box-shadow: none !important;
         }
-        #malik-root .malik-chat-fullwidth .malik-message-row .malik-source-square {
+        #malik-root .malik-chat-fullwidth .malik-message-row .malik-source-compact {
           box-sizing: border-box !important; display: inline-flex !important;
-          flex-direction: column !important; align-items: center !important; justify-content: center !important;
-          gap: 3px !important; width: 56px !important; min-width: 56px !important; max-width: 56px !important;
-          height: 56px !important; min-height: 56px !important; max-height: 56px !important;
-          padding: 4px !important; margin: 0 !important; border: 1px solid #303030 !important;
-          border-radius: 8px !important; background: #080808 !important; box-shadow: none !important;
-          color: #d4d4d8 !important; font-size: 10px !important; line-height: 12px !important;
+          flex-direction: row !important; align-items: center !important; justify-content: center !important;
+          gap: 7px !important; width: fit-content !important; min-width: 0 !important; max-width: 100% !important;
+          height: 30px !important; min-height: 30px !important; max-height: 30px !important;
+          aspect-ratio: auto !important; flex: 0 0 auto !important;
+          padding: 0 9px !important; margin: 0 !important; border: 1px solid #e5e5e5 !important;
+          border-radius: 999px !important; background: #000 !important; background-image: none !important;
+          box-shadow: none !important; filter: none !important; -webkit-filter: none !important;
+          color: #fff !important; font-size: 11px !important; font-weight: 600 !important; line-height: 14px !important; white-space: nowrap !important;
         }
-        #malik-root .malik-chat-fullwidth .malik-message-row .malik-source-square:hover { background: #181818 !important; }
-        #malik-root .malik-chat-fullwidth .malik-message-row .malik-source-square .malik-source-pill__icons { height: 18px !important; }
-        #malik-root .malik-chat-fullwidth .malik-message-row .malik-source-square .malik-source-icon {
+        #malik-root .malik-chat-fullwidth .malik-message-row .malik-source-compact:hover { background: #151515 !important; }
+        #malik-root .malik-chat-fullwidth .malik-message-row .malik-source-compact:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+        #malik-root .malik-chat-fullwidth .malik-message-row .malik-source-compact__label {
+          display: inline-flex !important; align-items: center !important;
+          padding-left: 7px !important; border-left: 1px solid #777 !important; color: #fff !important;
+          height: 14px !important; line-height: 14px !important;
+        }
+        #malik-root .malik-chat-fullwidth .malik-message-row .malik-source-compact .malik-source-pill__icons {
+          display: inline-flex !important; align-items: center !important; height: 18px !important; flex: 0 0 auto !important;
+          filter: none !important; -webkit-filter: none !important;
+        }
+        #malik-root .malik-chat-fullwidth .malik-message-row .malik-source-compact .malik-source-icon {
           width: 18px !important; height: 18px !important; min-width: 18px !important; min-height: 18px !important;
           max-width: 18px !important; max-height: 18px !important; flex: 0 0 18px !important;
+          border-radius: 50% !important; border: 1px solid #fff !important; background: #fff !important;
+          color: #111 !important; box-shadow: 0 0 0 1px #000 !important; filter: none !important; -webkit-filter: none !important;
         }
-        #malik-root .malik-chat-fullwidth .malik-message-row .malik-source-square .malik-source-icon img { width: 13px !important; height: 13px !important; }
+        #malik-root .malik-chat-fullwidth .malik-message-row .malik-source-compact .malik-source-icon + .malik-source-icon { margin-left: -5px !important; }
+        #malik-root .malik-chat-fullwidth .malik-message-row .malik-source-compact .malik-source-icon img {
+          width: 13px !important; height: 13px !important; object-fit: contain !important;
+          filter: none !important; -webkit-filter: none !important; opacity: 1 !important;
+        }
         #malik-root .malik-chat-fullwidth [data-malik-compact-answer="1"] .malik-message-actions {
           gap: 8px !important; margin-top: 8px !important; width: 100% !important; flex-wrap: nowrap !important;
           justify-content: flex-start !important; align-items: center !important;
